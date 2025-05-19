@@ -3,7 +3,7 @@
 :: Exit on error
 setlocal
 
-set path_dir=C:\VulkanSDK\Bin\
+set path_dir=C:\VulkanSDK\1.4.309.0\Bin\
 :: Compile shaders
 call %path_dir%glslc shader.vert -o vert.spv
 call %path_dir%glslc shader.frag -o frag.spv
