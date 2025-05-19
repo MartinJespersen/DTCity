@@ -1,0 +1,75 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "build project",
+            "type": "shell",
+            "command": "./build.sh",
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            },
+            "problemMatcher": [
+                "$gcc"
+            ],
+            "detail": "Generated task for building the project"
+        },
+        {
+            "label": "build for profiling",
+            "type": "shell",
+            "command": "./profile_build.sh",
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            },
+            "problemMatcher": [
+                "$gcc"
+            ],
+            "detail": "Generated task for building the project"
+        },
+        {
+            "label": "MSC debug",
+            "type": "shell",
+            "windows": {
+                "command": ".\\debug.bat",
+
+            },
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            },
+            "options": {
+                "shell": {
+                    "executable": "C:\\Windows\\System32\\cmd.exe",
+                    "args": [
+                        "/c",
+                        "\"C:\\Program Files\\Microsoft Visual Studio\\2022\\Community\\VC\\Auxiliary\\Build\\vcvars64.bat\" &&"
+                    ]
+                },"cwd": "${workspaceFolder}"
+            },
+            "detail": "build and debug with raddebugger"
+        },
+        {
+            "label": "MSC build",
+            "type": "shell",
+            "windows": {
+                "command": ".\\build.bat",
+
+            },
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            },
+            "options": {
+                "shell": {
+                    "executable": "C:\\Windows\\System32\\cmd.exe",
+                    "args": [
+                        "/c",
+                        "\"C:\\Program Files\\Microsoft Visual Studio\\2022\\Community\\VC\\Auxiliary\\Build\\vcvars64.bat\" &&"
+                    ]
+                },"cwd": "${workspaceFolder}"
+            },
+            "detail": "build MSC"
+        }
+    ]
+}

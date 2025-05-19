@@ -1,0 +1,21 @@
+BasedOnStyle: LLVM
+
+# Indent using 4 spaces
+IndentWidth: 4
+
+# Place function return type on a separate line
+AlwaysBreakAfterReturnType: All
+
+# Align parameters
+AlignAfterOpenBracket: Align
+
+# Break before braces
+BreakBeforeBraces: Allman
+
+# Other common settings (adjust as needed)
+ColumnLimit: 100
+AllowShortFunctionsOnASingleLine: None
+KeepEmptyLinesAtTheStartOfBlocks: false
+MaxEmptyLinesToKeep: 1
+PointerAlignment: Left
+SortIncludes: Never

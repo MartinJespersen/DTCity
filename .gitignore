@@ -1,0 +1,9 @@
+**.spv
+profiler
+build
+*.o
+*.obj
+*.exe
+*.rdi
+*.pdb
+*/BROWSE.VC.DB*

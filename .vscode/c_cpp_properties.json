@@ -1,0 +1,37 @@
+{
+    "configurations": [
+        {
+            "name": "Linux",
+            "includePath": [
+                "${workspaceFolder}",
+                "C:\\VulkanSDK\\Lib",
+                "C:\\freetype-2.13.2\\include",
+                "C:\\VulkanSDK\\Include",
+                "C:\\glfw\\include"
+            ],
+            "defines": [
+                "PROFILING_ENABLE",
+                "ASAN_ENABLE"
+            ],
+            "compilerPath": "C:\\Program Files (x86)\\Microsoft Visual Studio\\2019\\Enterprise\\VC\\Tools\\MSVC\\14.29.30133\\bin\\Hostx64\\x64\\cl.exe",
+            "cStandard": "c17",
+            "cppStandard": "c++20",
+            "intelliSenseMode": "windows-msvc-x64",
+            "forcedInclude": [
+                "${workspaceFolder}\\base\\base.hpp",
+                "${workspaceFolder}\\ui\\ui.hpp",
+                "${workspaceFolder}\\third_party\\third_party_wrapper.hpp",
+                "C:\\freetype-2.13.2\\include\\ft2build.h",
+                "C:\\VulkanSDK\\Include\\vulkan\\vulkan_core.h"
+            ],
+            "browse": {
+                "path": [
+                    "${workspaceFolder}"
+                ],
+                "limitSymbolsToIncludedHeaders": true,
+                "databaseFilename": "${workspaceFolder}/.vscode/browse.vc.db"
+            }
+        }
+    ],
+    "version": 4
+}
