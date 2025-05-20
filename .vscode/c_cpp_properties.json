@@ -4,10 +4,10 @@
             "name": "Linux",
             "includePath": [
                 "${workspaceFolder}",
-                "C:\\VulkanSDK\\Lib",
-                "C:\\freetype-2.13.2\\include",
-                "C:\\VulkanSDK\\Include",
-                "C:\\glfw\\include"
+                "C:\\VulkanSDK\\1.4.309.0\\Include",
+                "${workspaceFolder}\\third_party\\freetype\\include",
+                "${workspaceFolder}\\third_party\\glfw\\include",
+                "${workspaceFolder}\\third_party"
             ],
             "defines": [
                 "PROFILING_ENABLE",
@@ -21,8 +21,6 @@
                 "${workspaceFolder}\\base\\base.hpp",
                 "${workspaceFolder}\\ui\\ui.hpp",
                 "${workspaceFolder}\\third_party\\third_party_wrapper.hpp",
-                "C:\\freetype-2.13.2\\include\\ft2build.h",
-                "C:\\VulkanSDK\\Include\\vulkan\\vulkan_core.h"
             ],
             "browse": {
                 "path": [
