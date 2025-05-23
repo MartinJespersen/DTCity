@@ -9,37 +9,20 @@
 #error thread context not implemented for os
 #endif
 
-// Widget Configuration --------------------------------
-
-#define X(name, type) \
-    inline_function type name##_Get();
-WidgetCfg
-#undef X
-
-#define X(name, type) \
-    inline_function void name##_Push(type v);
-WidgetCfg
-#undef X
-
-#define X(name, type) \
-    inline_function void name##_Pop();
-WidgetCfg
-#undef X
-
-
-root_function void
+internal void
 ThreadContextInit();
 
-root_function void
+internal void
 ThreadContextExit();
 
-no_name_mangle void
+C_LINKAGE void
 ThreadCxtSet(ThreadCtx* ctx);
 
-root_function ThreadCtx* 
+internal ThreadCtx*
 ThreadCtxGet();
 
 // globals context
-no_name_mangle void GlobalContextSet(Context* ctx);
-inline_function Context* GlobalContextGet();
-
+C_LINKAGE void
+GlobalContextSet(Context* ctx);
+internal Context*
+GlobalContextGet();

@@ -1,11 +1,10 @@
 #pragma once
 
 // user defined: [hpp]
-#include "base/base.hpp"
+#include "base/base_inc.hpp"
 #include "ui/ui.hpp"
 
-const u64 FONT_ARENA_SIZE = MEGABYTE(4);
-const u32 MAX_FONTS_IN_USE = 10;
+const U32 MAX_FONTS_IN_USE = 10;
 
 extern "C"
 {
@@ -17,81 +16,81 @@ extern "C"
     drawFrame();
 }
 
-root_function void
+internal void
 cleanup();
 
-root_function void
+internal void
 VulkanInit();
 
-root_function void
+internal void
 initWindow();
 
-root_function void
+internal void
 framebufferResizeCallback(GLFWwindow* window, int width, int height);
 
-root_function void
-CommandBufferRecord(u32 imageIndex, u32 currentFrame);
+internal void
+CommandBufferRecord(U32 imageIndex, U32 currentFrame);
 
-root_function void
+internal void
 recreateSwapChain(VulkanContext* vulkanContext);
 
-root_function void
+internal void
 createSyncObjects(VulkanContext* vulkanContext);
 
-root_function void
+internal void
 createCommandBuffers(Context* context);
 
-root_function void
+internal void
 SwapChainImageViewsCreate(VulkanContext* vulkanContext);
-root_function void
+internal void
 createCommandPool(VulkanContext* vulkanContext);
 
-root_function void
+internal void
 cleanupColorResources(VulkanContext* vulkanContext);
-root_function void
+internal void
 cleanupSwapChain(VulkanContext* vulkanContext);
-root_function void
+internal void
 createInstance(VulkanContext* vulkanContext);
-root_function void
+internal void
 setupDebugMessenger(VulkanContext* vulkanContext);
-root_function void
+internal void
 createSurface(VulkanContext* vulkanContext);
-root_function void
+internal void
 pickPhysicalDevice(VulkanContext* vulkanContext);
-root_function void
+internal void
 createLogicalDevice(Arena* arena, VulkanContext* vulkanContext);
 
-root_function SwapChainInfo
+internal SwapChainInfo
 SwapChainCreate(Arena* arena, VulkanContext* vulkanContext);
-root_function u32
+internal U32
 SwapChainImageCountGet(VulkanContext* vulkanContext);
-root_function void
-SwapChainImagesCreate(VulkanContext* vulkanContext, SwapChainInfo swapChainInfo, u32 imageCount);
+internal void
+SwapChainImagesCreate(VulkanContext* vulkanContext, SwapChainInfo swapChainInfo, U32 imageCount);
 
-root_function VkExtent2D
+internal VkExtent2D
 chooseSwapExtent(VulkanContext* vulkanContext, const VkSurfaceCapabilitiesKHR& capabilities);
 
-root_function String8_Buffer
+internal Buffer<String8>
 getRequiredExtensions(VulkanContext* vulkanContext);
 
-root_function void
+internal void
 populateDebugMessengerCreateInfo(VkDebugUtilsMessengerCreateInfoEXT& createInfo);
 
-root_function bool
+internal bool
 isDeviceSuitable(VulkanContext* vulkanContext, VkPhysicalDevice device,
                  QueueFamilyIndexBits indexBits);
 
-                 root_function VkSampleCountFlagBits
+internal VkSampleCountFlagBits
 getMaxUsableSampleCount(VkPhysicalDevice device);
 
-root_function bool
+internal bool
 checkDeviceExtensionSupport(VulkanContext* vulkanContext, VkPhysicalDevice device);
 
-root_function bool
+internal bool
 checkValidationLayerSupport(VulkanContext* vulkanContext);
 
-root_function VkSurfaceFormatKHR
-chooseSwapSurfaceFormat(VkSurfaceFormatKHR_Buffer availableFormats);
+internal VkSurfaceFormatKHR
+chooseSwapSurfaceFormat(Buffer<VkSurfaceFormatKHR> availableFormats);
 
-root_function VkPresentModeKHR
-chooseSwapPresentMode(VkPresentModeKHR_Buffer availablePresentModes);
+internal VkPresentModeKHR
+chooseSwapPresentMode(Buffer<VkPresentModeKHR> availablePresentModes);

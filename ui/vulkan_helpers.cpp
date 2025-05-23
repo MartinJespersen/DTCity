@@ -1,16 +1,4 @@
-// buffers
-BufferImpl(VkSurfaceFormatKHR);
-BufferImpl(VkPresentModeKHR);
-BufferImpl(VkImage);
-BufferImpl(VkImageView);
-BufferImpl(VkFramebuffer);
-BufferImpl(VkCommandBuffer);
-BufferImpl(VkSemaphore);
-BufferImpl(VkFence);
-BufferImpl(VkVertexInputAttributeDescription);
-BufferImpl(VkDescriptorSetLayout);
-
-root_function VkCommandBuffer
+internal VkCommandBuffer
 beginSingleTimeCommands(VkDevice device, VkCommandPool commandPool)
 {
     VkCommandBufferAllocateInfo allocInfo{};
@@ -31,7 +19,7 @@ beginSingleTimeCommands(VkDevice device, VkCommandPool commandPool)
     return commandBuffer;
 }
 
-root_function void
+internal void
 endSingleTimeCommands(VkDevice device, VkCommandPool commandPool, VkQueue queue,
                       VkCommandBuffer commandBuffer)
 {
@@ -48,7 +36,7 @@ endSingleTimeCommands(VkDevice device, VkCommandPool commandPool, VkQueue queue,
     vkFreeCommandBuffers(device, commandPool, 1, &commandBuffer);
 }
 
-root_function uint32_t
+internal uint32_t
 findMemoryType(VkPhysicalDevice physicalDevice, uint32_t typeFilter,
                VkMemoryPropertyFlags properties)
 {
@@ -68,10 +56,10 @@ findMemoryType(VkPhysicalDevice physicalDevice, uint32_t typeFilter,
     return 0;
 }
 
-root_function void
+internal void
 BufferCreate(VkPhysicalDevice physicalDevice, VkDevice device, VkDeviceSize size,
-             VkBufferUsageFlags usage, VkMemoryPropertyFlags properties, VkBuffer& buffer,
-             VkDeviceMemory& bufferMemory)
+             VkBufferUsageFlags usage, VkMemoryPropertyFlags properties, VkBuffer* buffer,
+             VkDeviceMemory* bufferMemory)
 {
     VkBufferCreateInfo bufferInfo{};
     bufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
@@ -79,13 +67,13 @@ BufferCreate(VkPhysicalDevice physicalDevice, VkDevice device, VkDeviceSize size
     bufferInfo.usage = usage;
     bufferInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
 
-    if (vkCreateBuffer(device, &bufferInfo, nullptr, &buffer) != VK_SUCCESS)
+    if (vkCreateBuffer(device, &bufferInfo, nullptr, buffer) != VK_SUCCESS)
     {
         exitWithError("failed to create buffer!");
     }
 
     VkMemoryRequirements memRequirements;
-    vkGetBufferMemoryRequirements(device, buffer, &memRequirements);
+    vkGetBufferMemoryRequirements(device, *buffer, &memRequirements);
 
     VkMemoryAllocateInfo allocInfo{};
     allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
@@ -93,15 +81,15 @@ BufferCreate(VkPhysicalDevice physicalDevice, VkDevice device, VkDeviceSize size
     allocInfo.memoryTypeIndex =
         findMemoryType(physicalDevice, memRequirements.memoryTypeBits, properties);
 
-    if (vkAllocateMemory(device, &allocInfo, nullptr, &bufferMemory) != VK_SUCCESS)
+    if (vkAllocateMemory(device, &allocInfo, nullptr, bufferMemory) != VK_SUCCESS)
     {
         exitWithError("failed to allocate buffer memory!");
     }
 
-    vkBindBufferMemory(device, buffer, bufferMemory, 0);
+    vkBindBufferMemory(device, *buffer, *bufferMemory, 0);
 }
 
-root_function void
+internal void
 copyBuffer(VkDevice device, VkCommandPool commandPool, VkQueue queue, VkBuffer srcBuffer,
            VkBuffer dstBuffer, VkDeviceSize size)
 {
@@ -114,7 +102,7 @@ copyBuffer(VkDevice device, VkCommandPool commandPool, VkQueue queue, VkBuffer s
     endSingleTimeCommands(device, commandPool, queue, commandBuffer);
 }
 
-root_function VkImageView
+internal VkImageView
 createImageView(VkDevice device, VkImage image, VkFormat format)
 {
     VkImageViewCreateInfo viewInfo{};
@@ -137,7 +125,7 @@ createImageView(VkDevice device, VkImage image, VkFormat format)
     return imageView;
 }
 
-root_function void
+internal void
 transitionImageLayout(VkCommandPool commandPool, VkDevice device, VkQueue graphicsQueue,
                       VkImage image, VkImageLayout oldLayout, VkImageLayout newLayout)
 {
@@ -186,7 +174,7 @@ transitionImageLayout(VkCommandPool commandPool, VkDevice device, VkQueue graphi
     endSingleTimeCommands(device, commandPool, graphicsQueue, commandBuffer);
 }
 
-root_function void
+internal void
 copyBufferToImage(VkCommandPool commandPool, VkDevice device, VkQueue queue, VkBuffer buffer,
                   VkImage image, uint32_t width, uint32_t height)
 {
@@ -211,8 +199,8 @@ copyBufferToImage(VkCommandPool commandPool, VkDevice device, VkQueue queue, VkB
     endSingleTimeCommands(device, commandPool, queue, commandBuffer);
 }
 
-root_function void
-createImage(VkPhysicalDevice physicalDevice, VkDevice device, u32 width, u32 height,
+internal void
+createImage(VkPhysicalDevice physicalDevice, VkDevice device, U32 width, U32 height,
             VkSampleCountFlagBits numSamples, VkFormat format, VkImageTiling tiling,
             VkImageUsageFlags usage, VkMemoryPropertyFlags properties, VkImage& image,
             VkDeviceMemory& imageMemory)
@@ -254,7 +242,7 @@ createImage(VkPhysicalDevice physicalDevice, VkDevice device, u32 width, u32 hei
     vkBindImageMemory(device, image, imageMemory, 0);
 }
 
-root_function VkImageView
+internal VkImageView
 createColorResources(VkPhysicalDevice physicalDevice, VkDevice device,
                      VkFormat swapChainImageFormat, VkExtent2D swapChainExtent,
                      VkSampleCountFlagBits msaaSamples, VkImage& colorImage,
@@ -270,14 +258,14 @@ createColorResources(VkPhysicalDevice physicalDevice, VkDevice device,
     return createImageView(device, colorImage, colorFormat);
 }
 
-root_function void
-createFramebuffers(VkFramebuffer_Buffer framebuffers, VkDevice device, VkImageView colorImageView,
+internal void
+createFramebuffers(Buffer<VkFramebuffer> framebuffers, VkDevice device, VkImageView colorImageView,
                    VkRenderPass renderPass, VkExtent2D swapChainExtent,
-                   VkImageView_Buffer swapChainImageViews)
+                   Buffer<VkImageView> swapChainImageViews)
 {
     for (size_t i = 0; i < swapChainImageViews.size; i++)
     {
-        const u32 attachmentCount = 2;
+        const U32 attachmentCount = 2;
         VkImageView attachments[attachmentCount] = {colorImageView, swapChainImageViews.data[i]};
 
         VkFramebufferCreateInfo framebufferInfo{};
@@ -297,18 +285,18 @@ createFramebuffers(VkFramebuffer_Buffer framebuffers, VkDevice device, VkImageVi
     }
 }
 
-root_function void
+internal void
 createGraphicsPipeline(VkPipelineLayout* pipelineLayout, VkPipeline* graphicsPipeline,
                        VkDevice device, VkExtent2D swapChainExtent, VkRenderPass renderPass,
                        VkDescriptorSetLayout descriptorSetLayout, VkSampleCountFlagBits msaaSamples,
                        VkVertexInputBindingDescription bindingDescription,
-                       VkVertexInputAttributeDescription_Buffer attributeDescriptions,
+                       Buffer<VkVertexInputAttributeDescription> attributeDescriptions,
                        Vulkan_PushConstantInfo pushConstInfo, String8 vertShaderPath,
                        String8 fragShaderPath, VkShaderStageFlagBits pushConstantStage)
 {
-    ArenaTemp scratchArena = ArenaScratchGet();
-    Buffer vertShaderBuffer = IO_ReadFile(scratchArena.arena, vertShaderPath);
-    Buffer fragShaderBuffer = IO_ReadFile(scratchArena.arena, fragShaderPath);
+    Temp scratch = scratch_begin(0, 0);
+    Buffer<U8> vertShaderBuffer = IO_ReadFile(scratch.arena, vertShaderPath);
+    Buffer<U8> fragShaderBuffer = IO_ReadFile(scratch.arena, fragShaderPath);
 
     VkShaderModule vertShaderModule = ShaderModuleCreate(device, vertShaderBuffer);
     VkShaderModule fragShaderModule = ShaderModuleCreate(device, fragShaderBuffer);
@@ -331,7 +319,7 @@ createGraphicsPipeline(VkPipelineLayout* pipelineLayout, VkPipeline* graphicsPip
 
     VkPipelineDynamicStateCreateInfo dynamicState{};
     dynamicState.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
-    dynamicState.dynamicStateCount = (u32)(ArrayCount(dynamicStates));
+    dynamicState.dynamicStateCount = (U32)(ArrayCount(dynamicStates));
     dynamicState.pDynamicStates = dynamicStates;
 
     VkPipelineVertexInputStateCreateInfo vertexInputInfo{};
@@ -342,7 +330,7 @@ createGraphicsPipeline(VkPipelineLayout* pipelineLayout, VkPipeline* graphicsPip
     vertexInputInfo.pVertexAttributeDescriptions = nullptr; // Optional
 
     vertexInputInfo.vertexBindingDescriptionCount = 1;
-    vertexInputInfo.vertexAttributeDescriptionCount = (u32)(attributeDescriptions.size);
+    vertexInputInfo.vertexAttributeDescriptionCount = (U32)(attributeDescriptions.size);
     vertexInputInfo.pVertexBindingDescriptions = &bindingDescription;
     vertexInputInfo.pVertexAttributeDescriptions = attributeDescriptions.data;
 
@@ -461,11 +449,11 @@ createGraphicsPipeline(VkPipelineLayout* pipelineLayout, VkPipeline* graphicsPip
     vkDestroyShaderModule(device, fragShaderModule, nullptr);
     vkDestroyShaderModule(device, vertShaderModule, nullptr);
 
-    ArenaTempEnd(scratchArena);
+    scratch_end(scratch);
     return;
 }
 
-root_function VkRenderPass
+internal VkRenderPass
 createRenderPass(VkDevice device, VkFormat swapChainImageFormat, VkSampleCountFlagBits msaaSamples,
                  VkAttachmentLoadOp loadOp, VkImageLayout initialLayout, VkImageLayout finalLayout)
 {
@@ -515,7 +503,7 @@ createRenderPass(VkDevice device, VkFormat swapChainImageFormat, VkSampleCountFl
     dependency.dstAccessMask =
         VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT | VK_ACCESS_COLOR_ATTACHMENT_READ_BIT;
 
-    const u32 attachmentsCount = 2;
+    const U32 attachmentsCount = 2;
     VkAttachmentDescription attachments[attachmentsCount] = {colorAttachment,
                                                              colorAttachmentResolve};
 
@@ -537,13 +525,13 @@ createRenderPass(VkDevice device, VkFormat swapChainImageFormat, VkSampleCountFl
     return renderPass;
 }
 
-root_function VkShaderModule
-ShaderModuleCreate(VkDevice device, Buffer buffer)
+internal VkShaderModule
+ShaderModuleCreate(VkDevice device, Buffer<U8> buffer)
 {
     VkShaderModuleCreateInfo createInfo{};
     createInfo.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
     createInfo.codeSize = buffer.size;
-    createInfo.pCode = reinterpret_cast<const u32*>(buffer.data);
+    createInfo.pCode = reinterpret_cast<const U32*>(buffer.data);
 
     VkShaderModule shaderModule;
     if (vkCreateShaderModule(device, &createInfo, nullptr, &shaderModule) != VK_SUCCESS)
@@ -555,7 +543,7 @@ ShaderModuleCreate(VkDevice device, Buffer buffer)
 }
 
 // queue family
-root_function bool
+internal bool
 QueueFamilyIsComplete(QueueFamilyIndexBits queueFamily)
 {
     if ((!queueFamily.graphicsFamilyIndexBits) || (!queueFamily.presentFamilyIndexBits))
@@ -565,7 +553,7 @@ QueueFamilyIsComplete(QueueFamilyIndexBits queueFamily)
     return true;
 }
 
-root_function QueueFamilyIndices
+internal QueueFamilyIndices
 QueueFamilyIndicesFromBitFields(QueueFamilyIndexBits queueFamilyBits)
 {
     if (!QueueFamilyIsComplete(queueFamilyBits))
@@ -575,24 +563,24 @@ QueueFamilyIndicesFromBitFields(QueueFamilyIndexBits queueFamilyBits)
     }
 
     QueueFamilyIndices indices = {0};
-    indices.graphicsFamilyIndex = (u32)LSBIndex((i32)queueFamilyBits.graphicsFamilyIndexBits);
-    indices.presentFamilyIndex = (u32)LSBIndex((i32)queueFamilyBits.presentFamilyIndexBits);
+    indices.graphicsFamilyIndex = (U32)LSBIndex((S32)queueFamilyBits.graphicsFamilyIndexBits);
+    indices.presentFamilyIndex = (U32)LSBIndex((S32)queueFamilyBits.presentFamilyIndexBits);
 
     return indices;
 }
 
-root_function QueueFamilyIndexBits
+internal QueueFamilyIndexBits
 QueueFamiliesFind(VulkanContext* vulkanContext, VkPhysicalDevice device)
 {
-    ArenaTemp scratchArena = ArenaScratchGet();
+    Temp scratch = scratch_begin(0, 0);
     QueueFamilyIndexBits indices = {0};
-    u32 queueFamilyCount = 0;
+    U32 queueFamilyCount = 0;
     vkGetPhysicalDeviceQueueFamilyProperties(device, &queueFamilyCount, nullptr);
 
     VkQueueFamilyProperties* queueFamilies =
-        PushArray(scratchArena.arena, VkQueueFamilyProperties, queueFamilyCount);
+        push_array(scratch.arena, VkQueueFamilyProperties, queueFamilyCount);
     vkGetPhysicalDeviceQueueFamilyProperties(device, &queueFamilyCount, queueFamilies);
-    for (u32 i = 0; i < queueFamilyCount; i++)
+    for (U32 i = 0; i < queueFamilyCount; i++)
     {
         if (queueFamilies[i].queueFlags & VK_QUEUE_GRAPHICS_BIT)
         {
@@ -607,7 +595,7 @@ QueueFamiliesFind(VulkanContext* vulkanContext, VkPhysicalDevice device)
         }
     }
 
-    u32 sameFamily = indices.graphicsFamilyIndexBits & indices.presentFamilyIndexBits;
+    U32 sameFamily = indices.graphicsFamilyIndexBits & indices.presentFamilyIndexBits;
     if (sameFamily)
     {
         sameFamily &= ((~sameFamily) + 1);
@@ -618,11 +606,11 @@ QueueFamiliesFind(VulkanContext* vulkanContext, VkPhysicalDevice device)
     indices.graphicsFamilyIndexBits &= (~indices.graphicsFamilyIndexBits) + 1;
     indices.presentFamilyIndexBits &= (~indices.presentFamilyIndexBits) + 1;
 
-    ArenaTempEnd(scratchArena);
+    scratch_end(scratch);
     return indices;
 }
 
-root_function SwapChainSupportDetails
+internal SwapChainSupportDetails
 querySwapChainSupport(Arena* arena, VulkanContext* vulkanContext, VkPhysicalDevice device)
 {
     SwapChainSupportDetails details;
@@ -630,23 +618,23 @@ querySwapChainSupport(Arena* arena, VulkanContext* vulkanContext, VkPhysicalDevi
     vkGetPhysicalDeviceSurfaceCapabilitiesKHR(device, vulkanContext->surface,
                                               &details.capabilities);
 
-    u32 formatCount;
+    U32 formatCount;
     vkGetPhysicalDeviceSurfaceFormatsKHR(device, vulkanContext->surface, &formatCount, nullptr);
 
     if (formatCount != 0)
     {
-        details.formats = VkSurfaceFormatKHR_Buffer_Alloc(arena, formatCount);
+        details.formats = BufferAlloc<VkSurfaceFormatKHR>(arena, formatCount);
         vkGetPhysicalDeviceSurfaceFormatsKHR(device, vulkanContext->surface, &formatCount,
                                              details.formats.data);
     }
 
-    u32 presentModeCount;
+    U32 presentModeCount;
     vkGetPhysicalDeviceSurfacePresentModesKHR(device, vulkanContext->surface, &presentModeCount,
                                               nullptr);
 
     if (presentModeCount != 0)
     {
-        details.presentModes = VkPresentModeKHR_Buffer_Alloc(arena, presentModeCount);
+        details.presentModes = BufferAlloc<VkPresentModeKHR>(arena, presentModeCount);
         vkGetPhysicalDeviceSurfacePresentModesKHR(device, vulkanContext->surface, &presentModeCount,
                                                   details.presentModes.data);
     }

@@ -9,14 +9,14 @@
 #include "entrypoint.hpp"
 
 // domain: cpp
-#include "base/base.cpp"
+#include "base/base_inc.cpp"
 #include "ui/ui.cpp"
 
 // profiler
 #include "profiler/tracy/Tracy.hpp"
 #include "profiler/tracy/TracyVulkan.hpp"
 
-root_function VkResult
+internal VkResult
 CreateDebugUtilsMessengerEXT(VkInstance instance,
                              const VkDebugUtilsMessengerCreateInfoEXT* pCreateInfo,
                              const VkAllocationCallbacks* pAllocator,
@@ -34,7 +34,7 @@ CreateDebugUtilsMessengerEXT(VkInstance instance,
     }
 }
 
-root_function void
+internal void
 DestroyDebugUtilsMessengerEXT(VkInstance instance, VkDebugUtilsMessengerEXT debugMessenger,
                               const VkAllocationCallbacks* pAllocator)
 {
@@ -46,54 +46,27 @@ DestroyDebugUtilsMessengerEXT(VkInstance instance, VkDebugUtilsMessengerEXT debu
     }
 }
 
-no_name_mangle void
+C_LINKAGE void
 InitContext()
 {
     Context* ctx = GlobalContextGet();
-    GlyphAtlas* glyphAtlas = ctx->glyphAtlas;
-    glyphAtlas->fontArena = (Arena*)ArenaAlloc(FONT_ARENA_SIZE);
-
-    UI_State* ui_state = ctx->ui_state;
-    ui_state->arena_permanent = (Arena*)ArenaAlloc(GIGABYTE(1));
-    ui_state->widgetCacheSize = 1; // 4096;
-    ui_state->widgetSlot =
-        PushArray(ui_state->arena_permanent, UI_WidgetSlot, ui_state->widgetCacheSize);
-
-    ui_state->arena_frame = ArenaAlloc(GIGABYTE(1));
+    ctx->arena_permanent = (Arena*)arena_alloc();
 
     ThreadContextInit();
     initWindow();
     VulkanInit();
 }
 
-no_name_mangle void
+C_LINKAGE void
 DeleteContext()
 {
     cleanup();
     ThreadContextExit();
     Context* ctx = GlobalContextGet();
     ASSERT(ctx, "No Global Context found.");
-    GlyphAtlas* glyphAtlas = ctx->glyphAtlas;
-    UI_State* ui_state = ctx->ui_state;
-    ArenaDealloc(glyphAtlas->fontArena);
-    ArenaDealloc(ui_state->arena_frame);
 }
 
-root_function void
-IndexBufferAlloc(VulkanContext* vulkanContext, GlyphAtlas* glyphAtlas)
-{
-    const u16 indices[] = {0, 1, 2, 2, 3, 0};
-    vulkanContext->indices = u16_Buffer_Alloc(vulkanContext->arena, ArrayCount(indices));
-    glyphAtlas->indices = u16_Buffer_Alloc(glyphAtlas->fontArena, ArrayCount(indices));
-
-    for (u32 i = 0; i < vulkanContext->indices.size; i++)
-    {
-        vulkanContext->indices.data[i] = indices[i];
-        glyphAtlas->indices.data[i] = indices[i];
-    }
-}
-
-root_function void
+internal void
 framebufferResizeCallback(GLFWwindow* window, int width, int height)
 {
     (void)width;
@@ -103,7 +76,7 @@ framebufferResizeCallback(GLFWwindow* window, int width, int height)
     context->vulkanContext->framebufferResized = 1;
 }
 
-root_function void
+internal void
 initWindow()
 {
     Context* ctx = GlobalContextGet();
@@ -117,79 +90,55 @@ initWindow()
     glfwSetFramebufferSizeCallback(vulkanContext->window, framebufferResizeCallback);
 }
 
-root_function void
+internal void
 VulkanInit()
 {
     Context* ctx = GlobalContextGet();
-    ArenaTemp scratchArena = ArenaScratchGet();
+    Temp scratch = scratch_begin(0, 0);
 
     VulkanContext* vulkanContext = ctx->vulkanContext;
-    GlyphAtlas* glyphAtlas = ctx->glyphAtlas;
-    BoxContext* box_context = ctx->box_context;
-    vulkanContext->arena = ArenaAlloc(GIGABYTE(4));
+    vulkanContext->arena = arena_alloc();
 
-    IndexBufferAlloc(vulkanContext, glyphAtlas);
     createInstance(vulkanContext);
     setupDebugMessenger(vulkanContext);
     createSurface(vulkanContext);
     pickPhysicalDevice(vulkanContext);
-    createLogicalDevice(scratchArena.arena, vulkanContext);
-    SwapChainInfo swapChainInfo = SwapChainCreate(scratchArena.arena, vulkanContext);
-    u32 swapChainImageCount = SwapChainImageCountGet(vulkanContext);
+    createLogicalDevice(scratch.arena, vulkanContext);
+    SwapChainInfo swapChainInfo = SwapChainCreate(scratch.arena, vulkanContext);
+    U32 swapChainImageCount = SwapChainImageCountGet(vulkanContext);
     vulkanContext->swapChainImages =
-        VkImage_Buffer_Alloc(vulkanContext->arena, (u64)swapChainImageCount);
+        BufferAlloc<VkImage>(vulkanContext->arena, (U64)swapChainImageCount);
     vulkanContext->swapChainImageViews =
-        VkImageView_Buffer_Alloc(vulkanContext->arena, (u64)swapChainImageCount);
+        BufferAlloc<VkImageView>(vulkanContext->arena, (U64)swapChainImageCount);
     vulkanContext->swapChainFramebuffers =
-        VkFramebuffer_Buffer_Alloc(vulkanContext->arena, (u64)swapChainImageCount);
+        BufferAlloc<VkFramebuffer>(vulkanContext->arena, (U64)swapChainImageCount);
 
     SwapChainImagesCreate(vulkanContext, swapChainInfo, swapChainImageCount);
     SwapChainImageViewsCreate(vulkanContext);
     createCommandPool(vulkanContext);
 
-    vulkanContext->boxRenderPass = createRenderPass(
-        vulkanContext->device, vulkanContext->swapChainImageFormat, vulkanContext->msaaSamples,
-        VK_ATTACHMENT_LOAD_OP_CLEAR, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR);
-    vulkanContext->fontRenderPass =
-        createRenderPass(vulkanContext->device, vulkanContext->swapChainImageFormat,
-                         vulkanContext->msaaSamples, VK_ATTACHMENT_LOAD_OP_LOAD,
-                         VK_IMAGE_LAYOUT_PRESENT_SRC_KHR, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR);
-
     vulkanContext->resolutionInfo.offset = 0;
     vulkanContext->resolutionInfo.size = sizeof(float) * 2;
-
-    createGraphicsPipeline(
-        &box_context->pipelineLayout, &box_context->graphicsPipeline, vulkanContext->device,
-        vulkanContext->swapChainExtent, vulkanContext->fontRenderPass, VK_NULL_HANDLE,
-        vulkanContext->msaaSamples, Vulkan_BoxInstance::getBindingDescription(),
-        Vulkan_BoxInstance::getAttributeDescriptions(vulkanContext->arena),
-        vulkanContext->resolutionInfo, Str8(scratchArena.arena, "shaders/vert.spv"),
-        Str8(scratchArena.arena, "shaders/frag.spv"), VK_SHADER_STAGE_VERTEX_BIT);
 
     vulkanContext->colorImageView = createColorResources(
         vulkanContext->physicalDevice, vulkanContext->device, vulkanContext->swapChainImageFormat,
         vulkanContext->swapChainExtent, vulkanContext->msaaSamples, vulkanContext->colorImage,
         vulkanContext->colorImageMemory);
-    createFramebuffers(vulkanContext->swapChainFramebuffers, vulkanContext->device,
-                       vulkanContext->colorImageView, vulkanContext->fontRenderPass,
-                       vulkanContext->swapChainExtent, vulkanContext->swapChainImageViews);
-    BoxIndexBufferCreate(ctx->box_context, vulkanContext->physicalDevice, vulkanContext->device,
-                         vulkanContext->commandPool, vulkanContext->graphicsQueue,
-                         vulkanContext->indices);
+    // TODO: missing framebuffer creation
 
     createCommandBuffers(ctx);
     createSyncObjects(vulkanContext);
 
-    ArenaTempEnd(scratchArena);
+    TerrainInit();
+
+    scratch_end(scratch);
 }
 
-root_function void
+internal void
 cleanup()
 {
     Context* ctx = GlobalContextGet();
     VulkanContext* vulkanContext = ctx->vulkanContext;
-    GlyphAtlas* glyphAtlas = ctx->glyphAtlas;
-    BoxContext* box_context = ctx->box_context;
 
     vkDeviceWaitIdle(vulkanContext->device);
 
@@ -200,14 +149,8 @@ cleanup()
     }
     cleanupSwapChain(vulkanContext);
 
-    cleanupFontResources(glyphAtlas, vulkanContext->device);
-    BoxCleanup(box_context, vulkanContext->device);
-
-    vkDestroyRenderPass(vulkanContext->device, vulkanContext->boxRenderPass, nullptr);
-    vkDestroyRenderPass(vulkanContext->device, vulkanContext->fontRenderPass, nullptr);
-
 #ifdef PROFILING_ENABLE
-    for (u32 i = 0; i < ctx->profilingContext->tracyContexts.size; i++)
+    for (U32 i = 0; i < ctx->profilingContext->tracyContexts.size; i++)
     {
         TracyVkDestroy(ctx->profilingContext->tracyContexts.data[i]);
     }
@@ -216,7 +159,7 @@ cleanup()
 
     vkDestroySurfaceKHR(vulkanContext->instance, vulkanContext->surface, nullptr);
 
-    for (u32 i = 0; i < (u32)vulkanContext->MAX_FRAMES_IN_FLIGHT; i++)
+    for (U32 i = 0; i < (U32)vulkanContext->MAX_FRAMES_IN_FLIGHT; i++)
     {
         vkDestroySemaphore(vulkanContext->device, vulkanContext->renderFinishedSemaphores.data[i],
                            nullptr);
@@ -233,7 +176,7 @@ cleanup()
     glfwTerminate();
 }
 
-root_function void
+internal void
 cleanupColorResources(VulkanContext* vulkanContext)
 {
     vkDestroyImageView(vulkanContext->device, vulkanContext->colorImageView, nullptr);
@@ -241,7 +184,7 @@ cleanupColorResources(VulkanContext* vulkanContext)
     vkFreeMemory(vulkanContext->device, vulkanContext->colorImageMemory, nullptr);
 }
 
-root_function void
+internal void
 cleanupSwapChain(VulkanContext* vulkanContext)
 {
     cleanupColorResources(vulkanContext);
@@ -261,15 +204,15 @@ cleanupSwapChain(VulkanContext* vulkanContext)
     vkDestroySwapchainKHR(vulkanContext->device, vulkanContext->swapChain, nullptr);
 }
 
-root_function void
+internal void
 createSyncObjects(VulkanContext* vulkanContext)
 {
     vulkanContext->imageAvailableSemaphores =
-        VkSemaphore_Buffer_Alloc(vulkanContext->arena, vulkanContext->MAX_FRAMES_IN_FLIGHT);
+        BufferAlloc<VkSemaphore>(vulkanContext->arena, vulkanContext->MAX_FRAMES_IN_FLIGHT);
     vulkanContext->renderFinishedSemaphores =
-        VkSemaphore_Buffer_Alloc(vulkanContext->arena, vulkanContext->MAX_FRAMES_IN_FLIGHT);
+        BufferAlloc<VkSemaphore>(vulkanContext->arena, vulkanContext->MAX_FRAMES_IN_FLIGHT);
     vulkanContext->inFlightFences =
-        VkFence_Buffer_Alloc(vulkanContext->arena, vulkanContext->MAX_FRAMES_IN_FLIGHT);
+        BufferAlloc<VkFence>(vulkanContext->arena, vulkanContext->MAX_FRAMES_IN_FLIGHT);
 
     VkSemaphoreCreateInfo semaphoreInfo{};
     semaphoreInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
@@ -278,7 +221,7 @@ createSyncObjects(VulkanContext* vulkanContext)
     fenceInfo.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
     fenceInfo.flags = VK_FENCE_CREATE_SIGNALED_BIT;
 
-    for (u32 i = 0; i < (u32)vulkanContext->MAX_FRAMES_IN_FLIGHT; i++)
+    for (U32 i = 0; i < (U32)vulkanContext->MAX_FRAMES_IN_FLIGHT; i++)
     {
         if (vkCreateSemaphore(vulkanContext->device, &semaphoreInfo, nullptr,
                               &vulkanContext->imageAvailableSemaphores.data[i]) != VK_SUCCESS ||
@@ -292,12 +235,12 @@ createSyncObjects(VulkanContext* vulkanContext)
     }
 }
 
-root_function void
+internal void
 createCommandBuffers(Context* context)
 {
     VulkanContext* vulkanContext = context->vulkanContext;
 
-    vulkanContext->commandBuffers = VkCommandBuffer_Buffer_Alloc(
+    vulkanContext->commandBuffers = BufferAlloc<VkCommandBuffer>(
         vulkanContext->arena, vulkanContext->swapChainFramebuffers.size);
     VkCommandBufferAllocateInfo allocInfo{};
     allocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
@@ -313,8 +256,8 @@ createCommandBuffers(Context* context)
 
 #ifdef PROFILING_ENABLE
     context->profilingContext->tracyContexts =
-        TracyVkCtx_Buffer_Alloc(vulkanContext->arena, vulkanContext->swapChainFramebuffers.size);
-    for (u32 i = 0; i < vulkanContext->commandBuffers.size; i++)
+        BufferAlloc<TracyVkCtx>(vulkanContext->arena, vulkanContext->swapChainFramebuffers.size);
+    for (U32 i = 0; i < vulkanContext->commandBuffers.size; i++)
     {
         context->profilingContext->tracyContexts.data[i] =
             TracyVkContext(vulkanContext->physicalDevice, vulkanContext->device,
@@ -323,7 +266,7 @@ createCommandBuffers(Context* context)
 #endif
 }
 
-root_function void
+internal void
 createCommandPool(VulkanContext* vulkanContext)
 {
     QueueFamilyIndices queueFamilyIndices = vulkanContext->queueFamilyIndices;
@@ -340,7 +283,7 @@ createCommandPool(VulkanContext* vulkanContext)
     }
 }
 
-root_function void
+internal void
 SwapChainImageViewsCreate(VulkanContext* vulkanContext)
 {
     for (uint32_t i = 0; i < vulkanContext->swapChainImages.size; i++)
@@ -351,8 +294,8 @@ SwapChainImageViewsCreate(VulkanContext* vulkanContext)
     }
 }
 
-root_function void
-SwapChainImagesCreate(VulkanContext* vulkanContext, SwapChainInfo swapChainInfo, u32 imageCount)
+internal void
+SwapChainImagesCreate(VulkanContext* vulkanContext, SwapChainInfo swapChainInfo, U32 imageCount)
 {
     vkGetSwapchainImagesKHR(vulkanContext->device, vulkanContext->swapChain, &imageCount,
                             vulkanContext->swapChainImages.data);
@@ -361,15 +304,15 @@ SwapChainImagesCreate(VulkanContext* vulkanContext, SwapChainInfo swapChainInfo,
     vulkanContext->swapChainExtent = swapChainInfo.extent;
 }
 
-root_function u32
+internal U32
 SwapChainImageCountGet(VulkanContext* vulkanContext)
 {
-    u32 imageCount = {0};
+    U32 imageCount = {0};
     vkGetSwapchainImagesKHR(vulkanContext->device, vulkanContext->swapChain, &imageCount, nullptr);
     return imageCount;
 }
 
-root_function SwapChainInfo
+internal SwapChainInfo
 SwapChainCreate(Arena* arena, VulkanContext* vulkanContext)
 {
     SwapChainInfo swapChainInfo = {0};
@@ -382,7 +325,7 @@ SwapChainCreate(Arena* arena, VulkanContext* vulkanContext)
     swapChainInfo.extent =
         chooseSwapExtent(vulkanContext, swapChainInfo.swapChainSupport.capabilities);
 
-    u32 imageCount = swapChainInfo.swapChainSupport.capabilities.minImageCount + 1;
+    U32 imageCount = swapChainInfo.swapChainSupport.capabilities.minImageCount + 1;
 
     if (swapChainInfo.swapChainSupport.capabilities.maxImageCount > 0 &&
         imageCount > swapChainInfo.swapChainSupport.capabilities.maxImageCount)
@@ -404,7 +347,7 @@ SwapChainCreate(Arena* arena, VulkanContext* vulkanContext)
 
     if (queueFamilyIndices.graphicsFamilyIndex != queueFamilyIndices.presentFamilyIndex)
     {
-        u32 queueFamilyIndicesSame[] = {vulkanContext->queueFamilyIndices.graphicsFamilyIndex,
+        U32 queueFamilyIndicesSame[] = {vulkanContext->queueFamilyIndices.graphicsFamilyIndex,
                                         vulkanContext->queueFamilyIndices.presentFamilyIndex};
         createInfo.imageSharingMode = VK_SHARING_MODE_CONCURRENT;
         createInfo.queueFamilyIndexCount = 2;
@@ -433,7 +376,7 @@ SwapChainCreate(Arena* arena, VulkanContext* vulkanContext)
     return swapChainInfo;
 }
 
-root_function void
+internal void
 createSurface(VulkanContext* vulkanContext)
 {
     if (glfwCreateWindowSurface(vulkanContext->instance, vulkanContext->window, nullptr,
@@ -443,10 +386,22 @@ createSurface(VulkanContext* vulkanContext)
     }
 }
 
-root_function void
+internal char**
+StrArrFromStr8Buffer(Arena* arena, String8* buffer, U64 count)
+{
+    char** arr = push_array(arena, char*, count);
+
+    for (U32 i = 0; i < count; i++)
+    {
+        arr[i] = (char*)buffer[i].str;
+    }
+    return arr;
+}
+
+internal void
 createInstance(VulkanContext* vulkanContext)
 {
-    ArenaTemp scratchArena = ArenaScratchGet();
+    Temp scratch = scratch_begin(0, 0);
     if (vulkanContext->enableValidationLayers && !checkValidationLayerSupport(vulkanContext))
     {
         exitWithError("validation layers requested, but not available!");
@@ -464,16 +419,16 @@ createInstance(VulkanContext* vulkanContext)
     createInfo.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
     createInfo.pApplicationInfo = &appInfo;
 
-    String8_Buffer extensions = getRequiredExtensions(vulkanContext);
+    Buffer<String8> extensions = getRequiredExtensions(vulkanContext);
 
-    createInfo.enabledExtensionCount = (u32)extensions.size;
+    createInfo.enabledExtensionCount = (U32)extensions.size;
     createInfo.ppEnabledExtensionNames =
-        StrArrFromStr8Buffer(scratchArena.arena, extensions.data, extensions.size);
+        StrArrFromStr8Buffer(scratch.arena, extensions.data, extensions.size);
 
     VkDebugUtilsMessengerCreateInfoEXT debugCreateInfo{};
     if (vulkanContext->enableValidationLayers)
     {
-        createInfo.enabledLayerCount = (u32)ArrayCount(vulkanContext->validationLayers);
+        createInfo.enabledLayerCount = (U32)ArrayCount(vulkanContext->validationLayers);
         createInfo.ppEnabledLayerNames = vulkanContext->validationLayers;
 
         populateDebugMessengerCreateInfo(debugCreateInfo);
@@ -490,27 +445,27 @@ createInstance(VulkanContext* vulkanContext)
         exitWithError("failed to create instance!");
     }
 
-    ArenaTempEnd(scratchArena);
+    scratch_end(scratch);
 }
 
-root_function void
+internal void
 createLogicalDevice(Arena* arena, VulkanContext* vulkanContext)
 {
     QueueFamilyIndices queueFamilyIndicies = vulkanContext->queueFamilyIndices;
 
-    u32 uniqueQueueFamiliesCount = 1;
+    U32 uniqueQueueFamiliesCount = 1;
     if (queueFamilyIndicies.graphicsFamilyIndex != queueFamilyIndicies.presentFamilyIndex)
     {
         uniqueQueueFamiliesCount++;
     }
 
-    u32 uniqueQueueFamilies[] = {queueFamilyIndicies.graphicsFamilyIndex,
+    U32 uniqueQueueFamilies[] = {queueFamilyIndicies.graphicsFamilyIndex,
                                  queueFamilyIndicies.presentFamilyIndex};
 
     VkDeviceQueueCreateInfo* queueCreateInfos =
-        PushArray(arena, VkDeviceQueueCreateInfo, uniqueQueueFamiliesCount);
+        push_array(arena, VkDeviceQueueCreateInfo, uniqueQueueFamiliesCount);
     float queuePriority = 1.0f;
-    for (u32 i = 0; i < uniqueQueueFamiliesCount; i++)
+    for (U32 i = 0; i < uniqueQueueFamiliesCount; i++)
     {
         VkDeviceQueueCreateInfo queueCreateInfo{};
         queueCreateInfo.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
@@ -533,13 +488,13 @@ createLogicalDevice(Arena* arena, VulkanContext* vulkanContext)
 
     createInfo.pEnabledFeatures = &deviceFeatures;
 
-    createInfo.enabledExtensionCount = (u32)ArrayCount(vulkanContext->deviceExtensions);
+    createInfo.enabledExtensionCount = (U32)ArrayCount(vulkanContext->deviceExtensions);
     createInfo.ppEnabledExtensionNames = vulkanContext->deviceExtensions;
 
     // NOTE: This if statement is no longer necessary on newer versions
     if (vulkanContext->enableValidationLayers)
     {
-        createInfo.enabledLayerCount = (u32)ArrayCount(vulkanContext->validationLayers);
+        createInfo.enabledLayerCount = (U32)ArrayCount(vulkanContext->validationLayers);
         createInfo.ppEnabledLayerNames = vulkanContext->validationLayers;
     }
     else
@@ -559,10 +514,10 @@ createLogicalDevice(Arena* arena, VulkanContext* vulkanContext)
                      &vulkanContext->presentQueue);
 }
 
-root_function void
+internal void
 pickPhysicalDevice(VulkanContext* vulkanContext)
 {
-    ArenaTemp scratchArena = ArenaScratchGet();
+    Temp scratch = scratch_begin(0, 0);
 
     vulkanContext->physicalDevice = VK_NULL_HANDLE;
 
@@ -574,10 +529,10 @@ pickPhysicalDevice(VulkanContext* vulkanContext)
         exitWithError("failed to find GPUs with Vulkan support!");
     }
 
-    VkPhysicalDevice* devices = PushArray(scratchArena.arena, VkPhysicalDevice, deviceCount);
+    VkPhysicalDevice* devices = push_array(scratch.arena, VkPhysicalDevice, deviceCount);
     vkEnumeratePhysicalDevices(vulkanContext->instance, &deviceCount, devices);
 
-    for (u32 i = 0; i < deviceCount; i++)
+    for (U32 i = 0; i < deviceCount; i++)
     {
         QueueFamilyIndexBits familyIndexBits = QueueFamiliesFind(vulkanContext, devices[i]);
         if (isDeviceSuitable(vulkanContext, devices[i], familyIndexBits))
@@ -594,10 +549,10 @@ pickPhysicalDevice(VulkanContext* vulkanContext)
         exitWithError("failed to find a suitable GPU!");
     }
 
-    ArenaTempEnd(scratchArena);
+    scratch_end(scratch);
 }
 
-root_function bool
+internal bool
 isDeviceSuitable(VulkanContext* vulkanContext, VkPhysicalDevice device,
                  QueueFamilyIndexBits indexBits)
 {
@@ -621,22 +576,21 @@ isDeviceSuitable(VulkanContext* vulkanContext, VkPhysicalDevice device,
            supportedFeatures.samplerAnisotropy;
 }
 
-root_function bool
+internal bool
 checkValidationLayerSupport(VulkanContext* vulkanContext)
 {
-    ArenaTemp scratchArena = ArenaScratchGet();
+    Temp scratch = scratch_begin(0, 0);
     uint32_t layerCount;
     vkEnumerateInstanceLayerProperties(&layerCount, nullptr);
 
-    VkLayerProperties* availableLayers =
-        PushArray(scratchArena.arena, VkLayerProperties, layerCount);
+    VkLayerProperties* availableLayers = push_array(scratch.arena, VkLayerProperties, layerCount);
     vkEnumerateInstanceLayerProperties(&layerCount, availableLayers);
 
     bool layerFound = false;
     for (const char* layerName : vulkanContext->validationLayers)
     {
         layerFound = false;
-        for (u32 i = 0; i < layerCount; i++)
+        for (U32 i = 0; i < layerCount; i++)
         {
             if (strcmp(layerName, availableLayers[i].layerName) == 0)
             {
@@ -651,40 +605,40 @@ checkValidationLayerSupport(VulkanContext* vulkanContext)
         }
     }
 
-    ArenaTempEnd(scratchArena);
+    scratch_end(scratch);
     return layerFound;
 }
 
-root_function String8_Buffer
+internal Buffer<String8>
 getRequiredExtensions(VulkanContext* vulkanContext)
 {
-    u32 glfwExtensionCount = 0;
+    U32 glfwExtensionCount = 0;
     const char** glfwExtensions;
     glfwExtensions = glfwGetRequiredInstanceExtensions(&glfwExtensionCount);
 
-    u32 extensionCount = glfwExtensionCount;
+    U32 extensionCount = glfwExtensionCount;
     if (vulkanContext->enableValidationLayers)
     {
         extensionCount++;
     }
 
-    String8_Buffer extensions = String8_Buffer_Alloc(vulkanContext->arena, extensionCount);
+    Buffer<String8> extensions = BufferAlloc<String8>(vulkanContext->arena, extensionCount);
 
-    for (u32 i = 0; i < glfwExtensionCount; i++)
+    for (U32 i = 0; i < glfwExtensionCount; i++)
     {
-        extensions.data[i] = Str8(vulkanContext->arena, glfwExtensions[i]);
+        extensions.data[i] = push_str8f(vulkanContext->arena, glfwExtensions[i]);
     }
 
     if (vulkanContext->enableValidationLayers)
     {
         extensions.data[glfwExtensionCount] =
-            Str8(vulkanContext->arena, VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
+            push_str8f(vulkanContext->arena, VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
     }
 
     return extensions;
 }
 
-root_function VKAPI_ATTR VkBool32 VKAPI_CALL
+internal VKAPI_ATTR VkBool32 VKAPI_CALL
 debugCallback(VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity,
               VkDebugUtilsMessageTypeFlagsEXT messageType,
               const VkDebugUtilsMessengerCallbackDataEXT* pCallbackData, void* pUserData)
@@ -697,7 +651,7 @@ debugCallback(VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity,
     return VK_FALSE;
 }
 
-root_function void
+internal void
 setupDebugMessenger(VulkanContext* vulkanContext)
 {
     if (!vulkanContext->enableValidationLayers)
@@ -711,7 +665,7 @@ setupDebugMessenger(VulkanContext* vulkanContext)
     }
 }
 
-root_function void
+internal void
 populateDebugMessengerCreateInfo(VkDebugUtilsMessengerCreateInfoEXT& createInfo)
 {
     createInfo = {};
@@ -725,21 +679,21 @@ populateDebugMessengerCreateInfo(VkDebugUtilsMessengerCreateInfoEXT& createInfo)
     createInfo.pfnUserCallback = debugCallback;
 }
 
-root_function bool
+internal bool
 checkDeviceExtensionSupport(VulkanContext* vulkanContext, VkPhysicalDevice device)
 {
-    ArenaTemp scratchArena = ArenaScratchGet();
+    Temp scratch = scratch_begin(0, 0);
     uint32_t extensionCount;
     vkEnumerateDeviceExtensionProperties(device, nullptr, &extensionCount, nullptr);
 
     VkExtensionProperties* availableExtensions =
-        PushArrayZero(scratchArena.arena, VkExtensionProperties, extensionCount);
+        push_array(scratch.arena, VkExtensionProperties, extensionCount);
     vkEnumerateDeviceExtensionProperties(device, nullptr, &extensionCount, availableExtensions);
-    const u64 numberOfRequiredExtenstions = ArrayCount(vulkanContext->deviceExtensions);
-    u64 numberOfRequiredExtenstionsLeft = numberOfRequiredExtenstions;
-    for (u32 i = 0; i < extensionCount; i++)
+    const U64 numberOfRequiredExtenstions = ArrayCount(vulkanContext->deviceExtensions);
+    U64 numberOfRequiredExtenstionsLeft = numberOfRequiredExtenstions;
+    for (U32 i = 0; i < extensionCount; i++)
     {
-        for (u32 j = 0; j < numberOfRequiredExtenstions; j++)
+        for (U32 j = 0; j < numberOfRequiredExtenstions; j++)
         {
             if (CStrEqual(vulkanContext->deviceExtensions[j], availableExtensions[i].extensionName))
             {
@@ -752,10 +706,10 @@ checkDeviceExtensionSupport(VulkanContext* vulkanContext, VkPhysicalDevice devic
     return numberOfRequiredExtenstionsLeft == 0;
 }
 
-root_function VkSurfaceFormatKHR
-chooseSwapSurfaceFormat(VkSurfaceFormatKHR_Buffer availableFormats)
+internal VkSurfaceFormatKHR
+chooseSwapSurfaceFormat(Buffer<VkSurfaceFormatKHR> availableFormats)
 {
-    for (u32 i = 0; i < availableFormats.size; i++)
+    for (U32 i = 0; i < availableFormats.size; i++)
     {
         if (availableFormats.data[i].format == VK_FORMAT_B8G8R8A8_SRGB &&
             availableFormats.data[i].colorSpace == VK_COLOR_SPACE_SRGB_NONLINEAR_KHR)
@@ -766,10 +720,10 @@ chooseSwapSurfaceFormat(VkSurfaceFormatKHR_Buffer availableFormats)
     return availableFormats.data[0];
 }
 
-root_function VkPresentModeKHR
-chooseSwapPresentMode(VkPresentModeKHR_Buffer availablePresentModes)
+internal VkPresentModeKHR
+chooseSwapPresentMode(Buffer<VkPresentModeKHR> availablePresentModes)
 {
-    for (u32 i = 0; i < availablePresentModes.size; i++)
+    for (U32 i = 0; i < availablePresentModes.size; i++)
     {
         if (availablePresentModes.data[i] == VK_PRESENT_MODE_MAILBOX_KHR)
         {
@@ -779,7 +733,7 @@ chooseSwapPresentMode(VkPresentModeKHR_Buffer availablePresentModes)
     return VK_PRESENT_MODE_FIFO_KHR;
 }
 
-root_function VkExtent2D
+internal VkExtent2D
 chooseSwapExtent(VulkanContext* vulkanContext, const VkSurfaceCapabilitiesKHR& capabilities)
 {
     if (capabilities.currentExtent.width != UINT32_MAX)
@@ -793,16 +747,16 @@ chooseSwapExtent(VulkanContext* vulkanContext, const VkSurfaceCapabilitiesKHR& c
 
         VkExtent2D actualExtent = {static_cast<uint32_t>(width), static_cast<uint32_t>(height)};
 
-        actualExtent.width = Clamp<u32>(actualExtent.width, capabilities.minImageExtent.width,
-                                        capabilities.maxImageExtent.width);
-        actualExtent.height = Clamp<u32>(actualExtent.height, capabilities.minImageExtent.height,
-                                         capabilities.maxImageExtent.height);
+        actualExtent.width = Clamp(actualExtent.width, capabilities.minImageExtent.width,
+                                   capabilities.maxImageExtent.width);
+        actualExtent.height = Clamp(actualExtent.height, capabilities.minImageExtent.height,
+                                    capabilities.maxImageExtent.height);
 
         return actualExtent;
     }
 }
 
-root_function VkSampleCountFlagBits
+internal VkSampleCountFlagBits
 getMaxUsableSampleCount(VkPhysicalDevice device)
 {
     VkPhysicalDeviceProperties physicalDeviceProperties;
@@ -838,61 +792,20 @@ getMaxUsableSampleCount(VkPhysicalDevice device)
     return VK_SAMPLE_COUNT_1_BIT;
 }
 
-root_function void
-CommandBufferRecord(u32 imageIndex, u32 currentFrame)
+internal void
+CommandBufferRecord(U32 imageIndex, U32 currentFrame)
 {
     ZoneScoped;
     Context* context = GlobalContextGet();
 
     VulkanContext* vulkanContext = context->vulkanContext;
-    GlyphAtlas* glyphAtlas = context->glyphAtlas;
-    BoxContext* box_context = context->box_context;
     ProfilingContext* profilingContext = context->profilingContext;
-    UI_State* ui_state = context->ui_state;
     (void)profilingContext;
-
-    Arena* frame_arena = ui_state->arena_frame;
-    UI_State_FrameReset(ui_state);
-    FontFrameReset(frame_arena, glyphAtlas);
-    BoxFrameReset(frame_arena, box_context);
 
     VkCommandBufferBeginInfo beginInfo{};
     beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
     beginInfo.flags = 0;                  // Optional
     beginInfo.pInheritanceInfo = nullptr; // Optional
-
-    // add buttom that is only a rectangle and text at the moment
-    F32Vec4 color = {0.0f, 0.0f, 1.0f, 1.0f};
-    String8 text = Str8(frame_arena, "");
-    UI_WidgetFlags flags = 0;
-    UI_Size semanticSizeX = {.kind = UI_SizeKind_ChildrenSum, .value = 50.0f, .strictness = 0};
-    UI_Size semanticSizeY = {.kind = UI_SizeKind_Null, .value = 0, .strictness = 0};
-    {
-        UI_Widget_Add(Str8(frame_arena, "Div"), flags, semanticSizeX, semanticSizeY);
-    }
-
-    UI_Widget_SizeAndRelativePositionCalculate(glyphAtlas, ui_state);
-    F32Vec4 rootWindowRect = {0.0f, 0.0f, 400.0f, 400.0f};
-    UI_Widget_AbsolutePositionCalculate(ui_state, rootWindowRect);
-    UI_Widget_DrawPrepare(frame_arena, ui_state, box_context);
-
-    // recording rectangles
-    {
-        ZoneScopedN("Rectangle CPU");
-        box_context->numInstances =
-            InstanceBufferFromBoxes(box_context->boxQueue.first, box_context->boxInstances);
-        InstanceBufferFillFromBoxes(box_context, vulkanContext->physicalDevice,
-                                    vulkanContext->device);
-    }
-    // recording text
-    {
-        ZoneScopedN("Text CPU");
-
-        glyphAtlas->numInstances =
-            InstanceBufferFromFontBuffers(glyphAtlas->glyphInstanceBuffer, glyphAtlas->fontLL);
-        mapGlyphInstancesToBuffer(glyphAtlas, vulkanContext->physicalDevice, vulkanContext->device,
-                                  vulkanContext->graphicsQueue);
-    }
 
     if (vkBeginCommandBuffer(vulkanContext->commandBuffers.data[currentFrame], &beginInfo) !=
         VK_SUCCESS)
@@ -903,16 +816,7 @@ CommandBufferRecord(u32 imageIndex, u32 currentFrame)
     TracyVkCollect(profilingContext->tracyContexts.data[currentFrame],
                    vulkanContext->commandBuffers.data[currentFrame]);
 
-    {
-        TracyVkZoneC(profilingContext->tracyContexts.data[currentFrame],
-                     vulkanContext->commandBuffers.data[currentFrame], "Rectangles GPU", 0xff0000);
-        BoxRenderPassBegin(box_context, vulkanContext, imageIndex, currentFrame);
-    }
-    {
-        TracyVkZoneC(profilingContext->tracyContexts.data[currentFrame],
-                     vulkanContext->commandBuffers.data[currentFrame], "Text GPU", 0x00FF00);
-        GlyphAtlasRenderPass(glyphAtlas, vulkanContext, imageIndex, currentFrame);
-    }
+    // TODO: renderpass here
 
     if (vkEndCommandBuffer(vulkanContext->commandBuffers.data[currentFrame]) != VK_SUCCESS)
     {
@@ -920,7 +824,7 @@ CommandBufferRecord(u32 imageIndex, u32 currentFrame)
     }
 }
 
-no_name_mangle void
+C_LINKAGE void
 drawFrame()
 {
     ZoneScoped;
@@ -1010,10 +914,10 @@ drawFrame()
         (vulkanContext->currentFrame + 1) % vulkanContext->MAX_FRAMES_IN_FLIGHT;
 }
 
-root_function void
+internal void
 recreateSwapChain(VulkanContext* vulkanContext)
 {
-    ArenaTemp scratchArena = ArenaScratchGet();
+    Temp scratch = scratch_begin(0, 0);
     int width = 0, height = 0;
     glfwGetFramebufferSize(vulkanContext->window, &width, &height);
     while (width == 0 || height == 0)
@@ -1025,8 +929,8 @@ recreateSwapChain(VulkanContext* vulkanContext)
 
     cleanupSwapChain(vulkanContext);
 
-    SwapChainInfo swapChainInfo = SwapChainCreate(scratchArena.arena, vulkanContext);
-    u32 swapChainImageCount = SwapChainImageCountGet(vulkanContext);
+    SwapChainInfo swapChainInfo = SwapChainCreate(scratch.arena, vulkanContext);
+    U32 swapChainImageCount = SwapChainImageCountGet(vulkanContext);
     SwapChainImagesCreate(vulkanContext, swapChainInfo, swapChainImageCount);
 
     SwapChainImageViewsCreate(vulkanContext);
@@ -1034,8 +938,7 @@ recreateSwapChain(VulkanContext* vulkanContext)
         vulkanContext->physicalDevice, vulkanContext->device, vulkanContext->swapChainImageFormat,
         vulkanContext->swapChainExtent, vulkanContext->msaaSamples, vulkanContext->colorImage,
         vulkanContext->colorImageMemory);
-    createFramebuffers(vulkanContext->swapChainFramebuffers, vulkanContext->device,
-                       vulkanContext->colorImageView, vulkanContext->fontRenderPass,
-                       vulkanContext->swapChainExtent, vulkanContext->swapChainImageViews);
-    ArenaTempEnd(scratchArena);
+
+    // TODO: recreate framebuffer
+    scratch_end(scratch);
 }

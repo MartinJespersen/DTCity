@@ -1,10 +1,14 @@
-root_function u64
+internal U64
 OS_PageSize(void);
 
-root_function void* OS_Reserve(u64 size);
+internal void*
+OS_Reserve(U64 size);
 
-root_function void OS_Alloc(void* ptr, u64 size);
+internal void
+OS_Alloc(void* ptr, U64 size);
 
-root_function void OS_Free(void* ptr);
+internal void
+OS_Free(void* ptr);
 
-root_function void OS_Release(void* ptr, u64 size);
+internal void
+OS_Release(void* ptr, U64 size);

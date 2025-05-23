@@ -3,8 +3,8 @@
 #ifdef __linux__
 #include <sys/mman.h>
 
-root_function void*
-memAlloc(u64 size)
+internal void*
+memAlloc(U64 size)
 {
     void* mappedMem = mmap(NULL, size, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
     if (mappedMem == MAP_FAILED)
@@ -14,8 +14,8 @@ memAlloc(u64 size)
     return mappedMem;
 }
 
-root_function void
-memFree(void* ptr, u64 freeSize)
+internal void
+memFree(void* ptr, U64 freeSize)
 {
     if (munmap(ptr, freeSize) < 0)
     {

@@ -20,11 +20,14 @@
             "forcedInclude": [
                 "${workspaceFolder}\\base\\base.hpp",
                 "${workspaceFolder}\\ui\\ui.hpp",
-                "${workspaceFolder}\\third_party\\third_party_wrapper.hpp",
+                "${workspaceFolder}\\third_party\\third_party_wrapper.hpp"
             ],
             "browse": {
                 "path": [
-                    "${workspaceFolder}"
+                    "${workspaceFolder}\\ui",
+                    "${workspaceFolder}\\base",
+                    "${workspaceFolder}\\*.cpp",
+                    "${workspaceFolder}\\*.hpp"
                 ],
                 "limitSymbolsToIncludedHeaders": true,
                 "databaseFilename": "${workspaceFolder}/.vscode/browse.vc.db"

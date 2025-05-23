@@ -1,30 +1,21 @@
 #pragma once
 
-// TODO: Create a array/list that is a mix of a fixed array and a linked list to improve cache
-// utility for some workloads.
-
-// Fixed array
-
-template <typename T> struct Array
+template <typename T> struct Buffer
 {
     T* data;
-    u64 capacity;
-
-    T&
-    operator[](u64 index)
-    {
-        if (index >= capacity)
-        {
-            exitWithError("Indexing is out of bounds");
-        }
-        return data[index];
-    }
+    U64 size;
 };
 
 template <typename T>
-root_function Array<T>
-ArrayAlloc(Arena* arena, u64 capacity);
+Buffer<T>
+BufferAlloc(Arena* arena, U64 count)
+{
+    Buffer<T> buffer = {0};
+    buffer.data = push_array(arena, T, count);
+    buffer.size = count;
+    return buffer;
+};
 
 // hashing
-root_function u128
+internal U128
 HashFromStr8(String8 string);
