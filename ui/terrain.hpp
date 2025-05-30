@@ -7,19 +7,12 @@ struct TerrainTransform
     glm::highp_mat4 proj;
 };
 
-struct TerrainVertex
-{
-    Vec3F32 pos;
-};
-
 struct Terrain
 {
     TerrainTransform transform;
 
-    U32* vertex_indices;
-    TerrainVertex* vertices;
-    U32 index_count;
-    U32 vertex_count;
+    Buffer<Vertex> vertices;
+    Buffer<U32> indices;
 
     // vulkan
     VkBuffer* buffer;
@@ -28,17 +21,10 @@ struct Terrain
 
     VkPipelineLayout vk_pipeline_layout;
     VkPipeline vk_pipeline;
-    VkBuffer vk_vertex_buffer;
-    VkDeviceMemory vk_vertex_buffer_memory;
-    VkDeviceSize vertex_buffer_size;
-    VkBuffer vk_index_buffer;
-    VkDeviceMemory vk_index_buffer_memory;
 
     VkDescriptorSetLayout descriptor_set_layout;
     VkDescriptorPool descriptor_pool;
     VkDescriptorSet* descriptor_sets;
-
-    VkRenderPass vk_renderpass;
 };
 
 internal void
@@ -62,9 +48,6 @@ internal void
 TerrainDescriptorPoolCreate(Terrain* terrain, U32 frames_in_flight);
 internal void
 TerrainDescriptorSetCreate(Terrain* terrain, U32 frames_in_flight);
-
-internal void
-TerrainRenderPassCreate(Terrain* terrain);
 
 internal void
 TerrainRenderPassBegin(Terrain* terrain, U32 image_index, U32 current_frame);

@@ -55,7 +55,7 @@ TerrainDescriptorSetLayoutCreate(VkDevice device, Terrain* terrain)
 internal void
 TerrainDescriptorSetCreate(Terrain* terrain, U32 frames_in_flight)
 {
-    Temp scratch = ArenaScratchGet();
+    Temp scratch = scratch_begin(0, 0);
     Arena* arena = scratch.arena;
 
     VulkanContext* vk_ctx = GlobalContextGet()->vulkanContext;
@@ -112,7 +112,7 @@ TerrainUniformBufferCreate(Terrain* terrain, U32 frames_in_flight)
 
     for (U32 i = 0; i < frames_in_flight; i++)
     {
-        BufferCreate(vk_ctx->physicalDevice, vk_ctx->device, terrain_buffer_size,
+        BufferCreate(vk_ctx->physical_device, vk_ctx->device, terrain_buffer_size,
                      VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
                      VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
                      &terrain->buffer[i], &terrain->buffer_memory[i]);
@@ -151,11 +151,11 @@ TerrainGraphicsPipelineCreate(Terrain* terrain)
     str8_list_push(scratch.arena, &vert_path_list, cwd);
     str8_list_push(scratch.arena, &frag_path_list, cwd);
 
-    const char* vertex_path_strs[] = {"shaders", "terrain.vert"};
+    const char* vertex_path_strs[] = {"shaders", "terrain_vert.spv"};
     String8 vertex_path_abs = create_path_from_strings(
         scratch.arena, &vert_path_list, (char**)vertex_path_strs, ArrayCount(vertex_path_strs));
 
-    const char* fragment_path_strings[] = {"shaders", "terrain.frag"};
+    const char* fragment_path_strings[] = {"shaders", "terrain_frag.spv"};
     String8 fragment_path_abs = create_path_from_strings(
         scratch.arena, &frag_path_list, (char**)vertex_path_strs, ArrayCount(vertex_path_strs));
 
@@ -210,8 +210,8 @@ TerrainGraphicsPipelineCreate(Terrain* terrain)
     VkViewport viewport{};
     viewport.x = 0.0f;
     viewport.y = 0.0f;
-    viewport.width = vk_ctx->swapChainExtent.width;
-    viewport.height = vk_ctx->swapChainExtent.height;
+    viewport.width = vk_ctx->swapchain_extent.width;
+    viewport.height = vk_ctx->swapchain_extent.height;
     viewport.minDepth = 0.0f;
     viewport.maxDepth = 1.0f;
 
@@ -237,7 +237,7 @@ TerrainGraphicsPipelineCreate(Terrain* terrain)
     VkPipelineMultisampleStateCreateInfo multisampling{};
     multisampling.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
     multisampling.sampleShadingEnable = VK_TRUE;
-    multisampling.rasterizationSamples = vk_ctx->msaaSamples;
+    multisampling.rasterizationSamples = vk_ctx->msaa_samples;
     multisampling.minSampleShading = 1.0f;          // Optional
     multisampling.pSampleMask = nullptr;            // Optional
     multisampling.alphaToCoverageEnable = VK_FALSE; // Optional
@@ -298,7 +298,7 @@ TerrainGraphicsPipelineCreate(Terrain* terrain)
     pipelineInfo.pColorBlendState = &colorBlending;
     pipelineInfo.pDynamicState = &dynamicState; // Optional
     pipelineInfo.layout = terrain->vk_pipeline_layout;
-    pipelineInfo.renderPass = terrain->vk_renderpass;
+    pipelineInfo.renderPass = vk_ctx->vk_renderpass;
     pipelineInfo.subpass = 0;
 
     pipelineInfo.basePipelineHandle = VK_NULL_HANDLE; // Optional
@@ -332,7 +332,6 @@ TerrainVulkanCleanup(Terrain* terrain, U32 frames_in_flight)
 
     vkDestroyDescriptorSetLayout(vk_ctx->device, terrain->descriptor_set_layout, nullptr);
     vkDestroyPipelineLayout(vk_ctx->device, terrain->vk_pipeline_layout, nullptr);
-    vkDestroyRenderPass(vk_ctx->device, terrain->vk_renderpass, nullptr);
 }
 
 internal void
@@ -350,87 +349,17 @@ UpdateTerrainTransform(Terrain* terrain, Vec2F32 screen_res, U32 current_image)
 }
 
 internal void
-TerrainRenderPassCreate(Terrain* terrain)
-{
-    VulkanContext* vk_ctx = GlobalContextGet()->vulkanContext;
-    VkAttachmentDescription colorAttachment{};
-    colorAttachment.format = vk_ctx->swapChainImageFormat;
-    colorAttachment.samples = vk_ctx->msaaSamples;
-    colorAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
-    colorAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
-    colorAttachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
-    colorAttachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-    colorAttachment.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-    colorAttachment.finalLayout = VK_IMAGE_LAYOUT_ATTACHMENT_OPTIMAL;
-
-    VkAttachmentDescription colorAttachmentResolve{};
-    colorAttachmentResolve.format = vk_ctx->swapChainImageFormat;
-    colorAttachmentResolve.samples = VK_SAMPLE_COUNT_1_BIT;
-    colorAttachmentResolve.loadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
-    colorAttachmentResolve.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
-    colorAttachmentResolve.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
-    colorAttachmentResolve.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-    colorAttachmentResolve.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-    colorAttachmentResolve.finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
-
-    VkAttachmentReference colorAttachmentRef{};
-    colorAttachmentRef.attachment = 0;
-    colorAttachmentRef.layout =
-        VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL; // This one is optimal for color
-                                                  // attachment for writing colors
-                                                  // from fragment shader
-
-    VkAttachmentReference colorAttachmentResolveRef{};
-    colorAttachmentResolveRef.attachment = 1;
-    colorAttachmentResolveRef.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-
-    VkSubpassDescription subpass{};
-    subpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
-    subpass.colorAttachmentCount = 1;
-    subpass.pColorAttachments = &colorAttachmentRef;
-    subpass.pResolveAttachments = &colorAttachmentResolveRef;
-
-    VkSubpassDependency dependency{};
-    dependency.srcSubpass = VK_SUBPASS_EXTERNAL;
-    dependency.dstSubpass = 0;
-    dependency.srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
-    dependency.srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
-    dependency.dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
-    dependency.dstAccessMask =
-        VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT | VK_ACCESS_COLOR_ATTACHMENT_READ_BIT;
-
-    const U32 attachmentsCount = 2;
-    VkAttachmentDescription attachments[attachmentsCount] = {colorAttachment,
-                                                             colorAttachmentResolve};
-
-    VkRenderPassCreateInfo renderPassInfo{};
-    renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
-    renderPassInfo.attachmentCount = attachmentsCount;
-    renderPassInfo.pAttachments = attachments;
-    renderPassInfo.subpassCount = 1;
-    renderPassInfo.pSubpasses = &subpass;
-    renderPassInfo.dependencyCount = 1;
-    renderPassInfo.pDependencies = &dependency;
-
-    if (vkCreateRenderPass(vk_ctx->device, &renderPassInfo, nullptr, &terrain->vk_renderpass) !=
-        VK_SUCCESS)
-    {
-        exitWithError("failed to create render pass!");
-    }
-}
-
-internal void
-TerrainRenderPassBegin(Terrain* terrain, U32 image_index, U32 current_frame)
+TerrainRenderPassBegin(VulkanContext* vk_ctx, Terrain* terrain, U32 image_index, U32 current_frame)
 {
     VulkanContext* vk_ctx = GlobalContextGet()->vulkanContext;
 
-    VkExtent2D swap_chain_extent = vk_ctx->swapChainExtent;
-    VkCommandBuffer command_buffer = vk_ctx->commandBuffers.data[current_frame];
+    VkExtent2D swap_chain_extent = vk_ctx->swapchain_extent;
+    VkCommandBuffer command_buffer = vk_ctx->command_buffers.data[current_frame];
 
     VkRenderPassBeginInfo renderpass_info{};
     renderpass_info.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
-    renderpass_info.renderPass = terrain->vk_renderpass;
-    renderpass_info.framebuffer = vk_ctx->swapChainFramebuffers.data[image_index];
+    renderpass_info.renderPass = vk_ctx->vk_renderpass;
+    renderpass_info.framebuffer = vk_ctx->swapchain_framebuffers.data[image_index];
     renderpass_info.renderArea.offset = {0, 0};
     renderpass_info.renderArea.extent = swap_chain_extent;
 
@@ -460,14 +389,18 @@ TerrainRenderPassBegin(Terrain* terrain, U32 image_index, U32 current_frame)
     scissor.extent = swap_chain_extent;
     vkCmdSetScissor(command_buffer, 0, 1, &scissor);
 
-    VkBuffer vertexBuffers[] = {terrain->vk_vertex_buffer};
+    vkCmdBindDescriptorSets(command_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS,
+                            terrain->vk_pipeline_layout, 0, 1,
+                            &terrain->descriptor_sets[current_frame], 0, nullptr);
+
+    VkBuffer vertex_buffers[] = {vk_ctx->vk_vertex_context.buffer};
     VkDeviceSize offsets[] = {0};
     F32 resolutionData[2] = {(F32)swap_chain_extent.width, (F32)swap_chain_extent.height};
-    vkCmdBindVertexBuffers(command_buffer, 0, 1, vertexBuffers, offsets);
+    vkCmdBindVertexBuffers(command_buffer, 0, 1, vertex_buffers, offsets);
 
-    vkCmdBindIndexBuffer(command_buffer, terrain->vk_index_buffer, 0, VK_INDEX_TYPE_UINT16);
+    vkCmdBindIndexBuffer(command_buffer, vk_ctx->vk_indice_context.buffer, 0, VK_INDEX_TYPE_UINT32);
 
-    vkCmdDrawIndexed(command_buffer, terrain->index_count, 0, 0, 0, 0);
+    vkCmdDrawIndexed(command_buffer, vk_ctx->vk_indice_context.size, 0, 0, 0, 0);
 
     vkCmdEndRenderPass(command_buffer);
 }
@@ -484,7 +417,6 @@ TerrainInit()
     TerrainDescriptorSetLayoutCreate(vk_ctx->device, ctx->terrain);
     TerrainUniformBufferCreate(ctx->terrain, vk_ctx->MAX_FRAMES_IN_FLIGHT);
     TerrainDescriptorSetCreate(ctx->terrain, vk_ctx->MAX_FRAMES_IN_FLIGHT);
-    TerrainRenderPassCreate(ctx->terrain);
     TerrainGraphicsPipelineCreate(ctx->terrain);
 }
 
@@ -493,7 +425,7 @@ TerrainBindingDescriptionGet()
 {
     VkVertexInputBindingDescription bindingDescription{};
     bindingDescription.binding = 0;
-    bindingDescription.stride = sizeof(TerrainVertex);
+    bindingDescription.stride = sizeof(Vertex);
     bindingDescription.inputRate = VK_VERTEX_INPUT_RATE_INSTANCE;
     return bindingDescription;
 }
@@ -506,7 +438,7 @@ TerrainAttributeDescriptionGet(Arena* arena)
     attribute_descriptions.data[0].binding = 0;
     attribute_descriptions.data[0].location = 0;
     attribute_descriptions.data[0].format = VK_FORMAT_R32G32B32_SFLOAT;
-    attribute_descriptions.data[0].offset = offsetof(TerrainVertex, pos);
+    attribute_descriptions.data[0].offset = offsetof(Vertex, pos);
 
     return attribute_descriptions;
 }

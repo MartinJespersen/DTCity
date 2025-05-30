@@ -259,26 +259,25 @@ createColorResources(VkPhysicalDevice physicalDevice, VkDevice device,
 }
 
 internal void
-createFramebuffers(Buffer<VkFramebuffer> framebuffers, VkDevice device, VkImageView colorImageView,
-                   VkRenderPass renderPass, VkExtent2D swapChainExtent,
-                   Buffer<VkImageView> swapChainImageViews)
+createFramebuffers(VulkanContext* vk_ctx, VkRenderPass renderPass)
 {
-    for (size_t i = 0; i < swapChainImageViews.size; i++)
+    for (size_t i = 0; i < vk_ctx->swapchain_image_views.size; i++)
     {
         const U32 attachmentCount = 2;
-        VkImageView attachments[attachmentCount] = {colorImageView, swapChainImageViews.data[i]};
+        VkImageView attachments[attachmentCount] = {vk_ctx->color_image_view,
+                                                    vk_ctx->swapchain_image_views.data[i]};
 
         VkFramebufferCreateInfo framebufferInfo{};
         framebufferInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
         framebufferInfo.renderPass = renderPass;
         framebufferInfo.attachmentCount = attachmentCount;
         framebufferInfo.pAttachments = attachments;
-        framebufferInfo.width = swapChainExtent.width;
-        framebufferInfo.height = swapChainExtent.height;
+        framebufferInfo.width = vk_ctx->swapchain_extent.width;
+        framebufferInfo.height = vk_ctx->swapchain_extent.height;
         framebufferInfo.layers = 1;
 
-        if (vkCreateFramebuffer(device, &framebufferInfo, nullptr, &framebuffers.data[i]) !=
-            VK_SUCCESS)
+        if (vkCreateFramebuffer(vk_ctx->device, &framebufferInfo, nullptr,
+                                &vk_ctx->swapchain_framebuffers.data[i]) != VK_SUCCESS)
         {
             exitWithError("failed to create framebuffer!");
         }
@@ -640,4 +639,120 @@ querySwapChainSupport(Arena* arena, VulkanContext* vulkanContext, VkPhysicalDevi
     }
 
     return details;
+}
+
+internal void
+RenderPassCreate()
+{
+    VulkanContext* vk_ctx = GlobalContextGet()->vulkanContext;
+    VkAttachmentDescription colorAttachment{};
+    colorAttachment.format = vk_ctx->swapchain_image_format;
+    colorAttachment.samples = vk_ctx->msaa_samples;
+    colorAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+    colorAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+    colorAttachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+    colorAttachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+    colorAttachment.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+    colorAttachment.finalLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+
+    VkAttachmentDescription colorAttachmentResolve{};
+    colorAttachmentResolve.format = vk_ctx->swapchain_image_format;
+    colorAttachmentResolve.samples = VK_SAMPLE_COUNT_1_BIT;
+    colorAttachmentResolve.loadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+    colorAttachmentResolve.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+    colorAttachmentResolve.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+    colorAttachmentResolve.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+    colorAttachmentResolve.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+    colorAttachmentResolve.finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+
+    VkAttachmentReference colorAttachmentRef{};
+    colorAttachmentRef.attachment = 0;
+    colorAttachmentRef.layout =
+        VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL; // This one is optimal for color
+                                                  // attachment for writing colors
+                                                  // from fragment shader
+
+    VkAttachmentReference colorAttachmentResolveRef{};
+    colorAttachmentResolveRef.attachment = 1;
+    colorAttachmentResolveRef.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+
+    VkSubpassDescription subpass{};
+    subpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
+    subpass.colorAttachmentCount = 1;
+    subpass.pColorAttachments = &colorAttachmentRef;
+    subpass.pResolveAttachments = &colorAttachmentResolveRef;
+
+    VkSubpassDependency dependency{};
+    dependency.srcSubpass = VK_SUBPASS_EXTERNAL;
+    dependency.dstSubpass = 0;
+    dependency.srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+    dependency.srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+    dependency.dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+    dependency.dstAccessMask =
+        VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT | VK_ACCESS_COLOR_ATTACHMENT_READ_BIT;
+
+    const U32 attachmentsCount = 2;
+    VkAttachmentDescription attachments[attachmentsCount] = {colorAttachment,
+                                                             colorAttachmentResolve};
+
+    VkRenderPassCreateInfo renderPassInfo{};
+    renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
+    renderPassInfo.attachmentCount = attachmentsCount;
+    renderPassInfo.pAttachments = attachments;
+    renderPassInfo.subpassCount = 1;
+    renderPassInfo.pSubpasses = &subpass;
+    renderPassInfo.dependencyCount = 1;
+    renderPassInfo.pDependencies = &dependency;
+
+    if (vkCreateRenderPass(vk_ctx->device, &renderPassInfo, nullptr, &vk_ctx->vk_renderpass) !=
+        VK_SUCCESS)
+    {
+        exitWithError("failed to create render pass!");
+    }
+}
+
+internal void
+VK_BufferContextCreate(VulkanContext* vk_ctx, VK_BufferContext* vk_buffer_ctx,
+                       Buffer<Buffer<Vertex>> buffers)
+{
+    // calculate number of vertices
+    U32 total_buffer_size = 0;
+    for (U32 buf_i = 0; buf_i < buffers.size; buf_i++)
+    {
+        Buffer<Vertex> buffer = buffers.data[buf_i];
+        total_buffer_size += buffer.size;
+    }
+
+    if (total_buffer_size)
+    {
+        VkDeviceSize buffer_byte_size = sizeof(Vertex) * total_buffer_size;
+        if (total_buffer_size > vk_buffer_ctx->capacity)
+        {
+            vkDestroyBuffer(vk_ctx->device, vk_buffer_ctx->buffer, nullptr);
+            vkFreeMemory(vk_ctx->device, vk_buffer_ctx->memory, nullptr);
+
+            BufferCreate(vk_ctx->physical_device, vk_ctx->device, buffer_byte_size,
+                         VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
+                         VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+                         &vk_buffer_ctx->buffer, &vk_buffer_ctx->memory);
+
+            vk_buffer_ctx->capacity = total_buffer_size;
+        }
+
+        // TODO: Consider using vkFlushMappedMemoryRanges and vkInvalidateMappedMemoryRanges instead
+        // of VK_MEMORY_PROPERTY_HOST_COHERENT_BIT for performance.
+        void* data;
+        vkMapMemory(vk_ctx->device, vk_buffer_ctx->memory, 0, buffer_byte_size, 0, &data);
+
+        U32 data_offset = 0;
+        for (U32 buf_i = 0; buf_i < buffers.size; buf_i++)
+        {
+            Buffer<Vertex> buffer = buffers.data[buf_i];
+            memcpy((Vertex*)data + data_offset, buffer.data, buffer.size);
+            data_offset += buffer.size;
+        }
+        vkUnmapMemory(vk_ctx->device, vk_buffer_ctx->memory);
+
+        vk_buffer_ctx->size = total_buffer_size;
+    }
 }

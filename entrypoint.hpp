@@ -17,13 +17,13 @@ extern "C"
 }
 
 internal void
-cleanup();
+VK_Cleanup();
 
 internal void
 VulkanInit();
 
 internal void
-initWindow();
+InitWindow();
 
 internal void
 framebufferResizeCallback(GLFWwindow* window, int width, int height);
@@ -35,37 +35,37 @@ internal void
 recreateSwapChain(VulkanContext* vulkanContext);
 
 internal void
-createSyncObjects(VulkanContext* vulkanContext);
+VK_SyncObjectsCreate(VulkanContext* vulkanContext);
 
 internal void
-createCommandBuffers(Context* context);
+VK_CommandBuffersCreate(Context* context);
 
 internal void
-SwapChainImageViewsCreate(VulkanContext* vulkanContext);
+VK_SwapChainImageViewsCreate(VulkanContext* vulkanContext);
 internal void
-createCommandPool(VulkanContext* vulkanContext);
+VK_CommandPoolCreate(VulkanContext* vulkanContext);
 
 internal void
-cleanupColorResources(VulkanContext* vulkanContext);
+VK_ColorResourcesCleanup(VulkanContext* vulkanContext);
 internal void
-cleanupSwapChain(VulkanContext* vulkanContext);
+VK_SwapChainCleanup(VulkanContext* vulkanContext);
 internal void
 createInstance(VulkanContext* vulkanContext);
 internal void
 setupDebugMessenger(VulkanContext* vulkanContext);
 internal void
-createSurface(VulkanContext* vulkanContext);
+VK_SurfaceCreate(VulkanContext* vulkanContext);
 internal void
 pickPhysicalDevice(VulkanContext* vulkanContext);
 internal void
 createLogicalDevice(Arena* arena, VulkanContext* vulkanContext);
 
 internal SwapChainInfo
-SwapChainCreate(Arena* arena, VulkanContext* vulkanContext);
+VK_SwapChainCreate(Arena* arena, VulkanContext* vulkanContext);
 internal U32
-SwapChainImageCountGet(VulkanContext* vulkanContext);
+VK_SwapChainImageCountGet(VulkanContext* vulkanContext);
 internal void
-SwapChainImagesCreate(VulkanContext* vulkanContext, SwapChainInfo swapChainInfo, U32 imageCount);
+VK_SwapChainImagesCreate(VulkanContext* vulkanContext, SwapChainInfo swapChainInfo, U32 imageCount);
 
 internal VkExtent2D
 chooseSwapExtent(VulkanContext* vulkanContext, const VkSurfaceCapabilitiesKHR& capabilities);

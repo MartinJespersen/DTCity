@@ -41,38 +41,3 @@ ThreadContextExit()
         arena_release(g_thread_ctx->scratchArenas[tctx_i]);
     }
 }
-
-internal Temp
-ArenaScratchGet()
-{
-    Temp temp = {};
-    temp.pos = g_thread_ctx->scratchArenas[0]->pos;
-    temp.arena = g_thread_ctx->scratchArenas[0];
-    return temp;
-}
-
-internal Temp
-ArenaScratchGet(Arena** conflicts, U64 conflict_count)
-{
-    Temp scratch = {0};
-    ThreadCtx* tctx = g_thread_ctx;
-    for (U64 tctx_idx = 0; tctx_idx < ArrayCount(tctx->scratchArenas); tctx_idx += 1)
-    {
-        B32 is_conflicting = 0;
-        for (Arena** conflict = conflicts; conflict < conflicts + conflict_count; conflict += 1)
-        {
-            if (*conflict == tctx->scratchArenas[tctx_idx])
-            {
-                is_conflicting = 1;
-                break;
-            }
-        }
-        if (is_conflicting == 0)
-        {
-            scratch.arena = tctx->scratchArenas[tctx_idx];
-            scratch.pos = scratch.arena->pos;
-            break;
-        }
-    }
-    return scratch;
-}

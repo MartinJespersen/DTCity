@@ -21,11 +21,12 @@ set "link_dirs=/LIBPATH:"%lib_dir%glfw\lib" /LIBPATH:C:\VulkanSDK\1.4.309.0\Lib"
 if not exist "%shader_path%" mkdir "%shader_path%"
 :: Compile shaders
 pushd shaders
-call compile.bat
+call compile.bat %cd%
 popd
 
 :: Create debug directory
 if not exist "%debug_dir%" mkdir "%debug_dir%"
 
+echo %cd%
 :: Compile main executable
-cl  %main_file_name% %entrypoint_file_name% %tracy_src% /Fe"%exec_full_path%"  %cxxflags%  %include_dirs% /DTRACY_ENABLE /DPROFILING_ENABLE /nologo /link %link_dirs% %link_libs% %link_flags% /INCREMENTAL:NO /noexp 
+::cl  %main_file_name% %entrypoint_file_name% %tracy_src% /Fe"%exec_full_path%"  %cxxflags%  %include_dirs% /DTRACY_ENABLE /DPROFILING_ENABLE /nologo /link %link_dirs% %link_libs% %link_flags% /INCREMENTAL:NO /noexp 

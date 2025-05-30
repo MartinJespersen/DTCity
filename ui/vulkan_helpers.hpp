@@ -34,6 +34,19 @@ struct SwapChainInfo
     VkExtent2D extent;
 };
 
+struct Vertex
+{
+    Vec3F32 pos;
+};
+
+struct VK_BufferContext
+{
+    VkBuffer buffer;
+    VkDeviceMemory memory;
+    U32 size;
+    U32 capacity;
+};
+
 // vulkan context
 struct VulkanContext
 {
@@ -43,50 +56,54 @@ struct VulkanContext
     const U32 HEIGHT = 600;
     const U32 MAX_FRAMES_IN_FLIGHT = 2;
 
-    const char* validationLayers[1] = {"VK_LAYER_KHRONOS_validation"};
+    const char* validation_layers[1] = {"VK_LAYER_KHRONOS_validation"};
 
-    const char* deviceExtensions[1] = {VK_KHR_SWAPCHAIN_EXTENSION_NAME};
+    const char* device_extensions[1] = {VK_KHR_SWAPCHAIN_EXTENSION_NAME};
 
 #ifdef NDEBUG
     const u8 enableValidationLayers = 0;
 #else
-    const U8 enableValidationLayers = 1;
+    const U8 enable_validation_layers = 1;
 #endif
-    U8 framebufferResized = 0;
+    U8 framebuffer_resized = 0;
 
     GLFWwindow* window;
     VkInstance instance;
-    VkDebugUtilsMessengerEXT debugMessenger;
+    VkDebugUtilsMessengerEXT debug_messenger;
     VkDevice device;
-    VkPhysicalDevice physicalDevice;
-    VkQueue graphicsQueue;
+    VkPhysicalDevice physical_device;
+    VkQueue graphics_queue;
     VkSurfaceKHR surface;
-    VkQueue presentQueue;
-    VkSwapchainKHR swapChain;
-    Buffer<VkImage> swapChainImages;
-    VkFormat swapChainImageFormat;
-    VkExtent2D swapChainExtent;
-    Buffer<VkImageView> swapChainImageViews;
+    VkQueue present_queue;
+    VkSwapchainKHR swapchain;
+    Buffer<VkImage> swapchain_images;
+    VkFormat swapchain_image_format;
+    VkExtent2D swapchain_extent;
+    Buffer<VkImageView> swapchain_image_views;
 
-    Buffer<VkFramebuffer> swapChainFramebuffers;
-    VkCommandPool commandPool;
-    Buffer<VkCommandBuffer> commandBuffers;
+    Buffer<VkFramebuffer> swapchain_framebuffers;
+    VkCommandPool command_pool;
+    Buffer<VkCommandBuffer> command_buffers;
+    VkRenderPass vk_renderpass;
 
-    Buffer<VkSemaphore> imageAvailableSemaphores;
-    Buffer<VkSemaphore> renderFinishedSemaphores;
-    Buffer<VkFence> inFlightFences;
-    U32 currentFrame = 0;
+    Buffer<VkSemaphore> image_available_semaphores;
+    Buffer<VkSemaphore> render_finished_semaphores;
+    Buffer<VkFence> in_flight_fences;
+    U32 current_frame = 0;
 
-    VkImage colorImage;
-    VkDeviceMemory colorImageMemory;
-    VkImageView colorImageView;
-    VkSampleCountFlagBits msaaSamples = VK_SAMPLE_COUNT_1_BIT;
+    VkImage color_image;
+    VkDeviceMemory color_image_memory;
+    VkImageView color_image_view;
+    VkSampleCountFlagBits msaa_samples = VK_SAMPLE_COUNT_1_BIT;
 
-    Vulkan_PushConstantInfo resolutionInfo;
+    Vulkan_PushConstantInfo resolution_info;
     Buffer<U16> indices;
 
+    VK_BufferContext vk_vertex_context;
+    VK_BufferContext vk_indice_context;
+
     // queue
-    QueueFamilyIndices queueFamilyIndices;
+    QueueFamilyIndices queue_family_indices;
 };
 
 internal VkCommandBuffer
@@ -127,9 +144,7 @@ createColorResources(VkPhysicalDevice physicalDevice, VkDevice device,
                      VkDeviceMemory& colorImageMemory);
 
 internal void
-createFramebuffers(Buffer<VkFramebuffer> framebuffers, VkDevice device, VkImageView colorImageView,
-                   VkRenderPass renderPass, VkExtent2D swapChainExtent,
-                   Buffer<VkImageView> swapChainImageViews);
+createFramebuffers(VulkanContext* vulkan_ctx, VkRenderPass renderPass);
 
 internal void
 createGraphicsPipeline(VkPipelineLayout* pipelineLayout, VkPipeline* graphicsPipeline,
@@ -139,10 +154,6 @@ createGraphicsPipeline(VkPipelineLayout* pipelineLayout, VkPipeline* graphicsPip
                        Buffer<VkVertexInputAttributeDescription> attributeDescriptions,
                        Vulkan_PushConstantInfo pushConstInfo, String8 vertShaderPath,
                        String8 fragShaderPath, VkShaderStageFlagBits pushConstantStage);
-
-internal VkRenderPass
-createRenderPass(VkDevice device, VkFormat swapChainImageFormat, VkSampleCountFlagBits msaaSamples,
-                 VkAttachmentLoadOp loadOp, VkImageLayout initialLayout, VkImageLayout finalLayout);
 
 internal VkShaderModule
 ShaderModuleCreate(VkDevice device, Buffer<U8> buffer);
@@ -160,3 +171,10 @@ QueueFamiliesFind(VulkanContext* vulkanContext, VkPhysicalDevice device);
 
 internal SwapChainSupportDetails
 querySwapChainSupport(Arena* arena, VulkanContext* vulkanContext, VkPhysicalDevice device);
+
+internal void
+RenderPassCreate();
+
+internal void
+VK_BufferContextCreate(VulkanContext* vk_ctx, VK_BufferContext* vk_buffer_ctx,
+                       Buffer<Buffer<Vertex>> buffers);
