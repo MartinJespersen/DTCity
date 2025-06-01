@@ -86,6 +86,8 @@
         "xloctime": "cpp",
         "third_party_wrapper.hpp": "c",
         "base_strings.c": "cpp",
-        "os_core_inc.c": "cpp"
+        "os_core_inc.c": "cpp",
+        "forward_list": "cpp",
+        "locale": "cpp"
     }
 }

@@ -711,28 +711,28 @@ RenderPassCreate()
     }
 }
 
+template <typename T>
 internal void
 VK_BufferContextCreate(VulkanContext* vk_ctx, VK_BufferContext* vk_buffer_ctx,
-                       Buffer<Buffer<Vertex>> buffers)
+                       Buffer<Buffer<T>> buffers, VkBufferUsageFlags usage)
 {
     // calculate number of vertices
     U32 total_buffer_size = 0;
     for (U32 buf_i = 0; buf_i < buffers.size; buf_i++)
     {
-        Buffer<Vertex> buffer = buffers.data[buf_i];
+        Buffer<T> buffer = buffers.data[buf_i];
         total_buffer_size += buffer.size;
     }
 
     if (total_buffer_size)
     {
-        VkDeviceSize buffer_byte_size = sizeof(Vertex) * total_buffer_size;
+        VkDeviceSize buffer_byte_size = sizeof(T) * total_buffer_size;
         if (total_buffer_size > vk_buffer_ctx->capacity)
         {
             vkDestroyBuffer(vk_ctx->device, vk_buffer_ctx->buffer, nullptr);
             vkFreeMemory(vk_ctx->device, vk_buffer_ctx->memory, nullptr);
 
-            BufferCreate(vk_ctx->physical_device, vk_ctx->device, buffer_byte_size,
-                         VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
+            BufferCreate(vk_ctx->physical_device, vk_ctx->device, buffer_byte_size, usage,
                          VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
                          &vk_buffer_ctx->buffer, &vk_buffer_ctx->memory);
 
@@ -747,8 +747,8 @@ VK_BufferContextCreate(VulkanContext* vk_ctx, VK_BufferContext* vk_buffer_ctx,
         U32 data_offset = 0;
         for (U32 buf_i = 0; buf_i < buffers.size; buf_i++)
         {
-            Buffer<Vertex> buffer = buffers.data[buf_i];
-            memcpy((Vertex*)data + data_offset, buffer.data, buffer.size);
+            Buffer<T> buffer = buffers.data[buf_i];
+            MemoryCopy((T*)data + data_offset, buffer.data, buffer.size * sizeof(T));
             data_offset += buffer.size;
         }
         vkUnmapMemory(vk_ctx->device, vk_buffer_ctx->memory);

@@ -2,9 +2,9 @@
 
 struct TerrainTransform
 {
-    glm::highp_mat4 model;
-    glm::highp_mat4 view;
-    glm::highp_mat4 proj;
+    glm::mat4 model;
+    glm::mat4 view;
+    glm::mat4 proj;
 };
 
 struct Terrain
@@ -50,7 +50,7 @@ internal void
 TerrainDescriptorSetCreate(Terrain* terrain, U32 frames_in_flight);
 
 internal void
-TerrainRenderPassBegin(Terrain* terrain, U32 image_index, U32 current_frame);
+TerrainRenderPassBegin(VulkanContext* vk_ctx, Terrain* terrain, U32 image_index, U32 current_frame);
 
 internal void
 TerrainInit();

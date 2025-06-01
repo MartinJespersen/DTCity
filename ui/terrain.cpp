@@ -105,20 +105,23 @@ TerrainDescriptorSetCreate(Terrain* terrain, U32 frames_in_flight)
 }
 
 internal void
-TerrainUniformBufferCreate(Terrain* terrain, U32 frames_in_flight)
+TerrainUniformBufferCreate(Terrain* terrain, U32 image_count)
 {
     VulkanContext* vk_ctx = GlobalContextGet()->vulkanContext;
     VkDeviceSize terrain_buffer_size = sizeof(TerrainTransform);
 
-    for (U32 i = 0; i < frames_in_flight; i++)
+    for (U32 i = 0; i < image_count; i++)
     {
         BufferCreate(vk_ctx->physical_device, vk_ctx->device, terrain_buffer_size,
                      VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
                      VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
                      &terrain->buffer[i], &terrain->buffer_memory[i]);
 
-        vkMapMemory(vk_ctx->device, terrain->buffer_memory[i], 0, terrain_buffer_size, 0,
-                    &terrain->buffer_memory_mapped[i]);
+        if (vkMapMemory(vk_ctx->device, terrain->buffer_memory[i], 0, terrain_buffer_size, 0,
+                        &terrain->buffer_memory_mapped[i]) != VK_SUCCESS)
+        {
+            exitWithError("failed to map terrain buffer memory!");
+        }
     }
 }
 
@@ -148,6 +151,7 @@ TerrainGraphicsPipelineCreate(Terrain* terrain)
     String8List vert_path_list = {0};
     String8List frag_path_list = {0};
     String8 cwd = os_get_current_path(scratch.arena);
+
     str8_list_push(scratch.arena, &vert_path_list, cwd);
     str8_list_push(scratch.arena, &frag_path_list, cwd);
 
@@ -156,8 +160,9 @@ TerrainGraphicsPipelineCreate(Terrain* terrain)
         scratch.arena, &vert_path_list, (char**)vertex_path_strs, ArrayCount(vertex_path_strs));
 
     const char* fragment_path_strings[] = {"shaders", "terrain_frag.spv"};
-    String8 fragment_path_abs = create_path_from_strings(
-        scratch.arena, &frag_path_list, (char**)vertex_path_strs, ArrayCount(vertex_path_strs));
+    String8 fragment_path_abs =
+        create_path_from_strings(scratch.arena, &frag_path_list, (char**)fragment_path_strings,
+                                 ArrayCount(fragment_path_strings));
 
     Buffer<U8> vert_shader_buffer = IO_ReadFile(scratch.arena, vertex_path_abs);
     Buffer<U8> frag_shader_buffer = IO_ReadFile(scratch.arena, fragment_path_abs);
@@ -335,24 +340,33 @@ TerrainVulkanCleanup(Terrain* terrain, U32 frames_in_flight)
 }
 
 internal void
-UpdateTerrainTransform(Terrain* terrain, Vec2F32 screen_res, U32 current_image)
+UpdateTerrainTransform(Terrain* terrain, Vec2F32 screen_res, U32 current_frame)
 {
-    terrain->transform.model =
-        glm::rotate(glm::mat4(1.0f), glm::radians(90.0f), glm::vec3(0.0f, 0.0f, 1.0f));
-    terrain->transform.view = glm::lookAt(glm::vec3(2.0f, 2.0f, 2.0f), glm::vec3(0.0f, 0.0f, 0.0f),
-                                          glm::vec3(0.0f, 0.0f, 1.0f));
-    terrain->transform.proj =
-        glm::perspective(glm::radians(45.0f), screen_res.x / screen_res.y, 0.1f, 10.0f);
-    terrain->transform.proj[1][1] *= -1;
+    static U64 start_time = os_now_microseconds();
+    U64 current_time = os_now_microseconds();
+    U64 elapsed_time = current_time - start_time;
+    F32 elapsed_time_sec = (F32)elapsed_time / 1'000'000.0;
 
-    MemoryCopy(terrain->buffer[current_image], &terrain->transform, sizeof(TerrainTransform));
+    TerrainTransform terrain_transform = {0};
+    terrain_transform.model = glm::rotate(glm::mat4(1.0f), (elapsed_time_sec * glm::radians(90.0f)),
+                                          glm::vec3(0.0f, 0.0f, 1.0f));
+    terrain_transform.view = glm::lookAt(glm::vec3(1.0f, 1.0f, -2.0f), glm::vec3(0.0f, 0.0f, 0.0f),
+                                         glm::vec3(0.0f, 0.0f, 1.0f));
+    terrain_transform.proj =
+        glm::perspective(glm::radians(45.0f), (screen_res.x / screen_res.y), 0.1f, 10.0f);
+    terrain_transform.proj[1][1] *= -1;
+
+    // terrain_transform.view = glm::mat4(1.0f); // Identity matrix for view, can be modified as
+    // needed
+    // terrain_transform.proj = glm::mat4(1.0f);
+
+    MemoryCopy(terrain->buffer_memory_mapped[current_frame], &terrain_transform,
+               sizeof(TerrainTransform));
 }
 
 internal void
 TerrainRenderPassBegin(VulkanContext* vk_ctx, Terrain* terrain, U32 image_index, U32 current_frame)
 {
-    VulkanContext* vk_ctx = GlobalContextGet()->vulkanContext;
-
     VkExtent2D swap_chain_extent = vk_ctx->swapchain_extent;
     VkCommandBuffer command_buffer = vk_ctx->command_buffers.data[current_frame];
 
@@ -395,12 +409,12 @@ TerrainRenderPassBegin(VulkanContext* vk_ctx, Terrain* terrain, U32 image_index,
 
     VkBuffer vertex_buffers[] = {vk_ctx->vk_vertex_context.buffer};
     VkDeviceSize offsets[] = {0};
-    F32 resolutionData[2] = {(F32)swap_chain_extent.width, (F32)swap_chain_extent.height};
+
     vkCmdBindVertexBuffers(command_buffer, 0, 1, vertex_buffers, offsets);
 
     vkCmdBindIndexBuffer(command_buffer, vk_ctx->vk_indice_context.buffer, 0, VK_INDEX_TYPE_UINT32);
 
-    vkCmdDrawIndexed(command_buffer, vk_ctx->vk_indice_context.size, 0, 0, 0, 0);
+    vkCmdDrawIndexed(command_buffer, vk_ctx->vk_indice_context.size, 1, 0, 0, 0);
 
     vkCmdEndRenderPass(command_buffer);
 }
@@ -418,6 +432,18 @@ TerrainInit()
     TerrainUniformBufferCreate(ctx->terrain, vk_ctx->MAX_FRAMES_IN_FLIGHT);
     TerrainDescriptorSetCreate(ctx->terrain, vk_ctx->MAX_FRAMES_IN_FLIGHT);
     TerrainGraphicsPipelineCreate(ctx->terrain);
+
+    // Test
+    Vertex vertices[] = {
+        {-0.5f, -0.5f, 0.0f}, {0.5f, -0.5f, 0.0f}, {0.5f, 0.5f, 0.0f}, {-0.5f, 0.5f, 0.0f}};
+
+    U32 indices[] = {0, 1, 2, 2, 3, 0};
+
+    ctx->terrain->vertices = BufferAlloc<Vertex>(ctx->arena_permanent, ArrayCount(vertices));
+    ctx->terrain->indices = BufferAlloc<U32>(ctx->arena_permanent, ArrayCount(indices));
+
+    MemoryCopy(ctx->terrain->vertices.data, vertices, sizeof(vertices));
+    MemoryCopy(ctx->terrain->indices.data, indices, sizeof(indices));
 }
 
 internal VkVertexInputBindingDescription
@@ -426,7 +452,7 @@ TerrainBindingDescriptionGet()
     VkVertexInputBindingDescription bindingDescription{};
     bindingDescription.binding = 0;
     bindingDescription.stride = sizeof(Vertex);
-    bindingDescription.inputRate = VK_VERTEX_INPUT_RATE_INSTANCE;
+    bindingDescription.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
     return bindingDescription;
 }
 

@@ -54,7 +54,7 @@ InitContext()
 
     ThreadContextInit();
     InitWindow();
-    VulkanInit();
+    VK_VulkanInit();
 }
 
 C_LINKAGE void
@@ -67,7 +67,7 @@ DeleteContext()
 }
 
 internal void
-framebufferResizeCallback(GLFWwindow* window, int width, int height)
+VK_FramebufferResizeCallback(GLFWwindow* window, int width, int height)
 {
     (void)width;
     (void)height;
@@ -87,11 +87,11 @@ InitWindow()
     glfwWindowHint(GLFW_RESIZABLE, GLFW_TRUE);
     vulkanContext->window = glfwCreateWindow(800, 600, "Vulkan", nullptr, nullptr);
     glfwSetWindowUserPointer(vulkanContext->window, ctx);
-    glfwSetFramebufferSizeCallback(vulkanContext->window, framebufferResizeCallback);
+    glfwSetFramebufferSizeCallback(vulkanContext->window, VK_FramebufferResizeCallback);
 }
 
 internal void
-VulkanInit()
+VK_VulkanInit()
 {
     Context* ctx = GlobalContextGet();
     Temp scratch = scratch_begin(0, 0);
@@ -115,9 +115,6 @@ VulkanInit()
     VK_SwapChainImagesCreate(vk_ctx, swapChainInfo, swapChainImageCount);
     VK_SwapChainImageViewsCreate(vk_ctx);
     VK_CommandPoolCreate(vk_ctx);
-
-    vk_ctx->resolution_info.offset = 0;
-    vk_ctx->resolution_info.size = sizeof(float) * 2;
 
     vk_ctx->color_image_view =
         createColorResources(vk_ctx->physical_device, vk_ctx->device,
@@ -400,10 +397,10 @@ VK_StrArrFromStr8Buffer(Arena* arena, String8* buffer, U64 count)
 }
 
 internal void
-VK_CreateInstance(VulkanContext* vulkanContext)
+VK_CreateInstance(VulkanContext* vk_ctx)
 {
     Temp scratch = scratch_begin(0, 0);
-    if (vulkanContext->enable_validation_layers && !VK_CheckValidationLayerSupport(vulkanContext))
+    if (vk_ctx->enable_validation_layers && !VK_CheckValidationLayerSupport(vk_ctx))
     {
         exitWithError("validation layers requested, but not available!");
     }
@@ -420,17 +417,17 @@ VK_CreateInstance(VulkanContext* vulkanContext)
     createInfo.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
     createInfo.pApplicationInfo = &appInfo;
 
-    Buffer<String8> extensions = VK_RequiredExtensionsGet(vulkanContext);
+    Buffer<String8> extensions = VK_RequiredExtensionsGet(vk_ctx);
 
     createInfo.enabledExtensionCount = (U32)extensions.size;
     createInfo.ppEnabledExtensionNames =
         VK_StrArrFromStr8Buffer(scratch.arena, extensions.data, extensions.size);
 
     VkDebugUtilsMessengerCreateInfoEXT debugCreateInfo{};
-    if (vulkanContext->enable_validation_layers)
+    if (vk_ctx->enable_validation_layers)
     {
-        createInfo.enabledLayerCount = (U32)ArrayCount(vulkanContext->validation_layers);
-        createInfo.ppEnabledLayerNames = vulkanContext->validation_layers;
+        createInfo.enabledLayerCount = (U32)ArrayCount(vk_ctx->validation_layers);
+        createInfo.ppEnabledLayerNames = vk_ctx->validation_layers;
 
         VK_PopulateDebugMessengerCreateInfo(debugCreateInfo);
         createInfo.pNext = (VkDebugUtilsMessengerCreateInfoEXT*)&debugCreateInfo;
@@ -441,7 +438,7 @@ VK_CreateInstance(VulkanContext* vulkanContext)
         createInfo.pNext = nullptr;
     }
 
-    if (vkCreateInstance(&createInfo, nullptr, &vulkanContext->instance) != VK_SUCCESS)
+    if (vkCreateInstance(&createInfo, nullptr, &vk_ctx->instance) != VK_SUCCESS)
     {
         exitWithError("failed to create instance!");
     }
@@ -798,10 +795,11 @@ internal void
 VK_CommandBufferRecord(U32 image_index, U32 current_frame)
 {
     ZoneScoped;
-    Context* context = GlobalContextGet();
+    Temp scratch = scratch_begin(0, 0);
+    Context* ctx = GlobalContextGet();
 
-    VulkanContext* vk_ctx = context->vulkanContext;
-    ProfilingContext* profilingContext = context->profilingContext;
+    VulkanContext* vk_ctx = ctx->vulkanContext;
+    ProfilingContext* profilingContext = ctx->profilingContext;
     (void)profilingContext;
 
     VkCommandBufferBeginInfo beginInfo{};
@@ -817,17 +815,31 @@ VK_CommandBufferRecord(U32 image_index, U32 current_frame)
     TracyVkCollect(profilingContext->tracyContexts.data[current_frame],
                    vk_ctx->command_buffers.data[current_frame]);
 
-    VK_BufferContextCreate(vk_ctx, &vk_ctx->vk_vertex_context, );
-    TerrainRenderPassBegin(context->terrain, image_index, current_frame);
+    Buffer<Buffer<Vertex>> buf_of_vert_buffers = BufferAlloc<Buffer<Vertex>>(scratch.arena, 1);
+    buf_of_vert_buffers.data[0] = ctx->terrain->vertices;
+
+    Buffer<Buffer<U32>> buf_of_indice_buffers = BufferAlloc<Buffer<U32>>(scratch.arena, 1);
+    buf_of_indice_buffers.data[0] = ctx->terrain->indices;
+
+    VK_BufferContextCreate(vk_ctx, &vk_ctx->vk_vertex_context, buf_of_vert_buffers,
+                           VK_BUFFER_USAGE_VERTEX_BUFFER_BIT);
+    VK_BufferContextCreate(vk_ctx, &vk_ctx->vk_indice_context, buf_of_indice_buffers,
+                           VK_BUFFER_USAGE_INDEX_BUFFER_BIT);
+    UpdateTerrainTransform(
+        ctx->terrain,
+        Vec2F32{(F32)vk_ctx->swapchain_extent.width, (F32)vk_ctx->swapchain_extent.height},
+        current_frame);
+    TerrainRenderPassBegin(vk_ctx, ctx->terrain, image_index, current_frame);
 
     if (vkEndCommandBuffer(vk_ctx->command_buffers.data[current_frame]) != VK_SUCCESS)
     {
         exitWithError("failed to record command buffer!");
     }
+    scratch_end(scratch);
 }
 
 C_LINKAGE void
-VK_DrawFrame()
+DrawFrame()
 {
     ZoneScoped;
     Context* context = GlobalContextGet();

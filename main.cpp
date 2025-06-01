@@ -33,7 +33,7 @@ run()
         input.leftClicked =
             glfwGetMouseButton(vulkanContext.window, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS;
 
-        drawFrame();
+        DrawFrame();
     }
 
     DeleteContext();

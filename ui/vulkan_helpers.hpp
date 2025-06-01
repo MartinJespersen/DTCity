@@ -96,9 +96,6 @@ struct VulkanContext
     VkImageView color_image_view;
     VkSampleCountFlagBits msaa_samples = VK_SAMPLE_COUNT_1_BIT;
 
-    Vulkan_PushConstantInfo resolution_info;
-    Buffer<U16> indices;
-
     VK_BufferContext vk_vertex_context;
     VK_BufferContext vk_indice_context;
 
@@ -175,6 +172,7 @@ querySwapChainSupport(Arena* arena, VulkanContext* vulkanContext, VkPhysicalDevi
 internal void
 RenderPassCreate();
 
+template <typename T>
 internal void
 VK_BufferContextCreate(VulkanContext* vk_ctx, VK_BufferContext* vk_buffer_ctx,
-                       Buffer<Buffer<Vertex>> buffers);
+                       Buffer<Buffer<T>> buffers, VkBufferUsageFlags usage);

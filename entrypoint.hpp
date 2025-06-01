@@ -13,26 +13,26 @@ extern "C"
     void
     DeleteContext();
     void
-    drawFrame();
+    DrawFrame();
 }
 
 internal void
 VK_Cleanup();
 
 internal void
-VulkanInit();
+VK_VulkanInit();
 
 internal void
 InitWindow();
 
 internal void
-framebufferResizeCallback(GLFWwindow* window, int width, int height);
+VK_FramebufferResizeCallback(GLFWwindow* window, int width, int height);
 
 internal void
 CommandBufferRecord(U32 imageIndex, U32 currentFrame);
 
 internal void
-recreateSwapChain(VulkanContext* vulkanContext);
+VK_RecreateSwapChain(VulkanContext* vulkanContext);
 
 internal void
 VK_SyncObjectsCreate(VulkanContext* vulkanContext);
@@ -50,15 +50,15 @@ VK_ColorResourcesCleanup(VulkanContext* vulkanContext);
 internal void
 VK_SwapChainCleanup(VulkanContext* vulkanContext);
 internal void
-createInstance(VulkanContext* vulkanContext);
+VK_CreateInstance(VulkanContext* vulkanContext);
 internal void
-setupDebugMessenger(VulkanContext* vulkanContext);
+VK_DebugMessengerSetup(VulkanContext* vulkanContext);
 internal void
 VK_SurfaceCreate(VulkanContext* vulkanContext);
 internal void
-pickPhysicalDevice(VulkanContext* vulkanContext);
+VK_PhysicalDevicePick(VulkanContext* vulkanContext);
 internal void
-createLogicalDevice(Arena* arena, VulkanContext* vulkanContext);
+VK_LogicalDeviceCreate(Arena* arena, VulkanContext* vulkanContext);
 
 internal SwapChainInfo
 VK_SwapChainCreate(Arena* arena, VulkanContext* vulkanContext);
@@ -68,29 +68,29 @@ internal void
 VK_SwapChainImagesCreate(VulkanContext* vulkanContext, SwapChainInfo swapChainInfo, U32 imageCount);
 
 internal VkExtent2D
-chooseSwapExtent(VulkanContext* vulkanContext, const VkSurfaceCapabilitiesKHR& capabilities);
+VK_ChooseSwapExtent(VulkanContext* vulkanContext, const VkSurfaceCapabilitiesKHR& capabilities);
 
 internal Buffer<String8>
-getRequiredExtensions(VulkanContext* vulkanContext);
+VK_RequiredExtensionsGet(VulkanContext* vulkanContext);
 
 internal void
-populateDebugMessengerCreateInfo(VkDebugUtilsMessengerCreateInfoEXT& createInfo);
+VK_PopulateDebugMessengerCreateInfo(VkDebugUtilsMessengerCreateInfoEXT& createInfo);
 
 internal bool
-isDeviceSuitable(VulkanContext* vulkanContext, VkPhysicalDevice device,
-                 QueueFamilyIndexBits indexBits);
+VK_IsDeviceSuitable(VulkanContext* vulkanContext, VkPhysicalDevice device,
+                    QueueFamilyIndexBits indexBits);
 
 internal VkSampleCountFlagBits
-getMaxUsableSampleCount(VkPhysicalDevice device);
+VK_MaxUsableSampleCountGet(VkPhysicalDevice device);
 
 internal bool
-checkDeviceExtensionSupport(VulkanContext* vulkanContext, VkPhysicalDevice device);
+VK_CheckDeviceExtensionSupport(VulkanContext* vulkanContext, VkPhysicalDevice device);
 
 internal bool
-checkValidationLayerSupport(VulkanContext* vulkanContext);
+VK_CheckValidationLayerSupport(VulkanContext* vulkanContext);
 
 internal VkSurfaceFormatKHR
-chooseSwapSurfaceFormat(Buffer<VkSurfaceFormatKHR> availableFormats);
+VK_ChooseSwapSurfaceFormat(Buffer<VkSurfaceFormatKHR> availableFormats);
 
 internal VkPresentModeKHR
-chooseSwapPresentMode(Buffer<VkPresentModeKHR> availablePresentModes);
+VK_ChooseSwapPresentMode(Buffer<VkPresentModeKHR> availablePresentModes);
