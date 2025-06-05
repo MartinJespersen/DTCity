@@ -37,6 +37,7 @@ struct SwapChainInfo
 struct Vertex
 {
     Vec3F32 pos;
+    Vec4F32 color;
 };
 
 struct VK_BufferContext
@@ -94,6 +95,12 @@ struct VulkanContext
     VkImage color_image;
     VkDeviceMemory color_image_memory;
     VkImageView color_image_view;
+
+    VkImage depth_image;
+    VkDeviceMemory depth_image_memory;
+    VkImageView depth_image_view;
+    VkFormat depth_image_format;
+
     VkSampleCountFlagBits msaa_samples = VK_SAMPLE_COUNT_1_BIT;
 
     VK_BufferContext vk_vertex_context;
@@ -126,31 +133,23 @@ internal void
 copyBufferToImage(VkCommandPool commandPool, VkDevice device, VkQueue queue, VkBuffer buffer,
                   VkImage image, uint32_t width, uint32_t height);
 internal void
-createImage(VkPhysicalDevice physicalDevice, VkDevice device, uint32_t width, uint32_t height,
-            VkSampleCountFlagBits numSamples, VkFormat format, VkImageTiling tiling,
-            VkImageUsageFlags usage, VkMemoryPropertyFlags properties, VkImage& image,
-            VkDeviceMemory& imageMemory);
-
-internal VkImageView
-createImageView(VkDevice device, VkImage image, VkFormat format);
-
-internal VkImageView
-createColorResources(VkPhysicalDevice physicalDevice, VkDevice device,
-                     VkFormat swapChainImageFormat, VkExtent2D swapChainExtent,
-                     VkSampleCountFlagBits msaaSamples, VkImage& colorImage,
-                     VkDeviceMemory& colorImageMemory);
+VK_ImageCreate(VkPhysicalDevice physicalDevice, VkDevice device, uint32_t width, uint32_t height,
+               VkSampleCountFlagBits numSamples, VkFormat format, VkImageTiling tiling,
+               VkImageUsageFlags usage, VkMemoryPropertyFlags properties, VkImage* image,
+               VkDeviceMemory* imageMemory);
 
 internal void
-createFramebuffers(VulkanContext* vulkan_ctx, VkRenderPass renderPass);
+VK_ImageViewCreate(VkImageView* out_image_view, VkDevice device, VkImage image, VkFormat format,
+                   VkImageAspectFlags aspect_mask);
 
 internal void
-createGraphicsPipeline(VkPipelineLayout* pipelineLayout, VkPipeline* graphicsPipeline,
-                       VkDevice device, VkExtent2D swapChainExtent, VkRenderPass renderPass,
-                       VkDescriptorSetLayout descriptorSetLayout, VkSampleCountFlagBits msaaSamples,
-                       VkVertexInputBindingDescription bindingDescription,
-                       Buffer<VkVertexInputAttributeDescription> attributeDescriptions,
-                       Vulkan_PushConstantInfo pushConstInfo, String8 vertShaderPath,
-                       String8 fragShaderPath, VkShaderStageFlagBits pushConstantStage);
+VK_ColorResourcesCreate(VkPhysicalDevice physicalDevice, VkDevice device,
+                        VkFormat swapChainImageFormat, VkExtent2D swapChainExtent,
+                        VkSampleCountFlagBits msaaSamples, VkImageView* out_color_image_view,
+                        VkImage* out_color_image, VkDeviceMemory* out_color_image_memory);
+
+internal void
+VK_FramebuffersCreate(VulkanContext* vulkan_ctx, VkRenderPass renderPass);
 
 internal VkShaderModule
 ShaderModuleCreate(VkDevice device, Buffer<U8> buffer);
@@ -170,9 +169,12 @@ internal SwapChainSupportDetails
 querySwapChainSupport(Arena* arena, VulkanContext* vulkanContext, VkPhysicalDevice device);
 
 internal void
-RenderPassCreate();
+VK_RenderPassCreate();
 
 template <typename T>
 internal void
 VK_BufferContextCreate(VulkanContext* vk_ctx, VK_BufferContext* vk_buffer_ctx,
                        Buffer<Buffer<T>> buffers, VkBufferUsageFlags usage);
+
+internal void
+VK_DepthResourcesCreate(VulkanContext* vk_context);

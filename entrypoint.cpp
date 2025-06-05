@@ -116,17 +116,19 @@ VK_VulkanInit()
     VK_SwapChainImageViewsCreate(vk_ctx);
     VK_CommandPoolCreate(vk_ctx);
 
-    vk_ctx->color_image_view =
-        createColorResources(vk_ctx->physical_device, vk_ctx->device,
-                             vk_ctx->swapchain_image_format, vk_ctx->swapchain_extent,
-                             vk_ctx->msaa_samples, vk_ctx->color_image, vk_ctx->color_image_memory);
+    VK_ColorResourcesCreate(vk_ctx->physical_device, vk_ctx->device, vk_ctx->swapchain_image_format,
+                            vk_ctx->swapchain_extent, vk_ctx->msaa_samples,
+                            &vk_ctx->color_image_view, &vk_ctx->color_image,
+                            &vk_ctx->color_image_memory);
+
+    VK_DepthResourcesCreate(vk_ctx);
 
     VK_CommandBuffersCreate(ctx);
     VK_SyncObjectsCreate(vk_ctx);
-    RenderPassCreate();
+    VK_RenderPassCreate();
 
     TerrainInit();
-    createFramebuffers(vk_ctx, vk_ctx->vk_renderpass);
+    VK_FramebuffersCreate(vk_ctx, vk_ctx->vk_renderpass);
     scratch_end(scratch);
 }
 
@@ -144,6 +146,7 @@ VK_Cleanup()
                                       nullptr);
     }
     VK_SwapChainCleanup(vulkanContext);
+    TerrainVulkanCleanup(ctx->terrain, vulkanContext->MAX_FRAMES_IN_FLIGHT);
 
 #ifdef PROFILING_ENABLE
     for (U32 i = 0; i < ctx->profilingContext->tracyContexts.size; i++)
@@ -173,17 +176,26 @@ VK_Cleanup()
 }
 
 internal void
-VK_ColorResourcesCleanup(VulkanContext* vulkanContext)
+VK_ColorResourcesCleanup(VulkanContext* vk_ctx)
 {
-    vkDestroyImageView(vulkanContext->device, vulkanContext->color_image_view, nullptr);
-    vkDestroyImage(vulkanContext->device, vulkanContext->color_image, nullptr);
-    vkFreeMemory(vulkanContext->device, vulkanContext->color_image_memory, nullptr);
+    vkDestroyImageView(vk_ctx->device, vk_ctx->color_image_view, nullptr);
+    vkDestroyImage(vk_ctx->device, vk_ctx->color_image, nullptr);
+    vkFreeMemory(vk_ctx->device, vk_ctx->color_image_memory, nullptr);
+}
+
+internal void
+VK_DepthResourcesCleanup(VulkanContext* vk_ctx)
+{
+    vkDestroyImageView(vk_ctx->device, vk_ctx->depth_image_view, nullptr);
+    vkDestroyImage(vk_ctx->device, vk_ctx->depth_image, nullptr);
+    vkFreeMemory(vk_ctx->device, vk_ctx->depth_image_memory, nullptr);
 }
 
 internal void
 VK_SwapChainCleanup(VulkanContext* vulkanContext)
 {
     VK_ColorResourcesCleanup(vulkanContext);
+    VK_DepthResourcesCleanup(vulkanContext);
 
     for (size_t i = 0; i < vulkanContext->swapchain_framebuffers.size; i++)
     {
@@ -284,9 +296,9 @@ VK_SwapChainImageViewsCreate(VulkanContext* vulkanContext)
 {
     for (uint32_t i = 0; i < vulkanContext->swapchain_images.size; i++)
     {
-        vulkanContext->swapchain_image_views.data[i] =
-            createImageView(vulkanContext->device, vulkanContext->swapchain_images.data[i],
-                            vulkanContext->swapchain_image_format);
+        VK_ImageViewCreate(&vulkanContext->swapchain_image_views.data[i], vulkanContext->device,
+                           vulkanContext->swapchain_images.data[i],
+                           vulkanContext->swapchain_image_format, VK_IMAGE_ASPECT_COLOR_BIT);
     }
 }
 
@@ -948,11 +960,12 @@ VK_RecreateSwapChain(VulkanContext* vk_ctx)
     VK_SwapChainImagesCreate(vk_ctx, swapChainInfo, swapChainImageCount);
 
     VK_SwapChainImageViewsCreate(vk_ctx);
-    vk_ctx->color_image_view =
-        createColorResources(vk_ctx->physical_device, vk_ctx->device,
-                             vk_ctx->swapchain_image_format, vk_ctx->swapchain_extent,
-                             vk_ctx->msaa_samples, vk_ctx->color_image, vk_ctx->color_image_memory);
+    VK_ColorResourcesCreate(vk_ctx->physical_device, vk_ctx->device, vk_ctx->swapchain_image_format,
+                            vk_ctx->swapchain_extent, vk_ctx->msaa_samples,
+                            &vk_ctx->color_image_view, &vk_ctx->color_image,
+                            &vk_ctx->color_image_memory);
 
-    createFramebuffers(vk_ctx, vk_ctx->vk_renderpass);
+    VK_DepthResourcesCreate(vk_ctx);
+    VK_FramebuffersCreate(vk_ctx, vk_ctx->vk_renderpass);
     scratch_end(scratch);
 }

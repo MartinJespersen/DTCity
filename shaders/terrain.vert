@@ -6,12 +6,12 @@ layout(binding = 0) uniform TerrainTransform {
     mat4 proj;
 } ubo;
 
-layout(location = 0) in vec3 inPosition;
+layout(location = 0) in vec3 in_position;
+layout(location = 1) in vec4 in_color;
 
 layout(location = 0) out vec4 fragColor;
 
 void main() {
-    gl_Position = ubo.proj * ubo.view * ubo.model * vec4(inPosition, 1.0);
-    // gl_Position = vec4(inPosition, 1.0);
-    fragColor = vec4(1.0, 0.0, 0.0, 1.0); // Red color for the terrain
+    gl_Position = ubo.proj * ubo.view * ubo.model * vec4(in_position, 1.0);
+    fragColor = in_color;
 }

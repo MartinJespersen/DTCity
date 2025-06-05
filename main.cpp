@@ -58,10 +58,3 @@ wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPWSTR lpCmdLine, int nSh
     return 0;
 }
 #endif
-// int
-// main(int argc, char* argv[])
-// {
-//     w32_entry_point_caller(argc, argv);
-//     run();
-//     return EXIT_SUCCESS;
-// }

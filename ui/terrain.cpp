@@ -284,6 +284,18 @@ TerrainGraphicsPipelineCreate(Terrain* terrain)
     pipelineLayoutInfo.pushConstantRangeCount = 0;    // Optional
     pipelineLayoutInfo.pPushConstantRanges = nullptr; // Optional
 
+    VkPipelineDepthStencilStateCreateInfo depthStencil{};
+    depthStencil.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
+    depthStencil.depthTestEnable = VK_TRUE;
+    depthStencil.depthWriteEnable = VK_TRUE;
+    depthStencil.depthCompareOp = VK_COMPARE_OP_LESS;
+    depthStencil.depthBoundsTestEnable = VK_FALSE;
+    depthStencil.minDepthBounds = 0.0f; // Optional
+    depthStencil.maxDepthBounds = 1.0f; // Optional
+    depthStencil.stencilTestEnable = VK_FALSE;
+    depthStencil.front = {}; // Optional
+    depthStencil.back = {};  // Optional
+
     if (vkCreatePipelineLayout(vk_ctx->device, &pipelineLayoutInfo, nullptr,
                                &terrain->vk_pipeline_layout) != VK_SUCCESS)
     {
@@ -299,7 +311,7 @@ TerrainGraphicsPipelineCreate(Terrain* terrain)
     pipelineInfo.pViewportState = &viewportState;
     pipelineInfo.pRasterizationState = &rasterizer;
     pipelineInfo.pMultisampleState = &multisampling;
-    pipelineInfo.pDepthStencilState = nullptr; // Optional
+    pipelineInfo.pDepthStencilState = &depthStencil; // Optional
     pipelineInfo.pColorBlendState = &colorBlending;
     pipelineInfo.pDynamicState = &dynamicState; // Optional
     pipelineInfo.layout = terrain->vk_pipeline_layout;
@@ -350,15 +362,11 @@ UpdateTerrainTransform(Terrain* terrain, Vec2F32 screen_res, U32 current_frame)
     TerrainTransform terrain_transform = {0};
     terrain_transform.model = glm::rotate(glm::mat4(1.0f), (elapsed_time_sec * glm::radians(90.0f)),
                                           glm::vec3(0.0f, 0.0f, 1.0f));
-    terrain_transform.view = glm::lookAt(glm::vec3(1.0f, 1.0f, -2.0f), glm::vec3(0.0f, 0.0f, 0.0f),
-                                         glm::vec3(0.0f, 0.0f, 1.0f));
+    terrain_transform.view = glm::lookAt(glm::vec3(2.0f, 2.0f, -2.0f), glm::vec3(0.0f, 0.0f, 0.0f),
+                                         glm::vec3(0.0f, 1.0f, 0.0f));
     terrain_transform.proj =
         glm::perspective(glm::radians(45.0f), (screen_res.x / screen_res.y), 0.1f, 10.0f);
     terrain_transform.proj[1][1] *= -1;
-
-    // terrain_transform.view = glm::mat4(1.0f); // Identity matrix for view, can be modified as
-    // needed
-    // terrain_transform.proj = glm::mat4(1.0f);
 
     MemoryCopy(terrain->buffer_memory_mapped[current_frame], &terrain_transform,
                sizeof(TerrainTransform));
@@ -377,13 +385,14 @@ TerrainRenderPassBegin(VulkanContext* vk_ctx, Terrain* terrain, U32 image_index,
     renderpass_info.renderArea.offset = {0, 0};
     renderpass_info.renderArea.extent = swap_chain_extent;
 
-    const U32 clearValueCount = 2;
-    VkClearValue clearValues[clearValueCount] = {0};
-    clearValues[0].color = {{0.0f, 0.0f, 0.0f, 0.0f}};
-    clearValues[1].depthStencil = {1.0f, 0};
+    const U32 clear_value_count = 3;
+    VkClearValue clear_values[clear_value_count] = {0};
+    clear_values[0].color = {{0.0f, 0.0f, 0.0f, 0.0f}};
+    clear_values[1].color = {{0.0f, 0.0f, 0.0f, 1.0f}};
+    clear_values[2].depthStencil = {1.0f, 0};
 
-    renderpass_info.clearValueCount = clearValueCount;
-    renderpass_info.pClearValues = &clearValues[0];
+    renderpass_info.clearValueCount = clear_value_count;
+    renderpass_info.pClearValues = &clear_values[0];
 
     vkCmdBeginRenderPass(command_buffer, &renderpass_info, VK_SUBPASS_CONTENTS_INLINE);
 
@@ -433,11 +442,32 @@ TerrainInit()
     TerrainDescriptorSetCreate(ctx->terrain, vk_ctx->MAX_FRAMES_IN_FLIGHT);
     TerrainGraphicsPipelineCreate(ctx->terrain);
 
-    // Test
+    // All vertices have the same color (e.g., white)
     Vertex vertices[] = {
-        {-0.5f, -0.5f, 0.0f}, {0.5f, -0.5f, 0.0f}, {0.5f, 0.5f, 0.0f}, {-0.5f, 0.5f, 0.0f}};
+        // Front face
+        {{-0.5f, -0.5f, 0.5f}, {1.0f, 1.0f, 1.0f, 1.0f}},
+        {{0.5f, -0.5f, 0.5f}, {1.0f, 1.0f, 1.0f, 1.0f}},
+        {{0.5f, 0.5f, 0.5f}, {1.0f, 1.0f, 1.0f, 1.0f}},
+        {{-0.5f, 0.5f, 0.5f}, {1.0f, 1.0f, 1.0f, 1.0f}},
+        // Back face
+        {{-0.5f, -0.5f, -0.5f}, {1.0f, 1.0f, 1.0f, 1.0f}},
+        {{0.5f, -0.5f, -0.5f}, {1.0f, 1.0f, 1.0f, 1.0f}},
+        {{0.5f, 0.5f, -0.5f}, {1.0f, 1.0f, 1.0f, 1.0f}},
+        {{-0.5f, 0.5f, -0.5f}, {1.0f, 1.0f, 1.0f, 1.0f}},
+    };
 
-    U32 indices[] = {0, 1, 2, 2, 3, 0};
+    U32 indices[] = {// Front face
+                     0, 1, 2, 2, 3, 0,
+                     // Right face
+                     1, 5, 6, 6, 2, 1,
+                     // Back face
+                     5, 4, 7, 7, 6, 5,
+                     // Left face
+                     4, 0, 3, 3, 7, 4,
+                     // Top face
+                     3, 2, 6, 6, 7, 3,
+                     // Bottom face
+                     4, 5, 1, 1, 0, 4};
 
     ctx->terrain->vertices = BufferAlloc<Vertex>(ctx->arena_permanent, ArrayCount(vertices));
     ctx->terrain->indices = BufferAlloc<U32>(ctx->arena_permanent, ArrayCount(indices));
@@ -460,11 +490,16 @@ internal Buffer<VkVertexInputAttributeDescription>
 TerrainAttributeDescriptionGet(Arena* arena)
 {
     Buffer<VkVertexInputAttributeDescription> attribute_descriptions =
-        BufferAlloc<VkVertexInputAttributeDescription>(arena, 1);
+        BufferAlloc<VkVertexInputAttributeDescription>(arena, 2);
     attribute_descriptions.data[0].binding = 0;
     attribute_descriptions.data[0].location = 0;
     attribute_descriptions.data[0].format = VK_FORMAT_R32G32B32_SFLOAT;
     attribute_descriptions.data[0].offset = offsetof(Vertex, pos);
+
+    attribute_descriptions.data[1].binding = 0;
+    attribute_descriptions.data[1].location = 1;
+    attribute_descriptions.data[1].format = VK_FORMAT_R32G32B32A32_SFLOAT;
+    attribute_descriptions.data[1].offset = offsetof(Vertex, color);
 
     return attribute_descriptions;
 }
