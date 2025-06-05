@@ -110,28 +110,31 @@ struct VulkanContext
     QueueFamilyIndices queue_family_indices;
 };
 
+internal void
+VK_CommandBuffersCreate(VulkanContext* vk_ctx);
+
+internal VkResult
+CreateDebugUtilsMessengerEXT(VkInstance instance,
+                             const VkDebugUtilsMessengerCreateInfoEXT* pCreateInfo,
+                             const VkAllocationCallbacks* pAllocator,
+                             VkDebugUtilsMessengerEXT* pDebugMessenger);
+
+internal void
+DestroyDebugUtilsMessengerEXT(VkInstance instance, VkDebugUtilsMessengerEXT debugMessenger,
+                              const VkAllocationCallbacks* pAllocator);
+
 internal VkCommandBuffer
-beginSingleTimeCommands(VkDevice device, VkCommandPool commandPool);
+VK_BeginSingleTimeCommands(VkDevice device, VkCommandPool commandPool);
 
 internal void
-endSingleTimeCommands(VkDevice device, VkCommandPool commandPool, VkQueue queue,
-                      VkCommandBuffer commandBuffer);
+VK_EndSingleTimeCommands(VkDevice device, VkCommandPool commandPool, VkQueue queue,
+                         VkCommandBuffer commandBuffer);
 
 internal void
-BufferCreate(VkPhysicalDevice physicalDevice, VkDevice device, VkDeviceSize size,
-             VkBufferUsageFlags usage, VkMemoryPropertyFlags properties, VkBuffer* buffer,
-             VkDeviceMemory* bufferMemory);
-internal void
-copyBuffer(VkDevice device, VkCommandPool commandPool, VkQueue queue, VkBuffer srcBuffer,
-           VkBuffer dstBuffer, VkDeviceSize size);
+VK_BufferCreate(VkPhysicalDevice physicalDevice, VkDevice device, VkDeviceSize size,
+                VkBufferUsageFlags usage, VkMemoryPropertyFlags properties, VkBuffer* buffer,
+                VkDeviceMemory* bufferMemory);
 
-internal void
-transitionImageLayout(VkCommandPool commandPool, VkDevice device, VkQueue graphicsQueue,
-                      VkImage image, VkImageLayout oldLayout, VkImageLayout newLayout);
-
-internal void
-copyBufferToImage(VkCommandPool commandPool, VkDevice device, VkQueue queue, VkBuffer buffer,
-                  VkImage image, uint32_t width, uint32_t height);
 internal void
 VK_ImageCreate(VkPhysicalDevice physicalDevice, VkDevice device, uint32_t width, uint32_t height,
                VkSampleCountFlagBits numSamples, VkFormat format, VkImageTiling tiling,
@@ -152,21 +155,21 @@ internal void
 VK_FramebuffersCreate(VulkanContext* vulkan_ctx, VkRenderPass renderPass);
 
 internal VkShaderModule
-ShaderModuleCreate(VkDevice device, Buffer<U8> buffer);
+VK_ShaderModuleCreate(VkDevice device, Buffer<U8> buffer);
 
 // queue family
 
 internal bool
-QueueFamilyIsComplete(QueueFamilyIndexBits queueFamily);
+VK_QueueFamilyIsComplete(QueueFamilyIndexBits queueFamily);
 
 internal QueueFamilyIndices
-QueueFamilyIndicesFromBitFields(QueueFamilyIndexBits queueFamilyBits);
+VK_QueueFamilyIndicesFromBitFields(QueueFamilyIndexBits queueFamilyBits);
 
 internal QueueFamilyIndexBits
-QueueFamiliesFind(VulkanContext* vulkanContext, VkPhysicalDevice device);
+VK_QueueFamiliesFind(VulkanContext* vulkanContext, VkPhysicalDevice device);
 
 internal SwapChainSupportDetails
-querySwapChainSupport(Arena* arena, VulkanContext* vulkanContext, VkPhysicalDevice device);
+VK_QuerySwapChainSupport(Arena* arena, VulkanContext* vulkanContext, VkPhysicalDevice device);
 
 internal void
 VK_RenderPassCreate();
@@ -178,3 +181,64 @@ VK_BufferContextCreate(VulkanContext* vk_ctx, VK_BufferContext* vk_buffer_ctx,
 
 internal void
 VK_DepthResourcesCreate(VulkanContext* vk_context);
+
+internal void
+VK_RecreateSwapChain(VulkanContext* vulkanContext);
+
+internal void
+VK_SyncObjectsCreate(VulkanContext* vulkanContext);
+
+internal void
+VK_SwapChainImageViewsCreate(VulkanContext* vulkanContext);
+internal void
+VK_CommandPoolCreate(VulkanContext* vulkanContext);
+
+internal void
+VK_ColorResourcesCleanup(VulkanContext* vulkanContext);
+internal void
+VK_SwapChainCleanup(VulkanContext* vulkanContext);
+internal void
+VK_CreateInstance(VulkanContext* vulkanContext);
+internal void
+VK_DebugMessengerSetup(VulkanContext* vulkanContext);
+internal void
+VK_SurfaceCreate(VulkanContext* vulkanContext);
+internal void
+VK_PhysicalDevicePick(VulkanContext* vulkanContext);
+internal void
+VK_LogicalDeviceCreate(Arena* arena, VulkanContext* vulkanContext);
+
+internal SwapChainInfo
+VK_SwapChainCreate(Arena* arena, VulkanContext* vulkanContext);
+internal U32
+VK_SwapChainImageCountGet(VulkanContext* vulkanContext);
+internal void
+VK_SwapChainImagesCreate(VulkanContext* vulkanContext, SwapChainInfo swapChainInfo, U32 imageCount);
+
+internal VkExtent2D
+VK_ChooseSwapExtent(VulkanContext* vulkanContext, const VkSurfaceCapabilitiesKHR& capabilities);
+
+internal Buffer<String8>
+VK_RequiredExtensionsGet(VulkanContext* vulkanContext);
+
+internal void
+VK_PopulateDebugMessengerCreateInfo(VkDebugUtilsMessengerCreateInfoEXT& createInfo);
+
+internal bool
+VK_IsDeviceSuitable(VulkanContext* vulkanContext, VkPhysicalDevice device,
+                    QueueFamilyIndexBits indexBits);
+
+internal VkSampleCountFlagBits
+VK_MaxUsableSampleCountGet(VkPhysicalDevice device);
+
+internal bool
+VK_CheckDeviceExtensionSupport(VulkanContext* vulkanContext, VkPhysicalDevice device);
+
+internal bool
+VK_CheckValidationLayerSupport(VulkanContext* vulkanContext);
+
+internal VkSurfaceFormatKHR
+VK_ChooseSwapSurfaceFormat(Buffer<VkSurfaceFormatKHR> availableFormats);
+
+internal VkPresentModeKHR
+VK_ChooseSwapPresentMode(Buffer<VkPresentModeKHR> availablePresentModes);

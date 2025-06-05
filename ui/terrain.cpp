@@ -112,10 +112,10 @@ TerrainUniformBufferCreate(Terrain* terrain, U32 image_count)
 
     for (U32 i = 0; i < image_count; i++)
     {
-        BufferCreate(vk_ctx->physical_device, vk_ctx->device, terrain_buffer_size,
-                     VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
-                     VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-                     &terrain->buffer[i], &terrain->buffer_memory[i]);
+        VK_BufferCreate(vk_ctx->physical_device, vk_ctx->device, terrain_buffer_size,
+                        VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
+                        VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+                        &terrain->buffer[i], &terrain->buffer_memory[i]);
 
         if (vkMapMemory(vk_ctx->device, terrain->buffer_memory[i], 0, terrain_buffer_size, 0,
                         &terrain->buffer_memory_mapped[i]) != VK_SUCCESS)
@@ -167,8 +167,8 @@ TerrainGraphicsPipelineCreate(Terrain* terrain)
     Buffer<U8> vert_shader_buffer = IO_ReadFile(scratch.arena, vertex_path_abs);
     Buffer<U8> frag_shader_buffer = IO_ReadFile(scratch.arena, fragment_path_abs);
 
-    VkShaderModule vert_shader_module = ShaderModuleCreate(vk_ctx->device, vert_shader_buffer);
-    VkShaderModule frag_shader_module = ShaderModuleCreate(vk_ctx->device, frag_shader_buffer);
+    VkShaderModule vert_shader_module = VK_ShaderModuleCreate(vk_ctx->device, vert_shader_buffer);
+    VkShaderModule frag_shader_module = VK_ShaderModuleCreate(vk_ctx->device, frag_shader_buffer);
 
     VkPipelineShaderStageCreateInfo vert_shader_stage_info{};
     vert_shader_stage_info.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
