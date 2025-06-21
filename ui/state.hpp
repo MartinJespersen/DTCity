@@ -18,7 +18,6 @@ struct ThreadCtx
     Arena* scratchArenas[2];
 };
 
-// global contexts
 struct Terrain;
 struct Context
 {
@@ -28,4 +27,5 @@ struct Context
     ProfilingContext* profilingContext;
     UI_IO* io;
     ThreadCtx* thread_ctx;
+    const char* cwd = "C:\\repos\\DTCity";
 };

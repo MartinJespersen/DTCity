@@ -1,0 +1,55 @@
+[
+  {
+    "label": "Build",
+    "command": "./build.bat",
+    "cwd": "C:/repos/DTCity",
+    "use_new_terminal": false,
+    "allow_concurrent_runs": false,
+    "reveal": "always",
+    "hide": "never",
+    "shell": "system",
+    "show_summary": true,
+    "show_output": true,
+    "tags": []
+  },
+  {
+    "label": "Debug",
+    "command": "./debug.bat",
+    "cwd": "C:/repos/DTCity",
+    "use_new_terminal": false,
+    "allow_concurrent_runs": false,
+    "reveal": "always",
+    "hide": "never",
+    "shell": "system",
+    "show_summary": true,
+    "show_output": true,
+    "tags": []
+  },
+  {
+    "label": "Build and Run",
+    "command": "./buildrun.bat",
+    "cwd": "C:/repos/DTCity",
+    "use_new_terminal": false,
+    "allow_concurrent_runs": false,
+    "reveal": "always",
+    "hide": "never",
+    "shell": "system",
+    "show_summary": true,
+    "show_output": true,
+    "tags": []
+  },
+  {
+    "label": "run app",
+    "command": ".\\build\\msc\\debug\\city.exe"
+  }
+
+  // {
+  //   "label": "text_search",
+  //   "command": "C:/repos/zed/target/release/zed.exe (C:/Users/marti/AppData/Local/Microsoft/WinGet/Packages/alexpasmantier.television_Microsoft.Winget.Source_8wekyb3d8bbwe/tv.exe text)",
+  //   "hide": "always",
+  //   "allow_concurrent_runs": true,
+  //   "use_new_terminal": true,
+  //   "program": "C:/Windows/System32/cmd.exe",
+  //   "args": [""]
+  // }
+]

@@ -6,3 +6,4 @@ build
 *.rdi
 *.pdb
 */BROWSE.VC.DB*
+.cache

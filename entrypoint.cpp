@@ -136,7 +136,7 @@ CommandBufferRecord(U32 image_index, U32 current_frame)
                            VK_BUFFER_USAGE_VERTEX_BUFFER_BIT);
     VK_BufferContextCreate(vk_ctx, &vk_ctx->vk_indice_context, buf_of_indice_buffers,
                            VK_BUFFER_USAGE_INDEX_BUFFER_BIT);
-    UpdateTerrainTransform(
+    UpdateTerrainUniformBuffer(
         ctx->terrain,
         Vec2F32{(F32)vk_ctx->swapchain_extent.width, (F32)vk_ctx->swapchain_extent.height},
         current_frame);

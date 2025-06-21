@@ -19,3 +19,4 @@ KeepEmptyLinesAtTheStartOfBlocks: false
 MaxEmptyLinesToKeep: 1
 PointerAlignment: Left
 SortIncludes: Never
+Language: Cpp

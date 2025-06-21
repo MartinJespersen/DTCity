@@ -1,0 +1,29 @@
+CompileFlags:
+  Add: [
+    "-std=c++20",
+    "-Wno-unknown-warning-option",
+    "-fms-compatibility-version=19",  # For MSVC compatibility, optional
+    "-fsanitize=address",
+
+    # Include paths
+    "-I.",
+    "-IC:/VulkanSDK/Include",
+    "-Ithird_party",
+    "-Ithird_party/glfw/include",
+
+    # Defines
+    "-DTRACY_ENABLE",
+    "-DPROFILING_ENABLE",
+
+    # MSVC-specific suppressions
+    "-Wno-microsoft-anon-tag",      # Matches /wd4201
+    "-Wno-pragma-pack",             # Suppresses warning 4099 if needed
+
+    # force includes
+    "-include=C:/repos/DTCity/base/base_inc.hpp",
+    "-include=C:/repos/DTCity/ui/ui.hpp",
+    "-include=C:/repos/DTCity/third_party/third_party_wrapper.hpp"
+  ]
+
+Diagnostics:
+    UnusedIncludes: None

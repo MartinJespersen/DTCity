@@ -1,13 +1,16 @@
 #pragma once
 // third party libs
+
+#include <stb_image.h>
+
 #include <vulkan/vulkan_core.h>
 #define GLFW_INCLUDE_VULKAN
 #include <GLFW/glfw3.h>
 
 #define GLM_FORCE_RADIANS
 #define GLM_FORCE_DEPTH_ZERO_TO_ONE
-#include <glm/glm.hpp>
-#include <glm/gtc/matrix_transform.hpp>
+#include "glm/glm.hpp"
+#include "glm/gtc/matrix_transform.hpp"
 
 #include <string>
 #include <stdio.h>
@@ -22,4 +25,5 @@
 #include "vulkan_helpers.hpp"
 #include "state.hpp"
 #include "globals.hpp"
+#include "geometry.hpp"
 #include "terrain.hpp"

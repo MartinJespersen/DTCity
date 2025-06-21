@@ -37,7 +37,7 @@ struct SwapChainInfo
 struct Vertex
 {
     Vec3F32 pos;
-    Vec4F32 color;
+    Vec2F32 uv;
 };
 
 struct VK_BufferContext
@@ -73,6 +73,7 @@ struct VulkanContext
     VkDebugUtilsMessengerEXT debug_messenger;
     VkDevice device;
     VkPhysicalDevice physical_device;
+    VkPhysicalDeviceProperties physical_device_properties;
     VkQueue graphics_queue;
     VkSurfaceKHR surface;
     VkQueue present_queue;
@@ -110,55 +111,46 @@ struct VulkanContext
     QueueFamilyIndices queue_family_indices;
 };
 
-internal void
-VK_CommandBuffersCreate(VulkanContext* vk_ctx);
-
-internal VkResult
-CreateDebugUtilsMessengerEXT(VkInstance instance,
-                             const VkDebugUtilsMessengerCreateInfoEXT* pCreateInfo,
-                             const VkAllocationCallbacks* pAllocator,
-                             VkDebugUtilsMessengerEXT* pDebugMessenger);
-
-internal void
-DestroyDebugUtilsMessengerEXT(VkInstance instance, VkDebugUtilsMessengerEXT debugMessenger,
-                              const VkAllocationCallbacks* pAllocator);
-
-internal VkCommandBuffer
-VK_BeginSingleTimeCommands(VkDevice device, VkCommandPool commandPool);
-
-internal void
-VK_EndSingleTimeCommands(VkDevice device, VkCommandPool commandPool, VkQueue queue,
-                         VkCommandBuffer commandBuffer);
-
+// buffers helpers
 internal void
 VK_BufferCreate(VkPhysicalDevice physicalDevice, VkDevice device, VkDeviceSize size,
                 VkBufferUsageFlags usage, VkMemoryPropertyFlags properties, VkBuffer* buffer,
                 VkDeviceMemory* bufferMemory);
 
+template <typename T>
+internal void
+VK_BufferContextCreate(VulkanContext* vk_ctx, VK_BufferContext* vk_buffer_ctx,
+                       Buffer<Buffer<T>> buffers, VkBufferUsageFlags usage);
+
+// image helpers
+
+internal void
+VK_ImageFromBufferCopy(VkCommandBuffer command_buffer, VkBuffer buffer, VkImage image,
+                       uint32_t width, uint32_t height);
+
 internal void
 VK_ImageCreate(VkPhysicalDevice physicalDevice, VkDevice device, uint32_t width, uint32_t height,
                VkSampleCountFlagBits numSamples, VkFormat format, VkImageTiling tiling,
                VkImageUsageFlags usage, VkMemoryPropertyFlags properties, VkImage* image,
-               VkDeviceMemory* imageMemory);
+               VkDeviceMemory* imageMemory, U32 mipmap_level);
 
 internal void
 VK_ImageViewCreate(VkImageView* out_image_view, VkDevice device, VkImage image, VkFormat format,
-                   VkImageAspectFlags aspect_mask);
+                   VkImageAspectFlags aspect_mask, U32 mipmap_level);
 
 internal void
-VK_ColorResourcesCreate(VkPhysicalDevice physicalDevice, VkDevice device,
-                        VkFormat swapChainImageFormat, VkExtent2D swapChainExtent,
-                        VkSampleCountFlagBits msaaSamples, VkImageView* out_color_image_view,
-                        VkImage* out_color_image, VkDeviceMemory* out_color_image_memory);
+VK_ImageLayoutTransition(VkCommandBuffer command_buffer, VkImage image, VkFormat format,
+                         VkImageLayout oldLayout, VkImageLayout newLayout, U32 mipmap_level);
 
 internal void
-VK_FramebuffersCreate(VulkanContext* vulkan_ctx, VkRenderPass renderPass);
-
-internal VkShaderModule
-VK_ShaderModuleCreate(VkDevice device, Buffer<U8> buffer);
+VK_GenerateMipmaps(VkCommandBuffer command_buffer, VkImage image, int32_t tex_width,
+                   int32_t text_height, uint32_t mip_levels);
+// sampler helpers
+internal void
+VK_SamplerCreate(VkSampler* sampler, VkDevice device, VkFilter filter,
+                 VkSamplerMipmapMode mipmap_mode, U32 mip_level_count, F32 max_anisotrophy);
 
 // queue family
-
 internal bool
 VK_QueueFamilyIsComplete(QueueFamilyIndexBits queueFamily);
 
@@ -173,11 +165,6 @@ VK_QuerySwapChainSupport(Arena* arena, VulkanContext* vulkanContext, VkPhysicalD
 
 internal void
 VK_RenderPassCreate();
-
-template <typename T>
-internal void
-VK_BufferContextCreate(VulkanContext* vk_ctx, VK_BufferContext* vk_buffer_ctx,
-                       Buffer<Buffer<T>> buffers, VkBufferUsageFlags usage);
 
 internal void
 VK_DepthResourcesCreate(VulkanContext* vk_context);
@@ -242,3 +229,34 @@ VK_ChooseSwapSurfaceFormat(Buffer<VkSurfaceFormatKHR> availableFormats);
 
 internal VkPresentModeKHR
 VK_ChooseSwapPresentMode(Buffer<VkPresentModeKHR> availablePresentModes);
+
+internal void
+VK_ColorResourcesCreate(VkPhysicalDevice physicalDevice, VkDevice device,
+                        VkFormat swapChainImageFormat, VkExtent2D swapChainExtent,
+                        VkSampleCountFlagBits msaaSamples, VkImageView* out_color_image_view,
+                        VkImage* out_color_image, VkDeviceMemory* out_color_image_memory);
+
+internal void
+VK_FramebuffersCreate(VulkanContext* vulkan_ctx, VkRenderPass renderPass);
+
+internal VkShaderModule
+VK_ShaderModuleCreate(VkDevice device, Buffer<U8> buffer);
+
+internal void
+VK_CommandBuffersCreate(VulkanContext* vk_ctx);
+
+internal VkResult
+CreateDebugUtilsMessengerEXT(VkInstance instance,
+                             const VkDebugUtilsMessengerCreateInfoEXT* pCreateInfo,
+                             const VkAllocationCallbacks* pAllocator,
+                             VkDebugUtilsMessengerEXT* pDebugMessenger);
+
+internal void
+DestroyDebugUtilsMessengerEXT(VkInstance instance, VkDebugUtilsMessengerEXT debugMessenger,
+                              const VkAllocationCallbacks* pAllocator);
+
+internal VkCommandBuffer
+VK_BeginSingleTimeCommands(VulkanContext* vk_ctx);
+
+internal void
+VK_EndSingleTimeCommands(VulkanContext* vk_ctx, VkCommandBuffer commandBuffer);
