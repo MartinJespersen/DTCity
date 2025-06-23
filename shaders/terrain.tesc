@@ -35,10 +35,10 @@ layout(set = 0, binding = 1) uniform sampler2D samplerHeight;
 layout(vertices = 4) out;
 
 // layout (location = 0) in vec3 inNormal[];
-layout(location = 1) in vec2 in_uv[];
+layout(location = 0) in vec2 in_uv[];
 
 // layout (location = 0) out vec3 outNormal[4];
-layout(location = 1) out vec2 out_uv[4];
+layout(location = 0) out vec2 out_uv[4];
 
 // Calculate the tessellation factor based on screen space
 // dimensions of the edge
@@ -77,7 +77,7 @@ bool frustumCheck()
     // Fixed radius (increase if patch size is increased in example)
     const float radius = ubo.patch_size / 2.0;
     vec4 pos = gl_in[gl_InvocationID].gl_Position;
-    pos.y -= textureLod(samplerHeight, in_uv[0], 0.0).r * ubo.displacement_factor;
+    pos.y -= textureLod(samplerHeight, in_uv[gl_InvocationID], 0.0).r * ubo.displacement_factor;
 
     // Check sphere against frustum planes
     for (int i = 0; i < 6; i++) {
@@ -93,16 +93,16 @@ void main()
 {
     if (gl_InvocationID == 0)
     {
-        if (!frustumCheck())
-        {
-            gl_TessLevelInner[0] = 0.0;
-            gl_TessLevelInner[1] = 0.0;
-            gl_TessLevelOuter[0] = 0.0;
-            gl_TessLevelOuter[1] = 0.0;
-            gl_TessLevelOuter[2] = 0.0;
-            gl_TessLevelOuter[3] = 0.0;
-        }
-        else
+        // if (!frustumCheck())
+        // {
+        //     gl_TessLevelInner[0] = 0.0;
+        //     gl_TessLevelInner[1] = 0.0;
+        //     gl_TessLevelOuter[0] = 0.0;
+        //     gl_TessLevelOuter[1] = 0.0;
+        //     gl_TessLevelOuter[2] = 0.0;
+        //     gl_TessLevelOuter[3] = 0.0;
+        // }
+        // else
         {
             if (ubo.tessellation_factor > 0.0)
             {
@@ -117,12 +117,12 @@ void main()
             {
                 // Tessellation factor can be set to zero by example
                 // to demonstrate a simple passthrough
-                gl_TessLevelInner[0] = 1.0;
-                gl_TessLevelInner[1] = 1.0;
-                gl_TessLevelOuter[0] = 1.0;
-                gl_TessLevelOuter[1] = 1.0;
-                gl_TessLevelOuter[2] = 1.0;
-                gl_TessLevelOuter[3] = 1.0;
+                gl_TessLevelInner[0] = 4.0;
+                gl_TessLevelInner[1] = 4.0;
+                gl_TessLevelOuter[0] = 4.0;
+                gl_TessLevelOuter[1] = 4.0;
+                gl_TessLevelOuter[2] = 4.0;
+                gl_TessLevelOuter[3] = 4.0;
             }
         }
     }

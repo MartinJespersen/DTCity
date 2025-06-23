@@ -1,3 +1,4 @@
+#include <cstdio>
 #include <cstdlib>
 #include <cstring>
 #include <sys/types.h>
@@ -47,7 +48,7 @@ run()
 int
 wmain(int argc, WCHAR** argv)
 {
-    w32_entry_point_caller(argc, argv);
+    run();
     return 0;
 }
 #else

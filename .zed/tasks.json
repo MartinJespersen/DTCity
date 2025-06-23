@@ -40,7 +40,13 @@
   },
   {
     "label": "run app",
-    "command": ".\\build\\msc\\debug\\city.exe"
+    "command": ".\\build\\msc\\debug\\city.exe",
+    "show_output": true,
+    "show_summary": true
+  },
+  {
+    "label": "Find Code Location",
+    "command": "C:\\repos\\raddebugger\\build\\raddbg.exe --ipc find_code_location \"$ZED_FILE:$ZED_ROW:$ZED_COLUMN\""
   }
 
   // {

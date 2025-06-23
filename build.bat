@@ -28,5 +28,6 @@ popd
 :: Create debug directory
 if not exist "%debug_dir%" mkdir "%debug_dir%"
 
+if exist %exec_full_path% del %exec_full_path%
 :: Compile main executable
-cl /fsanitize=address %main_file_name% %entrypoint_file_name% %tracy_src% /Fe"%exec_full_path%"  %cxxflags%  %include_dirs% /DTRACY_ENABLE /DPROFILING_ENABLE /nologo /link %link_dirs% %link_libs% %link_flags% /INCREMENTAL:NO /noexp 
+cl /fsanitize=address %main_file_name% %entrypoint_file_name% %tracy_src% /Fe"%exec_full_path%"  %cxxflags%  %include_dirs% /DBUILD_CONSOLE_INTERFACE /DTRACY_ENABLE /DPROFILING_ENABLE /nologo /link %link_dirs% %link_libs% %link_flags% /INCREMENTAL:NO /noexp

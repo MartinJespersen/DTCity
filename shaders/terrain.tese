@@ -18,9 +18,9 @@
 
 layout(set = 0, binding = 0) uniform UBO
 {
-    mat4 projection;
-    mat4 view;
     mat4 model;
+    mat4 view;
+    mat4 projection;
     // vec4 lightPos;
     vec4 frustum_planes[6];
     float displacement_factor;

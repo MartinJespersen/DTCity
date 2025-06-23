@@ -62,7 +62,7 @@ struct VulkanContext
     const char* device_extensions[1] = {VK_KHR_SWAPCHAIN_EXTENSION_NAME};
 
 #ifdef NDEBUG
-    const u8 enableValidationLayers = 0;
+    const U8 enable_validation_layers = 0;
 #else
     const U8 enable_validation_layers = 1;
 #endif

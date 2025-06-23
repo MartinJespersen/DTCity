@@ -1,4 +1,5 @@
 
+#include "vulkan/vulkan_core.h"
 internal String8
 CreatePathFromStrings(Arena* arena, char** parts, U64 count)
 {
@@ -58,7 +59,8 @@ TerrainDescriptorSetLayoutCreate(VkDevice device, Terrain* terrain)
     terrain_desc_layout.binding = 0;
     terrain_desc_layout.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
     terrain_desc_layout.descriptorCount = 1;
-    terrain_desc_layout.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+    terrain_desc_layout.stageFlags =
+        VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT | VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT;
 
     VkDescriptorSetLayoutBinding sampler_layout_binding{};
     sampler_layout_binding.binding = 1;
@@ -336,7 +338,7 @@ TerrainGraphicsPipelineCreate(Terrain* terrain, const char* cwd)
 
     VkPipelineInputAssemblyStateCreateInfo inputAssembly{};
     inputAssembly.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
-    inputAssembly.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+    inputAssembly.topology = VK_PRIMITIVE_TOPOLOGY_PATCH_LIST;
     inputAssembly.primitiveRestartEnable = VK_FALSE;
 
     VkViewport viewport{};
@@ -437,7 +439,7 @@ TerrainGraphicsPipelineCreate(Terrain* terrain, const char* cwd)
 
     VkGraphicsPipelineCreateInfo pipelineInfo{};
     pipelineInfo.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
-    pipelineInfo.stageCount = 2;
+    pipelineInfo.stageCount = 4;
     pipelineInfo.pStages = shaderStages;
     pipelineInfo.pVertexInputState = &vertexInputInfo;
     pipelineInfo.pInputAssemblyState = &inputAssembly;
@@ -499,19 +501,27 @@ UpdateTerrainUniformBuffer(Terrain* terrain, Vec2F32 screen_res, U32 current_fra
     F32 elapsed_time_sec = (F32)elapsed_time / 1'000'000.0;
     TerrainUniformBuffer* ubo = &terrain->uniform_buffer;
 
+    // Keep model at identity or slight rotation to see the square clearly
     ubo->model =
-        glm::rotate(glm::mat4(1.0f), (1 * glm::radians(90.0f)), glm::vec3(0.0f, 0.0f, 1.0f));
-    ubo->view = glm::lookAt(glm::vec3(10.0f, 10.0f, -10.0f), glm::vec3(0.0f, 0.0f, 0.0f),
+        glm::mat4(1.0f); // glm::rotate(glm::mat4(1.0f), elapsed_time_sec * glm::radians(30.0f),
+                         //           glm::vec3(0.0f, 1.0f, 0.0f));
+
+    // Position camera to look down at the 2x2 square from above at an angle
+    ubo->view = glm::lookAt(glm::vec3(-3.0f, -3.0f, 0.0f), glm::vec3(0.0f, 0.0f, 0.0f),
                             glm::vec3(0.0f, 1.0f, 0.0f));
-    ubo->proj = glm::perspective(glm::radians(45.0f), (screen_res.x / screen_res.y), 0.1f, 100.0f);
+
+    // Use reasonable near/far planes for a 2x2 square
+    ubo->proj = glm::perspective(glm::radians(45.0f), (screen_res.x / screen_res.y), 0.1f, 10.0f);
     ubo->proj[1][1] *= -1;
 
     glm::mat4 transform = ubo->proj * ubo->view;
     FrustumPlanesCalculate(&ubo->frustum, transform);
-    ubo->viewport_dim = screen_res;
-    ubo->displacement_factor = 1.0f;
-    ubo->tessellated_edge_size = 1.0f;
-    ubo->tessellation_factor = 1.0f;
+    ubo->viewport_dim.x = screen_res.x;
+    ubo->viewport_dim.y = screen_res.y;
+    ubo->displacement_factor = 3.0f;   // Reduced for 2x2 square
+    ubo->tessellated_edge_size = 1.0f; // Increase for better tessellation control
+    ubo->tessellation_factor = 1.0f;   // Enable tessellation to see the effect
+    ubo->patch_size = terrain->patch_size;
 
     MemoryCopy(terrain->buffer_memory_mapped[current_frame], ubo, sizeof(*ubo));
 }
@@ -619,15 +629,16 @@ TerrainInit()
     VulkanContext* vk_ctx = ctx->vulkanContext;
 
     ctx->terrain = push_struct(ctx->arena_permanent, Terrain);
-    ctx->terrain->patch_size = 16;
+    ctx->terrain->patch_size = 2;
     TerrainAllocations(vk_ctx->arena, ctx->terrain, vk_ctx->MAX_FRAMES_IN_FLIGHT);
     TerrainDescriptorPoolCreate(ctx->terrain, vk_ctx->MAX_FRAMES_IN_FLIGHT);
     TerrainDescriptorSetLayoutCreate(vk_ctx->device, ctx->terrain);
     TerrainUniformBufferCreate(ctx->terrain, vk_ctx->MAX_FRAMES_IN_FLIGHT);
-    TerrainDescriptorSetCreate(ctx->terrain, vk_ctx->MAX_FRAMES_IN_FLIGHT);
-    TerrainGraphicsPipelineCreate(ctx->terrain, ctx->cwd);
 
     TerrainTextureResourceCreate(vk_ctx, ctx->terrain, ctx->cwd);
+
+    TerrainDescriptorSetCreate(ctx->terrain, vk_ctx->MAX_FRAMES_IN_FLIGHT);
+    TerrainGraphicsPipelineCreate(ctx->terrain, ctx->cwd);
 
     // TODO: move function below
     TerrainGenerateBuffers(vk_ctx->arena, &ctx->terrain->vertices, &ctx->terrain->indices,
