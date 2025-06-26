@@ -77,7 +77,7 @@ bool frustumCheck()
     // Fixed radius (increase if patch size is increased in example)
     const float radius = ubo.patch_size / 2.0;
     vec4 pos = gl_in[gl_InvocationID].gl_Position;
-    pos.y -= textureLod(samplerHeight, in_uv[gl_InvocationID], 0.0).r * ubo.displacement_factor;
+    pos.y += textureLod(samplerHeight, in_uv[gl_InvocationID], 0.0).r * ubo.displacement_factor;
 
     // Check sphere against frustum planes
     for (int i = 0; i < 6; i++) {

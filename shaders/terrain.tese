@@ -32,7 +32,7 @@ layout(set = 0, binding = 0) uniform UBO
 
 layout(set = 0, binding = 1) uniform sampler2D displacement_map;
 
-layout(quads, equal_spacing, cw) in;
+layout(quads, equal_spacing, ccw) in;
 
 // layout (location = 0) in vec3 inNormal[];
 layout(location = 0) in vec2 in_uv[];
@@ -63,7 +63,7 @@ void main()
     vec4 pos = mix(pos1, pos2, gl_TessCoord.y);
     // Displace
     vec4 texture_v = textureLod(displacement_map, out_uv, 0.0);
-    pos.y -= texture_v.r * ubo.displacement_factor;
+    pos.y += texture_v.r * ubo.displacement_factor;
     // Perspective projection
     gl_Position = ubo.projection * ubo.view * ubo.model * pos;
     out_color = texture_v;

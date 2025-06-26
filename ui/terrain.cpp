@@ -358,7 +358,7 @@ TerrainGraphicsPipelineCreate(Terrain* terrain, const char* cwd)
     VkPipelineRasterizationStateCreateInfo rasterizer{};
     rasterizer.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
     rasterizer.depthClampEnable = VK_FALSE;
-    rasterizer.polygonMode = VK_POLYGON_MODE_LINE; // TODO: helps in debugging, change to fill later
+    rasterizer.polygonMode = VK_POLYGON_MODE_FILL; // TODO: helps in debugging, change to fill later
     rasterizer.cullMode = VK_CULL_MODE_BACK_BIT;
     rasterizer.frontFace = VK_FRONT_FACE_CLOCKWISE; // TODO: might need to use counter-clockwise
     rasterizer.lineWidth = 1.0f;
@@ -501,24 +501,17 @@ UpdateTerrainUniformBuffer(Terrain* terrain, Vec2F32 screen_res, U32 current_fra
     F32 elapsed_time_sec = (F32)elapsed_time / 1'000'000.0;
     TerrainUniformBuffer* ubo = &terrain->uniform_buffer;
 
-    // Keep model at identity or slight rotation to see the square clearly
-    ubo->model =
-        glm::mat4(1.0f); // glm::rotate(glm::mat4(1.0f), elapsed_time_sec * glm::radians(30.0f),
-                         //           glm::vec3(0.0f, 1.0f, 0.0f));
-
-    // Position camera to look down at the 2x2 square from above at an angle
-    ubo->view = glm::lookAt(glm::vec3(-3.0f, -3.0f, 0.0f), glm::vec3(0.0f, 0.0f, 0.0f),
+    ubo->model = glm::mat4(1.0f);
+    ubo->view = glm::lookAt(glm::vec3(0.0f, 4.0f, 4.0f), glm::vec3(0.0f, 0.0f, 0.0f),
                             glm::vec3(0.0f, 1.0f, 0.0f));
-
-    // Use reasonable near/far planes for a 2x2 square
     ubo->proj = glm::perspective(glm::radians(45.0f), (screen_res.x / screen_res.y), 0.1f, 10.0f);
-    ubo->proj[1][1] *= -1;
+    ubo->proj[1][1] *= -1.0f;
 
     glm::mat4 transform = ubo->proj * ubo->view;
     FrustumPlanesCalculate(&ubo->frustum, transform);
     ubo->viewport_dim.x = screen_res.x;
     ubo->viewport_dim.y = screen_res.y;
-    ubo->displacement_factor = 3.0f;   // Reduced for 2x2 square
+    ubo->displacement_factor = 1.0f;   // Reduced for 2x2 square
     ubo->tessellated_edge_size = 1.0f; // Increase for better tessellation control
     ubo->tessellation_factor = 1.0f;   // Enable tessellation to see the effect
     ubo->patch_size = terrain->patch_size;
@@ -629,7 +622,7 @@ TerrainInit()
     VulkanContext* vk_ctx = ctx->vulkanContext;
 
     ctx->terrain = push_struct(ctx->arena_permanent, Terrain);
-    ctx->terrain->patch_size = 2;
+    ctx->terrain->patch_size = 4;
     TerrainAllocations(vk_ctx->arena, ctx->terrain, vk_ctx->MAX_FRAMES_IN_FLIGHT);
     TerrainDescriptorPoolCreate(ctx->terrain, vk_ctx->MAX_FRAMES_IN_FLIGHT);
     TerrainDescriptorSetLayoutCreate(vk_ctx->device, ctx->terrain);

@@ -9,10 +9,8 @@ struct TerrainUniformBuffer
     float displacement_factor;   // 4 bytes
     float tessellation_factor;   // 4 bytes
     float patch_size;            // 4 bytes
-    float _padding1;             // 4 bytes padding (total 16 bytes for above 4 floats)
     glm::vec2 viewport_dim;      // 8 bytes
     float tessellated_edge_size; // 4 bytes
-    float _padding2;             // 4 bytes padding (total 16 bytes for vec2 + 2 floats)
 };
 
 struct Terrain
