@@ -2,15 +2,14 @@
 
 struct TerrainUniformBuffer
 {
-    glm::mat4 model;             // 64 bytes
-    glm::mat4 view;              // 64 bytes
-    glm::mat4 proj;              // 64 bytes
-    Frustum frustum;             // 96 bytes (6 * vec4)
-    float displacement_factor;   // 4 bytes
-    float tessellation_factor;   // 4 bytes
-    float patch_size;            // 4 bytes
-    glm::vec2 viewport_dim;      // 8 bytes
-    float tessellated_edge_size; // 4 bytes
+    glm::mat4 view;
+    glm::mat4 proj;
+    Frustum frustum;
+    float displacement_factor;
+    float tessellation_factor;
+    float patch_size;
+    glm::vec2 viewport_dim;
+    float tessellated_edge_size;
 };
 
 struct Terrain

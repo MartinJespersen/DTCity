@@ -4,10 +4,10 @@ enum PlaneType
 {
     LEFT,
     RIGHT,
-    BOTTOM,
     TOP,
-    FRONT,
+    BOTTOM,
     BACK,
+    FRONT,
     PlaneType_Count
 };
 
@@ -17,4 +17,4 @@ struct Frustum
 };
 
 internal void
-FrustumPlanesCalculate(Frustum* out_frustum, const glm::mat4& matrix);
+FrustumPlanesCalculate(Frustum* out_frustum, const glm::mat4 matrix);

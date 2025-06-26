@@ -1,5 +1,5 @@
 internal void
-FrustumPlanesCalculate(Frustum* out_frustum, const glm::mat4& matrix)
+FrustumPlanesCalculate(Frustum* out_frustum, const glm::mat4 matrix)
 {
     out_frustum->planes[LEFT].x = matrix[0].w + matrix[0].x;
     out_frustum->planes[LEFT].y = matrix[1].w + matrix[1].x;
