@@ -3,6 +3,8 @@
 #include "vulkan_helpers.cpp"
 #include "geometry.cpp"
 #include "terrain.cpp"
+#include "io.cpp"
 
 #define STB_IMAGE_IMPLEMENTATION
+#define STB_IMAGE_STATIC
 #include <stb_image.h>

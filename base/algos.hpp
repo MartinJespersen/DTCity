@@ -15,7 +15,3 @@ BufferAlloc(Arena* arena, U64 count)
     buffer.size = count;
     return buffer;
 };
-
-// hashing
-internal U128
-HashFromStr8(String8 string);

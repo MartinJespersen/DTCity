@@ -9,32 +9,40 @@
 // user defined: [hpp]
 #include "entrypoint.hpp"
 
+// domain: cpp
+#include "entrypoint.cpp"
+// #include "base/base_inc.cpp"
+// #include "ui/ui.cpp"
+
+// profiler
+#include "profiler/tracy/Tracy.hpp"
+#include "profiler/tracy/TracyVulkan.hpp"
+
+// user defined: [cpp]
+// #include "base/base_inc.cpp"
+// #include "ui/io.cpp"
+
 Context g_ctx_main;
 
 void
 run()
 {
-    ThreadCtx thread_ctx = {0};
-
     VulkanContext vulkanContext = {};
     ProfilingContext profilingContext = {};
-    UI_IO input = {};
+    UI_IO io_ctx = {};
     Terrain terrain = {};
 
-    g_ctx_main = {0, &terrain, &vulkanContext, &profilingContext, &input, &thread_ctx};
+    g_ctx_main = {0, 0, &terrain, &vulkanContext, &profilingContext, &io_ctx};
 
-    GlobalContextSet(&g_ctx_main);
-    InitContext();
+    w32_entry_point_caller(__argc, __wargv);
 
-    while (!glfwWindowShouldClose(vulkanContext.window))
+    g_ctx_main.running = 1;
+    os_thread_launch(DrawFrame, (void*)&g_ctx_main, 0);
+
+    InitWindow(&g_ctx_main);
+    while (!glfwWindowShouldClose(io_ctx.window))
     {
-        glfwPollEvents();
-
-        glfwGetCursorPos(vulkanContext.window, &input.mousePosition.x, &input.mousePosition.y);
-        input.leftClicked =
-            glfwGetMouseButton(vulkanContext.window, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS;
-
-        DrawFrame();
+        IO_InputStateUpdate(&io_ctx);
     }
 
     DeleteContext();

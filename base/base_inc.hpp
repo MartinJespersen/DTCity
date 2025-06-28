@@ -6,7 +6,6 @@
 
 ////////////////////////////////
 //~ rjf: Base Includes
-#include "third_party/third_party_wrapper.hpp"
 #include "base_context_cracking.h"
 
 #include "base_core.h"
@@ -16,8 +15,8 @@
 #include "base_strings.h"
 #include "os_core/os_core_inc.h"
 #include "error.hpp"
-#include "algos.hpp"
 #include "base_thread_context.h"
+#include "algos.hpp"
 // #include "base_command_line.h"
 // #include "base_markup.h"
 // #include "base_meta.h"

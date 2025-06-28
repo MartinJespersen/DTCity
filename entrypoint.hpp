@@ -13,17 +13,17 @@ extern "C"
     void
     DeleteContext();
     void
-    DrawFrame();
+    DrawFrame(void* ptr);
 }
 
 internal void
 VK_Cleanup();
 
 internal void
-VulkanInit(VulkanContext* vk_ctx);
+VulkanInit(VulkanContext* vk_ctx, UI_IO* io_ctx);
 
 internal void
-InitWindow();
+InitWindow(Context* ctx);
 
 internal void
 VK_FramebufferResizeCallback(GLFWwindow* window, int width, int height);

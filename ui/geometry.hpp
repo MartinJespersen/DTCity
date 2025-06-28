@@ -18,3 +18,6 @@ struct Frustum
 
 internal void
 FrustumPlanesCalculate(Frustum* out_frustum, const glm::mat4 matrix);
+
+internal void
+CameraUpdate(Context* ctx);

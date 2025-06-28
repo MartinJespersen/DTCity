@@ -1,4 +1,5 @@
 
+#include "base/error.hpp"
 #include "vulkan/vulkan_core.h"
 internal String8
 CreatePathFromStrings(Arena* arena, char** parts, U64 count)
@@ -99,7 +100,7 @@ TerrainTextureResourceCreate(VulkanContext* vk_ctx, Terrain* terrain, const char
     if (!(formatProperties.optimalTilingFeatures &
           VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT))
     {
-        throw std::runtime_error("texture image format does not support linear blitting!");
+        exitWithError("texture image format does not support linear blitting!");
     }
 
     // load heightmap
@@ -465,6 +466,8 @@ TerrainGraphicsPipelineCreate(Terrain* terrain, const char* cwd)
 
     vkDestroyShaderModule(vk_ctx->device, frag_shader_module, nullptr);
     vkDestroyShaderModule(vk_ctx->device, vert_shader_module, nullptr);
+    vkDestroyShaderModule(vk_ctx->device, tese_shader_module, nullptr);
+    vkDestroyShaderModule(vk_ctx->device, tesc_shader_module, nullptr);
 
     scratch_end(scratch);
     return;
@@ -490,10 +493,12 @@ TerrainVulkanCleanup(Terrain* terrain, U32 frames_in_flight)
 
     vkDestroyDescriptorSetLayout(vk_ctx->device, terrain->descriptor_set_layout, nullptr);
     vkDestroyPipelineLayout(vk_ctx->device, terrain->vk_pipeline_layout, nullptr);
+    vkDestroyPipeline(vk_ctx->device, terrain->vk_pipeline, nullptr);
 }
 
 internal void
-UpdateTerrainUniformBuffer(Terrain* terrain, Vec2F32 screen_res, U32 current_frame)
+UpdateTerrainUniformBuffer(Terrain* terrain, glm::mat4* view, glm::mat4* proj, Vec2F32 screen_res,
+                           U32 current_frame)
 {
     static U64 start_time = os_now_microseconds();
     U64 current_time = os_now_microseconds();
@@ -501,12 +506,9 @@ UpdateTerrainUniformBuffer(Terrain* terrain, Vec2F32 screen_res, U32 current_fra
     F32 elapsed_time_sec = (F32)elapsed_time / 1'000'000.0;
     TerrainUniformBuffer* ubo = &terrain->uniform_buffer;
 
-    ubo->view = glm::lookAt(glm::vec3(0.0f, 4.0f, 0.1f), glm::vec3(0.0f, 0.0f, 0.0f),
-                            glm::vec3(0.0f, 1.0f, 0.0f));
-    ubo->proj = glm::perspective(glm::radians(45.0f), (screen_res.x / screen_res.y), 0.1f, 10.0f);
-    ubo->proj[1][1] *= -1.0f;
-
-    glm::mat4 transform = ubo->proj * ubo->view;
+    ubo->view = *view;
+    ubo->proj = *proj;
+    glm::mat4 transform = (*proj) * (*view);
     FrustumPlanesCalculate(&ubo->frustum, transform);
     ubo->viewport_dim.x = screen_res.x;
     ubo->viewport_dim.y = screen_res.y;

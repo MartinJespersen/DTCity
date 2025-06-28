@@ -13,7 +13,7 @@ set "vulkan_path=C:\VulkanSDK\"
 
 :: Compiler and linker flags
 set "cxxflags=/W0 /std:c++20 /wd4201 /EHsc /Z7"
-set "include_dirs=/I. /I%vulkan_path%Include /I%lib_dir%glfw\include /I%lib_dir%" 
+set "include_dirs=/I. /I%vulkan_path%Include /I%lib_dir%glfw\include /I%lib_dir%"
 :: free typed is the debug lib
 set "link_libs=glfw3_mt.lib vulkan-1.lib gdi32.lib"
 set "link_flags=/ignore:4099 /MACHINE:X64"
@@ -30,4 +30,4 @@ if not exist "%debug_dir%" mkdir "%debug_dir%"
 
 if exist %exec_full_path% del %exec_full_path%
 :: Compile main executable
-cl /fsanitize=address %main_file_name% %entrypoint_file_name% %tracy_src% /Fe"%exec_full_path%"  %cxxflags%  %include_dirs% /DBUILD_CONSOLE_INTERFACE /DTRACY_ENABLE /DPROFILING_ENABLE /nologo /link %link_dirs% %link_libs% %link_flags% /INCREMENTAL:NO /noexp
+cl /fsanitize=address %main_file_name% %tracy_src% /Fe"%exec_full_path%"  %cxxflags%  %include_dirs% /DBUILD_CONSOLE_INTERFACE /nologo /link %link_dirs% %link_libs% %link_flags% /INCREMENTAL:NO /noexp

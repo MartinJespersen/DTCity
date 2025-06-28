@@ -55,7 +55,8 @@ TerrainGraphicsPipelineCreate(Terrain* terrain, const char* cwd);
 internal void
 TerrainVulkanCleanup(Terrain* terrain, U32 frames_in_flight);
 internal void
-UpdateTerrainUniformBuffer(Terrain* terrain, Vec2F32 screen_res, U32 current_image);
+UpdateTerrainUniformBuffer(Terrain* terrain, glm::mat4* view, glm::mat4* proj, Vec2F32 screen_res,
+                           U32 current_image);
 
 internal void
 TerrainDescriptorPoolCreate(Terrain* terrain, U32 frames_in_flight);

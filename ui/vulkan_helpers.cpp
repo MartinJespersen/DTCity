@@ -647,6 +647,13 @@ VK_BufferContextCreate(VulkanContext* vk_ctx, VK_BufferContext* vk_buffer_ctx,
     }
 }
 
+internal void
+VK_BufferContextCleanup(VkDevice device, VK_BufferContext* buffer_context)
+{
+    vkDestroyBuffer(device, buffer_context->buffer, NULL);
+    vkFreeMemory(device, buffer_context->memory, NULL);
+}
+
 VkFormat
 VK_SupportedFormat(const VkFormat candidates[3], VkImageTiling tiling,
                    VkFormatFeatureFlags features)
@@ -746,19 +753,19 @@ VK_SwapChainImageCountGet(VulkanContext* vulkanContext)
 }
 
 internal SwapChainInfo
-VK_SwapChainCreate(Arena* arena, VulkanContext* vulkanContext)
+VK_SwapChainCreate(Arena* arena, VulkanContext* vk_ctx, UI_IO* io_ctx)
 {
     SwapChainInfo swapChainInfo = {0};
 
     swapChainInfo.swapChainSupport =
-        VK_QuerySwapChainSupport(arena, vulkanContext, vulkanContext->physical_device);
+        VK_QuerySwapChainSupport(arena, vk_ctx, vk_ctx->physical_device);
 
     swapChainInfo.surfaceFormat =
         VK_ChooseSwapSurfaceFormat(swapChainInfo.swapChainSupport.formats);
     swapChainInfo.presentMode =
         VK_ChooseSwapPresentMode(swapChainInfo.swapChainSupport.presentModes);
     swapChainInfo.extent =
-        VK_ChooseSwapExtent(vulkanContext, swapChainInfo.swapChainSupport.capabilities);
+        VK_ChooseSwapExtent(io_ctx, vk_ctx, swapChainInfo.swapChainSupport.capabilities);
 
     U32 imageCount = swapChainInfo.swapChainSupport.capabilities.minImageCount + 1;
 
@@ -768,10 +775,10 @@ VK_SwapChainCreate(Arena* arena, VulkanContext* vulkanContext)
         imageCount = swapChainInfo.swapChainSupport.capabilities.maxImageCount;
     }
 
-    QueueFamilyIndices queueFamilyIndices = vulkanContext->queue_family_indices;
+    QueueFamilyIndices queueFamilyIndices = vk_ctx->queue_family_indices;
     VkSwapchainCreateInfoKHR createInfo{};
     createInfo.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
-    createInfo.surface = vulkanContext->surface;
+    createInfo.surface = vk_ctx->surface;
 
     createInfo.minImageCount = imageCount;
     createInfo.imageFormat = swapChainInfo.surfaceFormat.format;
@@ -782,8 +789,8 @@ VK_SwapChainCreate(Arena* arena, VulkanContext* vulkanContext)
 
     if (queueFamilyIndices.graphicsFamilyIndex != queueFamilyIndices.presentFamilyIndex)
     {
-        U32 queueFamilyIndicesSame[] = {vulkanContext->queue_family_indices.graphicsFamilyIndex,
-                                        vulkanContext->queue_family_indices.presentFamilyIndex};
+        U32 queueFamilyIndicesSame[] = {vk_ctx->queue_family_indices.graphicsFamilyIndex,
+                                        vk_ctx->queue_family_indices.presentFamilyIndex};
         createInfo.imageSharingMode = VK_SHARING_MODE_CONCURRENT;
         createInfo.queueFamilyIndexCount = 2;
         createInfo.pQueueFamilyIndices = queueFamilyIndicesSame;
@@ -802,8 +809,8 @@ VK_SwapChainCreate(Arena* arena, VulkanContext* vulkanContext)
     // It is possible to specify the old swap chain to be replaced by a new one
     createInfo.oldSwapchain = VK_NULL_HANDLE;
 
-    if (vkCreateSwapchainKHR(vulkanContext->device, &createInfo, nullptr,
-                             &vulkanContext->swapchain) != VK_SUCCESS)
+    if (vkCreateSwapchainKHR(vk_ctx->device, &createInfo, nullptr, &vk_ctx->swapchain) !=
+        VK_SUCCESS)
     {
         exitWithError("failed to create swap chain!");
     }
@@ -812,9 +819,9 @@ VK_SwapChainCreate(Arena* arena, VulkanContext* vulkanContext)
 }
 
 internal void
-VK_SurfaceCreate(VulkanContext* vulkanContext)
+VK_SurfaceCreate(VulkanContext* vulkanContext, UI_IO* io)
 {
-    if (glfwCreateWindowSurface(vulkanContext->instance, vulkanContext->window, nullptr,
+    if (glfwCreateWindowSurface(vulkanContext->instance, io->window, nullptr,
                                 &vulkanContext->surface) != VK_SUCCESS)
     {
         exitWithError("failed to create window surface!");
@@ -1176,7 +1183,8 @@ VK_ChooseSwapPresentMode(Buffer<VkPresentModeKHR> availablePresentModes)
 }
 
 internal VkExtent2D
-VK_ChooseSwapExtent(VulkanContext* vulkanContext, const VkSurfaceCapabilitiesKHR& capabilities)
+VK_ChooseSwapExtent(UI_IO* io_ctx, VulkanContext* vulkanContext,
+                    const VkSurfaceCapabilitiesKHR& capabilities)
 {
     if (capabilities.currentExtent.width != UINT32_MAX)
     {
@@ -1185,7 +1193,7 @@ VK_ChooseSwapExtent(VulkanContext* vulkanContext, const VkSurfaceCapabilitiesKHR
     else
     {
         int width, height;
-        glfwGetFramebufferSize(vulkanContext->window, &width, &height);
+        glfwGetFramebufferSize(io_ctx->window, &width, &height);
 
         VkExtent2D actualExtent = {static_cast<uint32_t>(width), static_cast<uint32_t>(height)};
 
@@ -1235,21 +1243,21 @@ VK_MaxUsableSampleCountGet(VkPhysicalDevice device)
 }
 
 internal void
-VK_RecreateSwapChain(VulkanContext* vk_ctx)
+VK_RecreateSwapChain(UI_IO* io_ctx, VulkanContext* vk_ctx)
 {
     Temp scratch = scratch_begin(0, 0);
     int width = 0, height = 0;
-    glfwGetFramebufferSize(vk_ctx->window, &width, &height);
+    glfwGetFramebufferSize(io_ctx->window, &width, &height);
     while (width == 0 || height == 0)
     {
-        glfwGetFramebufferSize(vk_ctx->window, &width, &height);
+        glfwGetFramebufferSize(io_ctx->window, &width, &height);
         glfwWaitEvents();
     }
     vkDeviceWaitIdle(vk_ctx->device);
 
     VK_SwapChainCleanup(vk_ctx);
 
-    SwapChainInfo swapChainInfo = VK_SwapChainCreate(scratch.arena, vk_ctx);
+    SwapChainInfo swapChainInfo = VK_SwapChainCreate(scratch.arena, vk_ctx, io_ctx);
     U32 swapChainImageCount = VK_SwapChainImageCountGet(vk_ctx);
     VK_SwapChainImagesCreate(vk_ctx, swapChainInfo, swapChainImageCount);
 
@@ -1268,41 +1276,45 @@ internal void
 VK_Cleanup()
 {
     Context* ctx = GlobalContextGet();
-    VulkanContext* vulkanContext = ctx->vulkanContext;
+    VulkanContext* vk_ctx = ctx->vulkanContext;
+    UI_IO* io_ctx = ctx->io;
 
-    vkDeviceWaitIdle(vulkanContext->device);
+    vkDeviceWaitIdle(vk_ctx->device);
 
-    if (vulkanContext->enable_validation_layers)
+    if (vk_ctx->enable_validation_layers)
     {
-        DestroyDebugUtilsMessengerEXT(vulkanContext->instance, vulkanContext->debug_messenger,
-                                      nullptr);
+        DestroyDebugUtilsMessengerEXT(vk_ctx->instance, vk_ctx->debug_messenger, nullptr);
     }
-    VK_SwapChainCleanup(vulkanContext);
-    TerrainVulkanCleanup(ctx->terrain, vulkanContext->MAX_FRAMES_IN_FLIGHT);
+    // indice and vertex buffers
+    VK_BufferContextCleanup(vk_ctx->device, &vk_ctx->vk_indice_context);
+    VK_BufferContextCleanup(vk_ctx->device, &vk_ctx->vk_vertex_context);
 
-#ifdef PROFILING_ENABLE
+    TerrainVulkanCleanup(ctx->terrain, vk_ctx->MAX_FRAMES_IN_FLIGHT);
+
+    vkDestroyRenderPass(vk_ctx->device, vk_ctx->vk_renderpass, nullptr);
+    VK_SwapChainCleanup(vk_ctx);
+
+#ifdef TRACY_ENABLE
     for (U32 i = 0; i < ctx->profilingContext->tracyContexts.size; i++)
     {
         TracyVkDestroy(ctx->profilingContext->tracyContexts.data[i]);
     }
 #endif
-    vkDestroyCommandPool(vulkanContext->device, vulkanContext->command_pool, nullptr);
+    vkDestroyCommandPool(vk_ctx->device, vk_ctx->command_pool, nullptr);
 
-    vkDestroySurfaceKHR(vulkanContext->instance, vulkanContext->surface, nullptr);
+    vkDestroySurfaceKHR(vk_ctx->instance, vk_ctx->surface, nullptr);
 
-    for (U32 i = 0; i < (U32)vulkanContext->MAX_FRAMES_IN_FLIGHT; i++)
+    for (U32 i = 0; i < (U32)vk_ctx->MAX_FRAMES_IN_FLIGHT; i++)
     {
-        vkDestroySemaphore(vulkanContext->device, vulkanContext->render_finished_semaphores.data[i],
-                           nullptr);
-        vkDestroySemaphore(vulkanContext->device, vulkanContext->image_available_semaphores.data[i],
-                           nullptr);
-        vkDestroyFence(vulkanContext->device, vulkanContext->in_flight_fences.data[i], nullptr);
+        vkDestroySemaphore(vk_ctx->device, vk_ctx->render_finished_semaphores.data[i], nullptr);
+        vkDestroySemaphore(vk_ctx->device, vk_ctx->image_available_semaphores.data[i], nullptr);
+        vkDestroyFence(vk_ctx->device, vk_ctx->in_flight_fences.data[i], nullptr);
     }
 
-    vkDestroyDevice(vulkanContext->device, nullptr);
-    vkDestroyInstance(vulkanContext->instance, nullptr);
+    vkDestroyDevice(vk_ctx->device, nullptr);
+    vkDestroyInstance(vk_ctx->instance, nullptr);
 
-    glfwDestroyWindow(vulkanContext->window);
+    glfwDestroyWindow(io_ctx->window);
 
     glfwTerminate();
 }

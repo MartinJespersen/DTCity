@@ -1,4 +1,5 @@
 
+#include "ui/ui.hpp"
 #include <cstdlib>
 #include <cstring>
 
@@ -8,11 +9,11 @@
 // domain: hpp
 #include "entrypoint.hpp"
 
-// domain: cpp
+// // domain: cpp
 #include "base/base_inc.cpp"
 #include "ui/ui.cpp"
 
-// profiler
+// // profiler
 #include "profiler/tracy/Tracy.hpp"
 #include "profiler/tracy/TracyVulkan.hpp"
 
@@ -22,9 +23,7 @@ InitContext()
     Context* ctx = GlobalContextGet();
     ctx->arena_permanent = (Arena*)arena_alloc();
 
-    ThreadContextInit();
-    InitWindow();
-    VulkanInit(ctx->vulkanContext);
+    VulkanInit(ctx->vulkanContext, ctx->io);
     ProfileBuffersCreate(ctx->vulkanContext, ctx->profilingContext);
 }
 
@@ -32,7 +31,6 @@ C_LINKAGE void
 DeleteContext()
 {
     VK_Cleanup();
-    ThreadContextExit();
     Context* ctx = GlobalContextGet();
     ASSERT(ctx, "No Global Context found.");
 }
@@ -48,21 +46,19 @@ VK_FramebufferResizeCallback(GLFWwindow* window, int width, int height)
 }
 
 internal void
-InitWindow()
+InitWindow(Context* ctx)
 {
-    Context* ctx = GlobalContextGet();
-    VulkanContext* vulkanContext = ctx->vulkanContext;
-
+    UI_IO* io_ctx = ctx->io;
     glfwInit();
     glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
     glfwWindowHint(GLFW_RESIZABLE, GLFW_TRUE);
-    vulkanContext->window = glfwCreateWindow(800, 600, "Vulkan", nullptr, nullptr);
-    glfwSetWindowUserPointer(vulkanContext->window, ctx);
-    glfwSetFramebufferSizeCallback(vulkanContext->window, VK_FramebufferResizeCallback);
+    io_ctx->window = glfwCreateWindow(800, 600, "Vulkan", nullptr, nullptr);
+    glfwSetWindowUserPointer(io_ctx->window, ctx);
+    glfwSetFramebufferSizeCallback(io_ctx->window, VK_FramebufferResizeCallback);
 }
 
 internal void
-VulkanInit(VulkanContext* vk_ctx)
+VulkanInit(VulkanContext* vk_ctx, UI_IO* io_ctx)
 {
     Temp scratch = scratch_begin(0, 0);
 
@@ -70,10 +66,10 @@ VulkanInit(VulkanContext* vk_ctx)
 
     VK_CreateInstance(vk_ctx);
     VK_DebugMessengerSetup(vk_ctx);
-    VK_SurfaceCreate(vk_ctx);
+    VK_SurfaceCreate(vk_ctx, io_ctx);
     VK_PhysicalDevicePick(vk_ctx);
     VK_LogicalDeviceCreate(scratch.arena, vk_ctx);
-    SwapChainInfo swapChainInfo = VK_SwapChainCreate(scratch.arena, vk_ctx);
+    SwapChainInfo swapChainInfo = VK_SwapChainCreate(scratch.arena, vk_ctx, io_ctx);
     U32 swapChainImageCount = VK_SwapChainImageCountGet(vk_ctx);
     vk_ctx->swapchain_images = BufferAlloc<VkImage>(vk_ctx->arena, (U64)swapChainImageCount);
     vk_ctx->swapchain_image_views =
@@ -136,8 +132,9 @@ CommandBufferRecord(U32 image_index, U32 current_frame)
                            VK_BUFFER_USAGE_VERTEX_BUFFER_BIT);
     VK_BufferContextCreate(vk_ctx, &vk_ctx->vk_indice_context, buf_of_indice_buffers,
                            VK_BUFFER_USAGE_INDEX_BUFFER_BIT);
+    CameraUpdate(ctx);
     UpdateTerrainUniformBuffer(
-        ctx->terrain,
+        ctx->terrain, &ctx->view_matrix, &ctx->projection_matrix,
         Vec2F32{(F32)vk_ctx->swapchain_extent.width, (F32)vk_ctx->swapchain_extent.height},
         current_frame);
     TerrainRenderPassBegin(vk_ctx, ctx->terrain, image_index, current_frame);
@@ -150,99 +147,108 @@ CommandBufferRecord(U32 image_index, U32 current_frame)
 }
 
 C_LINKAGE void
-DrawFrame()
+DrawFrame(void* ptr)
 {
-    ZoneScoped;
-    Context* context = GlobalContextGet();
-    VulkanContext* vulkanContext = context->vulkanContext;
+    printf("hello from thread");
+    Context* ctx = (Context*)ptr;
+    GlobalContextSet(ctx);
+    InitContext();
 
+    while (ctx->running)
     {
-        ZoneScopedN("Wait for frame");
-        vkWaitForFences(vulkanContext->device, 1,
-                        &vulkanContext->in_flight_fences.data[vulkanContext->current_frame],
-                        VK_TRUE, UINT64_MAX);
+        ZoneScoped;
+        VulkanContext* vulkanContext = ctx->vulkanContext;
+        UI_IO* io_ctx = ctx->io;
+
+        {
+            ZoneScopedN("Wait for frame");
+            vkWaitForFences(vulkanContext->device, 1,
+                            &vulkanContext->in_flight_fences.data[vulkanContext->current_frame],
+                            VK_TRUE, UINT64_MAX);
+        }
+
+        uint32_t imageIndex;
+        VkResult result = vkAcquireNextImageKHR(
+            vulkanContext->device, vulkanContext->swapchain, UINT64_MAX,
+            vulkanContext->image_available_semaphores.data[vulkanContext->current_frame],
+            VK_NULL_HANDLE, &imageIndex);
+
+        if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR)
+        {
+            VK_RecreateSwapChain(io_ctx, vulkanContext);
+            return;
+        }
+        else if (result != VK_SUCCESS)
+        {
+            exitWithError("failed to acquire swap chain image!");
+        }
+
+        vkResetFences(vulkanContext->device, 1,
+                      &vulkanContext->in_flight_fences.data[vulkanContext->current_frame]);
+        vkResetCommandBuffer(vulkanContext->command_buffers.data[vulkanContext->current_frame], 0);
+
+        CommandBufferRecord(imageIndex, vulkanContext->current_frame);
+
+        VkSubmitInfo submitInfo{};
+        submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+        VkSemaphore waitSemaphores[] = {
+            vulkanContext->image_available_semaphores.data[vulkanContext->current_frame]};
+        VkPipelineStageFlags waitStages[] = {VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT};
+        submitInfo.waitSemaphoreCount = 1;
+        submitInfo.pWaitSemaphores = waitSemaphores;
+        submitInfo.pWaitDstStageMask = waitStages;
+        submitInfo.commandBufferCount = 1;
+        submitInfo.pCommandBuffers =
+            &vulkanContext->command_buffers.data[vulkanContext->current_frame];
+
+        VkSemaphore signalSemaphores[] = {
+            vulkanContext->render_finished_semaphores.data[vulkanContext->current_frame]};
+        submitInfo.signalSemaphoreCount = 1;
+        submitInfo.pSignalSemaphores = signalSemaphores;
+
+        if (vkQueueSubmit(vulkanContext->graphics_queue, 1, &submitInfo,
+                          vulkanContext->in_flight_fences.data[vulkanContext->current_frame]) !=
+            VK_SUCCESS)
+        {
+            exitWithError("failed to submit draw command buffer!");
+        }
+
+        VkPresentInfoKHR presentInfo{};
+        presentInfo.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
+
+        presentInfo.waitSemaphoreCount = 1;
+        presentInfo.pWaitSemaphores = signalSemaphores;
+
+        VkSwapchainKHR swapChains[] = {vulkanContext->swapchain};
+        presentInfo.swapchainCount = 1;
+        presentInfo.pSwapchains = swapChains;
+        presentInfo.pImageIndices = &imageIndex;
+
+        presentInfo.pResults = nullptr; // Optional
+
+        result = vkQueuePresentKHR(vulkanContext->present_queue, &presentInfo);
+        // TracyVkCollect(tracyContexts[currentFrame], commandBuffers[currentFrame]);
+        FrameMark; // end of frame is assumed to be here
+        if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR ||
+            vulkanContext->framebuffer_resized)
+        {
+            vulkanContext->framebuffer_resized = 0;
+            VK_RecreateSwapChain(io_ctx, vulkanContext);
+        }
+        else if (result != VK_SUCCESS)
+        {
+            exitWithError("failed to present swap chain image!");
+        }
+
+        vulkanContext->current_frame =
+            (vulkanContext->current_frame + 1) % vulkanContext->MAX_FRAMES_IN_FLIGHT;
     }
-
-    uint32_t imageIndex;
-    VkResult result = vkAcquireNextImageKHR(
-        vulkanContext->device, vulkanContext->swapchain, UINT64_MAX,
-        vulkanContext->image_available_semaphores.data[vulkanContext->current_frame],
-        VK_NULL_HANDLE, &imageIndex);
-
-    if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR)
-    {
-        VK_RecreateSwapChain(vulkanContext);
-        return;
-    }
-    else if (result != VK_SUCCESS)
-    {
-        exitWithError("failed to acquire swap chain image!");
-    }
-
-    vkResetFences(vulkanContext->device, 1,
-                  &vulkanContext->in_flight_fences.data[vulkanContext->current_frame]);
-    vkResetCommandBuffer(vulkanContext->command_buffers.data[vulkanContext->current_frame], 0);
-
-    CommandBufferRecord(imageIndex, vulkanContext->current_frame);
-
-    VkSubmitInfo submitInfo{};
-    submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
-    VkSemaphore waitSemaphores[] = {
-        vulkanContext->image_available_semaphores.data[vulkanContext->current_frame]};
-    VkPipelineStageFlags waitStages[] = {VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT};
-    submitInfo.waitSemaphoreCount = 1;
-    submitInfo.pWaitSemaphores = waitSemaphores;
-    submitInfo.pWaitDstStageMask = waitStages;
-    submitInfo.commandBufferCount = 1;
-    submitInfo.pCommandBuffers = &vulkanContext->command_buffers.data[vulkanContext->current_frame];
-
-    VkSemaphore signalSemaphores[] = {
-        vulkanContext->render_finished_semaphores.data[vulkanContext->current_frame]};
-    submitInfo.signalSemaphoreCount = 1;
-    submitInfo.pSignalSemaphores = signalSemaphores;
-
-    if (vkQueueSubmit(vulkanContext->graphics_queue, 1, &submitInfo,
-                      vulkanContext->in_flight_fences.data[vulkanContext->current_frame]) !=
-        VK_SUCCESS)
-    {
-        exitWithError("failed to submit draw command buffer!");
-    }
-
-    VkPresentInfoKHR presentInfo{};
-    presentInfo.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
-
-    presentInfo.waitSemaphoreCount = 1;
-    presentInfo.pWaitSemaphores = signalSemaphores;
-
-    VkSwapchainKHR swapChains[] = {vulkanContext->swapchain};
-    presentInfo.swapchainCount = 1;
-    presentInfo.pSwapchains = swapChains;
-    presentInfo.pImageIndices = &imageIndex;
-
-    presentInfo.pResults = nullptr; // Optional
-
-    result = vkQueuePresentKHR(vulkanContext->present_queue, &presentInfo);
-    // TracyVkCollect(tracyContexts[currentFrame], commandBuffers[currentFrame]);
-    FrameMark; // end of frame is assumed to be here
-    if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR ||
-        vulkanContext->framebuffer_resized)
-    {
-        vulkanContext->framebuffer_resized = 0;
-        VK_RecreateSwapChain(vulkanContext);
-    }
-    else if (result != VK_SUCCESS)
-    {
-        exitWithError("failed to present swap chain image!");
-    }
-
-    vulkanContext->current_frame =
-        (vulkanContext->current_frame + 1) % vulkanContext->MAX_FRAMES_IN_FLIGHT;
 }
 
 internal void
 ProfileBuffersCreate(VulkanContext* vk_ctx, ProfilingContext* prof_ctx)
 {
-#ifdef PROFILING_ENABLE
+#ifdef TRACY_ENABLE
     prof_ctx->tracyContexts =
         BufferAlloc<TracyVkCtx>(vk_ctx->arena, vk_ctx->swapchain_framebuffers.size);
     for (U32 i = 0; i < vk_ctx->command_buffers.size; i++)

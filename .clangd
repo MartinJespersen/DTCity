@@ -13,7 +13,6 @@ CompileFlags:
 
     # Defines
     "-DTRACY_ENABLE",
-    "-DPROFILING_ENABLE",
 
     # MSVC-specific suppressions
     "-Wno-microsoft-anon-tag",      # Matches /wd4201
@@ -21,8 +20,7 @@ CompileFlags:
 
     # force includes
     "-include=C:/repos/DTCity/base/base_inc.hpp",
-    "-include=C:/repos/DTCity/ui/ui.hpp",
-    "-include=C:/repos/DTCity/third_party/third_party_wrapper.hpp"
+    "-include=C:/repos/DTCity/ui/ui.hpp"
   ]
 
 Diagnostics:

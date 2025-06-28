@@ -14,8 +14,6 @@
 #include "base_strings.c"
 #include "os_core/os_core_inc.c"
 
-#include "algos.cpp"
-
 #include "base_thread_context.c"
 // #include "base_command_line.c"
 // #include "base_markup.c"

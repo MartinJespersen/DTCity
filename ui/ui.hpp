@@ -1,6 +1,7 @@
 #pragma once
 // third party libs
 
+#define STB_IMAGE_STATIC
 #include <stb_image.h>
 
 #include <vulkan/vulkan_core.h>
@@ -23,6 +24,7 @@
 
 // user defined headers
 #include "base/base_inc.hpp"
+#include "io.hpp"
 #include "vulkan_helpers.hpp"
 #include "state.hpp"
 #include "globals.hpp"

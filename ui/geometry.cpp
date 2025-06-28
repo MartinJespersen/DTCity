@@ -39,3 +39,18 @@ FrustumPlanesCalculate(Frustum* out_frustum, const glm::mat4 matrix)
         out_frustum->planes[i] /= length;
     }
 }
+
+internal void
+CameraUpdate(Context* ctx)
+{
+    UI_IO* input = ctx->io;
+    VulkanContext* vk_ctx = ctx->vulkanContext;
+
+    ctx->view_matrix = glm::lookAt(glm::vec3(0.0f, 4.0f, 0.1f), glm::vec3(0.0f, 0.0f, 0.0f),
+                                   glm::vec3(0.0f, 1.0f, 0.0f));
+    ctx->projection_matrix = glm::perspective(
+        glm::radians(45.0f),
+        (F32)((F32)vk_ctx->swapchain_extent.width / (F32)vk_ctx->swapchain_extent.height), 0.1f,
+        10.0f);
+    ctx->projection_matrix[1][1] *= -1.0f;
+}
