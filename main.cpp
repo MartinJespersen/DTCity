@@ -18,10 +18,6 @@
 #include "profiler/tracy/Tracy.hpp"
 #include "profiler/tracy/TracyVulkan.hpp"
 
-// user defined: [cpp]
-// #include "base/base_inc.cpp"
-// #include "ui/io.cpp"
-
 Context g_ctx_main;
 
 void
