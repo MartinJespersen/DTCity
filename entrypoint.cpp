@@ -16,87 +16,6 @@
 #include "profiler/tracy/Tracy.hpp"
 #include "profiler/tracy/TracyVulkan.hpp"
 
-C_LINKAGE void
-InitContext()
-{
-    Context* ctx = GlobalContextGet();
-    ctx->arena_permanent = (Arena*)arena_alloc();
-
-    VulkanInit(ctx->vulkanContext, ctx->io);
-    ProfileBuffersCreate(ctx->vulkanContext, ctx->profilingContext);
-}
-
-C_LINKAGE void
-DeleteContext()
-{
-    VK_Cleanup();
-    Context* ctx = GlobalContextGet();
-    ASSERT(ctx, "No Global Context found.");
-}
-
-internal void
-VK_FramebufferResizeCallback(GLFWwindow* window, int width, int height)
-{
-    (void)width;
-    (void)height;
-
-    auto context = reinterpret_cast<Context*>(glfwGetWindowUserPointer(window));
-    context->vulkanContext->framebuffer_resized = 1;
-}
-
-internal void
-InitWindow(Context* ctx)
-{
-    UI_IO* io_ctx = ctx->io;
-    glfwInit();
-    glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
-    glfwWindowHint(GLFW_RESIZABLE, GLFW_TRUE);
-    io_ctx->window = glfwCreateWindow(800, 600, "Vulkan", nullptr, nullptr);
-    glfwSetWindowUserPointer(io_ctx->window, ctx);
-    glfwSetFramebufferSizeCallback(io_ctx->window, VK_FramebufferResizeCallback);
-}
-
-internal void
-VulkanInit(VulkanContext* vk_ctx, UI_IO* io_ctx)
-{
-    Temp scratch = scratch_begin(0, 0);
-
-    vk_ctx->arena = arena_alloc();
-
-    VK_CreateInstance(vk_ctx);
-    VK_DebugMessengerSetup(vk_ctx);
-    VK_SurfaceCreate(vk_ctx, io_ctx);
-    VK_PhysicalDevicePick(vk_ctx);
-    VK_LogicalDeviceCreate(scratch.arena, vk_ctx);
-    SwapChainInfo swapChainInfo = VK_SwapChainCreate(scratch.arena, vk_ctx, io_ctx);
-    U32 swapChainImageCount = VK_SwapChainImageCountGet(vk_ctx);
-    vk_ctx->swapchain_images = BufferAlloc<VkImage>(vk_ctx->arena, (U64)swapChainImageCount);
-    vk_ctx->swapchain_image_views =
-        BufferAlloc<VkImageView>(vk_ctx->arena, (U64)swapChainImageCount);
-    vk_ctx->swapchain_framebuffers =
-        BufferAlloc<VkFramebuffer>(vk_ctx->arena, (U64)swapChainImageCount);
-
-    VK_SwapChainImagesCreate(vk_ctx, swapChainInfo, swapChainImageCount);
-    VK_SwapChainImageViewsCreate(vk_ctx);
-    VK_CommandPoolCreate(vk_ctx);
-
-    VK_ColorResourcesCreate(vk_ctx->physical_device, vk_ctx->device, vk_ctx->swapchain_image_format,
-                            vk_ctx->swapchain_extent, vk_ctx->msaa_samples,
-                            &vk_ctx->color_image_view, &vk_ctx->color_image,
-                            &vk_ctx->color_image_memory);
-
-    VK_DepthResourcesCreate(vk_ctx);
-
-    VK_CommandBuffersCreate(vk_ctx);
-
-    VK_SyncObjectsCreate(vk_ctx);
-    VK_RenderPassCreate();
-
-    TerrainInit();
-    VK_FramebuffersCreate(vk_ctx, vk_ctx->vk_renderpass);
-    scratch_end(scratch);
-}
-
 internal void
 CommandBufferRecord(U32 image_index, U32 current_frame)
 {
@@ -145,19 +64,35 @@ CommandBufferRecord(U32 image_index, U32 current_frame)
     scratch_end(scratch);
 }
 
-C_LINKAGE void
-DrawFrame(void* ptr)
+shared_function OS_Handle
+Entrypoint(void* ptr)
 {
-    printf("hello from thread");
     Context* ctx = (Context*)ptr;
     GlobalContextSet(ctx);
-    InitContext();
+    return os_thread_launch(MainLoop, ptr, NULL);
+}
+
+shared_function void
+Cleanup(void* ptr)
+{
+    Context* ctx = (Context*)ptr;
+    ctx->running = false;
+    os_thread_join(ctx->main_thread_handle, max_U64);
+    ctx->main_thread_handle.u64[0] = 0;
+}
+
+internal void
+MainLoop(void* ptr)
+{
+    Context* ctx = (Context*)ptr;
+    VulkanContext* vk_ctx = ctx->vulkanContext;
+    os_set_thread_name(str8_cstring("Entrypoint thread"));
 
     while (ctx->running)
     {
         ZoneScoped;
         VulkanContext* vulkanContext = ctx->vulkanContext;
-        UI_IO* io_ctx = ctx->io;
+        IO* io_ctx = ctx->io;
 
         {
             ZoneScopedN("Wait for frame");
@@ -172,8 +107,10 @@ DrawFrame(void* ptr)
             vulkanContext->image_available_semaphores.data[vulkanContext->current_frame],
             VK_NULL_HANDLE, &imageIndex);
 
-        if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR)
+        if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR ||
+            vulkanContext->framebuffer_resized)
         {
+            vulkanContext->framebuffer_resized = false;
             VK_RecreateSwapChain(io_ctx, vulkanContext);
             return;
         }
@@ -242,19 +179,5 @@ DrawFrame(void* ptr)
         vulkanContext->current_frame =
             (vulkanContext->current_frame + 1) % vulkanContext->MAX_FRAMES_IN_FLIGHT;
     }
-}
-
-internal void
-ProfileBuffersCreate(VulkanContext* vk_ctx, ProfilingContext* prof_ctx)
-{
-#ifdef TRACY_ENABLE
-    prof_ctx->tracyContexts =
-        BufferAlloc<TracyVkCtx>(vk_ctx->arena, vk_ctx->swapchain_framebuffers.size);
-    for (U32 i = 0; i < vk_ctx->command_buffers.size; i++)
-    {
-        prof_ctx->tracyContexts.data[i] =
-            TracyVkContext(vk_ctx->physical_device, vk_ctx->device, vk_ctx->graphics_queue,
-                           vk_ctx->command_buffers.data[i]);
-    }
-#endif
+    vkDeviceWaitIdle(vk_ctx->device);
 }

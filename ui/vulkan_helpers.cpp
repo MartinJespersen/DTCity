@@ -753,7 +753,7 @@ VK_SwapChainImageCountGet(VulkanContext* vulkanContext)
 }
 
 internal SwapChainInfo
-VK_SwapChainCreate(Arena* arena, VulkanContext* vk_ctx, UI_IO* io_ctx)
+VK_SwapChainCreate(Arena* arena, VulkanContext* vk_ctx, IO* io_ctx)
 {
     SwapChainInfo swapChainInfo = {0};
 
@@ -806,7 +806,7 @@ VK_SwapChainCreate(Arena* arena, VulkanContext* vk_ctx, UI_IO* io_ctx)
     createInfo.compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
     createInfo.presentMode = swapChainInfo.presentMode;
     createInfo.clipped = VK_TRUE;
-    // It is possible to specify the old swap chain to be replaced by a new one
+    // TODO: It is possible to specify the old swap chain to be replaced by a new one
     createInfo.oldSwapchain = VK_NULL_HANDLE;
 
     if (vkCreateSwapchainKHR(vk_ctx->device, &createInfo, nullptr, &vk_ctx->swapchain) !=
@@ -819,10 +819,14 @@ VK_SwapChainCreate(Arena* arena, VulkanContext* vk_ctx, UI_IO* io_ctx)
 }
 
 internal void
-VK_SurfaceCreate(VulkanContext* vulkanContext, UI_IO* io)
+VK_SurfaceCreate(VulkanContext* vulkanContext, IO* io)
 {
-    if (glfwCreateWindowSurface(vulkanContext->instance, io->window, nullptr,
-                                &vulkanContext->surface) != VK_SUCCESS)
+    int supported = glfwVulkanSupported();
+    B32 enabled = supported == GLFW_TRUE;
+
+    VkResult result = glfwCreateWindowSurface(vulkanContext->instance, io->window, nullptr,
+                                              &vulkanContext->surface);
+    if (result != VK_SUCCESS)
     {
         exitWithError("failed to create window surface!");
     }
@@ -1183,7 +1187,7 @@ VK_ChooseSwapPresentMode(Buffer<VkPresentModeKHR> availablePresentModes)
 }
 
 internal VkExtent2D
-VK_ChooseSwapExtent(UI_IO* io_ctx, VulkanContext* vulkanContext,
+VK_ChooseSwapExtent(IO* io_ctx, VulkanContext* vulkanContext,
                     const VkSurfaceCapabilitiesKHR& capabilities)
 {
     if (capabilities.currentExtent.width != UINT32_MAX)
@@ -1243,7 +1247,7 @@ VK_MaxUsableSampleCountGet(VkPhysicalDevice device)
 }
 
 internal void
-VK_RecreateSwapChain(UI_IO* io_ctx, VulkanContext* vk_ctx)
+VK_RecreateSwapChain(IO* io_ctx, VulkanContext* vk_ctx)
 {
     Temp scratch = scratch_begin(0, 0);
     int width = 0, height = 0;
@@ -1277,7 +1281,7 @@ VK_Cleanup()
 {
     Context* ctx = GlobalContextGet();
     VulkanContext* vk_ctx = ctx->vulkanContext;
-    UI_IO* io_ctx = ctx->io;
+    IO* io_ctx = ctx->io;
 
     vkDeviceWaitIdle(vk_ctx->device);
 
@@ -1403,4 +1407,44 @@ VK_CommandBuffersCreate(VulkanContext* vk_ctx)
     {
         exitWithError("failed to allocate command buffers!");
     }
+}
+internal void
+VK_VulkanInit(VulkanContext* vk_ctx, IO* io_ctx)
+{
+    Temp scratch = scratch_begin(0, 0);
+
+    vk_ctx->arena = arena_alloc();
+
+    VK_CreateInstance(vk_ctx);
+    VK_DebugMessengerSetup(vk_ctx);
+    VK_SurfaceCreate(vk_ctx, io_ctx);
+    VK_PhysicalDevicePick(vk_ctx);
+    VK_LogicalDeviceCreate(scratch.arena, vk_ctx);
+    SwapChainInfo swapChainInfo = VK_SwapChainCreate(scratch.arena, vk_ctx, io_ctx);
+    U32 swapChainImageCount = VK_SwapChainImageCountGet(vk_ctx);
+    vk_ctx->swapchain_images = BufferAlloc<VkImage>(vk_ctx->arena, (U64)swapChainImageCount);
+    vk_ctx->swapchain_image_views =
+        BufferAlloc<VkImageView>(vk_ctx->arena, (U64)swapChainImageCount);
+    vk_ctx->swapchain_framebuffers =
+        BufferAlloc<VkFramebuffer>(vk_ctx->arena, (U64)swapChainImageCount);
+
+    VK_SwapChainImagesCreate(vk_ctx, swapChainInfo, swapChainImageCount);
+    VK_SwapChainImageViewsCreate(vk_ctx);
+    VK_CommandPoolCreate(vk_ctx);
+
+    VK_ColorResourcesCreate(vk_ctx->physical_device, vk_ctx->device, vk_ctx->swapchain_image_format,
+                            vk_ctx->swapchain_extent, vk_ctx->msaa_samples,
+                            &vk_ctx->color_image_view, &vk_ctx->color_image,
+                            &vk_ctx->color_image_memory);
+
+    VK_DepthResourcesCreate(vk_ctx);
+
+    VK_CommandBuffersCreate(vk_ctx);
+
+    VK_SyncObjectsCreate(vk_ctx);
+    VK_RenderPassCreate();
+
+    TerrainInit();
+    VK_FramebuffersCreate(vk_ctx, vk_ctx->vk_renderpass);
+    scratch_end(scratch);
 }

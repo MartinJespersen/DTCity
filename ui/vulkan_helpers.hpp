@@ -169,7 +169,7 @@ internal void
 VK_DepthResourcesCreate(VulkanContext* vk_context);
 
 internal void
-VK_RecreateSwapChain(UI_IO* io_ctx, VulkanContext* vulkanContext);
+VK_RecreateSwapChain(IO* io_ctx, VulkanContext* vulkanContext);
 
 internal void
 VK_SyncObjectsCreate(VulkanContext* vulkanContext);
@@ -188,21 +188,21 @@ VK_CreateInstance(VulkanContext* vulkanContext);
 internal void
 VK_DebugMessengerSetup(VulkanContext* vulkanContext);
 internal void
-VK_SurfaceCreate(VulkanContext* vulkanContext, UI_IO* io_ctx);
+VK_SurfaceCreate(VulkanContext* vulkanContext, IO* io_ctx);
 internal void
 VK_PhysicalDevicePick(VulkanContext* vulkanContext);
 internal void
 VK_LogicalDeviceCreate(Arena* arena, VulkanContext* vulkanContext);
 
 internal SwapChainInfo
-VK_SwapChainCreate(Arena* arena, VulkanContext* vulkanContext, UI_IO* io_ctx);
+VK_SwapChainCreate(Arena* arena, VulkanContext* vulkanContext, IO* io_ctx);
 internal U32
 VK_SwapChainImageCountGet(VulkanContext* vulkanContext);
 internal void
 VK_SwapChainImagesCreate(VulkanContext* vulkanContext, SwapChainInfo swapChainInfo, U32 imageCount);
 
 internal VkExtent2D
-VK_ChooseSwapExtent(UI_IO* io_ctx, VulkanContext* vulkanContext,
+VK_ChooseSwapExtent(IO* io_ctx, VulkanContext* vulkanContext,
                     const VkSurfaceCapabilitiesKHR& capabilities);
 
 internal Buffer<String8>
@@ -260,3 +260,7 @@ VK_BeginSingleTimeCommands(VulkanContext* vk_ctx);
 
 internal void
 VK_EndSingleTimeCommands(VulkanContext* vk_ctx, VkCommandBuffer commandBuffer);
+internal void
+VK_VulkanInit(VulkanContext* vk_ctx, IO* io_ctx);
+internal void
+VK_Cleanup();

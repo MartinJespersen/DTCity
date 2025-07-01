@@ -1,4 +1,4 @@
-struct UI_IO
+struct IO
 {
     B32 handle_input;
 
@@ -10,4 +10,4 @@ struct UI_IO
 };
 
 internal void
-IO_InputStateUpdate(UI_IO* io);
+IO_InputStateUpdate(IO* io);

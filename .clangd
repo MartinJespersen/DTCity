@@ -5,6 +5,7 @@ CompileFlags:
     "-fms-compatibility-version=19",  # For MSVC compatibility, optional
     "-fsanitize=address",
 
+    "--header-insertion=never",
     # Include paths
     "-I.",
     "-IC:/VulkanSDK/Include",

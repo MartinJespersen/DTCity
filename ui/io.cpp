@@ -16,7 +16,7 @@
 // {
 // }
 internal void
-IO_InputStateUpdate(UI_IO* io)
+IO_InputStateUpdate(IO* io)
 {
     glfwPollEvents();
 
