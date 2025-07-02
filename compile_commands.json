@@ -1,7 +1,0 @@
-[
-  {
-    "directory": "C:/repos/DTCity",
-    "command": "cl /fsanitize=address /W0 /std:c++20 /wd4201 /EHsc /Z7 /I. /IC:/VulkanSDK/Include /Ithird_party/glfw/include /Ithird_party /DTRACY_ENABLE /DPROFILING_ENABLE /FIbase/base_inc.hpp /FIui/ui.hpp /FIthird_party/third_party_wrapper.hpp /c main.cpp",
-    "file": "main.cpp"
-  }
-]

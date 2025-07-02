@@ -13,7 +13,6 @@
 #include "base_arena.h"
 #include "base_math.h"
 #include "base_strings.h"
-#include "os_core/os_core_inc.h"
 #include "error.hpp"
 #include "base_thread_context.h"
 #include "algos.hpp"
@@ -23,4 +22,5 @@
 // #include "base_log.h"
 // #include "base_entry_point.h"
 #include "io.hpp"
+#include "os_core/os_core_inc.h"
 #endif // BASE_INC_H

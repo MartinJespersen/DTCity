@@ -7,7 +7,13 @@ struct IO
 
     // GLFW types
     GLFWwindow* window;
+
+    double scroll_x;
+    double scroll_y;
 };
+
+void
+IO_ScrollCallback(GLFWwindow* window, double xoffset, double yoffset);
 
 internal void
 IO_InputStateUpdate(IO* io);

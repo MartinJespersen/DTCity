@@ -2,6 +2,10 @@
 #include <cstdlib>
 #include <cstring>
 
+// // profiler
+#include "profiler/tracy/Tracy.hpp"
+#include "profiler/tracy/TracyVulkan.hpp"
+
 #define GLFW_INCLUDE_VULKAN
 #include <GLFW/glfw3.h>
 #include <vulkan/vulkan_core.h>
@@ -10,11 +14,8 @@
 
 // // domain: cpp
 #include "base/base_inc.cpp"
+#include "os_core/os_core_inc.c"
 #include "ui/ui.cpp"
-
-// // profiler
-#include "profiler/tracy/Tracy.hpp"
-#include "profiler/tracy/TracyVulkan.hpp"
 
 internal void
 CommandBufferRecord(U32 image_index, U32 current_frame)
@@ -25,6 +26,8 @@ CommandBufferRecord(U32 image_index, U32 current_frame)
 
     VulkanContext* vk_ctx = ctx->vulkanContext;
     ProfilingContext* profilingContext = ctx->profilingContext;
+    UI_Camera* camera = ctx->camera;
+
     (void)profilingContext;
 
     VkCommandBufferBeginInfo beginInfo{};
@@ -50,9 +53,9 @@ CommandBufferRecord(U32 image_index, U32 current_frame)
                            VK_BUFFER_USAGE_VERTEX_BUFFER_BIT);
     VK_BufferContextCreate(vk_ctx, &vk_ctx->vk_indice_context, buf_of_indice_buffers,
                            VK_BUFFER_USAGE_INDEX_BUFFER_BIT);
-    CameraUpdate(ctx);
+    UI_CameraUpdate(camera, ctx->io, vk_ctx->swapchain_extent);
     UpdateTerrainUniformBuffer(
-        ctx->terrain, &ctx->view_matrix, &ctx->projection_matrix,
+        ctx->terrain, camera,
         Vec2F32{(F32)vk_ctx->swapchain_extent.width, (F32)vk_ctx->swapchain_extent.height},
         current_frame);
     TerrainRenderPassBegin(vk_ctx, ctx->terrain, image_index, current_frame);

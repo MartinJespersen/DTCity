@@ -497,7 +497,7 @@ TerrainVulkanCleanup(Terrain* terrain, U32 frames_in_flight)
 }
 
 internal void
-UpdateTerrainUniformBuffer(Terrain* terrain, glm::mat4* view, glm::mat4* proj, Vec2F32 screen_res,
+UpdateTerrainUniformBuffer(Terrain* terrain, UI_Camera* camera, Vec2F32 screen_res,
                            U32 current_frame)
 {
     static U64 start_time = os_now_microseconds();
@@ -506,16 +506,16 @@ UpdateTerrainUniformBuffer(Terrain* terrain, glm::mat4* view, glm::mat4* proj, V
     F32 elapsed_time_sec = (F32)elapsed_time / 1'000'000.0;
     TerrainUniformBuffer* ubo = &terrain->uniform_buffer;
 
-    ubo->view = *view;
-    ubo->proj = *proj;
-    glm::mat4 transform = (*proj) * (*view);
+    glm::mat4 transform = camera->projection_matrix * camera->view_matrix;
     FrustumPlanesCalculate(&ubo->frustum, transform);
     ubo->viewport_dim.x = screen_res.x;
     ubo->viewport_dim.y = screen_res.y;
     ubo->displacement_factor = 1.0f;   // Reduced for 2x2 square
     ubo->tessellated_edge_size = 1.0f; // Increase for better tessellation control
-    ubo->tessellation_factor = 0.0f;   // Enable tessellation to see the effect
+    ubo->tessellation_factor = 1.0f;   // Enable tessellation to see the effect
     ubo->patch_size = terrain->patch_size;
+    ubo->view = camera->view_matrix;
+    ubo->proj = camera->projection_matrix;
 
     MemoryCopy(terrain->buffer_memory_mapped[current_frame], ubo, sizeof(*ubo));
 }

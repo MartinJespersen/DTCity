@@ -676,6 +676,7 @@ VK_SupportedFormat(const VkFormat candidates[3], VkImageTiling tiling,
     }
 
     exitWithError("failed to find supported format!");
+    return VK_FORMAT_UNDEFINED;
 }
 
 internal void

@@ -41,16 +41,18 @@ FrustumPlanesCalculate(Frustum* out_frustum, const glm::mat4 matrix)
 }
 
 internal void
-CameraUpdate(Context* ctx)
+UI_CameraInit(UI_Camera* camera)
 {
-    IO* input = ctx->io;
-    VulkanContext* vk_ctx = ctx->vulkanContext;
+    camera->zoom = 50.0f;
+}
 
-    ctx->view_matrix = glm::lookAt(glm::vec3(0.0f, 50.0f, 0.1f), glm::vec3(0.0f, 0.0f, 0.0f),
-                                   glm::vec3(0.0f, 1.0f, 0.0f));
-    ctx->projection_matrix = glm::perspective(
-        glm::radians(45.0f),
-        (F32)((F32)vk_ctx->swapchain_extent.width / (F32)vk_ctx->swapchain_extent.height), 0.1f,
-        100.0f);
-    ctx->projection_matrix[1][1] *= -1.0f;
+internal void
+UI_CameraUpdate(UI_Camera* camera, IO* input, VkExtent2D extent)
+{
+    camera->zoom += input->scroll_y;
+    camera->view_matrix = glm::lookAt(glm::vec3(0.0f, camera->zoom, camera->zoom),
+                                      glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 1.0f, 0.0f));
+    camera->projection_matrix = glm::perspective(
+        glm::radians(45.0f), (F32)((F32)extent.width / (F32)extent.height), 0.1f, 100.0f);
+    camera->projection_matrix[1][1] *= -1.0f;
 }

@@ -1,10 +1,14 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
-#include <sys/types.h>
 #define GLFW_INCLUDE_VULKAN
 #include <GLFW/glfw3.h>
 #include <vulkan/vulkan_core.h>
+
+// profiler
+#include "profiler/tracy/Tracy.hpp"
+#include "profiler/tracy/TracyVulkan.hpp"
+
 #include <windows.h>
 
 // user defined: [hpp]
@@ -12,11 +16,8 @@
 
 // domain: cpp
 #include "base/base_inc.cpp"
+#include "os_core/os_core_inc.c"
 #include "ui/ui.cpp"
-
-// profiler
-#include "profiler/tracy/Tracy.hpp"
-#include "profiler/tracy/TracyVulkan.hpp"
 
 Context g_ctx_main;
 
@@ -61,6 +62,7 @@ InitWindow(Context* ctx)
     io_ctx->window = glfwCreateWindow(800, 600, "Vulkan", nullptr, nullptr);
     glfwSetWindowUserPointer(io_ctx->window, ctx);
     glfwSetFramebufferSizeCallback(io_ctx->window, VK_FramebufferResizeCallback);
+    glfwSetScrollCallback(io_ctx->window, IO_ScrollCallback);
 }
 
 internal void
@@ -69,6 +71,7 @@ InitContext(Context* ctx)
     ctx->arena_permanent = (Arena*)arena_alloc();
 
     VK_VulkanInit(ctx->vulkanContext, ctx->io);
+    UI_CameraInit(ctx->camera);
     ProfileBuffersCreate(ctx->vulkanContext, ctx->profilingContext);
 }
 
@@ -145,6 +148,7 @@ run()
     ProfilingContext profilingContext = {};
     IO io_ctx = {};
     Terrain terrain = {};
+    UI_Camera camera = {};
 
     DllInfo dll_info = {.func_name = "Entrypoint",
                         .cleanup_func_name = "Cleanup",
@@ -154,7 +158,8 @@ run()
                         .last_modified = 0,
                         .func = NULL};
     g_ctx_main = {
-        0, &dll_info, {0}, &os_w32_state, 0, &terrain, &vulkanContext, &profilingContext, &io_ctx};
+        0,       &dll_info, {0}, &os_w32_state, 0, &terrain, &vulkanContext, &profilingContext,
+        &io_ctx, &camera};
     g_ctx_main.running = 1;
 
     InitWindow(&g_ctx_main);

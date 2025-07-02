@@ -18,12 +18,9 @@
 #include <stdio.h>
 #include <time.h>
 
-// profiler
-#include "profiler/tracy/Tracy.hpp"
-#include "profiler/tracy/TracyVulkan.hpp"
-
 // user defined headers
 #include "base/base_inc.hpp"
+#include "os_core/os_core_inc.h"
 #include "io.hpp"
 #include "vulkan_helpers.hpp"
 #include "state.hpp"

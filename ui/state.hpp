@@ -25,6 +25,7 @@ struct DllInfo
 };
 
 struct Terrain;
+struct UI_Camera;
 struct Context
 {
     B32 running;
@@ -39,8 +40,7 @@ struct Context
     VulkanContext* vulkanContext;
     ProfilingContext* profilingContext;
     IO* io;
+    UI_Camera* camera;
+    // TODO: CWD should be set in init function
     const char* cwd = "C:\\repos\\DTCity";
-
-    glm::mat4 view_matrix;
-    glm::mat4 projection_matrix;
 };

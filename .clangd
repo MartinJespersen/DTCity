@@ -1,28 +1,23 @@
 CompileFlags:
-  Add: [
-    "-std=c++20",
-    "-Wno-unknown-warning-option",
-    "-fms-compatibility-version=19",  # For MSVC compatibility, optional
-    "-fsanitize=address",
-
-    "--header-insertion=never",
-    # Include paths
-    "-I.",
-    "-IC:/VulkanSDK/Include",
-    "-Ithird_party",
-    "-Ithird_party/glfw/include",
-
-    # Defines
-    "-DTRACY_ENABLE",
-
-    # MSVC-specific suppressions
-    "-Wno-microsoft-anon-tag",      # Matches /wd4201
-    "-Wno-pragma-pack",             # Suppresses warning 4099 if needed
-
-    # force includes
-    "-include=C:/repos/DTCity/base/base_inc.hpp",
-    "-include=C:/repos/DTCity/ui/ui.hpp"
-  ]
+    Add:
+    [
+       ## "-ferror-limit=0",
+      "-IC:/repos/DTCity",
+      "-include=./base/base_inc.hpp",
+      "-include=./os_core/os_core_inc.h",
+      "-include=./ui/ui.hpp",
+      "-IC:/VulkanSDK/Include",
+      "-IC:/repos/DTCity/third_party/glfw/include",
+      "-Wno-unused",
+      "-Wno-undefined-internal",
+      "-Wno-c99-designator",
+      "-IC:/repos/DTCity/os_core",
+      "-IC:/repos/DTCity/base",
+      "-IC:/repos/DTCity/ui",
+      "-IC:/repos/DTCity/third_party",
+      "--target=x86_64-pc-windows-msvc"
+    ]
 
 Diagnostics:
-    UnusedIncludes: None
+  UnusedIncludes: None
+  Suppress: ["redefinition_different_kind"]
