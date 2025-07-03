@@ -54,7 +54,7 @@ float screenSpaceTessFactor(vec4 p0, vec4 p1)
 bool frustumCheck()
 {
     // Fixed radius (increase if patch size is increased in example)
-    const float radius = 2.0;
+    const float radius = 4.0;
     vec4 pos = gl_in[gl_InvocationID].gl_Position;
     pos.y += textureLod(samplerHeight, in_uv[gl_InvocationID], 0.0).r * ubo.displacement_factor;
 

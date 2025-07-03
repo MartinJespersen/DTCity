@@ -39,33 +39,6 @@ ProfileBuffersCreate(VulkanContext* vk_ctx, ProfilingContext* prof_ctx)
 }
 
 internal void
-VK_FramebufferResizeCallback(GLFWwindow* window, int width, int height);
-internal void
-VK_FramebufferResizeCallback(GLFWwindow* window, int width, int height)
-{
-    (void)width;
-    (void)height;
-
-    auto context = reinterpret_cast<Context*>(glfwGetWindowUserPointer(window));
-    context->vulkanContext->framebuffer_resized = 1;
-}
-
-internal void
-InitWindow(Context* ctx);
-internal void
-InitWindow(Context* ctx)
-{
-    IO* io_ctx = ctx->io;
-    glfwInit();
-    glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
-    glfwWindowHint(GLFW_RESIZABLE, GLFW_TRUE);
-    io_ctx->window = glfwCreateWindow(800, 600, "Vulkan", nullptr, nullptr);
-    glfwSetWindowUserPointer(io_ctx->window, ctx);
-    glfwSetFramebufferSizeCallback(io_ctx->window, VK_FramebufferResizeCallback);
-    glfwSetScrollCallback(io_ctx->window, IO_ScrollCallback);
-}
-
-internal void
 InitContext(Context* ctx)
 {
     ctx->arena_permanent = (Arena*)arena_alloc();
@@ -149,6 +122,7 @@ run()
     IO io_ctx = {};
     Terrain terrain = {};
     UI_Camera camera = {};
+    DT_Time time = {};
 
     DllInfo dll_info = {.func_name = "Entrypoint",
                         .cleanup_func_name = "Cleanup",
@@ -158,8 +132,8 @@ run()
                         .last_modified = 0,
                         .func = NULL};
     g_ctx_main = {
-        0,       &dll_info, {0}, &os_w32_state, 0, &terrain, &vulkanContext, &profilingContext,
-        &io_ctx, &camera};
+        0,       &dll_info, {0},  &os_w32_state, 0, &terrain, &vulkanContext, &profilingContext,
+        &io_ctx, &camera,   &time};
     g_ctx_main.running = 1;
 
     InitWindow(&g_ctx_main);

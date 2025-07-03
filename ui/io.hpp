@@ -1,19 +1,35 @@
+struct Context;
 struct IO
 {
-    B32 handle_input;
+    Vec2F64 mouse_pos_cur;
+    B32 mouse_left_clicked;
+    F32 mouse_sensitivity;
+    B32 is_cursor_inside_win;
 
-    Vec2F64 mousePosition;
-    B32 leftClicked;
+    F64 scroll_x;
+    F64 scroll_y;
+    B32 w_btn_clicked;
+    B32 s_btn_clicked;
+    B32 a_btn_clicked;
+    B32 d_btn_clicked;
 
+    Vec2S32 window_size;
+    B32 is_window_focused;
     // GLFW types
     GLFWwindow* window;
-
-    double scroll_x;
-    double scroll_y;
 };
+
+internal void
+IO_InputStateUpdate(IO* io);
+
+internal void
+VK_FramebufferResizeCallback(GLFWwindow* window, int width, int height);
+
+internal void
+InitWindow(Context* ctx);
 
 void
 IO_ScrollCallback(GLFWwindow* window, double xoffset, double yoffset);
 
 internal void
-IO_InputStateUpdate(IO* io);
+IO_InputReset(IO* io);

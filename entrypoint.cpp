@@ -18,6 +18,20 @@
 #include "ui/ui.cpp"
 
 internal void
+DT_TimeInit(DT_Time* time)
+{
+    time->last_time_ms = os_now_microseconds();
+}
+
+internal void
+DT_UpdateTime(DT_Time* time)
+{
+    U64 cur_time = os_now_microseconds();
+    time->delta_time_sec = (F32)(cur_time - time->last_time_ms) / 1'000'000.0;
+    time->last_time_ms = cur_time;
+}
+
+internal void
 CommandBufferRecord(U32 image_index, U32 current_frame)
 {
     ZoneScoped;
@@ -27,7 +41,7 @@ CommandBufferRecord(U32 image_index, U32 current_frame)
     VulkanContext* vk_ctx = ctx->vulkanContext;
     ProfilingContext* profilingContext = ctx->profilingContext;
     UI_Camera* camera = ctx->camera;
-
+    DT_Time* time = ctx->time;
     (void)profilingContext;
 
     VkCommandBufferBeginInfo beginInfo{};
@@ -53,12 +67,15 @@ CommandBufferRecord(U32 image_index, U32 current_frame)
                            VK_BUFFER_USAGE_VERTEX_BUFFER_BIT);
     VK_BufferContextCreate(vk_ctx, &vk_ctx->vk_indice_context, buf_of_indice_buffers,
                            VK_BUFFER_USAGE_INDEX_BUFFER_BIT);
-    UI_CameraUpdate(camera, ctx->io, vk_ctx->swapchain_extent);
+
+    DT_UpdateTime(time);
+    UI_CameraUpdate(camera, ctx->io, ctx->time, vk_ctx->swapchain_extent);
     UpdateTerrainUniformBuffer(
         ctx->terrain, camera,
         Vec2F32{(F32)vk_ctx->swapchain_extent.width, (F32)vk_ctx->swapchain_extent.height},
         current_frame);
     TerrainRenderPassBegin(vk_ctx, ctx->terrain, image_index, current_frame);
+    IO_InputReset(ctx->io);
 
     if (vkEndCommandBuffer(vk_ctx->command_buffers.data[current_frame]) != VK_SUCCESS)
     {
@@ -89,7 +106,10 @@ MainLoop(void* ptr)
 {
     Context* ctx = (Context*)ptr;
     VulkanContext* vk_ctx = ctx->vulkanContext;
+    DT_Time* time = ctx->time;
+
     os_set_thread_name(str8_cstring("Entrypoint thread"));
+    DT_TimeInit(time);
 
     while (ctx->running)
     {

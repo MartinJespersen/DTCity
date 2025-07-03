@@ -24,6 +24,12 @@ struct DllInfo
     void (*cleanup_func)(void*);
 };
 
+struct DT_Time
+{
+    F32 delta_time_sec;
+    U64 last_time_ms;
+};
+
 struct Terrain;
 struct UI_Camera;
 struct Context
@@ -41,6 +47,7 @@ struct Context
     ProfilingContext* profilingContext;
     IO* io;
     UI_Camera* camera;
+    DT_Time* time;
     // TODO: CWD should be set in init function
     const char* cwd = "C:\\repos\\DTCity";
 };

@@ -500,10 +500,6 @@ internal void
 UpdateTerrainUniformBuffer(Terrain* terrain, UI_Camera* camera, Vec2F32 screen_res,
                            U32 current_frame)
 {
-    static U64 start_time = os_now_microseconds();
-    U64 current_time = os_now_microseconds();
-    U64 elapsed_time = current_time - start_time;
-    F32 elapsed_time_sec = (F32)elapsed_time / 1'000'000.0;
     TerrainUniformBuffer* ubo = &terrain->uniform_buffer;
 
     glm::mat4 transform = camera->projection_matrix * camera->view_matrix;
