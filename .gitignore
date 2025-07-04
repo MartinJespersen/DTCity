@@ -7,3 +7,4 @@ build
 *.pdb
 */BROWSE.VC.DB*
 .cache
+.venv

@@ -1157,6 +1157,7 @@ VK_CheckDeviceExtensionSupport(VulkanContext* vulkanContext, VkPhysicalDevice de
         }
     }
 
+    scratch_end(scratch);
     return numberOfRequiredExtenstionsLeft == 0;
 }
 

@@ -1,11 +1,11 @@
 CompileFlags:
     Add:
     [
-       ## "-ferror-limit=0",
+      "-ferror-limit=100",
       "-IC:/repos/DTCity",
-      "-include=./base/base_inc.hpp",
-      "-include=./os_core/os_core_inc.h",
-      "-include=./ui/ui.hpp",
+      "-include=C:/repos/DTCity/base/base_inc.hpp",
+      "-include=C:/repos/DTCity/os_core/os_core_inc.h",
+      "-include=C:/repos/DTCity/ui/ui.hpp",
       "-IC:/VulkanSDK/Include",
       "-IC:/repos/DTCity/third_party/glfw/include",
       "-Wno-unused",

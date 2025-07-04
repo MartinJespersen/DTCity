@@ -107,7 +107,7 @@ TerrainTextureResourceCreate(VulkanContext* vk_ctx, Terrain* terrain, const char
     String8List heightmap_path_list = {0};
     String8 cwd_str = str8_cstring(cwd);
     str8_list_push(scratch.arena, &heightmap_path_list, cwd_str);
-    const char* heightmap_file_path[] = {cwd, "textures", "heightmap.png"};
+    const char* heightmap_file_path[] = {cwd, "textures", "heightmap_au.png"};
     String8 heightmap_path_abs = CreatePathFromStrings(scratch.arena, (char**)heightmap_file_path,
                                                        ArrayCount(heightmap_file_path));
 
