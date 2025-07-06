@@ -147,19 +147,19 @@ struct HTTP_Response
 ////////////////////////////////////////////////////////////////
 //~ rjf: Basic Type Functions
 
-internal HTTP_StatusKind
+static HTTP_StatusKind
 HTTP_StatusKindFromCode(HTTP_StatusCode code);
 
 ////////////////////////////////////////////////////////////////
 //~ rjf: Main Layer Initialization
 
-internal void
+static void
 HTTP_Init(void);
 
 ////////////////////////////////////////////////////////////////
 //~ rjf: Low-Level Request Functions
 
-internal HTTP_Response
+static HTTP_Response
 HTTP_Request(Arena* arena, String8 url, String8 body, HTTP_RequestParams* params);
 ////////////////////////////////////////////////////////////////
 //~ rjf: High-Level Request Wrappers

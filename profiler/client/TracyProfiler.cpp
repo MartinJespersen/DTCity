@@ -161,7 +161,7 @@ struct MappingInfo {
 };
 }  // anonymous namespace
 
-   // Internal implementation helper for LookUpMapping(address).
+   // static implementation helper for LookUpMapping(address).
    //
    // Parses /proc/self/maps returning a vector<MappingInfo>.
    // /proc/self/maps is assumed to be sorted by ascending address, so the resulting
@@ -198,7 +198,7 @@ static std::vector<MappingInfo> ParseMappings()
     return result;
 }
 
-// Internal implementation helper for LookUpMapping(address).
+// static implementation helper for LookUpMapping(address).
 //
 // Takes as input an `address` and a known vector `mappings`, assumed to be
 // sorted by increasing addresses, as /proc/self/maps seems to be.
@@ -219,7 +219,7 @@ static MappingInfo* LookUpMapping(std::vector<MappingInfo>& mappings, uintptr_t 
     return &*iter;
 }
 
-// Internal implementation helper for EnsureReadable(address).
+// static implementation helper for EnsureReadable(address).
 //
 // Takes as input an `address` and returns a pointer to a MappingInfo
 // describing the mapping that this address belongs to, or nullptr if
@@ -243,7 +243,7 @@ static MappingInfo* LookUpMapping(uintptr_t address)
     return LookUpMapping( s_mappings, address );
 }
 
-// Internal implementation helper for EnsureReadable(address).
+// static implementation helper for EnsureReadable(address).
 //
 // Attempts to make the specified `mapping` readable if it isn't already.
 // Returns true if and only if the mapping is readable.

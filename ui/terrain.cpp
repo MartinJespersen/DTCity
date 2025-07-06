@@ -1,16 +1,16 @@
 
 #include "base/error.hpp"
 #include "vulkan/vulkan_core.h"
-internal String8
+static String8
 CreatePathFromStrings(Arena* arena, char** parts, U64 count)
 {
     String8List path_list = {0};
-    StringJoin join_params = {.sep = str8_cstring("\\")}; // Default to Unix-style separator
+    StringJoin join_params = {.sep = Str8CString("\\")}; // Default to Unix-style separator
 
     // Step 1: Convert each char* to String8 and push to list
     for (U64 i = 0; i < count; i++)
     {
-        String8 part = str8_cstring(parts[i]);
+        String8 part = Str8CString(parts[i]);
         Str8ListPush(arena, &path_list, part);
     }
 
@@ -18,7 +18,7 @@ CreatePathFromStrings(Arena* arena, char** parts, U64 count)
     return result;
 }
 
-internal void
+static void
 TerrainAllocations(Arena* arena, Terrain* terrain, U32 frames_in_flight)
 {
     terrain->descriptor_sets = push_array(arena, VkDescriptorSet, frames_in_flight);
@@ -28,7 +28,7 @@ TerrainAllocations(Arena* arena, Terrain* terrain, U32 frames_in_flight)
     terrain->buffer_memory_mapped = push_array(arena, void*, frames_in_flight);
 }
 
-internal void
+static void
 TerrainDescriptorPoolCreate(Terrain* terrain, U32 frames_in_flight)
 {
     VulkanContext* vk_ctx = GlobalContextGet()->vulkanContext;
@@ -53,7 +53,7 @@ TerrainDescriptorPoolCreate(Terrain* terrain, U32 frames_in_flight)
     }
 }
 
-internal void
+static void
 TerrainDescriptorSetLayoutCreate(VkDevice device, Terrain* terrain)
 {
     VkDescriptorSetLayoutBinding terrain_desc_layout{};
@@ -85,7 +85,7 @@ TerrainDescriptorSetLayoutCreate(VkDevice device, Terrain* terrain)
     }
 }
 
-internal void
+static void
 TerrainTextureResourceCreate(VulkanContext* vk_ctx, Terrain* terrain, const char* cwd)
 {
     Temp scratch = ScratchBegin(0, 0);
@@ -105,7 +105,7 @@ TerrainTextureResourceCreate(VulkanContext* vk_ctx, Terrain* terrain, const char
 
     // load heightmap
     String8List heightmap_path_list = {0};
-    String8 cwd_str = str8_cstring(cwd);
+    String8 cwd_str = Str8CString(cwd);
     Str8ListPush(scratch.arena, &heightmap_path_list, cwd_str);
     const char* heightmap_file_path[] = {cwd, "textures", "heightmap_au.png"};
     String8 heightmap_path_abs = CreatePathFromStrings(scratch.arena, (char**)heightmap_file_path,
@@ -165,7 +165,7 @@ TerrainTextureResourceCreate(VulkanContext* vk_ctx, Terrain* terrain, const char
     ScratchEnd(scratch);
 }
 
-internal void
+static void
 TerrainDescriptorSetCreate(Terrain* terrain, U32 frames_in_flight)
 {
     Temp scratch = ScratchBegin(0, 0);
@@ -233,7 +233,7 @@ TerrainDescriptorSetCreate(Terrain* terrain, U32 frames_in_flight)
     ScratchEnd(scratch);
 }
 
-internal void
+static void
 TerrainUniformBufferCreate(Terrain* terrain, U32 image_count)
 {
     VulkanContext* vk_ctx = GlobalContextGet()->vulkanContext;
@@ -254,7 +254,7 @@ TerrainUniformBufferCreate(Terrain* terrain, U32 image_count)
     }
 }
 
-internal void
+static void
 TerrainGraphicsPipelineCreate(Terrain* terrain, const char* cwd)
 {
     Temp scratch = ScratchBegin(0, 0);
@@ -473,7 +473,7 @@ TerrainGraphicsPipelineCreate(Terrain* terrain, const char* cwd)
     return;
 }
 
-internal void
+static void
 TerrainVulkanCleanup(Terrain* terrain, U32 frames_in_flight)
 {
     VulkanContext* vk_ctx = GlobalContextGet()->vulkanContext;
@@ -496,7 +496,7 @@ TerrainVulkanCleanup(Terrain* terrain, U32 frames_in_flight)
     vkDestroyPipeline(vk_ctx->device, terrain->vk_pipeline, nullptr);
 }
 
-internal void
+static void
 UpdateTerrainUniformBuffer(Terrain* terrain, UI_Camera* camera, Vec2F32 screen_res,
                            U32 current_frame)
 {
@@ -516,7 +516,7 @@ UpdateTerrainUniformBuffer(Terrain* terrain, UI_Camera* camera, Vec2F32 screen_r
     MemoryCopy(terrain->buffer_memory_mapped[current_frame], ubo, sizeof(*ubo));
 }
 
-internal void
+static void
 TerrainRenderPassBegin(VulkanContext* vk_ctx, Terrain* terrain, U32 image_index, U32 current_frame)
 {
     VkExtent2D swap_chain_extent = vk_ctx->swapchain_extent;
@@ -572,7 +572,7 @@ TerrainRenderPassBegin(VulkanContext* vk_ctx, Terrain* terrain, U32 image_index,
     vkCmdEndRenderPass(command_buffer);
 }
 
-internal void
+static void
 TerrainGenerateBuffers(Arena* arena, Buffer<Vertex>* vertices, Buffer<U32>* indices, U32 patch_size)
 {
     const F32 uv_scale = 1.0f;
@@ -612,7 +612,7 @@ TerrainGenerateBuffers(Arena* arena, Buffer<Vertex>* vertices, Buffer<U32>* indi
     }
 }
 
-internal void
+static void
 TerrainInit()
 {
     Context* ctx = GlobalContextGet();
@@ -635,7 +635,7 @@ TerrainInit()
                            ctx->terrain->patch_size);
 }
 
-internal VkVertexInputBindingDescription
+static VkVertexInputBindingDescription
 TerrainBindingDescriptionGet()
 {
     VkVertexInputBindingDescription bindingDescription{};
@@ -645,7 +645,7 @@ TerrainBindingDescriptionGet()
     return bindingDescription;
 }
 
-internal Buffer<VkVertexInputAttributeDescription>
+static Buffer<VkVertexInputAttributeDescription>
 TerrainAttributeDescriptionGet(Arena* arena)
 {
     Buffer<VkVertexInputAttributeDescription> attribute_descriptions =

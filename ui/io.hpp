@@ -19,17 +19,17 @@ struct IO
     GLFWwindow* window;
 };
 
-internal void
+static void
 IO_InputStateUpdate(IO* io);
 
-internal void
+static void
 VK_FramebufferResizeCallback(GLFWwindow* window, int width, int height);
 
-internal void
+static void
 InitWindow(Context* ctx);
 
 void
 IO_ScrollCallback(GLFWwindow* window, double xoffset, double yoffset);
 
-internal void
+static void
 IO_InputReset(IO* io);

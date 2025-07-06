@@ -60,7 +60,7 @@ extern "C"
 // identify whether this name is mangled, and fail if it is not. Failure is indicated
 // by returning nullptr. If demangling succeeds, a pointer to the C string containing
 // demangled function must be returned. The demangling function is responsible for
-// managing memory for this string. It is expected that it will be internally reused.
+// managing memory for this string. It is expected that it will be staticly reused.
 // When a call to ___tracy_demangle is made, previous contents of the string memory
 // do not need to be preserved. Function may return string of any length, but the
 // profiler can choose to truncate it.

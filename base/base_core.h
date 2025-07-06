@@ -16,8 +16,6 @@
 ////////////////////////////////
 //~ rjf: Codebase Keywords
 
-#define internal static
-#define global static
 #define local_persist static
 
 #if COMPILER_MSVC || (COMPILER_CLANG && OS_WINDOWS)
@@ -184,7 +182,7 @@
 #define InvalidPath Assert(!"Invalid Path!")
 #define NotImplemented Assert(!"Not Implemented!")
 #define NoOp ((void)0)
-#define StaticAssert(C, ID) global U8 Glue(ID, __LINE__)[(C) ? 1 : -1]
+#define StaticAssert(C, ID) static U8 Glue(ID, __LINE__)[(C) ? 1 : -1]
 
 ////////////////////////////////
 //~ rjf: Atomic Operations
@@ -604,163 +602,163 @@ struct U128Array
 ////////////////////////////////
 //~ NOTE(allen): Constants
 
-global U32 sign32 = 0x80000000;
-global U32 exponent32 = 0x7F800000;
-global U32 mantissa32 = 0x007FFFFF;
+static U32 sign32 = 0x80000000;
+static U32 exponent32 = 0x7F800000;
+static U32 mantissa32 = 0x007FFFFF;
 
-global F32 big_golden32 = 1.61803398875f;
-global F32 small_golden32 = 0.61803398875f;
+static F32 big_golden32 = 1.61803398875f;
+static F32 small_golden32 = 0.61803398875f;
 
-global F32 pi32 = 3.1415926535897f;
+static F32 pi32 = 3.1415926535897f;
 
-global F64 machine_epsilon64 = 4.94065645841247e-324;
+static F64 machine_epsilon64 = 4.94065645841247e-324;
 
-global U64 max_U64 = 0xffffffffffffffffull;
-global U32 max_U32 = 0xffffffff;
-global U16 max_U16 = 0xffff;
-global U8 max_U8 = 0xff;
+static U64 max_U64 = 0xffffffffffffffffull;
+static U32 max_U32 = 0xffffffff;
+static U16 max_U16 = 0xffff;
+static U8 max_U8 = 0xff;
 
-global S64 max_S64 = (S64)0x7fffffffffffffffull;
-global S32 max_S32 = (S32)0x7fffffff;
-global S16 max_S16 = (S16)0x7fff;
-global S8 max_S8 = (S8)0x7f;
+static S64 max_S64 = (S64)0x7fffffffffffffffull;
+static S32 max_S32 = (S32)0x7fffffff;
+static S16 max_S16 = (S16)0x7fff;
+static S8 max_S8 = (S8)0x7f;
 
-global S64 min_S64 = (S64)0xffffffffffffffffull;
-global S32 min_S32 = (S32)0xffffffff;
-global S16 min_S16 = (S16)0xffff;
-global S8 min_S8 = (S8)0xff;
+static S64 min_S64 = (S64)0xffffffffffffffffull;
+static S32 min_S32 = (S32)0xffffffff;
+static S16 min_S16 = (S16)0xffff;
+static S8 min_S8 = (S8)0xff;
 
-global const U32 bitmask1 = 0x00000001;
-global const U32 bitmask2 = 0x00000003;
-global const U32 bitmask3 = 0x00000007;
-global const U32 bitmask4 = 0x0000000f;
-global const U32 bitmask5 = 0x0000001f;
-global const U32 bitmask6 = 0x0000003f;
-global const U32 bitmask7 = 0x0000007f;
-global const U32 bitmask8 = 0x000000ff;
-global const U32 bitmask9 = 0x000001ff;
-global const U32 bitmask10 = 0x000003ff;
-global const U32 bitmask11 = 0x000007ff;
-global const U32 bitmask12 = 0x00000fff;
-global const U32 bitmask13 = 0x00001fff;
-global const U32 bitmask14 = 0x00003fff;
-global const U32 bitmask15 = 0x00007fff;
-global const U32 bitmask16 = 0x0000ffff;
-global const U32 bitmask17 = 0x0001ffff;
-global const U32 bitmask18 = 0x0003ffff;
-global const U32 bitmask19 = 0x0007ffff;
-global const U32 bitmask20 = 0x000fffff;
-global const U32 bitmask21 = 0x001fffff;
-global const U32 bitmask22 = 0x003fffff;
-global const U32 bitmask23 = 0x007fffff;
-global const U32 bitmask24 = 0x00ffffff;
-global const U32 bitmask25 = 0x01ffffff;
-global const U32 bitmask26 = 0x03ffffff;
-global const U32 bitmask27 = 0x07ffffff;
-global const U32 bitmask28 = 0x0fffffff;
-global const U32 bitmask29 = 0x1fffffff;
-global const U32 bitmask30 = 0x3fffffff;
-global const U32 bitmask31 = 0x7fffffff;
-global const U32 bitmask32 = 0xffffffff;
+static const U32 bitmask1 = 0x00000001;
+static const U32 bitmask2 = 0x00000003;
+static const U32 bitmask3 = 0x00000007;
+static const U32 bitmask4 = 0x0000000f;
+static const U32 bitmask5 = 0x0000001f;
+static const U32 bitmask6 = 0x0000003f;
+static const U32 bitmask7 = 0x0000007f;
+static const U32 bitmask8 = 0x000000ff;
+static const U32 bitmask9 = 0x000001ff;
+static const U32 bitmask10 = 0x000003ff;
+static const U32 bitmask11 = 0x000007ff;
+static const U32 bitmask12 = 0x00000fff;
+static const U32 bitmask13 = 0x00001fff;
+static const U32 bitmask14 = 0x00003fff;
+static const U32 bitmask15 = 0x00007fff;
+static const U32 bitmask16 = 0x0000ffff;
+static const U32 bitmask17 = 0x0001ffff;
+static const U32 bitmask18 = 0x0003ffff;
+static const U32 bitmask19 = 0x0007ffff;
+static const U32 bitmask20 = 0x000fffff;
+static const U32 bitmask21 = 0x001fffff;
+static const U32 bitmask22 = 0x003fffff;
+static const U32 bitmask23 = 0x007fffff;
+static const U32 bitmask24 = 0x00ffffff;
+static const U32 bitmask25 = 0x01ffffff;
+static const U32 bitmask26 = 0x03ffffff;
+static const U32 bitmask27 = 0x07ffffff;
+static const U32 bitmask28 = 0x0fffffff;
+static const U32 bitmask29 = 0x1fffffff;
+static const U32 bitmask30 = 0x3fffffff;
+static const U32 bitmask31 = 0x7fffffff;
+static const U32 bitmask32 = 0xffffffff;
 
-global const U64 bitmask33 = 0x00000001ffffffffull;
-global const U64 bitmask34 = 0x00000003ffffffffull;
-global const U64 bitmask35 = 0x00000007ffffffffull;
-global const U64 bitmask36 = 0x0000000fffffffffull;
-global const U64 bitmask37 = 0x0000001fffffffffull;
-global const U64 bitmask38 = 0x0000003fffffffffull;
-global const U64 bitmask39 = 0x0000007fffffffffull;
-global const U64 bitmask40 = 0x000000ffffffffffull;
-global const U64 bitmask41 = 0x000001ffffffffffull;
-global const U64 bitmask42 = 0x000003ffffffffffull;
-global const U64 bitmask43 = 0x000007ffffffffffull;
-global const U64 bitmask44 = 0x00000fffffffffffull;
-global const U64 bitmask45 = 0x00001fffffffffffull;
-global const U64 bitmask46 = 0x00003fffffffffffull;
-global const U64 bitmask47 = 0x00007fffffffffffull;
-global const U64 bitmask48 = 0x0000ffffffffffffull;
-global const U64 bitmask49 = 0x0001ffffffffffffull;
-global const U64 bitmask50 = 0x0003ffffffffffffull;
-global const U64 bitmask51 = 0x0007ffffffffffffull;
-global const U64 bitmask52 = 0x000fffffffffffffull;
-global const U64 bitmask53 = 0x001fffffffffffffull;
-global const U64 bitmask54 = 0x003fffffffffffffull;
-global const U64 bitmask55 = 0x007fffffffffffffull;
-global const U64 bitmask56 = 0x00ffffffffffffffull;
-global const U64 bitmask57 = 0x01ffffffffffffffull;
-global const U64 bitmask58 = 0x03ffffffffffffffull;
-global const U64 bitmask59 = 0x07ffffffffffffffull;
-global const U64 bitmask60 = 0x0fffffffffffffffull;
-global const U64 bitmask61 = 0x1fffffffffffffffull;
-global const U64 bitmask62 = 0x3fffffffffffffffull;
-global const U64 bitmask63 = 0x7fffffffffffffffull;
-global const U64 bitmask64 = 0xffffffffffffffffull;
+static const U64 bitmask33 = 0x00000001ffffffffull;
+static const U64 bitmask34 = 0x00000003ffffffffull;
+static const U64 bitmask35 = 0x00000007ffffffffull;
+static const U64 bitmask36 = 0x0000000fffffffffull;
+static const U64 bitmask37 = 0x0000001fffffffffull;
+static const U64 bitmask38 = 0x0000003fffffffffull;
+static const U64 bitmask39 = 0x0000007fffffffffull;
+static const U64 bitmask40 = 0x000000ffffffffffull;
+static const U64 bitmask41 = 0x000001ffffffffffull;
+static const U64 bitmask42 = 0x000003ffffffffffull;
+static const U64 bitmask43 = 0x000007ffffffffffull;
+static const U64 bitmask44 = 0x00000fffffffffffull;
+static const U64 bitmask45 = 0x00001fffffffffffull;
+static const U64 bitmask46 = 0x00003fffffffffffull;
+static const U64 bitmask47 = 0x00007fffffffffffull;
+static const U64 bitmask48 = 0x0000ffffffffffffull;
+static const U64 bitmask49 = 0x0001ffffffffffffull;
+static const U64 bitmask50 = 0x0003ffffffffffffull;
+static const U64 bitmask51 = 0x0007ffffffffffffull;
+static const U64 bitmask52 = 0x000fffffffffffffull;
+static const U64 bitmask53 = 0x001fffffffffffffull;
+static const U64 bitmask54 = 0x003fffffffffffffull;
+static const U64 bitmask55 = 0x007fffffffffffffull;
+static const U64 bitmask56 = 0x00ffffffffffffffull;
+static const U64 bitmask57 = 0x01ffffffffffffffull;
+static const U64 bitmask58 = 0x03ffffffffffffffull;
+static const U64 bitmask59 = 0x07ffffffffffffffull;
+static const U64 bitmask60 = 0x0fffffffffffffffull;
+static const U64 bitmask61 = 0x1fffffffffffffffull;
+static const U64 bitmask62 = 0x3fffffffffffffffull;
+static const U64 bitmask63 = 0x7fffffffffffffffull;
+static const U64 bitmask64 = 0xffffffffffffffffull;
 
-global const U32 bit1 = (1 << 0);
-global const U32 bit2 = (1 << 1);
-global const U32 bit3 = (1 << 2);
-global const U32 bit4 = (1 << 3);
-global const U32 bit5 = (1 << 4);
-global const U32 bit6 = (1 << 5);
-global const U32 bit7 = (1 << 6);
-global const U32 bit8 = (1 << 7);
-global const U32 bit9 = (1 << 8);
-global const U32 bit10 = (1 << 9);
-global const U32 bit11 = (1 << 10);
-global const U32 bit12 = (1 << 11);
-global const U32 bit13 = (1 << 12);
-global const U32 bit14 = (1 << 13);
-global const U32 bit15 = (1 << 14);
-global const U32 bit16 = (1 << 15);
-global const U32 bit17 = (1 << 16);
-global const U32 bit18 = (1 << 17);
-global const U32 bit19 = (1 << 18);
-global const U32 bit20 = (1 << 19);
-global const U32 bit21 = (1 << 20);
-global const U32 bit22 = (1 << 21);
-global const U32 bit23 = (1 << 22);
-global const U32 bit24 = (1 << 23);
-global const U32 bit25 = (1 << 24);
-global const U32 bit26 = (1 << 25);
-global const U32 bit27 = (1 << 26);
-global const U32 bit28 = (1 << 27);
-global const U32 bit29 = (1 << 28);
-global const U32 bit30 = (1 << 29);
-global const U32 bit31 = (1 << 30);
-global const U32 bit32 = (1 << 31);
+static const U32 bit1 = (1 << 0);
+static const U32 bit2 = (1 << 1);
+static const U32 bit3 = (1 << 2);
+static const U32 bit4 = (1 << 3);
+static const U32 bit5 = (1 << 4);
+static const U32 bit6 = (1 << 5);
+static const U32 bit7 = (1 << 6);
+static const U32 bit8 = (1 << 7);
+static const U32 bit9 = (1 << 8);
+static const U32 bit10 = (1 << 9);
+static const U32 bit11 = (1 << 10);
+static const U32 bit12 = (1 << 11);
+static const U32 bit13 = (1 << 12);
+static const U32 bit14 = (1 << 13);
+static const U32 bit15 = (1 << 14);
+static const U32 bit16 = (1 << 15);
+static const U32 bit17 = (1 << 16);
+static const U32 bit18 = (1 << 17);
+static const U32 bit19 = (1 << 18);
+static const U32 bit20 = (1 << 19);
+static const U32 bit21 = (1 << 20);
+static const U32 bit22 = (1 << 21);
+static const U32 bit23 = (1 << 22);
+static const U32 bit24 = (1 << 23);
+static const U32 bit25 = (1 << 24);
+static const U32 bit26 = (1 << 25);
+static const U32 bit27 = (1 << 26);
+static const U32 bit28 = (1 << 27);
+static const U32 bit29 = (1 << 28);
+static const U32 bit30 = (1 << 29);
+static const U32 bit31 = (1 << 30);
+static const U32 bit32 = (1 << 31);
 
-global const U64 bit33 = (1ull << 32);
-global const U64 bit34 = (1ull << 33);
-global const U64 bit35 = (1ull << 34);
-global const U64 bit36 = (1ull << 35);
-global const U64 bit37 = (1ull << 36);
-global const U64 bit38 = (1ull << 37);
-global const U64 bit39 = (1ull << 38);
-global const U64 bit40 = (1ull << 39);
-global const U64 bit41 = (1ull << 40);
-global const U64 bit42 = (1ull << 41);
-global const U64 bit43 = (1ull << 42);
-global const U64 bit44 = (1ull << 43);
-global const U64 bit45 = (1ull << 44);
-global const U64 bit46 = (1ull << 45);
-global const U64 bit47 = (1ull << 46);
-global const U64 bit48 = (1ull << 47);
-global const U64 bit49 = (1ull << 48);
-global const U64 bit50 = (1ull << 49);
-global const U64 bit51 = (1ull << 50);
-global const U64 bit52 = (1ull << 51);
-global const U64 bit53 = (1ull << 52);
-global const U64 bit54 = (1ull << 53);
-global const U64 bit55 = (1ull << 54);
-global const U64 bit56 = (1ull << 55);
-global const U64 bit57 = (1ull << 56);
-global const U64 bit58 = (1ull << 57);
-global const U64 bit59 = (1ull << 58);
-global const U64 bit60 = (1ull << 59);
-global const U64 bit61 = (1ull << 60);
-global const U64 bit62 = (1ull << 61);
-global const U64 bit63 = (1ull << 62);
-global const U64 bit64 = (1ull << 63);
+static const U64 bit33 = (1ull << 32);
+static const U64 bit34 = (1ull << 33);
+static const U64 bit35 = (1ull << 34);
+static const U64 bit36 = (1ull << 35);
+static const U64 bit37 = (1ull << 36);
+static const U64 bit38 = (1ull << 37);
+static const U64 bit39 = (1ull << 38);
+static const U64 bit40 = (1ull << 39);
+static const U64 bit41 = (1ull << 40);
+static const U64 bit42 = (1ull << 41);
+static const U64 bit43 = (1ull << 42);
+static const U64 bit44 = (1ull << 43);
+static const U64 bit45 = (1ull << 44);
+static const U64 bit46 = (1ull << 45);
+static const U64 bit47 = (1ull << 46);
+static const U64 bit48 = (1ull << 47);
+static const U64 bit49 = (1ull << 48);
+static const U64 bit50 = (1ull << 49);
+static const U64 bit51 = (1ull << 50);
+static const U64 bit52 = (1ull << 51);
+static const U64 bit53 = (1ull << 52);
+static const U64 bit54 = (1ull << 53);
+static const U64 bit55 = (1ull << 54);
+static const U64 bit56 = (1ull << 55);
+static const U64 bit57 = (1ull << 56);
+static const U64 bit58 = (1ull << 57);
+static const U64 bit59 = (1ull << 58);
+static const U64 bit60 = (1ull << 59);
+static const U64 bit61 = (1ull << 60);
+static const U64 bit62 = (1ull << 61);
+static const U64 bit63 = (1ull << 62);
+static const U64 bit64 = (1ull << 63);
 
 ////////////////////////////////
 //~ allen: Time
@@ -839,45 +837,45 @@ struct FileProperties
 ////////////////////////////////
 //~ rjf: Safe Casts
 
-internal U16
+static U16
 safe_cast_u16(U32 x);
-internal U32
+static U32
 safe_cast_u32(U64 x);
-internal S32
+static S32
 safe_cast_s32(S64 x);
 
 ////////////////////////////////
 //~ rjf: Large Base Type Functions
 
-internal U128
+static U128
 u128_zero(void);
-internal U128
+static U128
 u128_make(U64 v0, U64 v1);
-internal B32
+static B32
 u128_match(U128 a, U128 b);
 
 ////////////////////////////////
 //~ rjf: Bit Patterns
 
-internal U32
+static U32
 u32_from_u64_saturate(U64 x);
-internal U64
+static U64
 u64_up_to_pow2(U64 x);
-internal S32
+static S32
 extend_sign32(U32 x, U32 size);
-internal S64
+static S64
 extend_sign64(U64 x, U64 size);
 
-internal F32
+static F32
 inf32(void);
-internal F32
+static F32
 neg_inf32(void);
 
-internal U16
+static U16
 bswap_u16(U16 x);
-internal U32
+static U32
 bswap_u32(U32 x);
-internal U64
+static U64
 bswap_u64(U64 x);
 
 #if ARCH_LITTLE_ENDIAN
@@ -890,89 +888,89 @@ bswap_u64(U64 x);
 #define from_be_u64(x) (x)
 #endif
 
-internal U64
+static U64
 count_bits_set32(U32 val);
-internal U64
+static U64
 count_bits_set64(U64 val);
 
-internal U64
+static U64
 ctz32(U32 val);
-internal U64
+static U64
 ctz64(U64 val);
-internal U64
+static U64
 clz32(U32 val);
-internal U64
+static U64
 clz64(U64 val);
 
 ////////////////////////////////
 //~ rjf: Enum -> Sign
 
-internal S32
+static S32
 sign_from_side_S32(Side side);
-internal F32
+static F32
 sign_from_side_F32(Side side);
 
 ////////////////////////////////
 //~ rjf: Memory Functions
 
-internal B32
+static B32
 memory_is_zero(void* ptr, U64 size);
 
 ////////////////////////////////
 //~ rjf: Text 2D Coordinate/Range Functions
 
-internal TxtPt
+static TxtPt
 txt_pt(S64 line, S64 column);
-internal B32
+static B32
 txt_pt_match(TxtPt a, TxtPt b);
-internal B32
+static B32
 txt_pt_less_than(TxtPt a, TxtPt b);
-internal TxtPt
+static TxtPt
 txt_pt_min(TxtPt a, TxtPt b);
-internal TxtPt
+static TxtPt
 txt_pt_max(TxtPt a, TxtPt b);
-internal TxtRng
+static TxtRng
 txt_rng(TxtPt min, TxtPt max);
-internal TxtRng
+static TxtRng
 txt_rng_intersect(TxtRng a, TxtRng b);
-internal TxtRng
+static TxtRng
 txt_rng_union(TxtRng a, TxtRng b);
-internal B32
+static B32
 txt_rng_contains(TxtRng r, TxtPt pt);
 
 ////////////////////////////////
 //~ rjf: Toolchain/Environment Enum Functions
 
-internal U64
+static U64
 bit_size_from_arch(Arch arch);
-internal U64
+static U64
 max_instruction_size_from_arch(Arch arch);
 
-internal OperatingSystem
+static OperatingSystem
 operating_system_from_context(void);
-internal Arch
+static Arch
 arch_from_context(void);
-internal Compiler
+static Compiler
 compiler_from_context(void);
 
 ////////////////////////////////
 //~ rjf: Time Functions
 
-internal DenseTime
+static DenseTime
 dense_time_from_date_time(DateTime date_time);
-internal DateTime
+static DateTime
 date_time_from_dense_time(DenseTime time);
-internal DateTime
+static DateTime
 date_time_from_micro_seconds(U64 time);
-internal DateTime
+static DateTime
 date_time_from_unix_time(U64 unix_time);
 
 ////////////////////////////////
 //~ rjf: Non-Fancy Ring Buffer Reads/Writes
 
-internal U64
+static U64
 ring_write(U8* ring_base, U64 ring_size, U64 ring_pos, void* src_data, U64 src_data_size);
-internal U64
+static U64
 ring_read(U8* ring_base, U64 ring_size, U64 ring_pos, void* dst_data, U64 read_size);
 #define ring_write_struct(ring_base, ring_size, ring_pos, ptr)                                     \
     ring_write((ring_base), (ring_size), (ring_pos), (ptr), sizeof(*(ptr)))
@@ -987,7 +985,7 @@ ring_read(U8* ring_base, U64 ring_size, U64 ring_pos, void* dst_data, U64 read_s
 
 ////////////////////////////////
 
-internal U64
+static U64
 u64_array_bsearch(U64* arr, U64 count, U64 value);
 
 // compiler specifics

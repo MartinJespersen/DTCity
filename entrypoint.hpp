@@ -14,8 +14,8 @@ Entrypoint(void* ptr);
 shared_function void
 Cleanup(void* ptr);
 
-internal void
+static void
 MainLoop(void* ptr);
 
-internal void
+static void
 CommandBufferRecord(U32 imageIndex, U32 currentFrame);

@@ -13,8 +13,8 @@
 
 // user defined: [hpp]
 #include "entrypoint.hpp"
-// #include "third_party/json.hpp"
-// using json = nlohmann::json;
+#include "third_party/json.hpp"
+using Json = nlohmann::json;
 
 // domain: cpp
 #include "base/base_inc.cpp"
@@ -24,9 +24,9 @@
 
 Context g_ctx_main;
 
-internal void
+static void
 ProfileBuffersCreate(VulkanContext* vk_ctx, ProfilingContext* prof_ctx);
-internal void
+static void
 ProfileBuffersCreate(VulkanContext* vk_ctx, ProfilingContext* prof_ctx)
 {
 #ifdef TRACY_ENABLE
@@ -41,7 +41,7 @@ ProfileBuffersCreate(VulkanContext* vk_ctx, ProfilingContext* prof_ctx)
 #endif
 }
 
-internal void
+static void
 InitContext(Context* ctx)
 {
     ctx->arena_permanent = (Arena*)ArenaAlloc();
@@ -52,7 +52,7 @@ InitContext(Context* ctx)
 }
 
 // Function to load or reload the DLL
-internal int
+static int
 LoadDLL(DllInfo* dll_info)
 {
     Temp scratch = ScratchBegin(0, 0);
@@ -123,14 +123,31 @@ run()
 
     HTTP_Init();
     HTTP_RequestParams params = {};
-    params.method = HTTP_Method_Get;
+    params.method = HTTP_Method_Post;
+
+    const char* query = R"(data=
+        [out:json] [timeout:25];
+        (
+          way["highway"](56.16923976826141, 10.1852768812041, 56.17371342689877, 10.198376789774187);
+        );
+        out body;
+        >;
+        out skel qt;
+    )";
 
     HTTP_Response response =
-        HTTP_Request(scratch.arena, str8_cstring("https://jsonplaceholder.typicode.com/posts/1"),
-                     Str8Zero(), &params);
+        HTTP_Request(scratch.arena, Str8CString("https://overpass-api.de/api/interpreter"),
+                     Str8CString(query), &params);
 
-    // json data = json::parse(response.body.str);
-
+    Json data = nlohmann::json::parse(response.body.str);
+    Json elements = data["elements"];
+    for (size_t i = 0; i < elements.size(); i++)
+    {
+        Json element = elements[i];
+        U64 element_id = element["id"].get<U64>();
+        printf("id: %llu\n", element_id);
+        // Process the element here
+    }
     VulkanContext vulkanContext = {};
     ProfilingContext profilingContext = {};
     IO io_ctx = {};

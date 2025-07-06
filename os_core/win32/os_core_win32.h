@@ -92,43 +92,43 @@ struct OS_W32_State
 ////////////////////////////////
 //~ rjf: Globals
 
-global OS_W32_State os_w32_state = {0};
+static OS_W32_State os_w32_state = {0};
 
 ////////////////////////////////
 //~ rjf: File Info Conversion Helpers
 
-internal FilePropertyFlags
+static FilePropertyFlags
 os_w32_file_property_flags_from_dwFileAttributes(DWORD dwFileAttributes);
-internal void
+static void
 os_w32_file_properties_from_attribute_data(FileProperties* properties,
                                            WIN32_FILE_ATTRIBUTE_DATA* attributes);
 
 ////////////////////////////////
 //~ rjf: Time Conversion Helpers
 
-internal void
+static void
 os_w32_date_time_from_system_time(DateTime* out, SYSTEMTIME* in);
-internal void
+static void
 os_w32_system_time_from_date_time(SYSTEMTIME* out, DateTime* in);
-internal void
+static void
 os_w32_dense_time_from_file_time(DenseTime* out, FILETIME* in);
-internal U32
+static U32
 os_w32_sleep_ms_from_endt_us(U64 endt_us);
 
 ////////////////////////////////
 //~ rjf: Entity Functions
 
-internal OS_W32_Entity*
+static OS_W32_Entity*
 os_w32_entity_alloc(OS_W32_EntityKind kind);
-internal void
+static void
 os_w32_entity_release(OS_W32_Entity* entity);
 
 ////////////////////////////////
 //~ rjf: Thread Entry Point
 
-internal DWORD
+static DWORD
 os_w32_thread_entry_point(void* ptr);
-internal void
+static void
 w32_entry_point_caller(int argc, WCHAR** wargv);
 
 #endif // OS_CORE_WIN32_H

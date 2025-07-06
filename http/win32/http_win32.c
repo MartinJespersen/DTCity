@@ -4,7 +4,7 @@
 ////////////////////////////////////////////////////////////////
 //~ rjf: Main Layer Initialization
 
-internal void HTTP_Init(void) {
+static void HTTP_Init(void) {
   if (http_w32_state == 0) {
     Arena *arena = ArenaAlloc();
     http_w32_state = push_array(arena, HTTP_W32_State, 1);
@@ -19,8 +19,8 @@ internal void HTTP_Init(void) {
 ////////////////////////////////////////////////////////////////
 //~ rjf: Low-Level Request Functions
 
-internal HTTP_Response HTTP_Request(Arena *arena, String8 url, String8 body,
-                                    HTTP_RequestParams *params) {
+static HTTP_Response HTTP_Request(Arena *arena, String8 url, String8 body,
+                                  HTTP_RequestParams *params) {
   Temp scratch = ScratchBegin(&arena, 1);
   B32 good = 1;
   U32 code = 0;

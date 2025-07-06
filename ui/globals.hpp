@@ -3,5 +3,5 @@
 // globals context
 C_LINKAGE void
 GlobalContextSet(Context* ctx);
-internal Context*
+static Context*
 GlobalContextGet();

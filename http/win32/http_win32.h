@@ -10,10 +10,10 @@
 typedef struct HTTP_W32_State HTTP_W32_State;
 struct HTTP_W32_State
 {
- Arena *arena;
- HINTERNET hSession;
+    Arena* arena;
+    HINTERNET hSession;
 };
 
-global HTTP_W32_State *http_w32_state = 0;
+static HTTP_W32_State* http_w32_state = 0;
 
 #endif // HTTP_WIN32_H

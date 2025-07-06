@@ -17,13 +17,13 @@
 #include "os_core/os_core_inc.c"
 #include "ui/ui.cpp"
 
-internal void
+static void
 DT_TimeInit(DT_Time* time)
 {
     time->last_time_ms = os_now_microseconds();
 }
 
-internal void
+static void
 DT_UpdateTime(DT_Time* time)
 {
     U64 cur_time = os_now_microseconds();
@@ -31,7 +31,7 @@ DT_UpdateTime(DT_Time* time)
     time->last_time_ms = cur_time;
 }
 
-internal void
+static void
 CommandBufferRecord(U32 image_index, U32 current_frame)
 {
     ZoneScoped;
@@ -101,14 +101,14 @@ Cleanup(void* ptr)
     ctx->main_thread_handle.u64[0] = 0;
 }
 
-internal void
+static void
 MainLoop(void* ptr)
 {
     Context* ctx = (Context*)ptr;
     VulkanContext* vk_ctx = ctx->vulkanContext;
     DT_Time* time = ctx->time;
 
-    os_set_thread_name(str8_cstring("Entrypoint thread"));
+    os_set_thread_name(Str8CString("Entrypoint thread"));
     DT_TimeInit(time);
 
     while (ctx->running)

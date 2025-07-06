@@ -113,37 +113,37 @@ struct OS_LNX_State
 ////////////////////////////////
 //~ rjf: Globals
 
-global OS_LNX_State os_lnx_state = {0};
+static OS_LNX_State os_lnx_state = {0};
 thread_static OS_LNX_SafeCallChain* os_lnx_safe_call_chain = 0;
 
 ////////////////////////////////
 //~ rjf: Helpers
 
-internal DateTime
+static DateTime
 os_lnx_date_time_from_tm(tm in, U32 msec);
-internal tm
+static tm
 os_lnx_tm_from_date_time(DateTime dt);
-internal timespec
+static timespec
 os_lnx_timespec_from_date_time(DateTime dt);
-internal DenseTime
+static DenseTime
 os_lnx_dense_time_from_timespec(timespec in);
-internal FileProperties
+static FileProperties
 os_lnx_file_properties_from_stat(struct stat* s);
-internal void
+static void
 os_lnx_safe_call_sig_handler(int x);
 
 ////////////////////////////////
 //~ rjf: Entities
 
-internal OS_LNX_Entity*
+static OS_LNX_Entity*
 os_lnx_entity_alloc(OS_LNX_EntityKind kind);
-internal void
+static void
 os_lnx_entity_release(OS_LNX_Entity* entity);
 
 ////////////////////////////////
 //~ rjf: Thread Entry Point
 
-internal void*
+static void*
 os_lnx_thread_entry_point(void* ptr);
 
 #endif // OS_CORE_LINUX_H

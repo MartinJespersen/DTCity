@@ -22,24 +22,24 @@ struct TCTX
 ////////////////////////////////
 // NOTE(allen): Thread Context Functions
 
-internal void
+static void
 tctx_init_and_equip(TCTX* tctx);
-internal void
+static void
 tctx_release(void);
-internal TCTX*
+static TCTX*
 tctx_get_equipped(void);
 
-internal Arena*
+static Arena*
 tctx_get_scratch(Arena** conflicts, U64 countt);
 
-internal void
+static void
 tctx_set_thread_name(String8 name);
-internal String8
+static String8
 tctx_get_thread_name(void);
 
-internal void
+static void
 tctx_write_srcloc(char* file_name, U64 line_number);
-internal void
+static void
 tctx_read_srcloc(char** file_name, U64* line_number);
 #define tctx_write_this_srcloc() tctx_write_srcloc(__FILE__, __LINE__)
 

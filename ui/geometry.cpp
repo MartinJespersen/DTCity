@@ -1,4 +1,4 @@
-internal void
+static void
 FrustumPlanesCalculate(Frustum* out_frustum, const glm::mat4 matrix)
 {
     out_frustum->planes[LEFT].x = matrix[0].w + matrix[0].x;
@@ -40,7 +40,7 @@ FrustumPlanesCalculate(Frustum* out_frustum, const glm::mat4 matrix)
     }
 }
 
-internal void
+static void
 UI_CameraInit(UI_Camera* camera)
 {
     camera->zoom_sensitivity = 10.0f;
@@ -51,7 +51,7 @@ UI_CameraInit(UI_Camera* camera)
     camera->pitch = -88.0f;
 }
 
-internal void
+static void
 UI_CameraUpdate(UI_Camera* camera, IO* input, DT_Time* time, VkExtent2D extent)
 {
     F32 mouse_sensitivity = 0.1f;

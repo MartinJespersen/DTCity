@@ -1,6 +1,6 @@
 // image helpers
 
-internal void
+static void
 VK_ImageFromBufferCopy(VkCommandBuffer command_buffer, VkBuffer buffer, VkImage image,
                        uint32_t width, uint32_t height)
 {
@@ -21,7 +21,7 @@ VK_ImageFromBufferCopy(VkCommandBuffer command_buffer, VkBuffer buffer, VkImage 
                            &region);
 }
 
-internal void
+static void
 VK_ImageLayoutTransition(VkCommandBuffer command_buffer, VkImage image, VkFormat format,
                          VkImageLayout oldLayout, VkImageLayout newLayout, U32 mipmap_level)
 {
@@ -66,7 +66,7 @@ VK_ImageLayoutTransition(VkCommandBuffer command_buffer, VkImage image, VkFormat
                          1, &barrier);
 }
 
-internal void
+static void
 VK_GenerateMipmaps(VkCommandBuffer command_buffer, VkImage image, int32_t tex_width,
                    int32_t text_height, uint32_t mip_levels)
 {
@@ -140,7 +140,7 @@ VK_GenerateMipmaps(VkCommandBuffer command_buffer, VkImage image, int32_t tex_wi
 }
 
 // Samplers helpers
-internal void
+static void
 VK_SamplerCreate(VkSampler* sampler, VkDevice device, VkFilter filter,
                  VkSamplerMipmapMode mipmap_mode, U32 mip_level_count, F32 max_anisotrophy)
 {
@@ -167,7 +167,7 @@ VK_SamplerCreate(VkSampler* sampler, VkDevice device, VkFilter filter,
     }
 }
 
-internal VkResult
+static VkResult
 CreateDebugUtilsMessengerEXT(VkInstance instance,
                              const VkDebugUtilsMessengerCreateInfoEXT* pCreateInfo,
                              const VkAllocationCallbacks* pAllocator,
@@ -185,7 +185,7 @@ CreateDebugUtilsMessengerEXT(VkInstance instance,
     }
 }
 
-internal void
+static void
 DestroyDebugUtilsMessengerEXT(VkInstance instance, VkDebugUtilsMessengerEXT debugMessenger,
                               const VkAllocationCallbacks* pAllocator)
 {
@@ -197,7 +197,7 @@ DestroyDebugUtilsMessengerEXT(VkInstance instance, VkDebugUtilsMessengerEXT debu
     }
 }
 
-internal VkCommandBuffer
+static VkCommandBuffer
 VK_BeginSingleTimeCommands(VulkanContext* vk_ctx)
 {
     VkCommandBufferAllocateInfo allocInfo{};
@@ -218,7 +218,7 @@ VK_BeginSingleTimeCommands(VulkanContext* vk_ctx)
     return commandBuffer;
 }
 
-internal void
+static void
 VK_EndSingleTimeCommands(VulkanContext* vk_ctx, VkCommandBuffer command_buffer)
 {
     vkEndCommandBuffer(command_buffer);
@@ -234,7 +234,7 @@ VK_EndSingleTimeCommands(VulkanContext* vk_ctx, VkCommandBuffer command_buffer)
     vkFreeCommandBuffers(vk_ctx->device, vk_ctx->command_pool, 1, &command_buffer);
 }
 
-internal uint32_t
+static uint32_t
 VK_FindMemoryType(VkPhysicalDevice physicalDevice, uint32_t typeFilter,
                   VkMemoryPropertyFlags properties)
 {
@@ -254,7 +254,7 @@ VK_FindMemoryType(VkPhysicalDevice physicalDevice, uint32_t typeFilter,
     return 0;
 }
 
-internal void
+static void
 VK_BufferCreate(VkPhysicalDevice physicalDevice, VkDevice device, VkDeviceSize size,
                 VkBufferUsageFlags usage, VkMemoryPropertyFlags properties, VkBuffer* buffer,
                 VkDeviceMemory* bufferMemory)
@@ -287,7 +287,7 @@ VK_BufferCreate(VkPhysicalDevice physicalDevice, VkDevice device, VkDeviceSize s
     vkBindBufferMemory(device, *buffer, *bufferMemory, 0);
 }
 
-internal void
+static void
 VK_ImageViewCreate(VkImageView* view_out, VkDevice device, VkImage image, VkFormat format,
                    VkImageAspectFlags aspect_mask, U32 mipmap_level)
 {
@@ -308,7 +308,7 @@ VK_ImageViewCreate(VkImageView* view_out, VkDevice device, VkImage image, VkForm
     }
 }
 
-internal void
+static void
 VK_ImageCreate(VkPhysicalDevice physicalDevice, VkDevice device, U32 width, U32 height,
                VkSampleCountFlagBits numSamples, VkFormat format, VkImageTiling tiling,
                VkImageUsageFlags usage, VkMemoryPropertyFlags properties, VkImage* image,
@@ -351,7 +351,7 @@ VK_ImageCreate(VkPhysicalDevice physicalDevice, VkDevice device, U32 width, U32 
     vkBindImageMemory(device, *image, *imageMemory, 0);
 }
 
-internal void
+static void
 VK_ColorResourcesCreate(VkPhysicalDevice physicalDevice, VkDevice device,
                         VkFormat swapChainImageFormat, VkExtent2D swapChainExtent,
                         VkSampleCountFlagBits msaaSamples, VkImageView* out_color_image_view,
@@ -368,7 +368,7 @@ VK_ColorResourcesCreate(VkPhysicalDevice physicalDevice, VkDevice device,
                        VK_IMAGE_ASPECT_COLOR_BIT, 1);
 }
 
-internal void
+static void
 VK_FramebuffersCreate(VulkanContext* vk_ctx, VkRenderPass renderPass)
 {
     for (size_t i = 0; i < vk_ctx->swapchain_image_views.size; i++)
@@ -395,7 +395,7 @@ VK_FramebuffersCreate(VulkanContext* vk_ctx, VkRenderPass renderPass)
     }
 }
 
-internal VkShaderModule
+static VkShaderModule
 VK_ShaderModuleCreate(VkDevice device, Buffer<U8> buffer)
 {
     VkShaderModuleCreateInfo createInfo{};
@@ -413,7 +413,7 @@ VK_ShaderModuleCreate(VkDevice device, Buffer<U8> buffer)
 }
 
 // queue family
-internal bool
+static bool
 VK_QueueFamilyIsComplete(QueueFamilyIndexBits queueFamily)
 {
     if ((!queueFamily.graphicsFamilyIndexBits) || (!queueFamily.presentFamilyIndexBits))
@@ -423,7 +423,7 @@ VK_QueueFamilyIsComplete(QueueFamilyIndexBits queueFamily)
     return true;
 }
 
-internal QueueFamilyIndices
+static QueueFamilyIndices
 VK_QueueFamilyIndicesFromBitFields(QueueFamilyIndexBits queueFamilyBits)
 {
     if (!VK_QueueFamilyIsComplete(queueFamilyBits))
@@ -439,7 +439,7 @@ VK_QueueFamilyIndicesFromBitFields(QueueFamilyIndexBits queueFamilyBits)
     return indices;
 }
 
-internal QueueFamilyIndexBits
+static QueueFamilyIndexBits
 VK_QueueFamiliesFind(VulkanContext* vulkanContext, VkPhysicalDevice device)
 {
     Temp scratch = ScratchBegin(0, 0);
@@ -480,7 +480,7 @@ VK_QueueFamiliesFind(VulkanContext* vulkanContext, VkPhysicalDevice device)
     return indices;
 }
 
-internal SwapChainSupportDetails
+static SwapChainSupportDetails
 VK_QuerySwapChainSupport(Arena* arena, VulkanContext* vulkanContext, VkPhysicalDevice device)
 {
     SwapChainSupportDetails details;
@@ -512,7 +512,7 @@ VK_QuerySwapChainSupport(Arena* arena, VulkanContext* vulkanContext, VkPhysicalD
     return details;
 }
 
-internal void
+static void
 VK_RenderPassCreate()
 {
     VulkanContext* vk_ctx = GlobalContextGet()->vulkanContext;
@@ -601,7 +601,7 @@ VK_RenderPassCreate()
 }
 
 template <typename T>
-internal void
+static void
 VK_BufferContextCreate(VulkanContext* vk_ctx, VK_BufferContext* vk_buffer_ctx,
                        Buffer<Buffer<T>> buffers, VkBufferUsageFlags usage)
 {
@@ -647,7 +647,7 @@ VK_BufferContextCreate(VulkanContext* vk_ctx, VK_BufferContext* vk_buffer_ctx,
     }
 }
 
-internal void
+static void
 VK_BufferContextCleanup(VkDevice device, VK_BufferContext* buffer_context)
 {
     vkDestroyBuffer(device, buffer_context->buffer, NULL);
@@ -679,7 +679,7 @@ VK_SupportedFormat(const VkFormat candidates[3], VkImageTiling tiling,
     return VK_FORMAT_UNDEFINED;
 }
 
-internal void
+static void
 VK_DepthResourcesCreate(VulkanContext* vk_ctx)
 {
     Temp scratch = ScratchBegin(0, 0);
@@ -707,7 +707,7 @@ VK_DepthResourcesCreate(VulkanContext* vk_ctx)
     ScratchEnd(scratch);
 }
 
-internal void
+static void
 VK_CommandPoolCreate(VulkanContext* vulkanContext)
 {
     QueueFamilyIndices queueFamilyIndices = vulkanContext->queue_family_indices;
@@ -724,7 +724,7 @@ VK_CommandPoolCreate(VulkanContext* vulkanContext)
     }
 }
 
-internal void
+static void
 VK_SwapChainImageViewsCreate(VulkanContext* vulkanContext)
 {
     for (uint32_t i = 0; i < vulkanContext->swapchain_images.size; i++)
@@ -735,7 +735,7 @@ VK_SwapChainImageViewsCreate(VulkanContext* vulkanContext)
     }
 }
 
-internal void
+static void
 VK_SwapChainImagesCreate(VulkanContext* vulkanContext, SwapChainInfo swapChainInfo, U32 imageCount)
 {
     vkGetSwapchainImagesKHR(vulkanContext->device, vulkanContext->swapchain, &imageCount,
@@ -745,7 +745,7 @@ VK_SwapChainImagesCreate(VulkanContext* vulkanContext, SwapChainInfo swapChainIn
     vulkanContext->swapchain_extent = swapChainInfo.extent;
 }
 
-internal U32
+static U32
 VK_SwapChainImageCountGet(VulkanContext* vulkanContext)
 {
     U32 imageCount = {0};
@@ -753,7 +753,7 @@ VK_SwapChainImageCountGet(VulkanContext* vulkanContext)
     return imageCount;
 }
 
-internal SwapChainInfo
+static SwapChainInfo
 VK_SwapChainCreate(Arena* arena, VulkanContext* vk_ctx, IO* io_ctx)
 {
     SwapChainInfo swapChainInfo = {0};
@@ -819,7 +819,7 @@ VK_SwapChainCreate(Arena* arena, VulkanContext* vk_ctx, IO* io_ctx)
     return swapChainInfo;
 }
 
-internal void
+static void
 VK_SurfaceCreate(VulkanContext* vulkanContext, IO* io)
 {
     int supported = glfwVulkanSupported();
@@ -833,7 +833,7 @@ VK_SurfaceCreate(VulkanContext* vulkanContext, IO* io)
     }
 }
 
-internal char**
+static char**
 VK_StrArrFromStr8Buffer(Arena* arena, String8* buffer, U64 count)
 {
     char** arr = push_array(arena, char*, count);
@@ -845,7 +845,7 @@ VK_StrArrFromStr8Buffer(Arena* arena, String8* buffer, U64 count)
     return arr;
 }
 
-internal void
+static void
 VK_CreateInstance(VulkanContext* vk_ctx)
 {
     Temp scratch = ScratchBegin(0, 0);
@@ -895,7 +895,7 @@ VK_CreateInstance(VulkanContext* vk_ctx)
     ScratchEnd(scratch);
 }
 
-internal void
+static void
 VK_LogicalDeviceCreate(Arena* arena, VulkanContext* vulkanContext)
 {
     QueueFamilyIndices queueFamilyIndicies = vulkanContext->queue_family_indices;
@@ -963,7 +963,7 @@ VK_LogicalDeviceCreate(Arena* arena, VulkanContext* vulkanContext)
                      &vulkanContext->present_queue);
 }
 
-internal void
+static void
 VK_PhysicalDevicePick(VulkanContext* vk_ctx)
 {
     Temp scratch = ScratchBegin(0, 0);
@@ -1005,7 +1005,7 @@ VK_PhysicalDevicePick(VulkanContext* vk_ctx)
     ScratchEnd(scratch);
 }
 
-internal bool
+static bool
 VK_IsDeviceSuitable(VulkanContext* vulkanContext, VkPhysicalDevice device,
                     QueueFamilyIndexBits indexBits)
 {
@@ -1029,7 +1029,7 @@ VK_IsDeviceSuitable(VulkanContext* vulkanContext, VkPhysicalDevice device,
            supportedFeatures.samplerAnisotropy;
 }
 
-internal bool
+static bool
 VK_CheckValidationLayerSupport(VulkanContext* vulkanContext)
 {
     Temp scratch = ScratchBegin(0, 0);
@@ -1062,7 +1062,7 @@ VK_CheckValidationLayerSupport(VulkanContext* vulkanContext)
     return layerFound;
 }
 
-internal Buffer<String8>
+static Buffer<String8>
 VK_RequiredExtensionsGet(VulkanContext* vulkanContext)
 {
     U32 glfwExtensionCount = 0;
@@ -1091,7 +1091,7 @@ VK_RequiredExtensionsGet(VulkanContext* vulkanContext)
     return extensions;
 }
 
-internal VKAPI_ATTR VkBool32 VKAPI_CALL
+static VKAPI_ATTR VkBool32 VKAPI_CALL
 VK_DebugCallback(VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity,
                  VkDebugUtilsMessageTypeFlagsEXT messageType,
                  const VkDebugUtilsMessengerCallbackDataEXT* pCallbackData, void* pUserData)
@@ -1104,7 +1104,7 @@ VK_DebugCallback(VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity,
     return VK_FALSE;
 }
 
-internal void
+static void
 VK_DebugMessengerSetup(VulkanContext* vulkanContext)
 {
     if (!vulkanContext->enable_validation_layers)
@@ -1118,7 +1118,7 @@ VK_DebugMessengerSetup(VulkanContext* vulkanContext)
     }
 }
 
-internal void
+static void
 VK_PopulateDebugMessengerCreateInfo(VkDebugUtilsMessengerCreateInfoEXT& createInfo)
 {
     createInfo = {};
@@ -1132,7 +1132,7 @@ VK_PopulateDebugMessengerCreateInfo(VkDebugUtilsMessengerCreateInfoEXT& createIn
     createInfo.pfnUserCallback = VK_DebugCallback;
 }
 
-internal bool
+static bool
 VK_CheckDeviceExtensionSupport(VulkanContext* vulkanContext, VkPhysicalDevice device)
 {
     Temp scratch = ScratchBegin(0, 0);
@@ -1161,7 +1161,7 @@ VK_CheckDeviceExtensionSupport(VulkanContext* vulkanContext, VkPhysicalDevice de
     return numberOfRequiredExtenstionsLeft == 0;
 }
 
-internal VkSurfaceFormatKHR
+static VkSurfaceFormatKHR
 VK_ChooseSwapSurfaceFormat(Buffer<VkSurfaceFormatKHR> availableFormats)
 {
     for (U32 i = 0; i < availableFormats.size; i++)
@@ -1175,7 +1175,7 @@ VK_ChooseSwapSurfaceFormat(Buffer<VkSurfaceFormatKHR> availableFormats)
     return availableFormats.data[0];
 }
 
-internal VkPresentModeKHR
+static VkPresentModeKHR
 VK_ChooseSwapPresentMode(Buffer<VkPresentModeKHR> availablePresentModes)
 {
     for (U32 i = 0; i < availablePresentModes.size; i++)
@@ -1188,7 +1188,7 @@ VK_ChooseSwapPresentMode(Buffer<VkPresentModeKHR> availablePresentModes)
     return VK_PRESENT_MODE_FIFO_KHR;
 }
 
-internal VkExtent2D
+static VkExtent2D
 VK_ChooseSwapExtent(IO* io_ctx, VulkanContext* vulkanContext,
                     const VkSurfaceCapabilitiesKHR& capabilities)
 {
@@ -1212,7 +1212,7 @@ VK_ChooseSwapExtent(IO* io_ctx, VulkanContext* vulkanContext,
     }
 }
 
-internal VkSampleCountFlagBits
+static VkSampleCountFlagBits
 VK_MaxUsableSampleCountGet(VkPhysicalDevice device)
 {
     VkPhysicalDeviceProperties physicalDeviceProperties;
@@ -1248,7 +1248,7 @@ VK_MaxUsableSampleCountGet(VkPhysicalDevice device)
     return VK_SAMPLE_COUNT_1_BIT;
 }
 
-internal void
+static void
 VK_RecreateSwapChain(IO* io_ctx, VulkanContext* vk_ctx)
 {
     Temp scratch = ScratchBegin(0, 0);
@@ -1278,7 +1278,7 @@ VK_RecreateSwapChain(IO* io_ctx, VulkanContext* vk_ctx)
     ScratchEnd(scratch);
 }
 
-internal void
+static void
 VK_Cleanup()
 {
     Context* ctx = GlobalContextGet();
@@ -1325,7 +1325,7 @@ VK_Cleanup()
     glfwTerminate();
 }
 
-internal void
+static void
 VK_ColorResourcesCleanup(VulkanContext* vk_ctx)
 {
     vkDestroyImageView(vk_ctx->device, vk_ctx->color_image_view, nullptr);
@@ -1333,7 +1333,7 @@ VK_ColorResourcesCleanup(VulkanContext* vk_ctx)
     vkFreeMemory(vk_ctx->device, vk_ctx->color_image_memory, nullptr);
 }
 
-internal void
+static void
 VK_DepthResourcesCleanup(VulkanContext* vk_ctx)
 {
     vkDestroyImageView(vk_ctx->device, vk_ctx->depth_image_view, nullptr);
@@ -1341,7 +1341,7 @@ VK_DepthResourcesCleanup(VulkanContext* vk_ctx)
     vkFreeMemory(vk_ctx->device, vk_ctx->depth_image_memory, nullptr);
 }
 
-internal void
+static void
 VK_SwapChainCleanup(VulkanContext* vulkanContext)
 {
     VK_ColorResourcesCleanup(vulkanContext);
@@ -1362,7 +1362,7 @@ VK_SwapChainCleanup(VulkanContext* vulkanContext)
     vkDestroySwapchainKHR(vulkanContext->device, vulkanContext->swapchain, nullptr);
 }
 
-internal void
+static void
 VK_SyncObjectsCreate(VulkanContext* vulkanContext)
 {
     vulkanContext->image_available_semaphores =
@@ -1393,7 +1393,7 @@ VK_SyncObjectsCreate(VulkanContext* vulkanContext)
     }
 }
 
-internal void
+static void
 VK_CommandBuffersCreate(VulkanContext* vk_ctx)
 {
     vk_ctx->command_buffers =
@@ -1410,7 +1410,7 @@ VK_CommandBuffersCreate(VulkanContext* vk_ctx)
         exitWithError("failed to allocate command buffers!");
     }
 }
-internal void
+static void
 VK_VulkanInit(VulkanContext* vk_ctx, IO* io_ctx)
 {
     Temp scratch = ScratchBegin(0, 0);

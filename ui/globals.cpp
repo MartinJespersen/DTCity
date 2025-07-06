@@ -1,5 +1,5 @@
 // Global Context
-global Context* g_ctx;
+static Context* g_ctx;
 
 C_LINKAGE void
 GlobalContextSet(Context* ctx)
@@ -8,7 +8,7 @@ GlobalContextSet(Context* ctx)
     os_w32_state = *ctx->os_w32_state;
 }
 
-internal Context*
+static Context*
 GlobalContextGet()
 {
     return g_ctx;

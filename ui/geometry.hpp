@@ -29,11 +29,11 @@ struct UI_Camera
     F32 pitch;
 };
 
-internal void
+static void
 UI_CameraInit(UI_Camera* camera);
 
-internal void
+static void
 FrustumPlanesCalculate(Frustum* out_frustum, const glm::mat4 matrix);
 
-internal void
+static void
 UI_CameraUpdate(UI_Camera* camera, IO* input, DT_Time* time, VkExtent2D extent);

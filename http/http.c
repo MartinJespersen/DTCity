@@ -4,7 +4,7 @@
 ////////////////////////////////////////////////////////////////
 //~ rjf: Basic Type Functions
 
-internal HTTP_StatusKind HTTP_StatusKindFromCode(HTTP_StatusCode code) {
+static HTTP_StatusKind HTTP_StatusKindFromCode(HTTP_StatusCode code) {
   HTTP_StatusKind kind = HTTP_StatusKind_Null;
   if (0) {
   } else if (HTTP_StatusCode_FirstInformational <= code &&

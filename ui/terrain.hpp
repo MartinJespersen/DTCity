@@ -40,44 +40,44 @@ struct Terrain
     VkFormat vk_texture_blit_format;
 };
 
-internal void
+static void
 TerrainAllocations(Arena* arena, Terrain* terrain, U32 frames_in_flight);
 
-internal void
+static void
 TerrainDescriptorSetLayoutCreate(VkDevice device, Terrain* terrain);
 
-internal void
+static void
 TerrainUniformBufferCreate(Terrain* terrain, U32 frames_in_flight);
 
-internal void
+static void
 TerrainGraphicsPipelineCreate(Terrain* terrain, const char* cwd);
 
-internal void
+static void
 TerrainVulkanCleanup(Terrain* terrain, U32 frames_in_flight);
-internal void
+static void
 UpdateTerrainUniformBuffer(Terrain* terrain, UI_Camera* camera, Vec2F32 screen_res,
                            U32 current_image);
 
-internal void
+static void
 TerrainDescriptorPoolCreate(Terrain* terrain, U32 frames_in_flight);
-internal void
+static void
 TerrainDescriptorSetCreate(Terrain* terrain, U32 frames_in_flight);
 
-internal void
+static void
 TerrainRenderPassBegin(VulkanContext* vk_ctx, Terrain* terrain, U32 image_index, U32 current_frame);
 
-internal void
+static void
 TerrainInit();
 
-internal VkVertexInputBindingDescription
+static VkVertexInputBindingDescription
 TerrainBindingDescriptionGet();
 
-internal Buffer<VkVertexInputAttributeDescription>
+static Buffer<VkVertexInputAttributeDescription>
 TerrainAttributeDescriptionGet(Arena* arena);
 
-internal void
+static void
 TerrainTextureResourceCreate(VulkanContext* vk_ctx, Terrain* terrain, const char* cwd);
 
-internal void
+static void
 TerrainGenerateBuffers(Arena* arena, Buffer<Vertex>* vertices, Buffer<U32>* indices,
                        U32 patch_size);

@@ -4,7 +4,7 @@
 //     highlight_interface();
 // }
 
-internal void
+static void
 VK_FramebufferResizeCallback(GLFWwindow* window, int width, int height)
 {
     (void)width;
@@ -14,7 +14,7 @@ VK_FramebufferResizeCallback(GLFWwindow* window, int width, int height)
     context->vulkanContext->framebuffer_resized = 1;
 }
 
-internal void
+static void
 InitWindow(Context* ctx)
 {
     IO* io_ctx = ctx->io;
@@ -44,7 +44,7 @@ IO_ScrollCallback(GLFWwindow* window, double xoffset, double yoffset)
 // internally to a 0 value. This means that another thread may view the reset value before it is set
 // to the correct value.
 
-internal void
+static void
 IO_InputStateUpdate(IO* input)
 {
     glfwPollEvents();
@@ -77,7 +77,7 @@ IO_InputStateUpdate(IO* input)
     input->is_window_focused = glfwGetWindowAttrib(input->window, GLFW_FOCUSED) == GLFW_TRUE;
 }
 
-internal void
+static void
 IO_InputReset(IO* io)
 {
     io->scroll_x = 0.0;

@@ -57,41 +57,41 @@ struct Temp
 ////////////////////////////////
 //~ rjf: Global Defaults
 
-global U64 arena_default_reserve_size = MB(64);
-global U64 arena_default_commit_size = KB(64);
-global ArenaFlags arena_default_flags = 0;
+static U64 arena_default_reserve_size = MB(64);
+static U64 arena_default_commit_size = KB(64);
+static ArenaFlags arena_default_flags = 0;
 
 ////////////////////////////////
 //~ rjf: Arena Functions
 
 //- rjf: arena creation/destruction
-internal Arena*
+static Arena*
 arena_alloc_(ArenaParams* params);
 
-internal Arena*
+static Arena*
 ArenaAlloc();
 
-internal void
+static void
 arena_release(Arena* arena);
 
 //- rjf: arena push/pop/pos core functions
-internal void*
+static void*
 arena_push(Arena* arena, U64 size, U64 align);
-internal U64
+static U64
 arena_pos(Arena* arena);
-internal void
+static void
 arena_pop_to(Arena* arena, U64 pos);
 
 //- rjf: arena push/pop helpers
-internal void
+static void
 arena_clear(Arena* arena);
-internal void
+static void
 arena_pop(Arena* arena, U64 amt);
 
 //- rjf: temporary arena scopes
-internal Temp
+static Temp
 temp_begin(Arena* arena);
-internal void
+static void
 temp_end(Temp temp);
 
 //- rjf: push helper macros
