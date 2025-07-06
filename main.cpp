@@ -13,11 +13,14 @@
 
 // user defined: [hpp]
 #include "entrypoint.hpp"
+// #include "third_party/json.hpp"
+// using json = nlohmann::json;
 
 // domain: cpp
 #include "base/base_inc.cpp"
 #include "os_core/os_core_inc.c"
 #include "ui/ui.cpp"
+#include "http/http_inc.c"
 
 Context g_ctx_main;
 
@@ -41,7 +44,7 @@ ProfileBuffersCreate(VulkanContext* vk_ctx, ProfilingContext* prof_ctx)
 internal void
 InitContext(Context* ctx)
 {
-    ctx->arena_permanent = (Arena*)arena_alloc();
+    ctx->arena_permanent = (Arena*)ArenaAlloc();
 
     VK_VulkanInit(ctx->vulkanContext, ctx->io);
     UI_CameraInit(ctx->camera);
@@ -52,7 +55,7 @@ InitContext(Context* ctx)
 internal int
 LoadDLL(DllInfo* dll_info)
 {
-    Temp scratch = scratch_begin(0, 0);
+    Temp scratch = ScratchBegin(0, 0);
     // Free the previous DLL if loaded
     if (dll_info->handle)
     {
@@ -107,7 +110,7 @@ LoadDLL(DllInfo* dll_info)
     GetFileTime(file, NULL, NULL, &dll_info->last_modified);
     CloseHandle(file);
 
-    scratch_end(scratch);
+    ScratchEnd(scratch);
     return 1;
 }
 
@@ -115,7 +118,18 @@ void
 run()
 {
     w32_entry_point_caller(__argc, __wargv);
-    Temp scratch = scratch_begin(0, 0);
+
+    Temp scratch = ScratchBegin(0, 0);
+
+    HTTP_Init();
+    HTTP_RequestParams params = {};
+    params.method = HTTP_Method_Get;
+
+    HTTP_Response response =
+        HTTP_Request(scratch.arena, str8_cstring("https://jsonplaceholder.typicode.com/posts/1"),
+                     Str8Zero(), &params);
+
+    // json data = json::parse(response.body.str);
 
     VulkanContext vulkanContext = {};
     ProfilingContext profilingContext = {};
@@ -180,7 +194,7 @@ run()
 
     VK_Cleanup();
 
-    scratch_end(scratch);
+    ScratchEnd(scratch);
 }
 
 // NOTE: Tracy profiler has a dlclose function and it takes precedence over the one in the standard

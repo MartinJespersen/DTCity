@@ -35,7 +35,7 @@ internal void
 CommandBufferRecord(U32 image_index, U32 current_frame)
 {
     ZoneScoped;
-    Temp scratch = scratch_begin(0, 0);
+    Temp scratch = ScratchBegin(0, 0);
     Context* ctx = GlobalContextGet();
 
     VulkanContext* vk_ctx = ctx->vulkanContext;
@@ -81,7 +81,7 @@ CommandBufferRecord(U32 image_index, U32 current_frame)
     {
         exitWithError("failed to record command buffer!");
     }
-    scratch_end(scratch);
+    ScratchEnd(scratch);
 }
 
 shared_function OS_Handle

@@ -1,22 +1,24 @@
 CompileFlags:
-    Add:
-    [
-      "-ferror-limit=100",
-      "-IC:/repos/DTCity",
-      "-include=C:/repos/DTCity/base/base_inc.hpp",
-      "-include=C:/repos/DTCity/os_core/os_core_inc.h",
-      "-include=C:/repos/DTCity/ui/ui.hpp",
-      "-IC:/VulkanSDK/Include",
-      "-IC:/repos/DTCity/third_party/glfw/include",
-      "-Wno-unused",
-      "-Wno-undefined-internal",
-      "-Wno-c99-designator",
-      "-IC:/repos/DTCity/os_core",
-      "-IC:/repos/DTCity/base",
-      "-IC:/repos/DTCity/ui",
-      "-IC:/repos/DTCity/third_party",
-      "--target=x86_64-pc-windows-msvc"
-    ]
+  Add:
+    - -ferror-limit=100
+    - -IC:/repos/DTCity
+    - -include=C:/repos/DTCity/base/base_inc.hpp
+    - -include=C:/repos/DTCity/os_core/os_core_inc.h
+    - -include=C:/repos/DTCity/ui/ui.hpp
+    - -include=C:/repos/DTCity/http/http_inc.h
+    - -include=C:/repos/DTCity/entrypoint.hpp
+    - -IC:/VulkanSDK/Include
+    - -IC:/repos/DTCity/third_party/glfw/include
+    - -Wno-unused
+    - -Wno-undefined-internal
+    - -Wno-c99-designator
+    - -IC:/repos/DTCity/os_core
+    - -IC:/repos/DTCity/base
+    - -IC:/repos/DTCity/ui
+    - -IC:/repos/DTCity/http
+    - -IC:/repos/DTCity/third_party
+    - --target=x86_64-pc-windows-msvc
+    - -DOS_WINDOWS
 
 Diagnostics:
   UnusedIncludes: None

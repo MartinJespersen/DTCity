@@ -4,6 +4,7 @@
 #include "base/base_inc.hpp"
 #include "os_core/os_core_inc.h"
 #include "ui/ui.hpp"
+#include "http/http_inc.h"
 
 const U32 MAX_FONTS_IN_USE = 10;
 

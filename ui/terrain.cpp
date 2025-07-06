@@ -11,10 +11,10 @@ CreatePathFromStrings(Arena* arena, char** parts, U64 count)
     for (U64 i = 0; i < count; i++)
     {
         String8 part = str8_cstring(parts[i]);
-        str8_list_push(arena, &path_list, part);
+        Str8ListPush(arena, &path_list, part);
     }
 
-    String8 result = str8_list_join(arena, &path_list, &join_params);
+    String8 result = Str8ListJoin(arena, &path_list, &join_params);
     return result;
 }
 
@@ -88,7 +88,7 @@ TerrainDescriptorSetLayoutCreate(VkDevice device, Terrain* terrain)
 internal void
 TerrainTextureResourceCreate(VulkanContext* vk_ctx, Terrain* terrain, const char* cwd)
 {
-    Temp scratch = scratch_begin(0, 0);
+    Temp scratch = ScratchBegin(0, 0);
     VkBuffer vk_texture_staging_buffer;
     VkDeviceMemory vk_texture_staging_buffer_memory;
 
@@ -106,7 +106,7 @@ TerrainTextureResourceCreate(VulkanContext* vk_ctx, Terrain* terrain, const char
     // load heightmap
     String8List heightmap_path_list = {0};
     String8 cwd_str = str8_cstring(cwd);
-    str8_list_push(scratch.arena, &heightmap_path_list, cwd_str);
+    Str8ListPush(scratch.arena, &heightmap_path_list, cwd_str);
     const char* heightmap_file_path[] = {cwd, "textures", "heightmap_au.png"};
     String8 heightmap_path_abs = CreatePathFromStrings(scratch.arena, (char**)heightmap_file_path,
                                                        ArrayCount(heightmap_file_path));
@@ -162,13 +162,13 @@ TerrainTextureResourceCreate(VulkanContext* vk_ctx, Terrain* terrain, const char
                      VK_SAMPLER_MIPMAP_MODE_LINEAR, terrain->vk_mip_levels,
                      vk_ctx->physical_device_properties.limits.maxSamplerAnisotropy);
 
-    scratch_end(scratch);
+    ScratchEnd(scratch);
 }
 
 internal void
 TerrainDescriptorSetCreate(Terrain* terrain, U32 frames_in_flight)
 {
-    Temp scratch = scratch_begin(0, 0);
+    Temp scratch = ScratchBegin(0, 0);
     Arena* arena = scratch.arena;
 
     VulkanContext* vk_ctx = GlobalContextGet()->vulkanContext;
@@ -230,7 +230,7 @@ TerrainDescriptorSetCreate(Terrain* terrain, U32 frames_in_flight)
         vkUpdateDescriptorSets(vk_ctx->device, ArrayCount(descriptors), descriptors, 0, nullptr);
     }
 
-    scratch_end(scratch);
+    ScratchEnd(scratch);
 }
 
 internal void
@@ -257,7 +257,7 @@ TerrainUniformBufferCreate(Terrain* terrain, U32 image_count)
 internal void
 TerrainGraphicsPipelineCreate(Terrain* terrain, const char* cwd)
 {
-    Temp scratch = scratch_begin(0, 0);
+    Temp scratch = ScratchBegin(0, 0);
 
     VulkanContext* vk_ctx = GlobalContextGet()->vulkanContext;
 
@@ -469,7 +469,7 @@ TerrainGraphicsPipelineCreate(Terrain* terrain, const char* cwd)
     vkDestroyShaderModule(vk_ctx->device, tese_shader_module, nullptr);
     vkDestroyShaderModule(vk_ctx->device, tesc_shader_module, nullptr);
 
-    scratch_end(scratch);
+    ScratchEnd(scratch);
     return;
 }
 

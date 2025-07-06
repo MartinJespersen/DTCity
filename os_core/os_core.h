@@ -203,7 +203,7 @@ os_decommit(void* ptr, U64 size);
 internal void
 os_release(void* ptr, U64 size);
 
-//- rjf: large pages
+// - rjf: large pages
 internal void*
 os_reserve_large(U64 size);
 internal B32

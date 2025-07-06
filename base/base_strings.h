@@ -73,9 +73,9 @@ struct String8Array
 typedef U32 StringMatchFlags;
 enum
 {
-    StringMatchFlag_CaseInsensitive = (1 << 0),
-    StringMatchFlag_RightSideSloppy = (1 << 1),
-    StringMatchFlag_SlashInsensitive = (1 << 2),
+    MatchFlag_CaseInsensitive = (1 << 0),
+    MatchFlag_RightSideSloppy = (1 << 1),
+    MatchFlag_SlashInsensitive = (1 << 2),
 };
 
 typedef U32 StringSplitFlags;
@@ -183,7 +183,7 @@ cstring32_length(U32* c);
 ////////////////////////////////
 //~ rjf: String Constructors
 
-#define str8_lit(S) str8((U8*)(S), sizeof(S) - 1)
+#define Str8Lit(S) str8((U8*)(S), sizeof(S) - 1)
 #define str8_lit_comp(S)                                                                           \
     {                                                                                              \
         (U8*)(S),                                                                                  \
@@ -200,7 +200,7 @@ str8(U8* str, U64 size);
 internal String8
 str8_range(U8* first, U8* one_past_last);
 internal String8
-str8_zero(void);
+Str8Zero(void);
 internal String16
 str16(U16* str, U64 size);
 internal String16
@@ -244,13 +244,13 @@ backslashed_from_str8(Arena* arena, String8 string);
 internal B32
 str8_match(String8 a, String8 b, StringMatchFlags flags);
 internal U64
-str8_find_needle(String8 string, U64 start_pos, String8 needle, StringMatchFlags flags);
+FindSubstr8(String8 string, String8 needle, U64 start_pos, StringMatchFlags flags);
 internal U64
 str8_find_needle_reverse(String8 string, U64 start_pos, String8 needle, StringMatchFlags flags);
 internal B32
 str8_ends_with(String8 string, String8 end, StringMatchFlags flags);
 #define str8_ends_with_lit(string, end_lit, flags)                                                 \
-    str8_ends_with((string), str8_lit(end_lit), (flags))
+    str8_ends_with((string), Str8Lit(end_lit), (flags))
 
 ////////////////////////////////
 //~ rjf: String Slicing
@@ -258,9 +258,9 @@ str8_ends_with(String8 string, String8 end, StringMatchFlags flags);
 internal String8
 str8_substr(String8 str, Rng1U64 range);
 internal String8
-str8_prefix(String8 str, U64 size);
+Str8Prefix(String8 str, U64 size);
 internal String8
-str8_skip(String8 str, U64 amt);
+Str8Skip(String8 str, U64 amt);
 internal String8
 str8_postfix(String8 str, U64 size);
 internal String8
@@ -292,7 +292,7 @@ internal B32
 str8_is_integer(String8 string, U32 radix);
 
 internal U64
-u64_from_str8(String8 string, U32 radix);
+U64FromStr8(String8 string, U32 radix);
 internal S64
 s64_from_str8(String8 string, U32 radix);
 internal U32
@@ -336,7 +336,7 @@ str8_list_push_node_front(String8List* list, String8Node* node);
 internal String8Node*
 str8_list_push_node_front_set_string(String8List* list, String8Node* node, String8 string);
 internal String8Node*
-str8_list_push(Arena* arena, String8List* list, String8 string);
+Str8ListPush(Arena* arena, String8List* list, String8 string);
 internal String8Node*
 str8_list_push_front(Arena* arena, String8List* list, String8 string);
 internal void
@@ -344,12 +344,12 @@ str8_list_concat_in_place(String8List* list, String8List* to_push);
 internal String8Node*
 str8_list_push_aligner(Arena* arena, String8List* list, U64 min, U64 align);
 internal String8Node*
-str8_list_pushf(Arena* arena, String8List* list, char* fmt, ...);
+Str8ListPushf(Arena* arena, String8List* list, char* fmt, ...);
 internal String8Node*
 str8_list_push_frontf(Arena* arena, String8List* list, char* fmt, ...);
 internal String8List
 str8_list_copy(Arena* arena, String8List* list);
-#define str8_list_first(list) ((list)->first ? (list)->first->string : str8_zero())
+#define str8_list_first(list) ((list)->first ? (list)->first->string : Str8Zero())
 
 ////////////////////////////////
 //~ rjf: String Splitting & Joining
@@ -364,7 +364,7 @@ internal String8List
 str8_list_split_by_string_chars(Arena* arena, String8List list, String8 split_chars,
                                 StringSplitFlags flags);
 internal String8
-str8_list_join(Arena* arena, String8List* list, StringJoin* optional_params);
+Str8ListJoin(Arena* arena, String8List* list, StringJoin* optional_params);
 internal void
 str8_list_from_flags(Arena* arena, String8List* list, U32 flags, String8* flag_string_table,
                      U32 flag_string_count);
@@ -425,7 +425,7 @@ utf8_from_utf32_single(U8* buffer, U32 character);
 internal String8
 str8_from_16(Arena* arena, String16 in);
 internal String16
-str16_from_8(Arena* arena, String8 in);
+Str16From8(Arena* arena, String8 in);
 internal String8
 str8_from_32(Arena* arena, String32 in);
 internal String32
@@ -564,5 +564,15 @@ str8_deserial_read_block(String8 string, U64 off, U64 size, String8* block_out);
 
 // string manipulation helpers
 #define CStrEqual(a, b) (!strcmp((a), (b)))
+
+//- rjf: Allocation
+internal String8
+PushStr8Copy(Arena* arena, String8 string);
+internal String8
+PushStr8FV(Arena* arena, char* fmt, va_list args);
+internal String8
+PushStr8F(Arena* arena, char* fmt, ...);
+internal String8
+PushStr8FillByte(Arena* arena, U64 size, U8 byte);
 
 #endif // BASE_STRINGS_H

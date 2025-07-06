@@ -77,7 +77,7 @@ internal OS_LNX_Entity *os_lnx_entity_alloc(OS_LNX_EntityKind kind) {
     if (entity) {
       SLLStackPop(os_lnx_state.entity_free);
     } else {
-      entity = push_array_no_zero(os_lnx_state.entity_arena, OS_LNX_Entity, 1);
+      entity = PushArrayNoZero(os_lnx_state.entity_arena, OS_LNX_Entity, 1);
     }
   }
   MemoryZeroStruct(entity);
@@ -125,7 +125,7 @@ internal String8 os_get_current_path(Arena *arena) {
 }
 
 internal U32 os_get_process_start_time_unix(void) {
-  Temp scratch = scratch_begin(0, 0);
+  Temp scratch = ScratchBegin(0, 0);
   U64 start_time = 0;
   pid_t pid = getpid();
   String8 path = push_str8f(scratch.arena, "/proc/%u", pid);
@@ -134,7 +134,7 @@ internal U32 os_get_process_start_time_unix(void) {
   if (err == 0) {
     start_time = st.st_mtime;
   }
-  scratch_end(scratch);
+  ScratchEnd(scratch);
   return (U32)start_time;
 }
 
@@ -188,11 +188,11 @@ internal U32 os_tid(void) {
 }
 
 internal void os_set_thread_name(String8 name) {
-  Temp scratch = scratch_begin(0, 0);
+  Temp scratch = ScratchBegin(0, 0);
   String8 name_copy = push_str8_copy(scratch.arena, name);
   pthread_t current_thread = pthread_self();
   pthread_setname_np(current_thread, (char *)name_copy.str);
-  scratch_end(scratch);
+  ScratchEnd(scratch);
 }
 
 ////////////////////////////////
@@ -206,7 +206,7 @@ internal void os_abort(S32 exit_code) { exit(exit_code); }
 //- rjf: files
 
 internal OS_Handle os_file_open(OS_AccessFlags flags, String8 path) {
-  Temp scratch = scratch_begin(0, 0);
+  Temp scratch = ScratchBegin(0, 0);
   String8 path_copy = push_str8_copy(scratch.arena, path);
   int lnx_flags = 0;
   if (flags & OS_AccessFlag_Read && flags & OS_AccessFlag_Write) {
@@ -227,7 +227,7 @@ internal OS_Handle os_file_open(OS_AccessFlags flags, String8 path) {
   if (fd != -1) {
     handle.u64[0] = fd;
   }
-  scratch_end(scratch);
+  ScratchEnd(scratch);
   return handle;
 }
 
@@ -325,13 +325,13 @@ internal OS_FileID os_id_from_file(OS_Handle file) {
 }
 
 internal B32 os_delete_file_at_path(String8 path) {
-  Temp scratch = scratch_begin(0, 0);
+  Temp scratch = ScratchBegin(0, 0);
   B32 result = 0;
   String8 path_copy = push_str8_copy(scratch.arena, path);
   if (remove((char *)path_copy.str) != -1) {
     result = 1;
   }
-  scratch_end(scratch);
+  ScratchEnd(scratch);
   return result;
 }
 
@@ -369,29 +369,29 @@ internal B32 os_move_file_path(String8 dst, String8 src) {
 }
 
 internal String8 os_full_path_from_path(Arena *arena, String8 path) {
-  Temp scratch = scratch_begin(&arena, 1);
+  Temp scratch = ScratchBegin(&arena, 1);
   String8 path_copy = push_str8_copy(scratch.arena, path);
   char buffer[PATH_MAX] = {0};
   realpath((char *)path_copy.str, buffer);
   String8 result = push_str8_copy(arena, str8_cstring(buffer));
-  scratch_end(scratch);
+  ScratchEnd(scratch);
   return result;
 }
 
 internal B32 os_file_path_exists(String8 path) {
-  Temp scratch = scratch_begin(0, 0);
+  Temp scratch = ScratchBegin(0, 0);
   String8 path_copy = push_str8_copy(scratch.arena, path);
   int access_result = access((char *)path_copy.str, F_OK);
   B32 result = 0;
   if (access_result == 0) {
     result = 1;
   }
-  scratch_end(scratch);
+  ScratchEnd(scratch);
   return result;
 }
 
 internal B32 os_folder_path_exists(String8 path) {
-  Temp scratch = scratch_begin(0, 0);
+  Temp scratch = ScratchBegin(0, 0);
   B32 exists = 0;
   String8 path_copy = push_str8_copy(scratch.arena, path);
   DIR *handle = opendir((char *)path_copy.str);
@@ -399,12 +399,12 @@ internal B32 os_folder_path_exists(String8 path) {
     closedir(handle);
     exists = 1;
   }
-  scratch_end(scratch);
+  ScratchEnd(scratch);
   return exists;
 }
 
 internal FileProperties os_properties_from_file_path(String8 path) {
-  Temp scratch = scratch_begin(0, 0);
+  Temp scratch = ScratchBegin(0, 0);
   String8 path_copy = push_str8_copy(scratch.arena, path);
   struct stat f_stat = {0};
   int stat_result = stat((char *)path_copy.str, &f_stat);
@@ -412,7 +412,7 @@ internal FileProperties os_properties_from_file_path(String8 path) {
   if (stat_result != -1) {
     props = os_lnx_file_properties_from_stat(&f_stat);
   }
-  scratch_end(scratch);
+  ScratchEnd(scratch);
   return props;
 }
 
@@ -482,11 +482,11 @@ internal B32 os_file_iter_next(Arena *arena, OS_FileIter *iter,
     struct stat st = {0};
     int stat_result = 0;
     if (good) {
-      Temp scratch = scratch_begin(&arena, 1);
+      Temp scratch = ScratchBegin(&arena, 1);
       String8 full_path = push_str8f(scratch.arena, "%S/%s", lnx_iter->path,
                                      lnx_iter->dp->d_name);
       stat_result = stat((char *)full_path.str, &st);
-      scratch_end(scratch);
+      ScratchEnd(scratch);
     }
 
     // rjf: determine if filtered
@@ -527,13 +527,13 @@ internal void os_file_iter_end(OS_FileIter *iter) {
 //- rjf: directory creation
 
 internal B32 os_make_directory(String8 path) {
-  Temp scratch = scratch_begin(0, 0);
+  Temp scratch = ScratchBegin(0, 0);
   B32 result = 0;
   String8 path_copy = push_str8_copy(scratch.arena, path);
   if (mkdir((char *)path_copy.str, 0755) != -1) {
     result = 1;
   }
-  scratch_end(scratch);
+  ScratchEnd(scratch);
   return result;
 }
 
@@ -541,21 +541,21 @@ internal B32 os_make_directory(String8 path) {
 //~ rjf: @os_hooks Shared Memory (Implemented Per-OS)
 
 internal OS_Handle os_shared_memory_alloc(U64 size, String8 name) {
-  Temp scratch = scratch_begin(0, 0);
+  Temp scratch = ScratchBegin(0, 0);
   String8 name_copy = push_str8_copy(scratch.arena, name);
   int id = shm_open((char *)name_copy.str, O_RDWR, 0);
   ftruncate(id, size);
   OS_Handle result = {(U64)id};
-  scratch_end(scratch);
+  ScratchEnd(scratch);
   return result;
 }
 
 internal OS_Handle os_shared_memory_open(String8 name) {
-  Temp scratch = scratch_begin(0, 0);
+  Temp scratch = ScratchBegin(0, 0);
   String8 name_copy = push_str8_copy(scratch.arena, name);
   int id = shm_open((char *)name_copy.str, O_RDWR, 0);
   OS_Handle result = {(U64)id};
-  scratch_end(scratch);
+  ScratchEnd(scratch);
   return result;
 }
 
@@ -999,20 +999,20 @@ internal void os_semaphore_drop(OS_Handle semaphore) {
 //~ rjf: @os_hooks Dynamically-Loaded Libraries (Implemented Per-OS)
 
 internal OS_Handle os_library_open(String8 path) {
-  Temp scratch = scratch_begin(0, 0);
+  Temp scratch = ScratchBegin(0, 0);
   char *path_cstr = (char *)push_str8_copy(scratch.arena, path).str;
   void *so = dlopen(path_cstr, RTLD_LAZY | RTLD_LOCAL);
   OS_Handle lib = {(U64)so};
-  scratch_end(scratch);
+  ScratchEnd(scratch);
   return lib;
 }
 
 internal VoidProc *os_library_load_proc(OS_Handle lib, String8 name) {
-  Temp scratch = scratch_begin(0, 0);
+  Temp scratch = ScratchBegin(0, 0);
   void *so = (void *)lib.u64;
   char *name_cstr = (char *)push_str8_copy(scratch.arena, name).str;
   VoidProc *proc = (VoidProc *)dlsym(so, name_cstr);
-  scratch_end(scratch);
+  ScratchEnd(scratch);
   return proc;
 }
 
@@ -1091,13 +1091,13 @@ int main(int argc, char **argv) {
     tctx_init_and_equip(&tctx);
 
     //- rjf: set up dynamically allocated state
-    os_lnx_state.arena = arena_alloc();
-    os_lnx_state.entity_arena = arena_alloc();
+    os_lnx_state.arena = ArenaAlloc();
+    os_lnx_state.entity_arena = ArenaAlloc();
     pthread_mutex_init(&os_lnx_state.entity_mutex, 0);
 
     //- rjf: grab dynamically allocated system info
     {
-      Temp scratch = scratch_begin(0, 0);
+      Temp scratch = ScratchBegin(0, 0);
       OS_SystemInfo *info = &os_lnx_state.system_info;
 
       // rjf: get machine name
@@ -1105,8 +1105,8 @@ int main(int argc, char **argv) {
       U8 *buffer = 0;
       int size = 0;
       for (S64 cap = 4096, r = 0; r < 4; cap *= 2, r += 1) {
-        scratch_end(scratch);
-        buffer = push_array_no_zero(scratch.arena, U8, cap);
+        ScratchEnd(scratch);
+        buffer = PushArrayNoZero(scratch.arena, U8, cap);
         size = gethostname((char *)buffer, cap);
         if (size < cap) {
           got_final_result = 1;
@@ -1117,18 +1117,18 @@ int main(int argc, char **argv) {
       // rjf: save name to info
       if (got_final_result && size > 0) {
         info->machine_name.size = size;
-        info->machine_name.str = push_array_no_zero(
-            os_lnx_state.arena, U8, info->machine_name.size + 1);
+        info->machine_name.str = PushArrayNoZero(os_lnx_state.arena, U8,
+                                                 info->machine_name.size + 1);
         MemoryCopy(info->machine_name.str, buffer, info->machine_name.size);
         info->machine_name.str[info->machine_name.size] = 0;
       }
 
-      scratch_end(scratch);
+      ScratchEnd(scratch);
     }
 
     //- rjf: grab dynamically allocated process info
     {
-      Temp scratch = scratch_begin(0, 0);
+      Temp scratch = ScratchBegin(0, 0);
       OS_ProcessInfo *info = &os_lnx_state.process_info;
 
       // rjf: grab binary path
@@ -1138,8 +1138,8 @@ int main(int argc, char **argv) {
         U8 *buffer = 0;
         int size = 0;
         for (S64 cap = PATH_MAX, r = 0; r < 4; cap *= 2, r += 1) {
-          scratch_end(scratch);
-          buffer = push_array_no_zero(scratch.arena, U8, cap);
+          ScratchEnd(scratch);
+          buffer = PushArrayNoZero(scratch.arena, U8, cap);
           size = readlink("/proc/self/exe", (char *)buffer, cap);
           if (size < cap) {
             got_final_result = 1;
@@ -1166,7 +1166,7 @@ int main(int argc, char **argv) {
         info->user_program_data_path = str8_cstring(home);
       }
 
-      scratch_end(scratch);
+      ScratchEnd(scratch);
     }
   }
 

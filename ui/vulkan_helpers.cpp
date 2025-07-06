@@ -442,7 +442,7 @@ VK_QueueFamilyIndicesFromBitFields(QueueFamilyIndexBits queueFamilyBits)
 internal QueueFamilyIndexBits
 VK_QueueFamiliesFind(VulkanContext* vulkanContext, VkPhysicalDevice device)
 {
-    Temp scratch = scratch_begin(0, 0);
+    Temp scratch = ScratchBegin(0, 0);
     QueueFamilyIndexBits indices = {0};
     U32 queueFamilyCount = 0;
     vkGetPhysicalDeviceQueueFamilyProperties(device, &queueFamilyCount, nullptr);
@@ -476,7 +476,7 @@ VK_QueueFamiliesFind(VulkanContext* vulkanContext, VkPhysicalDevice device)
     indices.graphicsFamilyIndexBits &= (~indices.graphicsFamilyIndexBits) + 1;
     indices.presentFamilyIndexBits &= (~indices.presentFamilyIndexBits) + 1;
 
-    scratch_end(scratch);
+    ScratchEnd(scratch);
     return indices;
 }
 
@@ -682,7 +682,7 @@ VK_SupportedFormat(const VkFormat candidates[3], VkImageTiling tiling,
 internal void
 VK_DepthResourcesCreate(VulkanContext* vk_ctx)
 {
-    Temp scratch = scratch_begin(0, 0);
+    Temp scratch = ScratchBegin(0, 0);
     VkFormat depth_formats[3] = {VK_FORMAT_D16_UNORM, VK_FORMAT_D32_SFLOAT,
                                  VK_FORMAT_D24_UNORM_S8_UINT};
 
@@ -704,7 +704,7 @@ VK_DepthResourcesCreate(VulkanContext* vk_ctx)
 
     // transitioning image layout happens in renderpass
 
-    scratch_end(scratch);
+    ScratchEnd(scratch);
 }
 
 internal void
@@ -848,7 +848,7 @@ VK_StrArrFromStr8Buffer(Arena* arena, String8* buffer, U64 count)
 internal void
 VK_CreateInstance(VulkanContext* vk_ctx)
 {
-    Temp scratch = scratch_begin(0, 0);
+    Temp scratch = ScratchBegin(0, 0);
     if (vk_ctx->enable_validation_layers && !VK_CheckValidationLayerSupport(vk_ctx))
     {
         exitWithError("validation layers requested, but not available!");
@@ -892,7 +892,7 @@ VK_CreateInstance(VulkanContext* vk_ctx)
         exitWithError("failed to create instance!");
     }
 
-    scratch_end(scratch);
+    ScratchEnd(scratch);
 }
 
 internal void
@@ -966,7 +966,7 @@ VK_LogicalDeviceCreate(Arena* arena, VulkanContext* vulkanContext)
 internal void
 VK_PhysicalDevicePick(VulkanContext* vk_ctx)
 {
-    Temp scratch = scratch_begin(0, 0);
+    Temp scratch = ScratchBegin(0, 0);
 
     vk_ctx->physical_device = VK_NULL_HANDLE;
 
@@ -1002,7 +1002,7 @@ VK_PhysicalDevicePick(VulkanContext* vk_ctx)
         exitWithError("failed to find a suitable GPU!");
     }
 
-    scratch_end(scratch);
+    ScratchEnd(scratch);
 }
 
 internal bool
@@ -1032,7 +1032,7 @@ VK_IsDeviceSuitable(VulkanContext* vulkanContext, VkPhysicalDevice device,
 internal bool
 VK_CheckValidationLayerSupport(VulkanContext* vulkanContext)
 {
-    Temp scratch = scratch_begin(0, 0);
+    Temp scratch = ScratchBegin(0, 0);
     uint32_t layerCount;
     vkEnumerateInstanceLayerProperties(&layerCount, nullptr);
 
@@ -1058,7 +1058,7 @@ VK_CheckValidationLayerSupport(VulkanContext* vulkanContext)
         }
     }
 
-    scratch_end(scratch);
+    ScratchEnd(scratch);
     return layerFound;
 }
 
@@ -1135,7 +1135,7 @@ VK_PopulateDebugMessengerCreateInfo(VkDebugUtilsMessengerCreateInfoEXT& createIn
 internal bool
 VK_CheckDeviceExtensionSupport(VulkanContext* vulkanContext, VkPhysicalDevice device)
 {
-    Temp scratch = scratch_begin(0, 0);
+    Temp scratch = ScratchBegin(0, 0);
     uint32_t extensionCount;
     vkEnumerateDeviceExtensionProperties(device, nullptr, &extensionCount, nullptr);
 
@@ -1157,7 +1157,7 @@ VK_CheckDeviceExtensionSupport(VulkanContext* vulkanContext, VkPhysicalDevice de
         }
     }
 
-    scratch_end(scratch);
+    ScratchEnd(scratch);
     return numberOfRequiredExtenstionsLeft == 0;
 }
 
@@ -1251,7 +1251,7 @@ VK_MaxUsableSampleCountGet(VkPhysicalDevice device)
 internal void
 VK_RecreateSwapChain(IO* io_ctx, VulkanContext* vk_ctx)
 {
-    Temp scratch = scratch_begin(0, 0);
+    Temp scratch = ScratchBegin(0, 0);
     int width = 0, height = 0;
     glfwGetFramebufferSize(io_ctx->window, &width, &height);
     while (width == 0 || height == 0)
@@ -1275,7 +1275,7 @@ VK_RecreateSwapChain(IO* io_ctx, VulkanContext* vk_ctx)
 
     VK_DepthResourcesCreate(vk_ctx);
     VK_FramebuffersCreate(vk_ctx, vk_ctx->vk_renderpass);
-    scratch_end(scratch);
+    ScratchEnd(scratch);
 }
 
 internal void
@@ -1413,9 +1413,9 @@ VK_CommandBuffersCreate(VulkanContext* vk_ctx)
 internal void
 VK_VulkanInit(VulkanContext* vk_ctx, IO* io_ctx)
 {
-    Temp scratch = scratch_begin(0, 0);
+    Temp scratch = ScratchBegin(0, 0);
 
-    vk_ctx->arena = arena_alloc();
+    vk_ctx->arena = ArenaAlloc();
 
     VK_CreateInstance(vk_ctx);
     VK_DebugMessengerSetup(vk_ctx);
@@ -1448,5 +1448,5 @@ VK_VulkanInit(VulkanContext* vk_ctx, IO* io_ctx)
 
     TerrainInit();
     VK_FramebuffersCreate(vk_ctx, vk_ctx->vk_renderpass);
-    scratch_end(scratch);
+    ScratchEnd(scratch);
 }
