@@ -15,7 +15,10 @@
 // // domain: cpp
 #include "base/base_inc.cpp"
 #include "os_core/os_core_inc.c"
+#include "http/http_inc.c"
+#include "lib_wrappers/lib_wrappers_inc.cpp"
 #include "ui/ui.cpp"
+#include "city/city_inc.cpp"
 
 static void
 DT_TimeInit(DT_Time* time)

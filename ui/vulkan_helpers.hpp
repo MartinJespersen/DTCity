@@ -233,9 +233,6 @@ VK_ColorResourcesCreate(VkPhysicalDevice physicalDevice, VkDevice device,
 static void
 VK_FramebuffersCreate(VulkanContext* vulkan_ctx, VkRenderPass renderPass);
 
-static VkShaderModule
-VK_ShaderModuleCreate(VkDevice device, Buffer<U8> buffer);
-
 static void
 VK_CommandBuffersCreate(VulkanContext* vk_ctx);
 

@@ -405,8 +405,6 @@ str8_path_list_join_by_style(Arena* arena, String8List* path, PathStyle style);
 static String8TxtPtPair
 str8_txt_pt_pair_from_string(String8 string);
 
-static String8
-CreatePathFromStrings(Arena* arena, char** parts, U64 count);
 ////////////////////////////////
 //~ rjf: UTF-8 & UTF-16 Decoding/Encoding
 

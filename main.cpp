@@ -12,16 +12,19 @@
 #include <windows.h>
 
 // user defined: [hpp]
-#include "entrypoint.hpp"
+#include "base/base_inc.hpp"
+#include "os_core/os_core_inc.h"
+#include "http/http_inc.h"
 #include "lib_wrappers/lib_wrappers_inc.hpp"
+#include "ui/ui.hpp"
 #include "city/city_inc.hpp"
 
 // domain: cpp
 #include "base/base_inc.cpp"
 #include "os_core/os_core_inc.c"
-#include "ui/ui.cpp"
 #include "http/http_inc.c"
 #include "lib_wrappers/lib_wrappers_inc.cpp"
+#include "ui/ui.cpp"
 #include "city/city_inc.cpp"
 
 Context g_ctx_main;
@@ -123,10 +126,6 @@ run()
 
     HTTP_Init();
 
-    city::City city = {};
-    city::CityInit(&city);
-    city::RoadsBuild(city.arena, &city);
-
     VulkanContext vulkanContext = {};
     ProfilingContext profilingContext = {};
     IO io_ctx = {};
@@ -149,6 +148,10 @@ run()
     InitWindow(&g_ctx_main);
     GlobalContextSet(&g_ctx_main);
     InitContext(&g_ctx_main);
+
+    city::City city = {};
+    city::CityInit(&city, Str8CString(g_ctx_main.cwd));
+    city::RoadsBuild(city.arena, &city);
 
     while (!glfwWindowShouldClose(io_ctx.window))
     {

@@ -36,9 +36,10 @@ struct RoadWay
     U64 tag_count;
 };
 
-struct Vertex
+struct RoadVertex
 {
-    Vec3F32 pos;
+    Vec2F32 pos;
+    U64 id;
 };
 
 struct Road
@@ -49,8 +50,7 @@ struct Road
     U64 way_count;
     RoadWay* ways;
 
-    Buffer<Vertex> vertices;
-    Buffer<U32> indices;
+    Buffer<RoadVertex> vertices;
 };
 
 struct City
@@ -66,6 +66,9 @@ struct City
 
 static void
 CityInit(City* city);
+
+static void
+CityCleanup(City* city);
 
 static void
 RoadsBuild(Arena* arena, City* road);

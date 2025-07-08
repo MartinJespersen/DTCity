@@ -395,23 +395,6 @@ VK_FramebuffersCreate(VulkanContext* vk_ctx, VkRenderPass renderPass)
     }
 }
 
-static VkShaderModule
-VK_ShaderModuleCreate(VkDevice device, Buffer<U8> buffer)
-{
-    VkShaderModuleCreateInfo createInfo{};
-    createInfo.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
-    createInfo.codeSize = buffer.size;
-    createInfo.pCode = reinterpret_cast<const U32*>(buffer.data);
-
-    VkShaderModule shaderModule;
-    if (vkCreateShaderModule(device, &createInfo, nullptr, &shaderModule) != VK_SUCCESS)
-    {
-        exitWithError("failed to create shader module!");
-    }
-
-    return shaderModule;
-}
-
 // queue family
 static bool
 VK_QueueFamilyIsComplete(QueueFamilyIndexBits queueFamily)

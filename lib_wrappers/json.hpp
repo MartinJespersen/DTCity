@@ -1,5 +1,6 @@
 #pragma once
 
+// ~mgj: forward declaration
 namespace city
 {
 struct Road;

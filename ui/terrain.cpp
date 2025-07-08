@@ -87,9 +87,8 @@ TerrainTextureResourceCreate(VulkanContext* vk_ctx, Terrain* terrain, const char
     String8List heightmap_path_list = {0};
     String8 cwd_str = Str8CString(cwd);
     Str8ListPush(scratch.arena, &heightmap_path_list, cwd_str);
-    const char* heightmap_file_path[] = {cwd, "textures", "heightmap_au.png"};
-    String8 heightmap_path_abs = CreatePathFromStrings(scratch.arena, (char**)heightmap_file_path,
-                                                       ArrayCount(heightmap_file_path));
+    String8 heightmap_path_abs = CreatePathFromStrings(
+        scratch.arena, Str8BufferFromCString(scratch.arena, {cwd, "textures", "heightmap_au.png"}));
 
     S32 tex_width, tex_height, tex_channels;
     stbi_uc* pixels = stbi_load((char*)heightmap_path_abs.str, &tex_width, &tex_height,
@@ -240,60 +239,31 @@ TerrainGraphicsPipelineCreate(Terrain* terrain, const char* cwd)
     Temp scratch = ScratchBegin(0, 0);
 
     VulkanContext* vk_ctx = GlobalContextGet()->vulkanContext;
+    String8 vert_path = CreatePathFromStrings(
+        scratch.arena, Str8BufferFromCString(scratch.arena, {cwd, "shaders", "terrain_vert.spv"}));
+    String8 frag_path = CreatePathFromStrings(
+        scratch.arena, Str8BufferFromCString(scratch.arena, {cwd, "shaders", "terrain_frag.spv"}));
+    String8 tesc_path = CreatePathFromStrings(
+        scratch.arena, Str8BufferFromCString(scratch.arena, {cwd, "shaders", "terrain_tesc.spv"}));
+    String8 tese_path = CreatePathFromStrings(
+        scratch.arena, Str8BufferFromCString(scratch.arena, {cwd, "shaders", "terrain_tese.spv"}));
 
-    const char* vertex_path_strs[] = {cwd, "shaders", "terrain_vert.spv"};
-    String8 vertex_path_abs = CreatePathFromStrings(scratch.arena, (char**)vertex_path_strs,
-                                                    ArrayCount(vertex_path_strs));
-
-    const char* fragment_path_strings[] = {cwd, "shaders", "terrain_frag.spv"};
-    String8 fragment_path_abs = CreatePathFromStrings(scratch.arena, (char**)fragment_path_strings,
-                                                      ArrayCount(fragment_path_strings));
-
-    const char* tesc_path_strings[] = {cwd, "shaders", "terrain_tesc.spv"};
-    String8 tesc_path_abs = CreatePathFromStrings(scratch.arena, (char**)tesc_path_strings,
-                                                  ArrayCount(tesc_path_strings));
-
-    const char* tese_path_strings[] = {cwd, "shaders", "terrain_tese.spv"};
-    String8 tese_path_abs = CreatePathFromStrings(scratch.arena, (char**)tese_path_strings,
-                                                  ArrayCount(tese_path_strings));
-
-    Buffer<U8> vert_shader_buffer = IO_ReadFile(scratch.arena, vertex_path_abs);
-    Buffer<U8> frag_shader_buffer = IO_ReadFile(scratch.arena, fragment_path_abs);
-    Buffer<U8> tesc_shader_buffer = IO_ReadFile(scratch.arena, tesc_path_abs);
-    Buffer<U8> tese_shader_buffer = IO_ReadFile(scratch.arena, tese_path_abs);
-
-    VkShaderModule vert_shader_module = VK_ShaderModuleCreate(vk_ctx->device, vert_shader_buffer);
-    VkShaderModule frag_shader_module = VK_ShaderModuleCreate(vk_ctx->device, frag_shader_buffer);
-    VkShaderModule tesc_shader_module = VK_ShaderModuleCreate(vk_ctx->device, tesc_shader_buffer);
-    VkShaderModule tese_shader_module = VK_ShaderModuleCreate(vk_ctx->device, tese_shader_buffer);
-
-    VkPipelineShaderStageCreateInfo vert_shader_stage_info{};
-    vert_shader_stage_info.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
-    vert_shader_stage_info.stage = VK_SHADER_STAGE_VERTEX_BIT;
-    vert_shader_stage_info.module = vert_shader_module;
-    vert_shader_stage_info.pName = "main";
-
-    VkPipelineShaderStageCreateInfo frag_shader_stage_info{};
-    frag_shader_stage_info.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
-    frag_shader_stage_info.stage = VK_SHADER_STAGE_FRAGMENT_BIT;
-    frag_shader_stage_info.module = frag_shader_module;
-    frag_shader_stage_info.pName = "main";
-
-    VkPipelineShaderStageCreateInfo tesc_shader_stage_info{};
-    tesc_shader_stage_info.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
-    tesc_shader_stage_info.stage = VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT;
-    tesc_shader_stage_info.module = tesc_shader_module;
-    tesc_shader_stage_info.pName = "main";
-
-    VkPipelineShaderStageCreateInfo tese_shader_stage_info{};
-    tese_shader_stage_info.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
-    tese_shader_stage_info.stage = VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT;
-    tese_shader_stage_info.module = tese_shader_module;
-    tese_shader_stage_info.pName = "main";
+    wrapper::internal::ShaderModuleInfo vert_shader_stage_info =
+        wrapper::internal::ShaderStageFromSpirv(scratch.arena, vk_ctx->device,
+                                                VK_SHADER_STAGE_VERTEX_BIT, vert_path);
+    wrapper::internal::ShaderModuleInfo frag_shader_stage_info =
+        wrapper::internal::ShaderStageFromSpirv(scratch.arena, vk_ctx->device,
+                                                VK_SHADER_STAGE_FRAGMENT_BIT, frag_path);
+    wrapper::internal::ShaderModuleInfo tesc_shader_stage_info =
+        wrapper::internal::ShaderStageFromSpirv(
+            scratch.arena, vk_ctx->device, VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT, tesc_path);
+    wrapper::internal::ShaderModuleInfo tese_shader_stage_info =
+        wrapper::internal::ShaderStageFromSpirv(
+            scratch.arena, vk_ctx->device, VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT, tese_path);
 
     VkPipelineShaderStageCreateInfo shaderStages[] = {
-        vert_shader_stage_info, frag_shader_stage_info, tesc_shader_stage_info,
-        tese_shader_stage_info};
+        vert_shader_stage_info.info, frag_shader_stage_info.info, tesc_shader_stage_info.info,
+        tese_shader_stage_info.info};
 
     VkDynamicState dynamicStates[] = {VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR};
 
@@ -443,11 +413,6 @@ TerrainGraphicsPipelineCreate(Terrain* terrain, const char* cwd)
     {
         exitWithError("failed to create graphics pipeline!");
     }
-
-    vkDestroyShaderModule(vk_ctx->device, frag_shader_module, nullptr);
-    vkDestroyShaderModule(vk_ctx->device, vert_shader_module, nullptr);
-    vkDestroyShaderModule(vk_ctx->device, tese_shader_module, nullptr);
-    vkDestroyShaderModule(vk_ctx->device, tesc_shader_module, nullptr);
 
     ScratchEnd(scratch);
     return;

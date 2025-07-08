@@ -1,65 +1,32 @@
 namespace wrapper
 {
-
-static VkVertexInputBindingDescription
-RoadBindingDescriptionGet()
-{
-    VkVertexInputBindingDescription bindingDescription{};
-    bindingDescription.binding = 0;
-    bindingDescription.stride = sizeof(city::Vertex);
-    bindingDescription.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
-    return bindingDescription;
-}
-
-static Buffer<VkVertexInputAttributeDescription>
-RoadAttributeDescriptionGet(Arena* arena)
-{
-    Buffer<VkVertexInputAttributeDescription> attribute_descriptions =
-        BufferAlloc<VkVertexInputAttributeDescription>(arena, 2);
-    attribute_descriptions.data[0].binding = 0;
-    attribute_descriptions.data[0].location = 0;
-    attribute_descriptions.data[0].format = VK_FORMAT_R32G32B32_SFLOAT;
-    attribute_descriptions.data[0].offset = offsetof(city::Vertex, pos);
-
-    return attribute_descriptions;
-}
-
 static void
-RoadPipelineCreate(city::City* city, const char* cwd)
+RoadPipelineCreate(city::City* city, String8 cwd)
 {
-    Temp scratch = ScratchBegin(0, 0);
+    ScratchScope scratch = ScratchScope(0, 0);
     wrapper::Road* w_road = city->w_road;
 
     VulkanContext* vk_ctx = GlobalContextGet()->vulkanContext;
 
-    const char* vertex_path_strs[] = {cwd, "shaders", "road_vert.spv"};
-    String8 vertex_path_abs = CreatePathFromStrings(scratch.arena, (char**)vertex_path_strs,
-                                                    ArrayCount(vertex_path_strs));
+    String8 vert_path = CreatePathFromStrings(
+        scratch.arena,
+        Str8BufferFromCString(scratch.arena, {(char*)cwd.str, "shaders", "road_vert.spv"}));
+    String8 frag_path = CreatePathFromStrings(
+        scratch.arena,
+        Str8BufferFromCString(scratch.arena, {(char*)cwd.str, "shaders", "road_vert.spv"}));
+    String8 geo_path = CreatePathFromStrings(
+        scratch.arena,
+        Str8BufferFromCString(scratch.arena, {(char*)cwd.str, "shaders", "road_vert.spv"}));
 
-    const char* fragment_path_strings[] = {cwd, "shaders", "road_frag.spv"};
-    String8 fragment_path_abs = CreatePathFromStrings(scratch.arena, (char**)fragment_path_strings,
-                                                      ArrayCount(fragment_path_strings));
+    internal::ShaderModuleInfo vert_shader_stage_info = internal::ShaderStageFromSpirv(
+        scratch.arena, vk_ctx->device, VK_SHADER_STAGE_VERTEX_BIT, vert_path);
+    internal::ShaderModuleInfo frag_shader_stage_info = internal::ShaderStageFromSpirv(
+        scratch.arena, vk_ctx->device, VK_SHADER_STAGE_FRAGMENT_BIT, frag_path);
+    internal::ShaderModuleInfo geom_shader_stage_info = internal::ShaderStageFromSpirv(
+        scratch.arena, vk_ctx->device, VK_SHADER_STAGE_GEOMETRY_BIT, geo_path);
 
-    Buffer<U8> vert_shader_buffer = IO_ReadFile(scratch.arena, vertex_path_abs);
-    Buffer<U8> frag_shader_buffer = IO_ReadFile(scratch.arena, fragment_path_abs);
-
-    VkShaderModule vert_shader_module = VK_ShaderModuleCreate(vk_ctx->device, vert_shader_buffer);
-    VkShaderModule frag_shader_module = VK_ShaderModuleCreate(vk_ctx->device, frag_shader_buffer);
-
-    VkPipelineShaderStageCreateInfo vert_shader_stage_info{};
-    vert_shader_stage_info.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
-    vert_shader_stage_info.stage = VK_SHADER_STAGE_VERTEX_BIT;
-    vert_shader_stage_info.module = vert_shader_module;
-    vert_shader_stage_info.pName = "main";
-
-    VkPipelineShaderStageCreateInfo frag_shader_stage_info{};
-    frag_shader_stage_info.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
-    frag_shader_stage_info.stage = VK_SHADER_STAGE_FRAGMENT_BIT;
-    frag_shader_stage_info.module = frag_shader_module;
-    frag_shader_stage_info.pName = "main";
-
-    VkPipelineShaderStageCreateInfo shaderStages[] = {vert_shader_stage_info,
-                                                      frag_shader_stage_info};
+    VkPipelineShaderStageCreateInfo shaderStages[] = {
+        vert_shader_stage_info.info, frag_shader_stage_info.info, geom_shader_stage_info.info};
 
     VkDynamicState dynamicStates[] = {VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR};
 
@@ -76,8 +43,8 @@ RoadPipelineCreate(city::City* city, const char* cwd)
     vertexInputInfo.pVertexAttributeDescriptions = nullptr; // Optional
 
     Buffer<VkVertexInputAttributeDescription> attr_desc =
-        RoadAttributeDescriptionGet(scratch.arena);
-    VkVertexInputBindingDescription input_desc = RoadBindingDescriptionGet();
+        internal::RoadAttributeDescriptionGet(scratch.arena);
+    VkVertexInputBindingDescription input_desc = internal::RoadBindingDescriptionGet();
     vertexInputInfo.vertexBindingDescriptionCount = 1;
     vertexInputInfo.vertexAttributeDescriptionCount = attr_desc.size;
     vertexInputInfo.pVertexBindingDescriptions = &input_desc;
@@ -85,7 +52,7 @@ RoadPipelineCreate(city::City* city, const char* cwd)
 
     VkPipelineInputAssemblyStateCreateInfo inputAssembly{};
     inputAssembly.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
-    inputAssembly.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+    inputAssembly.topology = VK_PRIMITIVE_TOPOLOGY_LINE_STRIP_WITH_ADJACENCY;
     inputAssembly.primitiveRestartEnable = VK_FALSE;
 
     VkViewport viewport{};
@@ -186,7 +153,7 @@ RoadPipelineCreate(city::City* city, const char* cwd)
 
     VkGraphicsPipelineCreateInfo pipelineInfo{};
     pipelineInfo.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
-    pipelineInfo.stageCount = 4;
+    pipelineInfo.stageCount = ArrayCount(shaderStages);
     pipelineInfo.pStages = shaderStages;
     pipelineInfo.pVertexInputState = &vertexInputInfo;
     pipelineInfo.pInputAssemblyState = &inputAssembly;
@@ -196,7 +163,7 @@ RoadPipelineCreate(city::City* city, const char* cwd)
     pipelineInfo.pDepthStencilState = &depthStencil; // Optional
     pipelineInfo.pColorBlendState = &colorBlending;
     pipelineInfo.pDynamicState = &dynamicState;
-    pipelineInfo.pTessellationState = &pipeline_tessellation_state_create_info;
+
     pipelineInfo.layout = w_road->pipeline_layout;
     pipelineInfo.renderPass = vk_ctx->vk_renderpass;
     pipelineInfo.subpass = 0;
@@ -210,11 +177,78 @@ RoadPipelineCreate(city::City* city, const char* cwd)
         exitWithError("failed to create graphics pipeline!");
     }
 
-    vkDestroyShaderModule(vk_ctx->device, frag_shader_module, nullptr);
-    vkDestroyShaderModule(vk_ctx->device, vert_shader_module, nullptr);
-
-    ScratchEnd(scratch);
     return;
 }
+
+static void
+RoadCleanup(city::City* city)
+{
+    Road* road = city->w_road;
+    // vkDestroyPipelineLayout(road->pipeline_layout, nullptr);
+    // vkDestroyPipeline(road->pipeline, nullptr);
+}
+
+namespace internal
+{
+static VkVertexInputBindingDescription
+RoadBindingDescriptionGet()
+{
+    VkVertexInputBindingDescription bindingDescription{};
+    bindingDescription.binding = 0;
+    bindingDescription.stride = sizeof(city::RoadVertex);
+    bindingDescription.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
+    return bindingDescription;
+}
+
+static Buffer<VkVertexInputAttributeDescription>
+RoadAttributeDescriptionGet(Arena* arena)
+{
+    Buffer<VkVertexInputAttributeDescription> attribute_descriptions =
+        BufferAlloc<VkVertexInputAttributeDescription>(arena, 2);
+    attribute_descriptions.data[0].binding = 0;
+    attribute_descriptions.data[0].location = 0;
+    attribute_descriptions.data[0].format = VK_FORMAT_R32G32_SFLOAT;
+    attribute_descriptions.data[0].offset = offsetof(city::RoadVertex, pos);
+
+    attribute_descriptions.data[0].binding = 0;
+    attribute_descriptions.data[0].location = 0;
+    attribute_descriptions.data[0].format = VK_FORMAT_R32_UINT;
+    attribute_descriptions.data[0].offset = offsetof(city::RoadVertex, pos);
+
+    return attribute_descriptions;
+}
+
+static ShaderModuleInfo
+ShaderStageFromSpirv(Arena* arena, VkDevice device, VkShaderStageFlagBits flag, String8 path)
+{
+    internal::ShaderModuleInfo shader_module_info = {};
+    shader_module_info.device = device;
+    Buffer<U8> shader_buffer = IO_ReadFile(arena, path);
+
+    shader_module_info.info.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+    shader_module_info.info.stage = flag;
+    shader_module_info.info.module = ShaderModuleCreate(device, shader_buffer);
+    shader_module_info.info.pName = "main";
+
+    return shader_module_info;
+}
+
+static VkShaderModule
+ShaderModuleCreate(VkDevice device, Buffer<U8> buffer)
+{
+    VkShaderModuleCreateInfo createInfo{};
+    createInfo.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
+    createInfo.codeSize = buffer.size;
+    createInfo.pCode = reinterpret_cast<const U32*>(buffer.data);
+
+    VkShaderModule shaderModule;
+    if (vkCreateShaderModule(device, &createInfo, nullptr, &shaderModule) != VK_SUCCESS)
+    {
+        exitWithError("failed to create shader module!");
+    }
+
+    return shaderModule;
+}
+} // namespace internal
 
 } // namespace wrapper
