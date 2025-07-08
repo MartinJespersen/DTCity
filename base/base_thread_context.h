@@ -46,4 +46,20 @@ tctx_read_srcloc(char** file_name, U64* line_number);
 #define ScratchBegin(conflicts, count) temp_begin(tctx_get_scratch((conflicts), (count)))
 #define ScratchEnd(scratch) temp_end(scratch)
 
+struct ScratchScope
+{
+    ScratchScope(Arena** conflicts, U64 count)
+    {
+        this->arena = tctx_get_scratch((conflicts), (count));
+        this->pos = arena_pos(this->arena);
+    }
+    ~ScratchScope()
+    {
+        arena_pop_to(this->arena, this->pos);
+    }
+
+    Arena* arena;
+    U64 pos;
+};
+
 #endif // BASE_THREAD_CONTEXT_H

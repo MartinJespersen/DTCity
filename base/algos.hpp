@@ -11,7 +11,7 @@ Buffer<T>
 BufferAlloc(Arena* arena, U64 count)
 {
     Buffer<T> buffer = {0};
-    buffer.data = push_array(arena, T, count);
+    buffer.data = PushArray(arena, T, count);
     buffer.size = count;
     return buffer;
 };

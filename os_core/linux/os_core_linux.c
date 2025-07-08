@@ -458,7 +458,7 @@ static void os_file_map_view_close(OS_Handle map, void *ptr, Rng1U64 range) {
 
 static OS_FileIter *os_file_iter_begin(Arena *arena, String8 path,
                                        OS_FileIterFlags flags) {
-  OS_FileIter *base_iter = push_array(arena, OS_FileIter, 1);
+  OS_FileIter *base_iter = PushArray(arena, OS_FileIter, 1);
   base_iter->flags = flags;
   OS_LNX_FileIter *iter = (OS_LNX_FileIter *)base_iter->memory;
   {
@@ -1149,7 +1149,7 @@ int main(int argc, char **argv) {
 
         // rjf: save
         if (got_final_result && size > 0) {
-          String8 full_name = str8(buffer, size);
+          String8 full_name = Str8(buffer, size);
           String8 name_chopped = str8_chop_last_slash(full_name);
           info->binary_path = push_str8_copy(os_lnx_state.arena, name_chopped);
         }

@@ -1,25 +1,36 @@
+If:
+  PathMatch: .*
 CompileFlags:
   Add:
-    - -ferror-limit=100
     - -IC:/repos/DTCity
     - -include=C:/repos/DTCity/base/base_inc.hpp
-    - -include=C:/repos/DTCity/os_core/os_core_inc.h
+    - -include=C:/repos/DTCity/os_core/os_core.h
+    - -include=C:/repos/DTCity/os_core/win32/os_core_win32.h
     - -include=C:/repos/DTCity/ui/ui.hpp
     - -include=C:/repos/DTCity/http/http_inc.h
-    - -include=C:/repos/DTCity/entrypoint.hpp
+    - -include=C:/repos/DTCity/city/city_inc.hpp
+    - -include=C:/repos/DTCity/lib_wrappers/lib_wrappers_inc.hpp
     - -IC:/VulkanSDK/Include
     - -IC:/repos/DTCity/third_party/glfw/include
     - -Wno-unused
     - -Wno-undefined-internal
     - -Wno-c99-designator
-    - -IC:/repos/DTCity/os_core
-    - -IC:/repos/DTCity/base
-    - -IC:/repos/DTCity/ui
-    - -IC:/repos/DTCity/http
-    - -IC:/repos/DTCity/third_party
     - --target=x86_64-pc-windows-msvc
     - -DOS_WINDOWS
+
+Index:
+  Background: Build
+  StandardLibrary: true
 
 Diagnostics:
   UnusedIncludes: None
   Suppress: ["redefinition_different_kind"]
+  ClangTidy:
+    FastCheckFilter: Strict
+---
+If:
+  PathMatch: (third_party/.*|os_core/linux/.*)
+Diagnostics:
+  Suppress: "*"
+CompileFlags:
+  Add: -ferror-limit=0

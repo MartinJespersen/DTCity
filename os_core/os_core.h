@@ -189,6 +189,8 @@ static String8
 os_get_current_path(Arena* arena);
 static U32
 os_get_process_start_time_unix(void);
+static inline String8
+OS_PathDelimiter(void);
 
 ////////////////////////////////
 //~ rjf: @os_hooks Memory Allocation (Implemented Per-OS)

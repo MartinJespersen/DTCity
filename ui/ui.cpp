@@ -7,4 +7,4 @@
 
 #define STB_IMAGE_IMPLEMENTATION
 #define STB_IMAGE_STATIC
-#include <stb_image.h>
+#include "third_party/stb_image.h"

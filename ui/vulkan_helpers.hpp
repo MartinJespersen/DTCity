@@ -34,12 +34,6 @@ struct SwapChainInfo
     VkExtent2D extent;
 };
 
-struct Vertex
-{
-    Vec3F32 pos;
-    Vec2F32 uv;
-};
-
 struct VK_BufferContext
 {
     VkBuffer buffer;

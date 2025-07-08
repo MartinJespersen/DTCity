@@ -12,11 +12,20 @@ struct TerrainUniformBuffer
     float tessellated_edge_size;
 };
 
+namespace terrain
+{
+struct Vertex
+{
+    Vec3F32 pos;
+    Vec2F32 uv;
+};
+} // namespace terrain
+
 struct Terrain
 {
     TerrainUniformBuffer uniform_buffer;
 
-    Buffer<Vertex> vertices;
+    Buffer<terrain::Vertex> vertices;
     Buffer<U32> indices;
     U32 patch_size;
 
@@ -79,5 +88,5 @@ static void
 TerrainTextureResourceCreate(VulkanContext* vk_ctx, Terrain* terrain, const char* cwd);
 
 static void
-TerrainGenerateBuffers(Arena* arena, Buffer<Vertex>* vertices, Buffer<U32>* indices,
+TerrainGenerateBuffers(Arena* arena, Buffer<terrain::Vertex>* vertices, Buffer<U32>* indices,
                        U32 patch_size);

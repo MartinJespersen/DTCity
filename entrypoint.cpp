@@ -57,7 +57,8 @@ CommandBufferRecord(U32 image_index, U32 current_frame)
     TracyVkCollect(profilingContext->tracyContexts.data[current_frame],
                    vk_ctx->command_buffers.data[current_frame]);
 
-    Buffer<Buffer<Vertex>> buf_of_vert_buffers = BufferAlloc<Buffer<Vertex>>(scratch.arena, 1);
+    Buffer<Buffer<terrain::Vertex>> buf_of_vert_buffers =
+        BufferAlloc<Buffer<terrain::Vertex>>(scratch.arena, 1);
     buf_of_vert_buffers.data[0] = ctx->terrain->vertices;
 
     Buffer<Buffer<U32>> buf_of_indice_buffers = BufferAlloc<Buffer<U32>>(scratch.arena, 1);
@@ -135,7 +136,7 @@ MainLoop(void* ptr)
         {
             vulkanContext->framebuffer_resized = false;
             VK_RecreateSwapChain(io_ctx, vulkanContext);
-            return;
+            continue;
         }
         else if (result != VK_SUCCESS)
         {

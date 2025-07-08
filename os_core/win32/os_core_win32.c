@@ -166,6 +166,8 @@ static U32 os_get_process_start_time_unix(void) {
   return 0;
 }
 
+static inline String8 OS_PathDelimiter(void) { return Str8Lit("\\"); }
+
 ////////////////////////////////
 //~ rjf: @os_hooks Memory Allocation (Implemented Per-OS)
 
@@ -590,7 +592,7 @@ static void os_file_map_close(OS_Handle map) {
 }
 
 static void *os_file_map_view_open(OS_Handle map, OS_AccessFlags flags,
-                                     Rng1U64 range) {
+                                   Rng1U64 range) {
   HANDLE handle = (HANDLE)map.u64[0];
   U32 off_lo = (U32)((range.min & 0x00000000ffffffffull) >> 0);
   U32 off_hi = (U32)((range.min & 0xffffffff00000000ull) >> 32);
@@ -629,12 +631,12 @@ static void os_file_map_view_close(OS_Handle map, void *ptr, Rng1U64 range) {
 //- rjf: directory iteration
 
 static OS_FileIter *os_file_iter_begin(Arena *arena, String8 path,
-                                         OS_FileIterFlags flags) {
+                                       OS_FileIterFlags flags) {
   Temp scratch = ScratchBegin(&arena, 1);
   String8 path_with_wildcard =
       push_str8_cat(scratch.arena, path, Str8Lit("\\*"));
   String16 path16 = Str16From8(scratch.arena, path_with_wildcard);
-  OS_FileIter *iter = push_array(arena, OS_FileIter, 1);
+  OS_FileIter *iter = PushArray(arena, OS_FileIter, 1);
   iter->flags = flags;
   OS_W32_FileIter *w32_iter = (OS_W32_FileIter *)iter->memory;
   if (path.size == 0) {
@@ -660,7 +662,7 @@ static OS_FileIter *os_file_iter_begin(Arena *arena, String8 path,
 }
 
 static B32 os_file_iter_next(Arena *arena, OS_FileIter *iter,
-                               OS_FileInfo *info_out) {
+                             OS_FileInfo *info_out) {
   B32 result = 0;
   OS_FileIterFlags flags = iter->flags;
   OS_W32_FileIter *w32_iter = (OS_W32_FileIter *)iter->memory;
@@ -801,7 +803,7 @@ static void *os_shared_memory_view_open(OS_Handle handle, Rng1U64 range) {
 }
 
 static void os_shared_memory_view_close(OS_Handle handle, void *ptr,
-                                          Rng1U64 range) {
+                                        Rng1U64 range) {
   UnmapViewOfFile(ptr);
 }
 
@@ -968,7 +970,7 @@ static void os_process_detach(OS_Handle handle) {
 //~ rjf: @os_hooks Threads (Implemented Per-OS)
 
 static OS_Handle os_thread_launch(OS_ThreadFunctionType *func, void *ptr,
-                                    void *params) {
+                                  void *params) {
   OS_W32_Entity *entity = os_w32_entity_alloc(OS_W32_EntityKind_Thread);
   entity->thread.func = func;
   entity->thread.ptr = ptr;
@@ -1075,7 +1077,7 @@ static void os_condition_variable_release(OS_Handle cv) {
 }
 
 static B32 os_condition_variable_wait(OS_Handle cv, OS_Handle mutex,
-                                        U64 endt_us) {
+                                      U64 endt_us) {
   U32 sleep_ms = os_w32_sleep_ms_from_endt_us(endt_us);
   BOOL result = 0;
   if (sleep_ms > 0) {
@@ -1088,7 +1090,7 @@ static B32 os_condition_variable_wait(OS_Handle cv, OS_Handle mutex,
 }
 
 static B32 os_condition_variable_wait_rw_r(OS_Handle cv, OS_Handle mutex_rw,
-                                             U64 endt_us) {
+                                           U64 endt_us) {
   U32 sleep_ms = os_w32_sleep_ms_from_endt_us(endt_us);
   BOOL result = 0;
   if (sleep_ms > 0) {
@@ -1102,7 +1104,7 @@ static B32 os_condition_variable_wait_rw_r(OS_Handle cv, OS_Handle mutex_rw,
 }
 
 static B32 os_condition_variable_wait_rw_w(OS_Handle cv, OS_Handle mutex_rw,
-                                             U64 endt_us) {
+                                           U64 endt_us) {
   U32 sleep_ms = os_w32_sleep_ms_from_endt_us(endt_us);
   BOOL result = 0;
   if (sleep_ms > 0) {
@@ -1127,7 +1129,7 @@ static void os_condition_variable_broadcast(OS_Handle cv) {
 //- rjf: cross-process semaphores
 
 static OS_Handle os_semaphore_alloc(U32 initial_count, U32 max_count,
-                                      String8 name) {
+                                    String8 name) {
   Temp scratch = ScratchBegin(0, 0);
   String16 name16 = Str16From8(scratch.arena, name);
   HANDLE handle =
@@ -1199,7 +1201,7 @@ static void os_library_close(OS_Handle lib) {
 //~ rjf: @os_hooks Safe Calls (Implemented Per-OS)
 
 static void os_safe_call(OS_ThreadFunctionType *func,
-                           OS_ThreadFunctionType *fail_handler, void *ptr) {
+                         OS_ThreadFunctionType *fail_handler, void *ptr) {
   __try {
     func(ptr);
   } __except (EXCEPTION_EXECUTE_HANDLER) {
@@ -1236,17 +1238,15 @@ static Guid os_make_guid(void) {
 
 static B32 win32_g_is_quiet = 0;
 
-static HRESULT WINAPI win32_dialog_callback(HWND hwnd, UINT msg,
-                                              WPARAM wparam, LPARAM lparam,
-                                              LONG_PTR data) {
+static HRESULT WINAPI win32_dialog_callback(HWND hwnd, UINT msg, WPARAM wparam,
+                                            LPARAM lparam, LONG_PTR data) {
   if (msg == TDN_HYPERLINK_CLICKED) {
     ShellExecuteW(NULL, L"open", (LPWSTR)lparam, NULL, NULL, SW_SHOWNORMAL);
   }
   return S_OK;
 }
 
-static LONG WINAPI
-win32_exception_filter(EXCEPTION_POINTERS *exception_ptrs) {
+static LONG WINAPI win32_exception_filter(EXCEPTION_POINTERS *exception_ptrs) {
   if (win32_g_is_quiet) {
     ExitProcess(1);
   }
@@ -1538,7 +1538,7 @@ static void w32_entry_point_caller(int argc, WCHAR **wargv) {
                         .commit_size = KB(32),
                         .flags = arena_default_flags};
   Arena *args_arena = arena_alloc_(&params);
-  char **argv = push_array(args_arena, char *, argc);
+  char **argv = PushArray(args_arena, char *, argc);
   for (int i = 0; i < argc; i += 1) {
     String16 arg16 = str16_cstring((U16 *)wargv[i]);
     String8 arg8 = str8_from_16(args_arena, arg16);
@@ -1569,7 +1569,7 @@ static void w32_entry_point_caller(int argc, WCHAR **wargv) {
       U8 buffer[MAX_COMPUTERNAME_LENGTH + 1] = {0};
       DWORD size = MAX_COMPUTERNAME_LENGTH + 1;
       if (GetComputerNameA((char *)buffer, &size)) {
-        info->machine_name = push_str8_copy(arena, str8(buffer, size));
+        info->machine_name = push_str8_copy(arena, Str8(buffer, size));
       }
     }
   }

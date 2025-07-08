@@ -7,7 +7,7 @@
 static void HTTP_Init(void) {
   if (http_w32_state == 0) {
     Arena *arena = ArenaAlloc();
-    http_w32_state = push_array(arena, HTTP_W32_State, 1);
+    http_w32_state = PushArray(arena, HTTP_W32_State, 1);
     http_w32_state->arena = arena;
     http_w32_state->hSession =
         WinHttpOpen(0, WINHTTP_ACCESS_TYPE_NO_PROXY, WINHTTP_NO_PROXY_NAME,

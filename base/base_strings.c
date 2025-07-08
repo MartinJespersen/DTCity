@@ -132,7 +132,7 @@ static U64 cstring32_length(U32 *c) {
 ////////////////////////////////
 //~ rjf: String Constructors
 
-static String8 str8(U8 *str, U64 size) {
+static String8 Str8(U8 *str, U64 size) {
   String8 result = {str, size};
   return (result);
 }
@@ -198,7 +198,7 @@ static String8 str8_cstring_capped(void *cstr, void *cap) {
   for (; ptr < opl && *ptr != 0; ptr += 1)
     ;
   U64 size = (U64)(ptr - (char *)cstr);
-  String8 result = str8((U8 *)cstr, size);
+  String8 result = Str8((U8 *)cstr, size);
   return result;
 }
 
@@ -223,7 +223,7 @@ static String8 str8_cstring_capped_reverse(void *raw_start, void *raw_cap) {
     }
   }
   U64 size = (U64)(ptr - start);
-  String8 result = str8(start, size);
+  String8 result = Str8(start, size);
   return result;
 }
 
@@ -1045,14 +1045,14 @@ static String8Array str8_array_from_list(Arena *arena, String8List *list) {
 static String8Array str8_array_reserve(Arena *arena, U64 count) {
   String8Array arr;
   arr.count = 0;
-  arr.v = push_array(arena, String8, count);
+  arr.v = PushArray(arena, String8, count);
   return arr;
 }
 
 static String8Array str8_array_copy(Arena *arena, String8Array array) {
   String8Array result = {0};
   result.count = array.count;
-  result.v = push_array(arena, String8, result.count);
+  result.v = PushArray(arena, String8, result.count);
   for
     EachIndex(idx, result.count) {
       result.v[idx] = push_str8_copy(arena, array.v[idx]);
@@ -1282,6 +1282,20 @@ static String8TxtPtPair str8_txt_pt_pair_from_string(String8 string) {
   return pair;
 }
 
+static String8 CreatePathFromStrings(Arena *arena, char **parts, U64 count) {
+  String8List path_list = {0};
+  StringJoin join_params = {.sep = OS_PathDelimiter()};
+
+  // Step 1: Convert each char* to String8 and push to list
+  for (U64 i = 0; i < count; i++) {
+    String8 part = Str8CString(parts[i]);
+    Str8ListPush(arena, &path_list, part);
+  }
+
+  String8 result = Str8ListJoin(arena, &path_list, &join_params);
+  return result;
+}
+
 ////////////////////////////////
 //~ rjf: UTF-8 & UTF-16 Decoding/Encoding
 
@@ -1415,7 +1429,7 @@ static String8 str8_from_16(Arena *arena, String16 in) {
     }
     str[size] = 0;
     arena_pop(arena, (cap - size));
-    result = str8(str, size);
+    result = Str8(str, size);
   }
   return result;
 }
@@ -1453,7 +1467,7 @@ static String8 str8_from_32(Arena *arena, String32 in) {
     }
     str[size] = 0;
     arena_pop(arena, (cap - size));
-    result = str8(str, size);
+    result = Str8(str, size);
   }
   return result;
 }
@@ -1859,7 +1873,7 @@ static String8 raw_from_escaped_str8(Arena *arena, String8 string) {
         break;
       }
       String8 replace_string =
-          push_str8_copy(scratch.arena, str8(&replace_byte, 1));
+          push_str8_copy(scratch.arena, Str8(&replace_byte, 1));
       Str8ListPush(scratch.arena, &strs, replace_string);
       idx += 1;
       start += 1;
@@ -1951,7 +1965,7 @@ static Vec4F32 rgba_from_hex_string_4f32(String8 hex_string) {
   }
   U8 byte_vals[4] = {0};
   for (U64 idx = 0; idx < 4; idx += 1) {
-    byte_vals[idx] = (U8)U64FromStr8(str8(&byte_text[idx * 2], 2), 16);
+    byte_vals[idx] = (U8)U64FromStr8(Str8(&byte_text[idx * 2], 2), 16);
   }
   Vec4F32 rgba = v4f32(byte_vals[0] / 255.f, byte_vals[1] / 255.f,
                        byte_vals[2] / 255.f, byte_vals[3] / 255.f);
@@ -1987,7 +2001,7 @@ static FuzzyMatchRangeList fuzzy_match_find(Arena *arena, String8 needle,
     }
     if (find_pos < haystack.size) {
       Rng1U64 range = r1u64(find_pos, find_pos + needle_n->string.size);
-      FuzzyMatchRangeNode *n = push_array(arena, FuzzyMatchRangeNode, 1);
+      FuzzyMatchRangeNode *n = PushArray(arena, FuzzyMatchRangeNode, 1);
       n->range = range;
       SLLQueuePush(result.first, result.last, n);
       result.count += 1;
@@ -2003,7 +2017,7 @@ fuzzy_match_range_list_copy(Arena *arena, FuzzyMatchRangeList *src) {
   FuzzyMatchRangeList dst = {0};
   for (FuzzyMatchRangeNode *src_n = src->first; src_n != 0;
        src_n = src_n->next) {
-    FuzzyMatchRangeNode *dst_n = push_array(arena, FuzzyMatchRangeNode, 1);
+    FuzzyMatchRangeNode *dst_n = PushArray(arena, FuzzyMatchRangeNode, 1);
     SLLQueuePush(dst.first, dst.last, dst_n);
     dst_n->range = src_n->range;
   }
@@ -2017,7 +2031,7 @@ fuzzy_match_range_list_copy(Arena *arena, FuzzyMatchRangeList *src) {
 //~ NOTE(allen): Serialization Helpers
 
 static void str8_serial_begin(Arena *arena, String8List *srl) {
-  String8Node *node = push_array(arena, String8Node, 1);
+  String8Node *node = PushArray(arena, String8Node, 1);
   node->string.str = PushArrayNoZero(arena, U8, 0);
   srl->first = srl->last = node;
   srl->node_count = 1;
@@ -2028,7 +2042,7 @@ static String8 str8_serial_end(Arena *arena, String8List *srl) {
   U64 size = srl->total_size;
   U8 *out = PushArrayNoZero(arena, U8, size);
   str8_serial_write_to_dst(srl, out);
-  String8 result = str8(out, size);
+  String8 result = Str8(out, size);
   return result;
 }
 
@@ -2049,14 +2063,14 @@ static U64 str8_serial_push_align(Arena *arena, String8List *srl, U64 align) {
   U64 size = (new_pos - pos);
 
   if (size != 0) {
-    U8 *buf = push_array(arena, U8, size);
+    U8 *buf = PushArray(arena, U8, size);
 
     String8 *str = &srl->last->string;
     if (str->str + str->size == buf) {
       srl->last->string.size += size;
       srl->total_size += size;
     } else {
-      Str8ListPush(arena, srl, str8(buf, size));
+      Str8ListPush(arena, srl, Str8(buf, size));
     }
   }
   return size;
@@ -2071,7 +2085,7 @@ static void *str8_serial_push_size(Arena *arena, String8List *srl, U64 size) {
       srl->last->string.size += size;
       srl->total_size += size;
     } else {
-      Str8ListPush(arena, srl, str8(buf, size));
+      Str8ListPush(arena, srl, Str8(buf, size));
     }
     result = buf;
   }
@@ -2102,7 +2116,7 @@ static void str8_serial_push_u64(Arena *arena, String8List *srl, U64 x) {
     srl->last->string.size += 8;
     srl->total_size += 8;
   } else {
-    Str8ListPush(arena, srl, str8(buf, 8));
+    Str8ListPush(arena, srl, Str8(buf, 8));
   }
 }
 
@@ -2114,7 +2128,7 @@ static void str8_serial_push_u32(Arena *arena, String8List *srl, U32 x) {
     srl->last->string.size += 4;
     srl->total_size += 4;
   } else {
-    Str8ListPush(arena, srl, str8(buf, 4));
+    Str8ListPush(arena, srl, Str8(buf, 4));
   }
 }
 

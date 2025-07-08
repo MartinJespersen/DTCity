@@ -183,7 +183,7 @@ cstring32_length(U32* c);
 ////////////////////////////////
 //~ rjf: String Constructors
 
-#define Str8Lit(S) str8((U8*)(S), sizeof(S) - 1)
+#define Str8Lit(S) Str8((U8*)(S), sizeof(S) - 1)
 #define str8_lit_comp(S)                                                                           \
     {                                                                                              \
         (U8*)(S),                                                                                  \
@@ -191,12 +191,12 @@ cstring32_length(U32* c);
     }
 #define str8_varg(S) (int)((S).size), ((S).str)
 
-#define str8_array(S, C) str8((U8*)(S), sizeof(*(S)) * (C))
-#define str8_array_fixed(S) str8((U8*)(S), sizeof(S))
-#define str8_struct(S) str8((U8*)(S), sizeof(*(S)))
+#define str8_array(S, C) Str8((U8*)(S), sizeof(*(S)) * (C))
+#define str8_array_fixed(S) Str8((U8*)(S), sizeof(S))
+#define str8_struct(S) Str8((U8*)(S), sizeof(*(S)))
 
 static String8
-str8(U8* str, U64 size);
+Str8(U8* str, U64 size);
 static String8
 str8_range(U8* first, U8* one_past_last);
 static String8
@@ -242,7 +242,7 @@ backslashed_from_str8(Arena* arena, String8 string);
 #define str8_match_lit(a_lit, b, flags) str8_match(str8_lit(a_lit), (b), (flags))
 #define str8_match_cstr(a_cstr, b, flags) str8_match(str8_cstring(a_cstr), (b), (flags))
 static B32
-str8_match(String8 a, String8 b, StringMatchFlags flags);
+Str8Match(String8 a, String8 b, StringMatchFlags flags);
 static U64
 FindSubstr8(String8 string, String8 needle, U64 start_pos, StringMatchFlags flags);
 static U64
@@ -344,7 +344,7 @@ str8_list_concat_in_place(String8List* list, String8List* to_push);
 static String8Node*
 str8_list_push_aligner(Arena* arena, String8List* list, U64 min, U64 align);
 static String8Node*
-Str8ListPushf(Arena* arena, String8List* list, char* fmt, ...);
+Str8ListPushF(Arena* arena, String8List* list, char* fmt, ...);
 static String8Node*
 str8_list_push_frontf(Arena* arena, String8List* list, char* fmt, ...);
 static String8List
@@ -405,6 +405,8 @@ str8_path_list_join_by_style(Arena* arena, String8List* path, PathStyle style);
 static String8TxtPtPair
 str8_txt_pt_pair_from_string(String8 string);
 
+static String8
+CreatePathFromStrings(Arena* arena, char** parts, U64 count);
 ////////////////////////////////
 //~ rjf: UTF-8 & UTF-16 Decoding/Encoding
 

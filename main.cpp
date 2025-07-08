@@ -13,14 +13,16 @@
 
 // user defined: [hpp]
 #include "entrypoint.hpp"
-#include "third_party/json.hpp"
-using Json = nlohmann::json;
+#include "lib_wrappers/lib_wrappers_inc.hpp"
+#include "city/city_inc.hpp"
 
 // domain: cpp
 #include "base/base_inc.cpp"
 #include "os_core/os_core_inc.c"
 #include "ui/ui.cpp"
 #include "http/http_inc.c"
+#include "lib_wrappers/lib_wrappers_inc.cpp"
+#include "city/city_inc.cpp"
 
 Context g_ctx_main;
 
@@ -119,35 +121,12 @@ run()
 {
     w32_entry_point_caller(__argc, __wargv);
 
-    Temp scratch = ScratchBegin(0, 0);
-
     HTTP_Init();
-    HTTP_RequestParams params = {};
-    params.method = HTTP_Method_Post;
 
-    const char* query = R"(data=
-        [out:json] [timeout:25];
-        (
-          way["highway"](56.16923976826141, 10.1852768812041, 56.17371342689877, 10.198376789774187);
-        );
-        out body;
-        >;
-        out skel qt;
-    )";
+    city::City city = {};
+    city::CityInit(&city);
+    city::RoadsBuild(city.arena, &city);
 
-    HTTP_Response response =
-        HTTP_Request(scratch.arena, Str8CString("https://overpass-api.de/api/interpreter"),
-                     Str8CString(query), &params);
-
-    Json data = nlohmann::json::parse(response.body.str);
-    Json elements = data["elements"];
-    for (size_t i = 0; i < elements.size(); i++)
-    {
-        Json element = elements[i];
-        U64 element_id = element["id"].get<U64>();
-        printf("id: %llu\n", element_id);
-        // Process the element here
-    }
     VulkanContext vulkanContext = {};
     ProfilingContext profilingContext = {};
     IO io_ctx = {};
@@ -210,8 +189,6 @@ run()
     }
 
     VK_Cleanup();
-
-    ScratchEnd(scratch);
 }
 
 // NOTE: Tracy profiler has a dlclose function and it takes precedence over the one in the standard

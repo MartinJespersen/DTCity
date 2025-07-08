@@ -437,15 +437,15 @@ mix_1f64(F64 a, F64 b, F64 t);
 static Vec2F32
 vec_2f32(F32 x, F32 y);
 static Vec2F32
-add_2f32(Vec2F32 a, Vec2F32 b);
+Add2F32(Vec2F32 a, Vec2F32 b);
 static Vec2F32
-sub_2f32(Vec2F32 a, Vec2F32 b);
+Sub2F32(Vec2F32 a, Vec2F32 b);
 static Vec2F32
-mul_2f32(Vec2F32 a, Vec2F32 b);
+Mul2F32(Vec2F32 a, Vec2F32 b);
 static Vec2F32
 div_2f32(Vec2F32 a, Vec2F32 b);
 static Vec2F32
-scale_2f32(Vec2F32 v, F32 s);
+Scale2F32(Vec2F32 v, F32 s);
 static F32
 dot_2f32(Vec2F32 a, Vec2F32 b);
 static F32
@@ -453,7 +453,7 @@ length_squared_2f32(Vec2F32 v);
 static F32
 length_2f32(Vec2F32 v);
 static Vec2F32
-normalize_2f32(Vec2F32 v);
+Normalize2F32(Vec2F32 v);
 static Vec2F32
 mix_2f32(Vec2F32 a, Vec2F32 b, F32 t);
 

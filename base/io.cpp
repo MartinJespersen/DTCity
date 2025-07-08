@@ -12,7 +12,7 @@ IO_ReadFile(Arena* arena, String8 filename)
     buffer.size = (U64)ftell(file);
     fseek(file, 0, SEEK_SET);
 
-    buffer.data = push_array(arena, U8, buffer.size);
+    buffer.data = PushArray(arena, U8, buffer.size);
     fread(buffer.data, sizeof(U8), buffer.size, file);
 
     fclose(file);

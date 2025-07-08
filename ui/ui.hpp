@@ -2,7 +2,7 @@
 // third party libs
 
 #define STB_IMAGE_STATIC
-#include <stb_image.h>
+#include "third_party/stb_image.h"
 
 #include <vulkan/vulkan_core.h>
 #define GLFW_INCLUDE_VULKAN

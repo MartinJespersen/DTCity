@@ -1,31 +1,11 @@
-
-#include "base/error.hpp"
-#include "vulkan/vulkan_core.h"
-static String8
-CreatePathFromStrings(Arena* arena, char** parts, U64 count)
-{
-    String8List path_list = {0};
-    StringJoin join_params = {.sep = Str8CString("\\")}; // Default to Unix-style separator
-
-    // Step 1: Convert each char* to String8 and push to list
-    for (U64 i = 0; i < count; i++)
-    {
-        String8 part = Str8CString(parts[i]);
-        Str8ListPush(arena, &path_list, part);
-    }
-
-    String8 result = Str8ListJoin(arena, &path_list, &join_params);
-    return result;
-}
-
 static void
 TerrainAllocations(Arena* arena, Terrain* terrain, U32 frames_in_flight)
 {
-    terrain->descriptor_sets = push_array(arena, VkDescriptorSet, frames_in_flight);
+    terrain->descriptor_sets = PushArray(arena, VkDescriptorSet, frames_in_flight);
 
-    terrain->buffer = push_array(arena, VkBuffer, frames_in_flight);
-    terrain->buffer_memory = push_array(arena, VkDeviceMemory, frames_in_flight);
-    terrain->buffer_memory_mapped = push_array(arena, void*, frames_in_flight);
+    terrain->buffer = PushArray(arena, VkBuffer, frames_in_flight);
+    terrain->buffer_memory = PushArray(arena, VkDeviceMemory, frames_in_flight);
+    terrain->buffer_memory_mapped = PushArray(arena, void*, frames_in_flight);
 }
 
 static void
@@ -573,11 +553,12 @@ TerrainRenderPassBegin(VulkanContext* vk_ctx, Terrain* terrain, U32 image_index,
 }
 
 static void
-TerrainGenerateBuffers(Arena* arena, Buffer<Vertex>* vertices, Buffer<U32>* indices, U32 patch_size)
+TerrainGenerateBuffers(Arena* arena, Buffer<terrain::Vertex>* vertices, Buffer<U32>* indices,
+                       U32 patch_size)
 {
     const F32 uv_scale = 1.0f;
     const U32 vertex_count = patch_size * patch_size;
-    *vertices = BufferAlloc<Vertex>(arena, vertex_count);
+    *vertices = BufferAlloc<terrain::Vertex>(arena, vertex_count);
 
     const F32 wx = 2.0f;
     const F32 wy = 2.0f;
@@ -618,7 +599,7 @@ TerrainInit()
     Context* ctx = GlobalContextGet();
     VulkanContext* vk_ctx = ctx->vulkanContext;
 
-    ctx->terrain = push_struct(ctx->arena_permanent, Terrain);
+    ctx->terrain = PushStruct(ctx->arena_permanent, Terrain);
     ctx->terrain->patch_size = 20;
     TerrainAllocations(vk_ctx->arena, ctx->terrain, vk_ctx->MAX_FRAMES_IN_FLIGHT);
     TerrainDescriptorPoolCreate(ctx->terrain, vk_ctx->MAX_FRAMES_IN_FLIGHT);
@@ -640,7 +621,7 @@ TerrainBindingDescriptionGet()
 {
     VkVertexInputBindingDescription bindingDescription{};
     bindingDescription.binding = 0;
-    bindingDescription.stride = sizeof(Vertex);
+    bindingDescription.stride = sizeof(terrain::Vertex);
     bindingDescription.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
     return bindingDescription;
 }
@@ -653,12 +634,12 @@ TerrainAttributeDescriptionGet(Arena* arena)
     attribute_descriptions.data[0].binding = 0;
     attribute_descriptions.data[0].location = 0;
     attribute_descriptions.data[0].format = VK_FORMAT_R32G32B32_SFLOAT;
-    attribute_descriptions.data[0].offset = offsetof(Vertex, pos);
+    attribute_descriptions.data[0].offset = offsetof(terrain::Vertex, pos);
 
     attribute_descriptions.data[1].binding = 0;
     attribute_descriptions.data[1].location = 1;
     attribute_descriptions.data[1].format = VK_FORMAT_R32G32_SFLOAT;
-    attribute_descriptions.data[1].offset = offsetof(Vertex, uv);
+    attribute_descriptions.data[1].offset = offsetof(terrain::Vertex, uv);
 
     return attribute_descriptions;
 }

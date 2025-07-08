@@ -448,7 +448,7 @@ VK_QueueFamiliesFind(VulkanContext* vulkanContext, VkPhysicalDevice device)
     vkGetPhysicalDeviceQueueFamilyProperties(device, &queueFamilyCount, nullptr);
 
     VkQueueFamilyProperties* queueFamilies =
-        push_array(scratch.arena, VkQueueFamilyProperties, queueFamilyCount);
+        PushArray(scratch.arena, VkQueueFamilyProperties, queueFamilyCount);
     vkGetPhysicalDeviceQueueFamilyProperties(device, &queueFamilyCount, queueFamilies);
     for (U32 i = 0; i < queueFamilyCount; i++)
     {
@@ -836,7 +836,7 @@ VK_SurfaceCreate(VulkanContext* vulkanContext, IO* io)
 static char**
 VK_StrArrFromStr8Buffer(Arena* arena, String8* buffer, U64 count)
 {
-    char** arr = push_array(arena, char*, count);
+    char** arr = PushArray(arena, char*, count);
 
     for (U32 i = 0; i < count; i++)
     {
@@ -910,7 +910,7 @@ VK_LogicalDeviceCreate(Arena* arena, VulkanContext* vulkanContext)
                                  queueFamilyIndicies.presentFamilyIndex};
 
     VkDeviceQueueCreateInfo* queueCreateInfos =
-        push_array(arena, VkDeviceQueueCreateInfo, uniqueQueueFamiliesCount);
+        PushArray(arena, VkDeviceQueueCreateInfo, uniqueQueueFamiliesCount);
     float queuePriority = 1.0f;
     for (U32 i = 0; i < uniqueQueueFamiliesCount; i++)
     {
@@ -978,7 +978,7 @@ VK_PhysicalDevicePick(VulkanContext* vk_ctx)
         exitWithError("failed to find GPUs with Vulkan support!");
     }
 
-    VkPhysicalDevice* devices = push_array(scratch.arena, VkPhysicalDevice, deviceCount);
+    VkPhysicalDevice* devices = PushArray(scratch.arena, VkPhysicalDevice, deviceCount);
     vkEnumeratePhysicalDevices(vk_ctx->instance, &deviceCount, devices);
 
     for (U32 i = 0; i < deviceCount; i++)
@@ -1036,7 +1036,7 @@ VK_CheckValidationLayerSupport(VulkanContext* vulkanContext)
     uint32_t layerCount;
     vkEnumerateInstanceLayerProperties(&layerCount, nullptr);
 
-    VkLayerProperties* availableLayers = push_array(scratch.arena, VkLayerProperties, layerCount);
+    VkLayerProperties* availableLayers = PushArray(scratch.arena, VkLayerProperties, layerCount);
     vkEnumerateInstanceLayerProperties(&layerCount, availableLayers);
 
     bool layerFound = false;
@@ -1140,7 +1140,7 @@ VK_CheckDeviceExtensionSupport(VulkanContext* vulkanContext, VkPhysicalDevice de
     vkEnumerateDeviceExtensionProperties(device, nullptr, &extensionCount, nullptr);
 
     VkExtensionProperties* availableExtensions =
-        push_array(scratch.arena, VkExtensionProperties, extensionCount);
+        PushArray(scratch.arena, VkExtensionProperties, extensionCount);
     vkEnumerateDeviceExtensionProperties(device, nullptr, &extensionCount, availableExtensions);
     const U64 numberOfRequiredExtenstions = ArrayCount(vulkanContext->device_extensions);
     U64 numberOfRequiredExtenstionsLeft = numberOfRequiredExtenstions;
