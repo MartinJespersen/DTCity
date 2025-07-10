@@ -44,28 +44,29 @@ struct RoadVertex
 
 struct Road
 {
+    F32 road_height;
+    F32 road_width;
+
     U64 node_slot_count;
     RoadNodeSlot* nodes;
 
     U64 way_count;
     RoadWay* ways;
 
-    Buffer<RoadVertex> vertices;
+    glm::mat4 model_matrix;
+    Buffer<RoadVertex> vertex_buffer;
 };
 
 struct City
 {
     Arena* arena;
 
-    // roads
-    F32 road_height;
-    U32 road_width;
     Road road;
     wrapper::Road* w_road;
 };
 
 static void
-CityInit(City* city);
+CityInit(wrapper::VulkanContext* vk_ctx, City* city, String8 cwd);
 
 static void
 CityCleanup(City* city);

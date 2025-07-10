@@ -41,7 +41,7 @@ CommandBufferRecord(U32 image_index, U32 current_frame)
     Temp scratch = ScratchBegin(0, 0);
     Context* ctx = GlobalContextGet();
 
-    VulkanContext* vk_ctx = ctx->vulkanContext;
+    wrapper::VulkanContext* vk_ctx = ctx->vk_ctx;
     ProfilingContext* profilingContext = ctx->profilingContext;
     UI_Camera* camera = ctx->camera;
     DT_Time* time = ctx->time;
@@ -67,10 +67,12 @@ CommandBufferRecord(U32 image_index, U32 current_frame)
     Buffer<Buffer<U32>> buf_of_indice_buffers = BufferAlloc<Buffer<U32>>(scratch.arena, 1);
     buf_of_indice_buffers.data[0] = ctx->terrain->indices;
 
-    VK_BufferContextCreate(vk_ctx, &vk_ctx->vk_vertex_context, buf_of_vert_buffers,
-                           VK_BUFFER_USAGE_VERTEX_BUFFER_BIT);
-    VK_BufferContextCreate(vk_ctx, &vk_ctx->vk_indice_context, buf_of_indice_buffers,
-                           VK_BUFFER_USAGE_INDEX_BUFFER_BIT);
+    wrapper::internal::VkBufferFromBuffers(vk_ctx->device, vk_ctx->physical_device,
+                                           &vk_ctx->vk_vertex_context, buf_of_vert_buffers,
+                                           VK_BUFFER_USAGE_VERTEX_BUFFER_BIT);
+    wrapper::internal::VkBufferFromBuffers(vk_ctx->device, vk_ctx->physical_device,
+                                           &vk_ctx->vk_indice_context, buf_of_indice_buffers,
+                                           VK_BUFFER_USAGE_INDEX_BUFFER_BIT);
 
     DT_UpdateTime(time);
     UI_CameraUpdate(camera, ctx->io, ctx->time, vk_ctx->swapchain_extent);
@@ -79,6 +81,7 @@ CommandBufferRecord(U32 image_index, U32 current_frame)
         Vec2F32{(F32)vk_ctx->swapchain_extent.width, (F32)vk_ctx->swapchain_extent.height},
         current_frame);
     TerrainRenderPassBegin(vk_ctx, ctx->terrain, image_index, current_frame);
+    city::CityUpdate(ctx->city, vk_ctx, image_index);
     IO_InputReset(ctx->io);
 
     if (vkEndCommandBuffer(vk_ctx->command_buffers.data[current_frame]) != VK_SUCCESS)
@@ -109,7 +112,7 @@ static void
 MainLoop(void* ptr)
 {
     Context* ctx = (Context*)ptr;
-    VulkanContext* vk_ctx = ctx->vulkanContext;
+    wrapper::VulkanContext* vk_ctx = ctx->vk_ctx;
     DT_Time* time = ctx->time;
 
     os_set_thread_name(Str8CString("Entrypoint thread"));
@@ -118,27 +121,27 @@ MainLoop(void* ptr)
     while (ctx->running)
     {
         ZoneScoped;
-        VulkanContext* vulkanContext = ctx->vulkanContext;
+        wrapper::VulkanContext* vk_ctx = ctx->vk_ctx;
         IO* io_ctx = ctx->io;
 
         {
             ZoneScopedN("Wait for frame");
-            vkWaitForFences(vulkanContext->device, 1,
-                            &vulkanContext->in_flight_fences.data[vulkanContext->current_frame],
-                            VK_TRUE, UINT64_MAX);
+            vkWaitForFences(vk_ctx->device, 1,
+                            &vk_ctx->in_flight_fences.data[vk_ctx->current_frame], VK_TRUE,
+                            UINT64_MAX);
         }
 
         uint32_t imageIndex;
-        VkResult result = vkAcquireNextImageKHR(
-            vulkanContext->device, vulkanContext->swapchain, UINT64_MAX,
-            vulkanContext->image_available_semaphores.data[vulkanContext->current_frame],
-            VK_NULL_HANDLE, &imageIndex);
+        VkResult result =
+            vkAcquireNextImageKHR(vk_ctx->device, vk_ctx->swapchain, UINT64_MAX,
+                                  vk_ctx->image_available_semaphores.data[vk_ctx->current_frame],
+                                  VK_NULL_HANDLE, &imageIndex);
 
         if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR ||
-            vulkanContext->framebuffer_resized)
+            vk_ctx->framebuffer_resized)
         {
-            vulkanContext->framebuffer_resized = false;
-            VK_RecreateSwapChain(io_ctx, vulkanContext);
+            vk_ctx->framebuffer_resized = false;
+            VK_RecreateSwapChain(io_ctx, vk_ctx);
             continue;
         }
         else if (result != VK_SUCCESS)
@@ -146,32 +149,29 @@ MainLoop(void* ptr)
             exitWithError("failed to acquire swap chain image!");
         }
 
-        vkResetFences(vulkanContext->device, 1,
-                      &vulkanContext->in_flight_fences.data[vulkanContext->current_frame]);
-        vkResetCommandBuffer(vulkanContext->command_buffers.data[vulkanContext->current_frame], 0);
+        vkResetFences(vk_ctx->device, 1, &vk_ctx->in_flight_fences.data[vk_ctx->current_frame]);
+        vkResetCommandBuffer(vk_ctx->command_buffers.data[vk_ctx->current_frame], 0);
 
-        CommandBufferRecord(imageIndex, vulkanContext->current_frame);
+        CommandBufferRecord(imageIndex, vk_ctx->current_frame);
 
         VkSubmitInfo submitInfo{};
         submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
         VkSemaphore waitSemaphores[] = {
-            vulkanContext->image_available_semaphores.data[vulkanContext->current_frame]};
+            vk_ctx->image_available_semaphores.data[vk_ctx->current_frame]};
         VkPipelineStageFlags waitStages[] = {VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT};
         submitInfo.waitSemaphoreCount = 1;
         submitInfo.pWaitSemaphores = waitSemaphores;
         submitInfo.pWaitDstStageMask = waitStages;
         submitInfo.commandBufferCount = 1;
-        submitInfo.pCommandBuffers =
-            &vulkanContext->command_buffers.data[vulkanContext->current_frame];
+        submitInfo.pCommandBuffers = &vk_ctx->command_buffers.data[vk_ctx->current_frame];
 
         VkSemaphore signalSemaphores[] = {
-            vulkanContext->render_finished_semaphores.data[vulkanContext->current_frame]};
+            vk_ctx->render_finished_semaphores.data[vk_ctx->current_frame]};
         submitInfo.signalSemaphoreCount = 1;
         submitInfo.pSignalSemaphores = signalSemaphores;
 
-        if (vkQueueSubmit(vulkanContext->graphics_queue, 1, &submitInfo,
-                          vulkanContext->in_flight_fences.data[vulkanContext->current_frame]) !=
-            VK_SUCCESS)
+        if (vkQueueSubmit(vk_ctx->graphics_queue, 1, &submitInfo,
+                          vk_ctx->in_flight_fences.data[vk_ctx->current_frame]) != VK_SUCCESS)
         {
             exitWithError("failed to submit draw command buffer!");
         }
@@ -182,29 +182,28 @@ MainLoop(void* ptr)
         presentInfo.waitSemaphoreCount = 1;
         presentInfo.pWaitSemaphores = signalSemaphores;
 
-        VkSwapchainKHR swapChains[] = {vulkanContext->swapchain};
+        VkSwapchainKHR swapChains[] = {vk_ctx->swapchain};
         presentInfo.swapchainCount = 1;
         presentInfo.pSwapchains = swapChains;
         presentInfo.pImageIndices = &imageIndex;
 
         presentInfo.pResults = nullptr; // Optional
 
-        result = vkQueuePresentKHR(vulkanContext->present_queue, &presentInfo);
+        result = vkQueuePresentKHR(vk_ctx->present_queue, &presentInfo);
         // TracyVkCollect(tracyContexts[currentFrame], commandBuffers[currentFrame]);
         FrameMark; // end of frame is assumed to be here
         if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR ||
-            vulkanContext->framebuffer_resized)
+            vk_ctx->framebuffer_resized)
         {
-            vulkanContext->framebuffer_resized = 0;
-            VK_RecreateSwapChain(io_ctx, vulkanContext);
+            vk_ctx->framebuffer_resized = 0;
+            VK_RecreateSwapChain(io_ctx, vk_ctx);
         }
         else if (result != VK_SUCCESS)
         {
             exitWithError("failed to present swap chain image!");
         }
 
-        vulkanContext->current_frame =
-            (vulkanContext->current_frame + 1) % vulkanContext->MAX_FRAMES_IN_FLIGHT;
+        vk_ctx->current_frame = (vk_ctx->current_frame + 1) % vk_ctx->MAX_FRAMES_IN_FLIGHT;
     }
     vkDeviceWaitIdle(vk_ctx->device);
 }

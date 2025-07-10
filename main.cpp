@@ -30,9 +30,9 @@
 Context g_ctx_main;
 
 static void
-ProfileBuffersCreate(VulkanContext* vk_ctx, ProfilingContext* prof_ctx);
+ProfileBuffersCreate(wrapper::VulkanContext* vk_ctx, ProfilingContext* prof_ctx);
 static void
-ProfileBuffersCreate(VulkanContext* vk_ctx, ProfilingContext* prof_ctx)
+ProfileBuffersCreate(wrapper::VulkanContext* vk_ctx, ProfilingContext* prof_ctx)
 {
 #ifdef TRACY_ENABLE
     prof_ctx->tracyContexts =
@@ -51,9 +51,10 @@ InitContext(Context* ctx)
 {
     ctx->arena_permanent = (Arena*)ArenaAlloc();
 
-    VK_VulkanInit(ctx->vulkanContext, ctx->io);
+    wrapper::VK_VulkanInit(ctx->vk_ctx, ctx->io);
     UI_CameraInit(ctx->camera);
-    ProfileBuffersCreate(ctx->vulkanContext, ctx->profilingContext);
+    ProfileBuffersCreate(ctx->vk_ctx, ctx->profilingContext);
+    city::CityInit(ctx->vk_ctx, ctx->city, Str8CString(g_ctx_main.cwd));
 }
 
 // Function to load or reload the DLL
@@ -126,12 +127,13 @@ run()
 
     HTTP_Init();
 
-    VulkanContext vulkanContext = {};
+    wrapper::VulkanContext vk_ctx = {};
     ProfilingContext profilingContext = {};
     IO io_ctx = {};
     Terrain terrain = {};
     UI_Camera camera = {};
     DT_Time time = {};
+    city::City city = {};
 
     DllInfo dll_info = {.func_name = "Entrypoint",
                         .cleanup_func_name = "Cleanup",
@@ -140,17 +142,13 @@ run()
                         .handle = NULL,
                         .last_modified = 0,
                         .func = NULL};
-    g_ctx_main = {
-        0,       &dll_info, {0},  &os_w32_state, 0, &terrain, &vulkanContext, &profilingContext,
-        &io_ctx, &camera,   &time};
+    g_ctx_main = {0,       &dll_info,         {0},     &os_w32_state, 0,     &terrain,
+                  &vk_ctx, &profilingContext, &io_ctx, &camera,       &time, &city};
     g_ctx_main.running = 1;
 
     InitWindow(&g_ctx_main);
     GlobalContextSet(&g_ctx_main);
     InitContext(&g_ctx_main);
-
-    city::City city = {};
-    city::CityInit(&city, Str8CString(g_ctx_main.cwd));
     city::RoadsBuild(city.arena, &city);
 
     while (!glfwWindowShouldClose(io_ctx.window))
@@ -191,7 +189,8 @@ run()
         g_ctx_main.dll_info->cleanup_func(&g_ctx_main);
     }
 
-    VK_Cleanup();
+    city::CityCleanup(&city, &vk_ctx);
+    wrapper::VK_Cleanup();
 }
 
 // NOTE: Tracy profiler has a dlclose function and it takes precedence over the one in the standard

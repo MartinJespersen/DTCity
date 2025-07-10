@@ -43,11 +43,12 @@ struct Context
     Arena* arena_permanent;
     Terrain* terrain;
 
-    VulkanContext* vulkanContext;
+    wrapper::VulkanContext* vk_ctx;
     ProfilingContext* profilingContext;
     IO* io;
     UI_Camera* camera;
     DT_Time* time;
+    city::City* city;
     // TODO: CWD should be set in init function
     const char* cwd = "C:\\repos\\DTCity";
 };

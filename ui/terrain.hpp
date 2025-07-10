@@ -73,7 +73,8 @@ static void
 TerrainDescriptorSetCreate(Terrain* terrain, U32 frames_in_flight);
 
 static void
-TerrainRenderPassBegin(VulkanContext* vk_ctx, Terrain* terrain, U32 image_index, U32 current_frame);
+TerrainRenderPassBegin(wrapper::VulkanContext* vk_ctx, Terrain* terrain, U32 image_index,
+                       U32 current_frame);
 
 static void
 TerrainInit();
@@ -85,7 +86,7 @@ static Buffer<VkVertexInputAttributeDescription>
 TerrainAttributeDescriptionGet(Arena* arena);
 
 static void
-TerrainTextureResourceCreate(VulkanContext* vk_ctx, Terrain* terrain, const char* cwd);
+TerrainTextureResourceCreate(wrapper::VulkanContext* vk_ctx, Terrain* terrain, const char* cwd);
 
 static void
 TerrainGenerateBuffers(Arena* arena, Buffer<terrain::Vertex>* vertices, Buffer<U32>* indices,

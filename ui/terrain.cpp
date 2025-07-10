@@ -11,7 +11,7 @@ TerrainAllocations(Arena* arena, Terrain* terrain, U32 frames_in_flight)
 static void
 TerrainDescriptorPoolCreate(Terrain* terrain, U32 frames_in_flight)
 {
-    VulkanContext* vk_ctx = GlobalContextGet()->vulkanContext;
+    wrapper::VulkanContext* vk_ctx = GlobalContextGet()->vk_ctx;
 
     VkDescriptorPoolSize pool_sizes[] = {
         {VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, frames_in_flight},
@@ -66,7 +66,7 @@ TerrainDescriptorSetLayoutCreate(VkDevice device, Terrain* terrain)
 }
 
 static void
-TerrainTextureResourceCreate(VulkanContext* vk_ctx, Terrain* terrain, const char* cwd)
+TerrainTextureResourceCreate(wrapper::VulkanContext* vk_ctx, Terrain* terrain, const char* cwd)
 {
     Temp scratch = ScratchBegin(0, 0);
     VkBuffer vk_texture_staging_buffer;
@@ -101,10 +101,10 @@ TerrainTextureResourceCreate(VulkanContext* vk_ctx, Terrain* terrain, const char
         exitWithError("failed to load texture image!");
     }
 
-    VK_BufferCreate(vk_ctx->physical_device, vk_ctx->device, image_size,
-                    VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-                    VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-                    &vk_texture_staging_buffer, &vk_texture_staging_buffer_memory);
+    wrapper::VK_BufferCreate(
+        vk_ctx->physical_device, vk_ctx->device, image_size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+        VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+        &vk_texture_staging_buffer, &vk_texture_staging_buffer_memory);
 
     void* data;
     vkMapMemory(vk_ctx->device, vk_texture_staging_buffer_memory, 0, image_size, 0, &data);
@@ -113,20 +113,20 @@ TerrainTextureResourceCreate(VulkanContext* vk_ctx, Terrain* terrain, const char
 
     stbi_image_free(pixels);
 
-    VK_ImageCreate(vk_ctx->physical_device, vk_ctx->device, tex_width, tex_height,
-                   VK_SAMPLE_COUNT_1_BIT, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_TILING_OPTIMAL,
-                   VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT |
-                       VK_IMAGE_USAGE_SAMPLED_BIT,
-                   VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, &terrain->vk_texture_image,
-                   &terrain->vk_texture_image_memory, terrain->vk_mip_levels);
+    wrapper::VK_ImageCreate(vk_ctx->physical_device, vk_ctx->device, tex_width, tex_height,
+                            VK_SAMPLE_COUNT_1_BIT, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_TILING_OPTIMAL,
+                            VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT |
+                                VK_IMAGE_USAGE_SAMPLED_BIT,
+                            VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, &terrain->vk_texture_image,
+                            &terrain->vk_texture_image_memory, terrain->vk_mip_levels);
 
     VkCommandBuffer command_buffer = VK_BeginSingleTimeCommands(vk_ctx);
-    VK_ImageLayoutTransition(command_buffer, terrain->vk_texture_image, VK_FORMAT_R8G8B8A8_SRGB,
-                             VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-                             terrain->vk_mip_levels);
-    VK_ImageFromBufferCopy(command_buffer, vk_texture_staging_buffer, terrain->vk_texture_image,
-                           tex_width, tex_height);
-    VK_GenerateMipmaps(
+    wrapper::VK_ImageLayoutTransition(command_buffer, terrain->vk_texture_image,
+                                      VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_LAYOUT_UNDEFINED,
+                                      VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, terrain->vk_mip_levels);
+    wrapper::VK_ImageFromBufferCopy(command_buffer, vk_texture_staging_buffer,
+                                    terrain->vk_texture_image, tex_width, tex_height);
+    wrapper::VK_GenerateMipmaps(
         command_buffer, terrain->vk_texture_image, tex_width, tex_height,
         terrain->vk_mip_levels); // TODO: mip maps are usually not generated at runtime. They are
                                  // usually stored in the texture file
@@ -135,11 +135,12 @@ TerrainTextureResourceCreate(VulkanContext* vk_ctx, Terrain* terrain, const char
     vkDestroyBuffer(vk_ctx->device, vk_texture_staging_buffer, nullptr);
     vkFreeMemory(vk_ctx->device, vk_texture_staging_buffer_memory, nullptr);
 
-    VK_ImageViewCreate(&terrain->vk_texture_image_view, vk_ctx->device, terrain->vk_texture_image,
-                       VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_ASPECT_COLOR_BIT, terrain->vk_mip_levels);
-    VK_SamplerCreate(&terrain->vk_texture_sampler, vk_ctx->device, VK_FILTER_LINEAR,
-                     VK_SAMPLER_MIPMAP_MODE_LINEAR, terrain->vk_mip_levels,
-                     vk_ctx->physical_device_properties.limits.maxSamplerAnisotropy);
+    wrapper::VK_ImageViewCreate(&terrain->vk_texture_image_view, vk_ctx->device,
+                                terrain->vk_texture_image, VK_FORMAT_R8G8B8A8_SRGB,
+                                VK_IMAGE_ASPECT_COLOR_BIT, terrain->vk_mip_levels);
+    wrapper::VK_SamplerCreate(&terrain->vk_texture_sampler, vk_ctx->device, VK_FILTER_LINEAR,
+                              VK_SAMPLER_MIPMAP_MODE_LINEAR, terrain->vk_mip_levels,
+                              vk_ctx->physical_device_properties.limits.maxSamplerAnisotropy);
 
     ScratchEnd(scratch);
 }
@@ -150,7 +151,7 @@ TerrainDescriptorSetCreate(Terrain* terrain, U32 frames_in_flight)
     Temp scratch = ScratchBegin(0, 0);
     Arena* arena = scratch.arena;
 
-    VulkanContext* vk_ctx = GlobalContextGet()->vulkanContext;
+    wrapper::VulkanContext* vk_ctx = GlobalContextGet()->vk_ctx;
 
     Buffer<VkDescriptorSetLayout> layouts =
         BufferAlloc<VkDescriptorSetLayout>(arena, frames_in_flight);
@@ -215,15 +216,16 @@ TerrainDescriptorSetCreate(Terrain* terrain, U32 frames_in_flight)
 static void
 TerrainUniformBufferCreate(Terrain* terrain, U32 image_count)
 {
-    VulkanContext* vk_ctx = GlobalContextGet()->vulkanContext;
+    wrapper::VulkanContext* vk_ctx = GlobalContextGet()->vk_ctx;
     VkDeviceSize terrain_buffer_size = sizeof(TerrainUniformBuffer);
 
     for (U32 i = 0; i < image_count; i++)
     {
-        VK_BufferCreate(vk_ctx->physical_device, vk_ctx->device, terrain_buffer_size,
-                        VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
-                        VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-                        &terrain->buffer[i], &terrain->buffer_memory[i]);
+        wrapper::VK_BufferCreate(vk_ctx->physical_device, vk_ctx->device, terrain_buffer_size,
+                                 VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
+                                 VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
+                                     VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+                                 &terrain->buffer[i], &terrain->buffer_memory[i]);
 
         if (vkMapMemory(vk_ctx->device, terrain->buffer_memory[i], 0, terrain_buffer_size, 0,
                         &terrain->buffer_memory_mapped[i]) != VK_SUCCESS)
@@ -238,15 +240,19 @@ TerrainGraphicsPipelineCreate(Terrain* terrain, const char* cwd)
 {
     Temp scratch = ScratchBegin(0, 0);
 
-    VulkanContext* vk_ctx = GlobalContextGet()->vulkanContext;
+    wrapper::VulkanContext* vk_ctx = GlobalContextGet()->vk_ctx;
     String8 vert_path = CreatePathFromStrings(
-        scratch.arena, Str8BufferFromCString(scratch.arena, {cwd, "shaders", "terrain_vert.spv"}));
+        scratch.arena,
+        Str8BufferFromCString(scratch.arena, {cwd, "shaders", "terrain", "terrain_vert.spv"}));
     String8 frag_path = CreatePathFromStrings(
-        scratch.arena, Str8BufferFromCString(scratch.arena, {cwd, "shaders", "terrain_frag.spv"}));
+        scratch.arena,
+        Str8BufferFromCString(scratch.arena, {cwd, "shaders", "terrain", "terrain_frag.spv"}));
     String8 tesc_path = CreatePathFromStrings(
-        scratch.arena, Str8BufferFromCString(scratch.arena, {cwd, "shaders", "terrain_tesc.spv"}));
+        scratch.arena,
+        Str8BufferFromCString(scratch.arena, {cwd, "shaders", "terrain", "terrain_tesc.spv"}));
     String8 tese_path = CreatePathFromStrings(
-        scratch.arena, Str8BufferFromCString(scratch.arena, {cwd, "shaders", "terrain_tese.spv"}));
+        scratch.arena,
+        Str8BufferFromCString(scratch.arena, {cwd, "shaders", "terrain", "terrain_tese.spv"}));
 
     wrapper::internal::ShaderModuleInfo vert_shader_stage_info =
         wrapper::internal::ShaderStageFromSpirv(scratch.arena, vk_ctx->device,
@@ -421,7 +427,7 @@ TerrainGraphicsPipelineCreate(Terrain* terrain, const char* cwd)
 static void
 TerrainVulkanCleanup(Terrain* terrain, U32 frames_in_flight)
 {
-    VulkanContext* vk_ctx = GlobalContextGet()->vulkanContext;
+    wrapper::VulkanContext* vk_ctx = GlobalContextGet()->vk_ctx;
 
     for (size_t i = 0; i < frames_in_flight; i++)
     {
@@ -462,7 +468,8 @@ UpdateTerrainUniformBuffer(Terrain* terrain, UI_Camera* camera, Vec2F32 screen_r
 }
 
 static void
-TerrainRenderPassBegin(VulkanContext* vk_ctx, Terrain* terrain, U32 image_index, U32 current_frame)
+TerrainRenderPassBegin(wrapper::VulkanContext* vk_ctx, Terrain* terrain, U32 image_index,
+                       U32 current_frame)
 {
     VkExtent2D swap_chain_extent = vk_ctx->swapchain_extent;
     VkCommandBuffer command_buffer = vk_ctx->command_buffers.data[current_frame];
@@ -562,7 +569,7 @@ static void
 TerrainInit()
 {
     Context* ctx = GlobalContextGet();
-    VulkanContext* vk_ctx = ctx->vulkanContext;
+    wrapper::VulkanContext* vk_ctx = ctx->vk_ctx;
 
     ctx->terrain = PushStruct(ctx->arena_permanent, Terrain);
     ctx->terrain->patch_size = 20;

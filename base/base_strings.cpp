@@ -553,10 +553,10 @@ push_str8fv(Arena* arena, const char* fmt, va_list args)
 {
     va_list args2;
     va_copy(args2, args);
-    U32 needed_bytes = raddbg_vsnprintf(0, 0, fmt, args) + 1;
+    U32 needed_bytes = vsnprintf(0, 0, fmt, args) + 1;
     String8 result = {0};
     result.str = PushArrayNoZero(arena, U8, needed_bytes);
-    result.size = raddbg_vsnprintf((char*)result.str, needed_bytes, fmt, args2);
+    result.size = vsnprintf((char*)result.str, needed_bytes, fmt, args2);
     result.str[result.size] = 0;
     va_end(args2);
     return (result);
@@ -2744,10 +2744,10 @@ PushStr8FV(Arena* arena, char* fmt, va_list args)
     String8 result = {0};
     va_list args2;
     va_copy(args2, args);
-    U64 needed_bytes = raddbg_vsnprintf(0, 0, fmt, args) + 1;
+    U64 needed_bytes = vsnprintf(0, 0, fmt, args) + 1;
     result.str = PushArrayNoZero(arena, U8, needed_bytes);
     result.size = needed_bytes - 1;
-    raddbg_vsnprintf((char*)result.str, needed_bytes, fmt, args2);
+    vsnprintf((char*)result.str, needed_bytes, fmt, args2);
     return result;
 }
 

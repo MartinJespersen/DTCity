@@ -11,7 +11,7 @@ VK_FramebufferResizeCallback(GLFWwindow* window, int width, int height)
     (void)height;
 
     auto context = reinterpret_cast<Context*>(glfwGetWindowUserPointer(window));
-    context->vulkanContext->framebuffer_resized = 1;
+    context->vk_ctx->framebuffer_resized = 1;
 }
 
 static void

@@ -1,18 +1,31 @@
 namespace city
 {
 static void
-CityInit(City* city, String8 cwd)
+CityInit(wrapper::VulkanContext* vk_ctx, City* city, String8 cwd)
 {
     city->arena = ArenaAlloc();
     city->road.node_slot_count = 100;
-    city->road_width = 10;
-    wrapper::RoadPipelineCreate(city, cwd);
+
+    city->w_road = PushStruct(city->arena, wrapper::Road);
+    city->road.road_height = -10.0f;
+    city->road.road_width = 10.0f;
+
+    wrapper::RoadInit(vk_ctx, city, cwd);
 }
 
 static void
-CityCleanup(City* city)
+CityUpdate(City* city, wrapper::VulkanContext* vk_ctx, U32 image_index)
 {
-    wrapper::RoadCleanup(city);
+    // ~mgj: road building update
+    wrapper::Road* w_road = city->w_road;
+    Road* road = &city->road;
+    wrapper::RoadUpdate(road, w_road, vk_ctx, image_index);
+};
+
+static void
+CityCleanup(City* city, wrapper::VulkanContext* vk_ctx)
+{
+    wrapper::RoadCleanup(city, vk_ctx);
 }
 
 static inline RoadNode*
@@ -34,10 +47,30 @@ NodeFind(Road* road, U64 node_id)
 static void
 RoadsBuild(Arena* arena, City* city)
 {
-    F32 road_half_width = city->road_width;
-    F32 road_height = city->road_height;
     Road* road = &city->road;
     ScratchScope scratch = ScratchScope(&arena, 1);
+
+    // TODO: make this an input and check for input conditions
+    F64 lon_lb = 56.16923976826141;
+    F64 lan_lb = 10.1852768812041;
+    F64 lon_rt = 56.17371342689877;
+    F64 lan_rt = 10.198376789774187;
+
+    F64 out_northing_lb = 0;
+    F64 out_easting_lb = 0;
+    char zone_lb[265];
+    UTM::LLtoUTM(lon_lb, lan_lb, out_easting_lb, out_northing_lb, zone_lb);
+    F64 out_northing_rt = 0;
+    F64 out_easting_rt = 0;
+    char zone_rt[265];
+    UTM::LLtoUTM(lon_rt, lan_rt, out_easting_rt, out_northing_rt, zone_rt);
+
+    F64 meters_in_x = out_easting_rt - out_easting_lb;
+    F64 meters_in_y = out_northing_rt - out_northing_lb;
+
+    glm::mat4 transform = glm::mat4(1.0f);
+    road->model_matrix =
+        glm::translate(transform, glm::vec3(-meters_in_x / 2.0, -meters_in_y / 2.0, 0.0f));
 
     HTTP_RequestParams params = {};
     params.method = HTTP_Method_Post;
@@ -45,15 +78,16 @@ RoadsBuild(Arena* arena, City* city)
     const char* query = R"(data=
         [out:json] [timeout:25];
         (
-          way["highway"](56.16923976826141, 10.1852768812041, 56.17371342689877, 10.198376789774187);
+          way["highway"](%f, %f, %f, %f);
         );
         out body;
         >;
         out skel qt;
     )";
+    String8 query_str = PushStr8F(scratch.arena, (char*)query, lon_lb, lan_lb, lon_rt, lan_rt);
 
     HTTP_Response response = HTTP_Request(
-        arena, Str8CString("https://overpass-api.de/api/interpreter"), Str8CString(query), &params);
+        arena, Str8CString("https://overpass-api.de/api/interpreter"), query_str, &params);
 
     String8 content = Str8((U8*)response.body.str, response.body.size);
 
@@ -63,23 +97,24 @@ RoadsBuild(Arena* arena, City* city)
     U64 node_count = way->node_count;
 
     U64 vert_count = node_count + 2; // +2 as we use a line adjacency strip topology
-    road->vertices = BufferAlloc<RoadVertex>(city->arena, vert_count);
+    road->vertex_buffer = BufferAlloc<RoadVertex>(city->arena, vert_count);
 
     // ~mgj: padding for line adjacency strip topology
     U64 node_id_start = way->node_ids[0];
-    U64 node_id_end = way->node_ids[vert_count - 1];
+    U64 node_id_end = way->node_ids[node_count - 1];
     RoadNode* road_node_start = NodeFind(road, node_id_start);
     RoadNode* road_node_end = NodeFind(road, node_id_end);
-    road->vertices.data[0] = {{road_node_start->lon, road_node_start->lat}, road_node_start->id};
-    road->vertices.data[vert_count - 1] = {{road_node_end->lon, road_node_end->lat},
-                                           road_node_end->id};
+    road->vertex_buffer.data[0] = {{road_node_start->lon, road_node_start->lat},
+                                   road_node_start->id};
+    road->vertex_buffer.data[vert_count - 1] = {{road_node_end->lon, road_node_end->lat},
+                                                road_node_end->id};
 
     U32 quad_counter = 0;
     for (int i = 0; i < way->node_count - 1; i++)
     {
         U64 node_id = way->node_ids[i];
         RoadNode* road_node = NodeFind(road, node_id);
-        road->vertices.data[i] = {{road_node->lon, road_node->lat}, road_node->id};
+        road->vertex_buffer.data[i] = {{road_node->lon, road_node->lat}, road_node->id};
     }
 }
 // struct QuadCoord
