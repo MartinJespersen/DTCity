@@ -7,23 +7,47 @@ RoadRenderPass(wrapper::VulkanContext* vk_ctx, wrapper::Road* w_road, city::Road
     VkExtent2D swap_chain_extent = vk_ctx->swapchain_extent;
     VkCommandBuffer command_buffer = vk_ctx->command_buffers.data[vk_ctx->current_frame];
 
-    VkRenderPassBeginInfo renderpass_info{};
-    renderpass_info.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
-    renderpass_info.renderPass = vk_ctx->vk_renderpass;
-    renderpass_info.framebuffer = vk_ctx->swapchain_framebuffers.data[image_index];
-    renderpass_info.renderArea.offset = {0, 0};
-    renderpass_info.renderArea.extent = swap_chain_extent;
+    // Color attachment (assuming you want to render to the same targets)
+    VkRenderingAttachmentInfo color_attachment{};
+    color_attachment.sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO;
+    color_attachment.imageView = vk_ctx->color_image_view;
+    color_attachment.imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+    color_attachment.loadOp = VK_ATTACHMENT_LOAD_OP_LOAD; // Load existing content
+    color_attachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
 
-    const U32 clear_value_count = 3;
-    VkClearValue clear_values[clear_value_count] = {0};
-    clear_values[0].color = {{0.0f, 0.0f, 0.0f, 0.0f}};
-    clear_values[1].color = {{0.0f, 0.0f, 0.0f, 1.0f}};
-    clear_values[2].depthStencil = {1.0f, 0};
+    // Resolve attachment
+    VkRenderingAttachmentInfo resolve_attachment{};
+    resolve_attachment.sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO;
+    resolve_attachment.imageView = vk_ctx->swapchain_image_views.data[image_index];
+    resolve_attachment.imageLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
 
-    renderpass_info.clearValueCount = clear_value_count;
-    renderpass_info.pClearValues = &clear_values[0];
+    // Depth attachment
+    VkRenderingAttachmentInfo depth_attachment{};
+    depth_attachment.sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO;
+    depth_attachment.imageView = vk_ctx->depth_image_view;
+    depth_attachment.imageLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+    depth_attachment.loadOp = VK_ATTACHMENT_LOAD_OP_LOAD; // Load existing depth
+    depth_attachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
 
-    vkCmdBeginRenderPass(command_buffer, &renderpass_info, VK_SUBPASS_CONTENTS_INLINE);
+    // Set up MSAA resolve if needed
+    if (vk_ctx->msaa_samples != VK_SAMPLE_COUNT_1_BIT)
+    {
+        color_attachment.resolveMode = VK_RESOLVE_MODE_AVERAGE_BIT;
+        color_attachment.resolveImageView = resolve_attachment.imageView;
+        color_attachment.resolveImageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+    }
+
+    // Rendering info
+    VkRenderingInfo rendering_info{};
+    rendering_info.sType = VK_STRUCTURE_TYPE_RENDERING_INFO;
+    rendering_info.renderArea.offset = {0, 0};
+    rendering_info.renderArea.extent = vk_ctx->swapchain_extent;
+    rendering_info.layerCount = 1;
+    rendering_info.colorAttachmentCount = 1;
+    rendering_info.pColorAttachments = &color_attachment;
+    rendering_info.pDepthAttachment = &depth_attachment;
+
+    vkCmdBeginRendering(command_buffer, &rendering_info);
 
     vkCmdBindPipeline(command_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, w_road->pipeline);
 
@@ -53,7 +77,7 @@ RoadRenderPass(wrapper::VulkanContext* vk_ctx, wrapper::Road* w_road, city::Road
 
     vkCmdDraw(command_buffer, w_road->vertex_buffer.size, 1, 0, 0);
 
-    vkCmdEndRenderPass(command_buffer);
+    vkCmdEndRendering(command_buffer);
 }
 static void
 RoadInit(wrapper::VulkanContext* vk_ctx, city::City* city, String8 cwd)
@@ -74,6 +98,7 @@ static void
 RoadCleanup(city::City* city, wrapper::VulkanContext* vk_ctx)
 {
     Road* road = city->w_road;
+    internal::VK_BufferContextCleanup(vk_ctx->device, &road->vertex_buffer);
     vkDestroyPipelineLayout(vk_ctx->device, road->pipeline_layout, nullptr);
     vkDestroyPipeline(vk_ctx->device, road->pipeline, nullptr);
 }
@@ -446,33 +471,6 @@ VK_ColorResourcesCreate(VkPhysicalDevice physicalDevice, VkDevice device,
                        VK_IMAGE_ASPECT_COLOR_BIT, 1);
 }
 
-static void
-VK_FramebuffersCreate(VulkanContext* vk_ctx, VkRenderPass renderPass)
-{
-    for (size_t i = 0; i < vk_ctx->swapchain_image_views.size; i++)
-    {
-        const U32 attachment_count = 3;
-        VkImageView attachments[attachment_count] = {vk_ctx->color_image_view,
-                                                     vk_ctx->swapchain_image_views.data[i],
-                                                     vk_ctx->depth_image_view};
-
-        VkFramebufferCreateInfo framebufferInfo{};
-        framebufferInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
-        framebufferInfo.renderPass = renderPass;
-        framebufferInfo.attachmentCount = attachment_count;
-        framebufferInfo.pAttachments = attachments;
-        framebufferInfo.width = vk_ctx->swapchain_extent.width;
-        framebufferInfo.height = vk_ctx->swapchain_extent.height;
-        framebufferInfo.layers = 1;
-
-        if (vkCreateFramebuffer(vk_ctx->device, &framebufferInfo, nullptr,
-                                &vk_ctx->swapchain_framebuffers.data[i]) != VK_SUCCESS)
-        {
-            exitWithError("failed to create framebuffer!");
-        }
-    }
-}
-
 // queue family
 
 VkFormat
@@ -509,7 +507,7 @@ VK_DepthResourcesCreate(VulkanContext* vk_ctx)
 
     VkFormat depth_format = VK_SupportedFormat(depth_formats, VK_IMAGE_TILING_OPTIMAL,
                                                VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT);
-    vk_ctx->depth_image_format = depth_format;
+    vk_ctx->depth_attachment_format = depth_format;
 
     B32 has_stencil_component =
         depth_format == VK_FORMAT_D32_SFLOAT_S8_UINT || depth_format == VK_FORMAT_D24_UNORM_S8_UINT;
@@ -680,8 +678,8 @@ VK_CreateInstance(VulkanContext* vk_ctx)
     appInfo.pApplicationName = "Hello Triangle";
     appInfo.applicationVersion = VK_MAKE_VERSION(1, 0, 0);
     appInfo.pEngineName = "No Engine";
-    appInfo.engineVersion = VK_MAKE_VERSION(1, 3, 0);
-    appInfo.apiVersion = VK_API_VERSION_1_0;
+    appInfo.engineVersion = VK_MAKE_VERSION(1, 0, 0);
+    appInfo.apiVersion = VK_API_VERSION_1_3;
 
     VkInstanceCreateInfo createInfo{};
     createInfo.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
@@ -750,9 +748,13 @@ VK_LogicalDeviceCreate(Arena* arena, VulkanContext* vk_ctx)
     deviceFeatures.geometryShader = VK_TRUE;
     deviceFeatures.fillModeNonSolid = VK_TRUE;
 
+    VkPhysicalDeviceDynamicRenderingFeatures dynamic_rendering_features{};
+    dynamic_rendering_features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DYNAMIC_RENDERING_FEATURES;
+    dynamic_rendering_features.dynamicRendering = VK_TRUE;
+
     VkDeviceCreateInfo createInfo{};
     createInfo.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
-
+    createInfo.pNext = &dynamic_rendering_features;
     createInfo.pQueueCreateInfos = queueCreateInfos;
 
     createInfo.queueCreateInfoCount = uniqueQueueFamiliesCount;
@@ -1071,7 +1073,6 @@ VK_RecreateSwapChain(IO* io_ctx, VulkanContext* vk_ctx)
                             &vk_ctx->color_image_memory);
 
     VK_DepthResourcesCreate(vk_ctx);
-    VK_FramebuffersCreate(vk_ctx, vk_ctx->vk_renderpass);
     ScratchEnd(scratch);
 }
 
@@ -1094,7 +1095,6 @@ VK_Cleanup()
 
     TerrainVulkanCleanup(ctx->terrain, vk_ctx->MAX_FRAMES_IN_FLIGHT);
 
-    vkDestroyRenderPass(vk_ctx->device, vk_ctx->vk_renderpass, nullptr);
     VK_SwapChainCleanup(vk_ctx);
 
 #ifdef TRACY_ENABLE
@@ -1226,6 +1226,8 @@ VK_VulkanInit(VulkanContext* vk_ctx, IO* io_ctx)
 
     VK_SwapChainImagesCreate(vk_ctx, swapChainInfo, swapChainImageCount);
     VK_SwapChainImageViewsCreate(vk_ctx);
+    vk_ctx->color_attachment_format = vk_ctx->swapchain_image_format;
+
     VK_CommandPoolCreate(vk_ctx);
 
     VK_ColorResourcesCreate(vk_ctx->physical_device, vk_ctx->device, vk_ctx->swapchain_image_format,
@@ -1238,10 +1240,8 @@ VK_VulkanInit(VulkanContext* vk_ctx, IO* io_ctx)
     VK_CommandBuffersCreate(vk_ctx);
 
     VK_SyncObjectsCreate(vk_ctx);
-    internal::RenderPassCreate(vk_ctx);
 
     TerrainInit();
-    VK_FramebuffersCreate(vk_ctx, vk_ctx->vk_renderpass);
     ScratchEnd(scratch);
 }
 
@@ -1371,7 +1371,7 @@ RoadPipelineCreate(city::City* city, String8 cwd)
     VkPushConstantRange pushConstantRange{};
     pushConstantRange.stageFlags = VK_SHADER_STAGE_GEOMETRY_BIT;
     pushConstantRange.offset = 0;
-    pushConstantRange.size = sizeof(float) * 2; // road_width and road_height
+    pushConstantRange.size = sizeof(RoadPushConstants); // road_width and road_height
 
     VkPipelineLayoutCreateInfo pipelineLayoutInfo{};
     pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
@@ -1399,7 +1399,14 @@ RoadPipelineCreate(city::City* city, String8 cwd)
         exitWithError("failed to create pipeline layout!");
     }
 
+    VkPipelineRenderingCreateInfo pipeline_rendering_info{};
+    pipeline_rendering_info.sType = VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO;
+    pipeline_rendering_info.colorAttachmentCount = 1;
+    pipeline_rendering_info.pColorAttachmentFormats = &vk_ctx->color_attachment_format;
+    pipeline_rendering_info.depthAttachmentFormat = vk_ctx->depth_attachment_format;
+
     VkGraphicsPipelineCreateInfo pipelineInfo{};
+    pipelineInfo.pNext = &pipeline_rendering_info;
     pipelineInfo.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
     pipelineInfo.stageCount = ArrayCount(shaderStages);
     pipelineInfo.pStages = shaderStages;
@@ -1413,8 +1420,7 @@ RoadPipelineCreate(city::City* city, String8 cwd)
     pipelineInfo.pDynamicState = &dynamicState;
 
     pipelineInfo.layout = w_road->pipeline_layout;
-    pipelineInfo.renderPass = vk_ctx->vk_renderpass;
-    pipelineInfo.subpass = 0;
+    pipelineInfo.renderPass = VK_NULL_HANDLE;
 
     pipelineInfo.basePipelineHandle = VK_NULL_HANDLE; // Optional
     pipelineInfo.basePipelineIndex = -1;              // Optional
@@ -1695,92 +1701,6 @@ VK_QuerySwapChainSupport(Arena* arena, VulkanContext* vk_ctx, VkPhysicalDevice d
     }
 
     return details;
-}
-
-static void
-RenderPassCreate(VulkanContext* vk_ctx)
-{
-    VkAttachmentDescription depthAttachment{};
-    depthAttachment.format = vk_ctx->depth_image_format;
-    depthAttachment.samples = vk_ctx->msaa_samples;
-    depthAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
-    depthAttachment.storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-    depthAttachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
-    depthAttachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-    depthAttachment.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-    depthAttachment.finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
-
-    VkAttachmentDescription colorAttachment{};
-    colorAttachment.format = vk_ctx->swapchain_image_format;
-    colorAttachment.samples = vk_ctx->msaa_samples;
-    colorAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
-    colorAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
-    colorAttachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
-    colorAttachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-    colorAttachment.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-    colorAttachment.finalLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-
-    VkAttachmentDescription colorAttachmentResolve{};
-    colorAttachmentResolve.format = vk_ctx->swapchain_image_format;
-    colorAttachmentResolve.samples = VK_SAMPLE_COUNT_1_BIT;
-    colorAttachmentResolve.loadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
-    colorAttachmentResolve.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
-    colorAttachmentResolve.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
-    colorAttachmentResolve.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-    colorAttachmentResolve.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-    colorAttachmentResolve.finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
-
-    VkAttachmentReference colorAttachmentRef{};
-    colorAttachmentRef.attachment = 0;
-    colorAttachmentRef.layout =
-        VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL; // This one is optimal for color
-                                                  // attachment for writing colors
-                                                  // from fragment shader
-
-    VkAttachmentReference colorAttachmentResolveRef{};
-    colorAttachmentResolveRef.attachment = 1;
-    colorAttachmentResolveRef.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-
-    VkAttachmentReference depthAttachmentRef{};
-    depthAttachmentRef.attachment = 2;
-    depthAttachmentRef.layout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
-
-    VkSubpassDescription subpass{};
-    subpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
-    subpass.colorAttachmentCount = 1;
-    subpass.pColorAttachments = &colorAttachmentRef;
-    subpass.pResolveAttachments = &colorAttachmentResolveRef;
-    subpass.pDepthStencilAttachment = &depthAttachmentRef;
-
-    VkSubpassDependency dependency{};
-    dependency.srcSubpass = VK_SUBPASS_EXTERNAL;
-    dependency.dstSubpass = 0;
-    dependency.srcStageMask =
-        VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT | VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
-    dependency.srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
-    dependency.dstStageMask =
-        VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT | VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
-    dependency.dstAccessMask =
-        VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
-
-    const U32 attachmentsCount = 3;
-    VkAttachmentDescription attachments[attachmentsCount] = {
-        colorAttachment, colorAttachmentResolve, depthAttachment};
-
-    VkRenderPassCreateInfo renderPassInfo{};
-    renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
-    renderPassInfo.attachmentCount = attachmentsCount;
-    renderPassInfo.pAttachments = attachments;
-    renderPassInfo.subpassCount = 1;
-    renderPassInfo.pSubpasses = &subpass;
-    renderPassInfo.dependencyCount = 1;
-    renderPassInfo.pDependencies = &dependency;
-
-    if (vkCreateRenderPass(vk_ctx->device, &renderPassInfo, nullptr, &vk_ctx->vk_renderpass) !=
-        VK_SUCCESS)
-    {
-        exitWithError("failed to create render pass!");
-    }
 }
 
 } // namespace internal

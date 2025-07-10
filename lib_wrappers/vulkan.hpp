@@ -94,8 +94,6 @@ static Buffer<VkVertexInputAttributeDescription>
 RoadAttributeDescriptionGet(Arena* arena);
 static void
 RoadPipelineCreate(city::City* city, String8 cwd);
-static void
-RenderPassCreate(VulkanContext* vk_ctx);
 } // namespace internal
 
 struct Road
@@ -115,7 +113,8 @@ struct VulkanContext
 
     const char* validation_layers[1] = {"VK_LAYER_KHRONOS_validation"};
 
-    const char* device_extensions[1] = {VK_KHR_SWAPCHAIN_EXTENSION_NAME};
+    const char* device_extensions[2] = {VK_KHR_SWAPCHAIN_EXTENSION_NAME,
+                                        VK_KHR_DYNAMIC_RENDERING_EXTENSION_NAME};
 
 #ifdef NDEBUG
     const U8 enable_validation_layers = 0;
@@ -141,13 +140,13 @@ struct VulkanContext
     Buffer<VkFramebuffer> swapchain_framebuffers;
     VkCommandPool command_pool;
     Buffer<VkCommandBuffer> command_buffers;
-    VkRenderPass vk_renderpass;
 
     Buffer<VkSemaphore> image_available_semaphores;
     Buffer<VkSemaphore> render_finished_semaphores;
     Buffer<VkFence> in_flight_fences;
     U32 current_frame = 0;
 
+    VkFormat color_attachment_format;
     VkImage color_image;
     VkDeviceMemory color_image_memory;
     VkImageView color_image_view;
@@ -155,7 +154,7 @@ struct VulkanContext
     VkImage depth_image;
     VkDeviceMemory depth_image_memory;
     VkImageView depth_image_view;
-    VkFormat depth_image_format;
+    VkFormat depth_attachment_format;
 
     VkSampleCountFlagBits msaa_samples = VK_SAMPLE_COUNT_1_BIT;
 
@@ -296,9 +295,6 @@ VK_ColorResourcesCreate(VkPhysicalDevice physicalDevice, VkDevice device,
                         VkFormat swapChainImageFormat, VkExtent2D swapChainExtent,
                         VkSampleCountFlagBits msaaSamples, VkImageView* out_color_image_view,
                         VkImage* out_color_image, VkDeviceMemory* out_color_image_memory);
-
-static void
-VK_FramebuffersCreate(VulkanContext* vulkan_ctx, VkRenderPass renderPass);
 
 static void
 VK_CommandBuffersCreate(VulkanContext* vk_ctx);

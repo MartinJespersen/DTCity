@@ -394,8 +394,15 @@ TerrainGraphicsPipelineCreate(Terrain* terrain, const char* cwd)
         exitWithError("failed to create pipeline layout!");
     }
 
+    VkPipelineRenderingCreateInfo pipeline_rendering_info{};
+    pipeline_rendering_info.sType = VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO;
+    pipeline_rendering_info.colorAttachmentCount = 1;
+    pipeline_rendering_info.pColorAttachmentFormats = &vk_ctx->color_attachment_format;
+    pipeline_rendering_info.depthAttachmentFormat = vk_ctx->depth_attachment_format;
+
     VkGraphicsPipelineCreateInfo pipelineInfo{};
     pipelineInfo.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
+    pipelineInfo.pNext = &pipeline_rendering_info;
     pipelineInfo.stageCount = 4;
     pipelineInfo.pStages = shaderStages;
     pipelineInfo.pVertexInputState = &vertexInputInfo;
@@ -408,8 +415,7 @@ TerrainGraphicsPipelineCreate(Terrain* terrain, const char* cwd)
     pipelineInfo.pDynamicState = &dynamicState;
     pipelineInfo.pTessellationState = &pipeline_tessellation_state_create_info;
     pipelineInfo.layout = terrain->vk_pipeline_layout;
-    pipelineInfo.renderPass = vk_ctx->vk_renderpass;
-    pipelineInfo.subpass = 0;
+    pipelineInfo.renderPass = VK_NULL_HANDLE;
 
     pipelineInfo.basePipelineHandle = VK_NULL_HANDLE; // Optional
     pipelineInfo.basePipelineIndex = -1;              // Optional
@@ -474,23 +480,51 @@ TerrainRenderPassBegin(wrapper::VulkanContext* vk_ctx, Terrain* terrain, U32 ima
     VkExtent2D swap_chain_extent = vk_ctx->swapchain_extent;
     VkCommandBuffer command_buffer = vk_ctx->command_buffers.data[current_frame];
 
-    VkRenderPassBeginInfo renderpass_info{};
-    renderpass_info.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
-    renderpass_info.renderPass = vk_ctx->vk_renderpass;
-    renderpass_info.framebuffer = vk_ctx->swapchain_framebuffers.data[image_index];
-    renderpass_info.renderArea.offset = {0, 0};
-    renderpass_info.renderArea.extent = swap_chain_extent;
+    // Color attachment info
+    VkRenderingAttachmentInfo color_attachment{};
+    color_attachment.sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO;
+    color_attachment.imageView = vk_ctx->color_image_view;
+    color_attachment.imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+    color_attachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+    color_attachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+    color_attachment.clearValue.color = {{0.0f, 0.0f, 0.0f, 1.0f}};
 
-    const U32 clear_value_count = 3;
-    VkClearValue clear_values[clear_value_count] = {0};
-    clear_values[0].color = {{0.0f, 0.0f, 0.0f, 0.0f}};
-    clear_values[1].color = {{0.0f, 0.0f, 0.0f, 1.0f}};
-    clear_values[2].depthStencil = {1.0f, 0};
+    // Resolve attachment info (for MSAA)
+    VkRenderingAttachmentInfo resolve_attachment{};
+    resolve_attachment.sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO;
+    resolve_attachment.imageView = vk_ctx->swapchain_image_views.data[image_index];
+    resolve_attachment.imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+    resolve_attachment.loadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+    resolve_attachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
 
-    renderpass_info.clearValueCount = clear_value_count;
-    renderpass_info.pClearValues = &clear_values[0];
+    // Depth attachment info
+    VkRenderingAttachmentInfo depth_attachment{};
+    depth_attachment.sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO;
+    depth_attachment.imageView = vk_ctx->depth_image_view;
+    depth_attachment.imageLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+    depth_attachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+    depth_attachment.storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+    depth_attachment.clearValue.depthStencil = {1.0f, 0};
 
-    vkCmdBeginRenderPass(command_buffer, &renderpass_info, VK_SUBPASS_CONTENTS_INLINE);
+    // Only set resolve attachment if using MSAA
+    if (vk_ctx->msaa_samples != VK_SAMPLE_COUNT_1_BIT)
+    {
+        color_attachment.resolveMode = VK_RESOLVE_MODE_AVERAGE_BIT;
+        color_attachment.resolveImageView = resolve_attachment.imageView;
+        color_attachment.resolveImageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+    }
+
+    // Rendering info
+    VkRenderingInfo rendering_info{};
+    rendering_info.sType = VK_STRUCTURE_TYPE_RENDERING_INFO;
+    rendering_info.renderArea.offset = {0, 0};
+    rendering_info.renderArea.extent = vk_ctx->swapchain_extent;
+    rendering_info.layerCount = 1;
+    rendering_info.colorAttachmentCount = 1;
+    rendering_info.pColorAttachments = &color_attachment;
+    rendering_info.pDepthAttachment = &depth_attachment;
+
+    vkCmdBeginRendering(command_buffer, &rendering_info);
 
     vkCmdBindPipeline(command_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, terrain->vk_pipeline);
 
@@ -521,7 +555,7 @@ TerrainRenderPassBegin(wrapper::VulkanContext* vk_ctx, Terrain* terrain, U32 ima
 
     vkCmdDrawIndexed(command_buffer, vk_ctx->vk_indice_context.size, 1, 0, 0, 0);
 
-    vkCmdEndRenderPass(command_buffer);
+    vkCmdEndRendering(command_buffer);
 }
 
 static void
