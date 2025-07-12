@@ -9,31 +9,6 @@ TerrainAllocations(Arena* arena, Terrain* terrain, U32 frames_in_flight)
 }
 
 static void
-TerrainDescriptorPoolCreate(Terrain* terrain, U32 frames_in_flight)
-{
-    wrapper::VulkanContext* vk_ctx = GlobalContextGet()->vk_ctx;
-
-    VkDescriptorPoolSize pool_sizes[] = {
-        {VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, frames_in_flight},
-        {VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, frames_in_flight},
-    };
-    U32 pool_size_count = ArrayCount(pool_sizes);
-
-    VkDescriptorPoolCreateInfo poolInfo{};
-    poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
-    poolInfo.poolSizeCount = pool_size_count;
-    poolInfo.pPoolSizes = pool_sizes;
-
-    poolInfo.maxSets = frames_in_flight;
-
-    if (vkCreateDescriptorPool(vk_ctx->device, &poolInfo, nullptr, &terrain->descriptor_pool) !=
-        VK_SUCCESS)
-    {
-        exitWithError("failed to create descriptor pool!");
-    }
-}
-
-static void
 TerrainDescriptorSetLayoutCreate(VkDevice device, Terrain* terrain)
 {
     VkDescriptorSetLayoutBinding terrain_desc_layout{};
@@ -146,12 +121,10 @@ TerrainTextureResourceCreate(wrapper::VulkanContext* vk_ctx, Terrain* terrain, c
 }
 
 static void
-TerrainDescriptorSetCreate(Terrain* terrain, U32 frames_in_flight)
+TerrainDescriptorSetCreate(wrapper::VulkanContext* vk_ctx, Terrain* terrain, U32 frames_in_flight)
 {
     Temp scratch = ScratchBegin(0, 0);
     Arena* arena = scratch.arena;
-
-    wrapper::VulkanContext* vk_ctx = GlobalContextGet()->vk_ctx;
 
     Buffer<VkDescriptorSetLayout> layouts =
         BufferAlloc<VkDescriptorSetLayout>(arena, frames_in_flight);
@@ -163,7 +136,7 @@ TerrainDescriptorSetCreate(Terrain* terrain, U32 frames_in_flight)
 
     VkDescriptorSetAllocateInfo allocInfo{};
     allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
-    allocInfo.descriptorPool = terrain->descriptor_pool;
+    allocInfo.descriptorPool = vk_ctx->descriptor_pool;
     allocInfo.descriptorSetCount = layouts.size;
     allocInfo.pSetLayouts = layouts.data;
 
@@ -363,10 +336,13 @@ TerrainGraphicsPipelineCreate(Terrain* terrain, const char* cwd)
     colorBlending.blendConstants[2] = 0.0f; // Optional
     colorBlending.blendConstants[3] = 0.0f; // Optional
 
+    VkDescriptorSetLayout descriptor_set_layout[2] = {vk_ctx->camera_descriptor_set_layout,
+                                                      terrain->descriptor_set_layout};
+
     VkPipelineLayoutCreateInfo pipelineLayoutInfo{};
     pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
-    pipelineLayoutInfo.setLayoutCount = 1;
-    pipelineLayoutInfo.pSetLayouts = &terrain->descriptor_set_layout;
+    pipelineLayoutInfo.setLayoutCount = ArrayCount(descriptor_set_layout);
+    pipelineLayoutInfo.pSetLayouts = descriptor_set_layout;
     pipelineLayoutInfo.pushConstantRangeCount = 0;    // Optional
     pipelineLayoutInfo.pPushConstantRanges = nullptr; // Optional
 
@@ -446,7 +422,7 @@ TerrainVulkanCleanup(Terrain* terrain, U32 frames_in_flight)
     vkDestroyImage(vk_ctx->device, terrain->vk_texture_image, nullptr);
     vkFreeMemory(vk_ctx->device, terrain->vk_texture_image_memory, nullptr);
 
-    vkDestroyDescriptorPool(vk_ctx->device, terrain->descriptor_pool, nullptr);
+    vkDestroyDescriptorPool(vk_ctx->device, vk_ctx->descriptor_pool, nullptr);
 
     vkDestroyDescriptorSetLayout(vk_ctx->device, terrain->descriptor_set_layout, nullptr);
     vkDestroyPipelineLayout(vk_ctx->device, terrain->vk_pipeline_layout, nullptr);
@@ -454,21 +430,14 @@ TerrainVulkanCleanup(Terrain* terrain, U32 frames_in_flight)
 }
 
 static void
-UpdateTerrainUniformBuffer(Terrain* terrain, UI_Camera* camera, Vec2F32 screen_res,
-                           U32 current_frame)
+UpdateTerrainUniformBuffer(Terrain* terrain, Vec2F32 screen_res, U32 current_frame)
 {
     TerrainUniformBuffer* ubo = &terrain->uniform_buffer;
 
-    glm::mat4 transform = camera->projection_matrix * camera->view_matrix;
-    FrustumPlanesCalculate(&ubo->frustum, transform);
-    ubo->viewport_dim.x = screen_res.x;
-    ubo->viewport_dim.y = screen_res.y;
     ubo->displacement_factor = 1.0f;   // Reduced for 2x2 square
     ubo->tessellated_edge_size = 1.0f; // Increase for better tessellation control
     ubo->tessellation_factor = 1.0f;   // Enable tessellation to see the effect
     ubo->patch_size = terrain->patch_size;
-    ubo->view = camera->view_matrix;
-    ubo->proj = camera->projection_matrix;
 
     MemoryCopy(terrain->buffer_memory_mapped[current_frame], ubo, sizeof(*ubo));
 }
@@ -542,9 +511,11 @@ TerrainRenderPassBegin(wrapper::VulkanContext* vk_ctx, Terrain* terrain, U32 ima
     scissor.extent = swap_chain_extent;
     vkCmdSetScissor(command_buffer, 0, 1, &scissor);
 
+    VkDescriptorSet descriptor_sets[2] = {vk_ctx->camera_descriptor_sets[current_frame],
+                                          terrain->descriptor_sets[current_frame]};
     vkCmdBindDescriptorSets(command_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS,
-                            terrain->vk_pipeline_layout, 0, 1,
-                            &terrain->descriptor_sets[current_frame], 0, nullptr);
+                            terrain->vk_pipeline_layout, 0, ArrayCount(descriptor_sets),
+                            descriptor_sets, 0, nullptr);
 
     VkBuffer vertex_buffers[] = {vk_ctx->vk_vertex_context.buffer};
     VkDeviceSize offsets[] = {0};
@@ -608,13 +579,12 @@ TerrainInit()
     ctx->terrain = PushStruct(ctx->arena_permanent, Terrain);
     ctx->terrain->patch_size = 20;
     TerrainAllocations(vk_ctx->arena, ctx->terrain, vk_ctx->MAX_FRAMES_IN_FLIGHT);
-    TerrainDescriptorPoolCreate(ctx->terrain, vk_ctx->MAX_FRAMES_IN_FLIGHT);
     TerrainDescriptorSetLayoutCreate(vk_ctx->device, ctx->terrain);
     TerrainUniformBufferCreate(ctx->terrain, vk_ctx->MAX_FRAMES_IN_FLIGHT);
 
     TerrainTextureResourceCreate(vk_ctx, ctx->terrain, ctx->cwd);
 
-    TerrainDescriptorSetCreate(ctx->terrain, vk_ctx->MAX_FRAMES_IN_FLIGHT);
+    TerrainDescriptorSetCreate(vk_ctx, ctx->terrain, vk_ctx->MAX_FRAMES_IN_FLIGHT);
     TerrainGraphicsPipelineCreate(ctx->terrain, ctx->cwd);
 
     // TODO: move function below

@@ -131,7 +131,7 @@ run()
     ProfilingContext profilingContext = {};
     IO io_ctx = {};
     Terrain terrain = {};
-    UI_Camera camera = {};
+    ui::Camera camera = {};
     DT_Time time = {};
     city::City city = {};
 

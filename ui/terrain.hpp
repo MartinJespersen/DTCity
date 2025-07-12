@@ -2,13 +2,9 @@
 
 struct TerrainUniformBuffer
 {
-    glm::mat4 view;
-    glm::mat4 proj;
-    Frustum frustum;
     float displacement_factor;
     float tessellation_factor;
     float patch_size;
-    glm::vec2 viewport_dim;
     float tessellated_edge_size;
 };
 
@@ -38,7 +34,6 @@ struct Terrain
     VkPipeline vk_pipeline;
 
     VkDescriptorSetLayout descriptor_set_layout;
-    VkDescriptorPool descriptor_pool;
     VkDescriptorSet* descriptor_sets;
 
     VkImage vk_texture_image;
@@ -64,13 +59,10 @@ TerrainGraphicsPipelineCreate(Terrain* terrain, const char* cwd);
 static void
 TerrainVulkanCleanup(Terrain* terrain, U32 frames_in_flight);
 static void
-UpdateTerrainUniformBuffer(Terrain* terrain, UI_Camera* camera, Vec2F32 screen_res,
-                           U32 current_image);
+UpdateTerrainUniformBuffer(Terrain* terrain, Vec2F32 screen_res, U32 current_image);
 
 static void
-TerrainDescriptorPoolCreate(Terrain* terrain, U32 frames_in_flight);
-static void
-TerrainDescriptorSetCreate(Terrain* terrain, U32 frames_in_flight);
+TerrainDescriptorSetCreate(wrapper::VulkanContext* vk_ctx, Terrain* terrain, U32 frames_in_flight);
 
 static void
 TerrainRenderPassBegin(wrapper::VulkanContext* vk_ctx, Terrain* terrain, U32 image_index,

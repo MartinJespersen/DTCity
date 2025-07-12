@@ -43,7 +43,7 @@ CommandBufferRecord(U32 image_index, U32 current_frame)
 
     wrapper::VulkanContext* vk_ctx = ctx->vk_ctx;
     ProfilingContext* profilingContext = ctx->profilingContext;
-    UI_Camera* camera = ctx->camera;
+    ui::Camera* camera = ctx->camera;
     DT_Time* time = ctx->time;
     (void)profilingContext;
 
@@ -96,8 +96,12 @@ CommandBufferRecord(U32 image_index, U32 current_frame)
 
     DT_UpdateTime(time);
     UI_CameraUpdate(camera, ctx->io, ctx->time, vk_ctx->swapchain_extent);
+    wrapper::internal::CameraUniformBufferUpdate(
+        vk_ctx, camera,
+        Vec2F32{(F32)vk_ctx->swapchain_extent.width, (F32)vk_ctx->swapchain_extent.height},
+        current_frame);
     UpdateTerrainUniformBuffer(
-        ctx->terrain, camera,
+        ctx->terrain,
         Vec2F32{(F32)vk_ctx->swapchain_extent.width, (F32)vk_ctx->swapchain_extent.height},
         current_frame);
     TerrainRenderPassBegin(vk_ctx, ctx->terrain, image_index, current_frame);

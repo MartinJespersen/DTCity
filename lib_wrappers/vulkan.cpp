@@ -1,5 +1,6 @@
 namespace wrapper
 {
+
 static void
 RoadRenderPass(wrapper::VulkanContext* vk_ctx, wrapper::Road* w_road, city::Road* road,
                U32 image_index)
@@ -71,8 +72,12 @@ RoadRenderPass(wrapper::VulkanContext* vk_ctx, wrapper::Road* w_road, city::Road
     RoadPushConstants road_push_constant = {.model = road->model_matrix,
                                             .road_width = road->road_width,
                                             .road_height = road->road_height};
-    vkCmdPushConstants(command_buffer, w_road->pipeline_layout, VK_SHADER_STAGE_GEOMETRY_BIT, 0,
+    vkCmdPushConstants(command_buffer, w_road->pipeline_layout, VK_SHADER_STAGE_VERTEX_BIT, 0,
                        sizeof(RoadPushConstants), &road_push_constant);
+    VkDescriptorSet descriptor_sets[] = {vk_ctx->camera_descriptor_sets[vk_ctx->current_frame]};
+    vkCmdBindDescriptorSets(command_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS,
+                            w_road->pipeline_layout, 0, ArrayCount(descriptor_sets),
+                            descriptor_sets, 0, NULL);
     vkCmdBindVertexBuffers(command_buffer, 0, 1, vertex_buffers, offsets);
 
     vkCmdDraw(command_buffer, w_road->vertex_buffer.size, 1, 0, 0);
@@ -1093,6 +1098,7 @@ VK_Cleanup()
     VK_BufferContextCleanup(vk_ctx->device, &vk_ctx->vk_indice_context);
     VK_BufferContextCleanup(vk_ctx->device, &vk_ctx->vk_vertex_context);
 
+    internal::CameraCleanup(vk_ctx);
     TerrainVulkanCleanup(ctx->terrain, vk_ctx->MAX_FRAMES_IN_FLIGHT);
 
     VK_SwapChainCleanup(vk_ctx);
@@ -1241,6 +1247,10 @@ VK_VulkanInit(VulkanContext* vk_ctx, IO* io_ctx)
 
     VK_SyncObjectsCreate(vk_ctx);
 
+    internal::DescriptorPoolCreate(vk_ctx);
+    internal::CameraUniformBufferCreate(vk_ctx);
+    internal::CameraDescriptorSetLayoutCreate(vk_ctx);
+    internal::CameraDescriptorSetCreate(vk_ctx);
     TerrainInit();
     ScratchEnd(scratch);
 }
@@ -1261,19 +1271,14 @@ RoadPipelineCreate(city::City* city, String8 cwd)
     String8 frag_path = CreatePathFromStrings(
         scratch.arena,
         Str8BufferFromCString(scratch.arena, {(char*)cwd.str, "shaders", "road", "road_frag.spv"}));
-    String8 geo_path = CreatePathFromStrings(
-        scratch.arena,
-        Str8BufferFromCString(scratch.arena, {(char*)cwd.str, "shaders", "road", "road_geom.spv"}));
 
     internal::ShaderModuleInfo vert_shader_stage_info = internal::ShaderStageFromSpirv(
         scratch.arena, vk_ctx->device, VK_SHADER_STAGE_VERTEX_BIT, vert_path);
     internal::ShaderModuleInfo frag_shader_stage_info = internal::ShaderStageFromSpirv(
         scratch.arena, vk_ctx->device, VK_SHADER_STAGE_FRAGMENT_BIT, frag_path);
-    internal::ShaderModuleInfo geom_shader_stage_info = internal::ShaderStageFromSpirv(
-        scratch.arena, vk_ctx->device, VK_SHADER_STAGE_GEOMETRY_BIT, geo_path);
 
-    VkPipelineShaderStageCreateInfo shaderStages[] = {
-        vert_shader_stage_info.info, frag_shader_stage_info.info, geom_shader_stage_info.info};
+    VkPipelineShaderStageCreateInfo shaderStages[] = {vert_shader_stage_info.info,
+                                                      frag_shader_stage_info.info};
 
     VkDynamicState dynamicStates[] = {VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR};
 
@@ -1299,7 +1304,7 @@ RoadPipelineCreate(city::City* city, String8 cwd)
 
     VkPipelineInputAssemblyStateCreateInfo inputAssembly{};
     inputAssembly.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
-    inputAssembly.topology = VK_PRIMITIVE_TOPOLOGY_LINE_STRIP_WITH_ADJACENCY;
+    inputAssembly.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP;
     inputAssembly.primitiveRestartEnable = VK_FALSE;
 
     VkViewport viewport{};
@@ -1319,9 +1324,10 @@ RoadPipelineCreate(city::City* city, String8 cwd)
     VkPipelineRasterizationStateCreateInfo rasterizer{};
     rasterizer.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
     rasterizer.depthClampEnable = VK_FALSE;
-    rasterizer.polygonMode = VK_POLYGON_MODE_LINE; // TODO: helps in debugging, change to fill later
-    rasterizer.cullMode = VK_CULL_MODE_BACK_BIT;
-    rasterizer.frontFace = VK_FRONT_FACE_CLOCKWISE; // TODO: might need to use counter-clockwise
+    rasterizer.polygonMode = VK_POLYGON_MODE_FILL; // TODO: helps in debugging, change to fill later
+    rasterizer.cullMode = VK_CULL_MODE_NONE;
+    rasterizer.frontFace =
+        VK_FRONT_FACE_COUNTER_CLOCKWISE; // TODO: might need to use counter-clockwise
     rasterizer.lineWidth = 1.0f;
     rasterizer.depthBiasEnable = VK_FALSE;
     rasterizer.depthBiasConstantFactor = 0.0f; // Optional
@@ -1369,14 +1375,15 @@ RoadPipelineCreate(city::City* city, String8 cwd)
 
     // Add push constant range for geometry shader
     VkPushConstantRange pushConstantRange{};
-    pushConstantRange.stageFlags = VK_SHADER_STAGE_GEOMETRY_BIT;
+    pushConstantRange.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
     pushConstantRange.offset = 0;
-    pushConstantRange.size = sizeof(RoadPushConstants); // road_width and road_height
+    pushConstantRange.size = sizeof(RoadPushConstants);
 
+    VkDescriptorSetLayout descriptor_set_layouts[1] = {vk_ctx->camera_descriptor_set_layout};
     VkPipelineLayoutCreateInfo pipelineLayoutInfo{};
     pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
-    pipelineLayoutInfo.setLayoutCount = 0;
-    pipelineLayoutInfo.pSetLayouts = nullptr;
+    pipelineLayoutInfo.setLayoutCount = ArrayCount(descriptor_set_layouts);
+    pipelineLayoutInfo.pSetLayouts = descriptor_set_layouts;
     pipelineLayoutInfo.pushConstantRangeCount = 1;
     pipelineLayoutInfo.pPushConstantRanges = &pushConstantRange;
 
@@ -1447,16 +1454,11 @@ static Buffer<VkVertexInputAttributeDescription>
 RoadAttributeDescriptionGet(Arena* arena)
 {
     Buffer<VkVertexInputAttributeDescription> attribute_descriptions =
-        BufferAlloc<VkVertexInputAttributeDescription>(arena, 2);
+        BufferAlloc<VkVertexInputAttributeDescription>(arena, 1);
     attribute_descriptions.data[0].binding = 0;
     attribute_descriptions.data[0].location = 0;
     attribute_descriptions.data[0].format = VK_FORMAT_R32G32_SFLOAT;
     attribute_descriptions.data[0].offset = offsetof(city::RoadVertex, pos);
-
-    attribute_descriptions.data[1].binding = 0;
-    attribute_descriptions.data[1].location = 1;
-    attribute_descriptions.data[1].format = VK_FORMAT_R32_UINT;
-    attribute_descriptions.data[1].offset = offsetof(city::RoadVertex, id);
 
     return attribute_descriptions;
 }
@@ -1701,6 +1703,207 @@ VK_QuerySwapChainSupport(Arena* arena, VulkanContext* vk_ctx, VkPhysicalDevice d
     }
 
     return details;
+}
+
+// ~mgj: Descriptor pool creation
+static void
+DescriptorPoolCreate(VulkanContext* vk_ctx)
+{
+    U32 max_frames_in_flight = vk_ctx->MAX_FRAMES_IN_FLIGHT;
+    VkDescriptorPoolSize pool_sizes[] = {
+        {VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+         max_frames_in_flight * 2}, // 2 for both camera buffer and terrain buffer
+        {VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, max_frames_in_flight},
+    };
+    U32 pool_size_count = ArrayCount(pool_sizes);
+
+    VkDescriptorPoolCreateInfo poolInfo{};
+    poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
+    poolInfo.poolSizeCount = pool_size_count;
+    poolInfo.pPoolSizes = pool_sizes;
+
+    poolInfo.maxSets = max_frames_in_flight * 2;
+
+    if (vkCreateDescriptorPool(vk_ctx->device, &poolInfo, nullptr, &vk_ctx->descriptor_pool) !=
+        VK_SUCCESS)
+    {
+        exitWithError("failed to create descriptor pool!");
+    }
+}
+// ~mgj: Camera functions
+static void
+FrustumPlanesCalculate(Frustum* out_frustum, const glm::mat4 matrix)
+{
+    out_frustum->planes[LEFT].x = matrix[0].w + matrix[0].x;
+    out_frustum->planes[LEFT].y = matrix[1].w + matrix[1].x;
+    out_frustum->planes[LEFT].z = matrix[2].w + matrix[2].x;
+    out_frustum->planes[LEFT].w = matrix[3].w + matrix[3].x;
+
+    out_frustum->planes[RIGHT].x = matrix[0].w - matrix[0].x;
+    out_frustum->planes[RIGHT].y = matrix[1].w - matrix[1].x;
+    out_frustum->planes[RIGHT].z = matrix[2].w - matrix[2].x;
+    out_frustum->planes[RIGHT].w = matrix[3].w - matrix[3].x;
+
+    out_frustum->planes[TOP].x = matrix[0].w - matrix[0].y;
+    out_frustum->planes[TOP].y = matrix[1].w - matrix[1].y;
+    out_frustum->planes[TOP].z = matrix[2].w - matrix[2].y;
+    out_frustum->planes[TOP].w = matrix[3].w - matrix[3].y;
+
+    out_frustum->planes[BOTTOM].x = matrix[0].w + matrix[0].y;
+    out_frustum->planes[BOTTOM].y = matrix[1].w + matrix[1].y;
+    out_frustum->planes[BOTTOM].z = matrix[2].w + matrix[2].y;
+    out_frustum->planes[BOTTOM].w = matrix[3].w + matrix[3].y;
+
+    out_frustum->planes[BACK].x = matrix[0].w + matrix[0].z;
+    out_frustum->planes[BACK].y = matrix[1].w + matrix[1].z;
+    out_frustum->planes[BACK].z = matrix[2].w + matrix[2].z;
+    out_frustum->planes[BACK].w = matrix[3].w + matrix[3].z;
+
+    out_frustum->planes[FRONT].x = matrix[0].w - matrix[0].z;
+    out_frustum->planes[FRONT].y = matrix[1].w - matrix[1].z;
+    out_frustum->planes[FRONT].z = matrix[2].w - matrix[2].z;
+    out_frustum->planes[FRONT].w = matrix[3].w - matrix[3].z;
+
+    for (size_t i = 0; i < ArrayCount(out_frustum->planes); i++)
+    {
+        float length = sqrtf(out_frustum->planes[i].x * out_frustum->planes[i].x +
+                             out_frustum->planes[i].y * out_frustum->planes[i].y +
+                             out_frustum->planes[i].z * out_frustum->planes[i].z);
+        out_frustum->planes[i] /= length;
+    }
+}
+
+static void
+CameraUniformBufferCreate(VulkanContext* vk_ctx)
+{
+    VkDeviceSize camera_buffer_size = sizeof(CameraUniformBuffer);
+
+    for (U32 i = 0; i < vk_ctx->MAX_FRAMES_IN_FLIGHT; i++)
+    {
+        wrapper::VK_BufferCreate(vk_ctx->physical_device, vk_ctx->device, camera_buffer_size,
+                                 VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
+                                 VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
+                                     VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+                                 &vk_ctx->camera_buffer[i], &vk_ctx->camera_buffer_memory[i]);
+
+        if (vkMapMemory(vk_ctx->device, vk_ctx->camera_buffer_memory[i], 0, camera_buffer_size, 0,
+                        &vk_ctx->camera_buffer_memory_mapped[i]) != VK_SUCCESS)
+        {
+            exitWithError("failed to map terrain buffer memory!");
+        }
+    }
+}
+
+static void
+CameraUniformBufferUpdate(VulkanContext* vk_ctx, ui::Camera* camera, Vec2F32 screen_res,
+                          U32 current_frame)
+{
+    CameraUniformBuffer* ubo = &vk_ctx->camera_uniform_buffer;
+
+    glm::mat4 transform = camera->projection_matrix * camera->view_matrix;
+    FrustumPlanesCalculate(&ubo->frustum, transform);
+    ubo->viewport_dim.x = screen_res.x;
+    ubo->viewport_dim.y = screen_res.y;
+    ubo->view = camera->view_matrix;
+    ubo->proj = camera->projection_matrix;
+
+    MemoryCopy(vk_ctx->camera_buffer_memory_mapped[current_frame], ubo, sizeof(*ubo));
+}
+
+static void
+CameraDescriptorSetLayoutCreate(VulkanContext* vk_ctx)
+{
+    VkDescriptorSetLayoutBinding camera_desc_layout{};
+    camera_desc_layout.binding = 0;
+    camera_desc_layout.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+    camera_desc_layout.descriptorCount = 1;
+    camera_desc_layout.stageFlags = VK_SHADER_STAGE_VERTEX_BIT |
+                                    VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT |
+                                    VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT;
+
+    VkDescriptorSetLayoutBinding descriptor_layout_bindings[] = {camera_desc_layout};
+
+    VkDescriptorSetLayoutCreateInfo layoutInfo{};
+    layoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+    layoutInfo.bindingCount = ArrayCount(descriptor_layout_bindings);
+    layoutInfo.pBindings = descriptor_layout_bindings;
+
+    if (vkCreateDescriptorSetLayout(vk_ctx->device, &layoutInfo, nullptr,
+                                    &vk_ctx->camera_descriptor_set_layout) != VK_SUCCESS)
+    {
+        exitWithError("failed to create camera descriptor set layout!");
+    }
+}
+
+static void
+CameraDescriptorSetCreate(VulkanContext* vk_ctx)
+{
+    Temp scratch = ScratchBegin(0, 0);
+    Arena* arena = scratch.arena;
+    U32 max_frames_in_flight = VulkanContext::MAX_FRAMES_IN_FLIGHT;
+
+    Buffer<VkDescriptorSetLayout> layouts =
+        BufferAlloc<VkDescriptorSetLayout>(arena, max_frames_in_flight);
+
+    for (U32 i = 0; i < layouts.size; i++)
+    {
+        layouts.data[i] = vk_ctx->camera_descriptor_set_layout;
+    }
+
+    VkDescriptorSetAllocateInfo allocInfo{};
+    allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+    allocInfo.descriptorPool = vk_ctx->descriptor_pool;
+    allocInfo.descriptorSetCount = layouts.size;
+    allocInfo.pSetLayouts = layouts.data;
+
+    if (vkAllocateDescriptorSets(vk_ctx->device, &allocInfo, vk_ctx->camera_descriptor_sets) !=
+        VK_SUCCESS)
+    {
+        exitWithError("failed to allocate descriptor sets!");
+    }
+
+    for (size_t i = 0; i < max_frames_in_flight; i++)
+    {
+        VkDescriptorBufferInfo buffer_info{};
+        buffer_info.buffer = vk_ctx->camera_buffer[i];
+        buffer_info.offset = 0;
+        buffer_info.range = sizeof(CameraUniformBuffer);
+
+        VkWriteDescriptorSet uniform_buffer_desc{};
+        uniform_buffer_desc.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+        uniform_buffer_desc.dstSet = vk_ctx->camera_descriptor_sets[i];
+        uniform_buffer_desc.dstBinding = 0;
+        uniform_buffer_desc.dstArrayElement = 0;
+        uniform_buffer_desc.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+        uniform_buffer_desc.descriptorCount = 1;
+        uniform_buffer_desc.pBufferInfo = &buffer_info;
+        uniform_buffer_desc.pImageInfo = nullptr;
+        uniform_buffer_desc.pTexelBufferView = nullptr;
+
+        VkWriteDescriptorSet descriptors[] = {uniform_buffer_desc};
+
+        vkUpdateDescriptorSets(vk_ctx->device, ArrayCount(descriptors), descriptors, 0, nullptr);
+    }
+
+    ScratchEnd(scratch);
+}
+
+static void
+CameraCleanup(VulkanContext* vk_ctx)
+{
+    VkBuffer camera_buffer[VulkanContext::MAX_FRAMES_IN_FLIGHT];
+    VkDeviceMemory camera_buffer_memory[VulkanContext::MAX_FRAMES_IN_FLIGHT];
+    void* camera_buffer_memory_mapped[VulkanContext::MAX_FRAMES_IN_FLIGHT];
+    VkDescriptorSetLayout camera_descriptor_set_layout;
+    VkDescriptorSet camera_descriptor_sets[VulkanContext::MAX_FRAMES_IN_FLIGHT];
+
+    for (size_t i = 0; i < VulkanContext::MAX_FRAMES_IN_FLIGHT; i++)
+    {
+        vkDestroyBuffer(vk_ctx->device, vk_ctx->camera_buffer[i], NULL);
+        vkFreeMemory(vk_ctx->device, vk_ctx->camera_buffer_memory[i], NULL);
+    }
+
+    vkDestroyDescriptorSetLayout(vk_ctx->device, vk_ctx->camera_descriptor_set_layout, NULL);
 }
 
 } // namespace internal

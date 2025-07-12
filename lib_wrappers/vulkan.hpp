@@ -11,6 +11,10 @@ namespace wrapper
 {
 struct VulkanContext;
 }
+namespace ui
+{
+struct Camera;
+}
 
 namespace wrapper
 {
@@ -55,6 +59,33 @@ struct SwapChainSupportDetails
     Buffer<VkPresentModeKHR> presentModes;
 };
 
+enum PlaneType
+{
+    LEFT,
+    RIGHT,
+    TOP,
+    BOTTOM,
+    BACK,
+    FRONT,
+    PlaneType_Count
+};
+
+struct Frustum
+{
+    glm::vec4 planes[PlaneType_Count];
+};
+
+struct CameraUniformBuffer
+{
+    glm::mat4 view;
+    glm::mat4 proj;
+    Frustum frustum;
+    glm::vec2 viewport_dim;
+};
+
+static void
+DescriptorPoolCreate(VulkanContext* vk_ctx);
+
 static ShaderModuleInfo
 ShaderStageFromSpirv(Arena* arena, VkDevice device, VkShaderStageFlagBits flag, String8 path);
 static VkShaderModule
@@ -94,6 +125,24 @@ static Buffer<VkVertexInputAttributeDescription>
 RoadAttributeDescriptionGet(Arena* arena);
 static void
 RoadPipelineCreate(city::City* city, String8 cwd);
+
+//~mgj: camera
+static void
+CameraCleanup(VulkanContext* vk_ctx);
+
+static void
+FrustumPlanesCalculate(Frustum* out_frustum, const glm::mat4 matrix);
+// ~mgj: camera functions
+static void
+CameraUniformBufferCreate(VulkanContext* vk_ctx);
+static void
+CameraUniformBufferUpdate(VulkanContext* vk_ctx, ui::Camera* camera, Vec2F32 screen_res,
+                          U32 current_frame);
+static void
+CameraDescriptorSetLayoutCreate(VulkanContext* vk_ctx);
+static void
+CameraDescriptorSetCreate(VulkanContext* vk_ctx);
+
 } // namespace internal
 
 struct Road
@@ -109,7 +158,7 @@ struct VulkanContext
 
     const U32 WIDTH = 800;
     const U32 HEIGHT = 600;
-    const U32 MAX_FRAMES_IN_FLIGHT = 2;
+    static const U32 MAX_FRAMES_IN_FLIGHT = 2;
 
     const char* validation_layers[1] = {"VK_LAYER_KHRONOS_validation"};
 
@@ -163,6 +212,15 @@ struct VulkanContext
 
     // queue
     internal::QueueFamilyIndices queue_family_indices;
+
+    VkDescriptorPool descriptor_pool;
+    // ~mgj: camera resources for uniform buffers
+    VkBuffer camera_buffer[MAX_FRAMES_IN_FLIGHT];
+    VkDeviceMemory camera_buffer_memory[MAX_FRAMES_IN_FLIGHT];
+    void* camera_buffer_memory_mapped[MAX_FRAMES_IN_FLIGHT];
+    VkDescriptorSetLayout camera_descriptor_set_layout;
+    VkDescriptorSet camera_descriptor_sets[MAX_FRAMES_IN_FLIGHT];
+    internal::CameraUniformBuffer camera_uniform_buffer;
 };
 
 struct RoadPushConstants
@@ -172,6 +230,7 @@ struct RoadPushConstants
     F32 road_height;
 };
 
+// ~mgj: road function
 static void
 RoadInit(wrapper::VulkanContext* vk_ctx, city::City* city, String8 cwd);
 static void

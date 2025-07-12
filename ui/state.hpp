@@ -31,7 +31,10 @@ struct DT_Time
 };
 
 struct Terrain;
-struct UI_Camera;
+namespace ui
+{
+struct Camera;
+}
 struct Context
 {
     B32 running;
@@ -46,7 +49,7 @@ struct Context
     wrapper::VulkanContext* vk_ctx;
     ProfilingContext* profilingContext;
     IO* io;
-    UI_Camera* camera;
+    ui::Camera* camera;
     DT_Time* time;
     city::City* city;
     // TODO: CWD should be set in init function

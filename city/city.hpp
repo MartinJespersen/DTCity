@@ -38,8 +38,7 @@ struct RoadWay
 
 struct RoadVertex
 {
-    Vec2F32 pos;
-    U64 id;
+    glm::vec2 pos;
 };
 
 struct Road
@@ -55,6 +54,11 @@ struct Road
 
     glm::mat4 model_matrix;
     Buffer<RoadVertex> vertex_buffer;
+};
+
+struct RoadQuadCoord
+{
+    glm::vec2 pos[4];
 };
 
 struct City

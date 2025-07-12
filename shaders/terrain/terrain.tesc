@@ -1,18 +1,22 @@
 #version 450
 
-layout(set = 0, binding = 0) uniform UBO
+layout(set = 0, binding = 0) uniform UBO_Camera
 {
     mat4 view;
     mat4 projection;
     vec4 frustum_planes[6];
+    vec2 viewport_dim;
+} camera_ubo;
+
+layout(set = 1, binding = 0) uniform UBO_Terrain
+{
     float displacement_factor;
     float tessellation_factor;
     float patch_size;
-    vec2 viewport_dim;
     float tessellated_edge_size;
-} ubo;
+} terrain_ubo;
 
-layout(set = 0, binding = 1) uniform sampler2D samplerHeight;
+layout(set = 1, binding = 1) uniform sampler2D samplerHeight;
 
 layout(vertices = 4) out;
 
@@ -29,24 +33,24 @@ float screenSpaceTessFactor(vec4 p0, vec4 p1)
     float radius = distance(p0, p1) / 2.0;
 
     // View space
-    vec4 v0 = ubo.view * midPoint;
+    vec4 v0 = camera_ubo.view * midPoint;
 
     // Project into clip space
-    vec4 clip0 = (ubo.projection * (v0 - vec4(radius, vec3(0.0))));
-    vec4 clip1 = (ubo.projection * (v0 + vec4(radius, vec3(0.0))));
+    vec4 clip0 = (camera_ubo.projection * (v0 - vec4(radius, vec3(0.0))));
+    vec4 clip1 = (camera_ubo.projection * (v0 + vec4(radius, vec3(0.0))));
 
     // Get normalized device coordinates
     clip0 /= clip0.w;
     clip1 /= clip1.w;
 
     // Convert to viewport coordinates
-    clip0.xy *= ubo.viewport_dim;
-    clip1.xy *= ubo.viewport_dim;
+    clip0.xy *= camera_ubo.viewport_dim;
+    clip1.xy *= camera_ubo.viewport_dim;
 
     // Return the tessellation factor based on the screen size
     // given by the distance of the two edge control points in screen space
     // and a reference (min.) tessellation size for the edge set by the application
-    return clamp(distance(clip0, clip1) / ubo.tessellated_edge_size * ubo.tessellation_factor, 1.0, 64.0);
+    return clamp(distance(clip0, clip1) / terrain_ubo.tessellated_edge_size * terrain_ubo.tessellation_factor, 1.0, 64.0);
 }
 
 // Checks the current's patch visibility against the frustum using a sphere check
@@ -56,11 +60,11 @@ bool frustumCheck()
     // Fixed radius (increase if patch size is increased in example)
     const float radius = 4.0;
     vec4 pos = gl_in[gl_InvocationID].gl_Position;
-    pos.y += textureLod(samplerHeight, in_uv[gl_InvocationID], 0.0).r * ubo.displacement_factor;
+    pos.y += textureLod(samplerHeight, in_uv[gl_InvocationID], 0.0).r * terrain_ubo.displacement_factor;
 
     // Check sphere against frustum planes
     for (int i = 0; i < 6; i++) {
-        if (dot(pos, ubo.frustum_planes[i]) + radius < 0.0)
+        if (dot(pos, camera_ubo.frustum_planes[i]) + radius < 0.0)
         {
             return false;
         }
@@ -83,7 +87,7 @@ void main()
         }
         else
         {
-            if (ubo.tessellation_factor > 0.0)
+            if (terrain_ubo.tessellation_factor > 0.0)
             {
                 gl_TessLevelOuter[0] = screenSpaceTessFactor(gl_in[3].gl_Position, gl_in[0].gl_Position);
                 gl_TessLevelOuter[1] = screenSpaceTessFactor(gl_in[0].gl_Position, gl_in[1].gl_Position);

@@ -1,18 +1,22 @@
 #version 450
 
-layout(set = 0, binding = 0) uniform UBO
+layout(set = 0, binding = 0) uniform UBO_Camera
 {
     mat4 view;
     mat4 projection;
     vec4 frustum_planes[6];
+    vec2 viewport_dim;
+} camera_ubo;
+
+layout(set = 1, binding = 0) uniform UBO_Terrain
+{
     float displacement_factor;
     float tessellation_factor;
     float patch_size;
-    vec2 viewport_dim;
     float tessellated_edge_size;
-} ubo;
+} terrain_ubo;
 
-layout(set = 0, binding = 1) uniform sampler2D displacement_map;
+layout(set = 1, binding = 1) uniform sampler2D displacement_map;
 
 layout(quads, equal_spacing, ccw) in;
 
@@ -34,9 +38,9 @@ void main()
 
     // Displace
     vec4 texture_v = textureLod(displacement_map, out_uv, 0.0);
-    pos.y += texture_v.r * ubo.displacement_factor;
+    pos.y += texture_v.r * terrain_ubo.displacement_factor;
 
     // Perspective projection
-    gl_Position = ubo.projection * ubo.view * pos;
+    gl_Position = camera_ubo.projection * camera_ubo.view * pos;
     out_color = texture_v; //texture_v;
 }

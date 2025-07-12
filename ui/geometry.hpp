@@ -1,22 +1,8 @@
 #pragma once
 
-enum PlaneType
+namespace ui
 {
-    LEFT,
-    RIGHT,
-    TOP,
-    BOTTOM,
-    BACK,
-    FRONT,
-    PlaneType_Count
-};
-
-struct Frustum
-{
-    glm::vec4 planes[PlaneType_Count];
-};
-
-struct UI_Camera
+struct Camera
 {
     glm::mat4 view_matrix;
     glm::mat4 projection_matrix;
@@ -30,10 +16,8 @@ struct UI_Camera
 };
 
 static void
-UI_CameraInit(UI_Camera* camera);
+UI_CameraInit(Camera* camera);
 
 static void
-FrustumPlanesCalculate(Frustum* out_frustum, const glm::mat4 matrix);
-
-static void
-UI_CameraUpdate(UI_Camera* camera, IO* input, DT_Time* time, VkExtent2D extent);
+UI_CameraUpdate(Camera* camera, IO* input, DT_Time* time, VkExtent2D extent);
+} // namespace ui
