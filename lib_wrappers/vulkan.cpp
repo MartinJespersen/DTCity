@@ -657,18 +657,6 @@ VK_SurfaceCreate(VulkanContext* vk_ctx, IO* io)
     }
 }
 
-static char**
-VK_StrArrFromStr8Buffer(Arena* arena, String8* buffer, U64 count)
-{
-    char** arr = PushArray(arena, char*, count);
-
-    for (U32 i = 0; i < count; i++)
-    {
-        arr[i] = (char*)buffer[i].str;
-    }
-    return arr;
-}
-
 static void
 VK_CreateInstance(VulkanContext* vk_ctx)
 {
@@ -693,14 +681,14 @@ VK_CreateInstance(VulkanContext* vk_ctx)
     Buffer<String8> extensions = VK_RequiredExtensionsGet(vk_ctx);
 
     createInfo.enabledExtensionCount = (U32)extensions.size;
-    createInfo.ppEnabledExtensionNames =
-        VK_StrArrFromStr8Buffer(scratch.arena, extensions.data, extensions.size);
+    createInfo.ppEnabledExtensionNames = CStrArrFromStr8Buffer(scratch.arena, extensions);
 
     VkDebugUtilsMessengerCreateInfoEXT debugCreateInfo{};
     if (vk_ctx->enable_validation_layers)
     {
-        createInfo.enabledLayerCount = (U32)ArrayCount(vk_ctx->validation_layers);
-        createInfo.ppEnabledLayerNames = vk_ctx->validation_layers;
+        createInfo.enabledLayerCount = (U32)vk_ctx->validation_layers.size;
+        createInfo.ppEnabledLayerNames =
+            CStrArrFromStr8Buffer(scratch.arena, vk_ctx->validation_layers);
 
         VK_PopulateDebugMessengerCreateInfo(debugCreateInfo);
         createInfo.pNext = (VkDebugUtilsMessengerCreateInfoEXT*)&debugCreateInfo;
@@ -766,14 +754,16 @@ VK_LogicalDeviceCreate(Arena* arena, VulkanContext* vk_ctx)
 
     createInfo.pEnabledFeatures = &deviceFeatures;
 
-    createInfo.enabledExtensionCount = (U32)ArrayCount(vk_ctx->device_extensions);
-    createInfo.ppEnabledExtensionNames = vk_ctx->device_extensions;
+    createInfo.enabledExtensionCount = (U32)vk_ctx->device_extensions.size;
+    createInfo.ppEnabledExtensionNames =
+        CStrArrFromStr8Buffer(vk_ctx->arena, vk_ctx->device_extensions);
 
     // NOTE: This if statement is no longer necessary on newer versions
     if (vk_ctx->enable_validation_layers)
     {
-        createInfo.enabledLayerCount = (U32)ArrayCount(vk_ctx->validation_layers);
-        createInfo.ppEnabledLayerNames = vk_ctx->validation_layers;
+        createInfo.enabledLayerCount = (U32)vk_ctx->validation_layers.size;
+        createInfo.ppEnabledLayerNames =
+            CStrArrFromStr8Buffer(vk_ctx->arena, vk_ctx->validation_layers);
     }
     else
     {
@@ -846,12 +836,13 @@ VK_CheckValidationLayerSupport(VulkanContext* vk_ctx)
     vkEnumerateInstanceLayerProperties(&layerCount, availableLayers);
 
     bool layerFound = false;
-    for (const char* layerName : vk_ctx->validation_layers)
+    for (U32 i = 0; i < vk_ctx->validation_layers.size; i++)
     {
         layerFound = false;
-        for (U32 i = 0; i < layerCount; i++)
+        for (U32 j = 0; j < layerCount; j++)
         {
-            if (strcmp(layerName, availableLayers[i].layerName) == 0)
+            if (strcmp((char*)vk_ctx->validation_layers.data[i].str,
+                       availableLayers[j].layerName) == 0)
             {
                 layerFound = true;
                 break;
@@ -948,13 +939,14 @@ VK_CheckDeviceExtensionSupport(VulkanContext* vk_ctx, VkPhysicalDevice device)
     VkExtensionProperties* availableExtensions =
         PushArray(scratch.arena, VkExtensionProperties, extensionCount);
     vkEnumerateDeviceExtensionProperties(device, nullptr, &extensionCount, availableExtensions);
-    const U64 numberOfRequiredExtenstions = ArrayCount(vk_ctx->device_extensions);
+    const U64 numberOfRequiredExtenstions = vk_ctx->device_extensions.size;
     U64 numberOfRequiredExtenstionsLeft = numberOfRequiredExtenstions;
     for (U32 i = 0; i < extensionCount; i++)
     {
         for (U32 j = 0; j < numberOfRequiredExtenstions; j++)
         {
-            if (CStrEqual(vk_ctx->device_extensions[j], availableExtensions[i].extensionName))
+            if (CStrEqual((char*)vk_ctx->device_extensions.data[j].str,
+                          availableExtensions[i].extensionName))
             {
                 numberOfRequiredExtenstionsLeft--;
                 break;
@@ -1214,8 +1206,24 @@ static void
 VK_VulkanInit(VulkanContext* vk_ctx, IO* io_ctx)
 {
     Temp scratch = ScratchBegin(0, 0);
-
     vk_ctx->arena = ArenaAlloc();
+
+    static const U32 MAX_FRAMES_IN_FLIGHT = 2;
+
+    const char* validation_layers[] = {"VK_LAYER_KHRONOS_validation"};
+    vk_ctx->validation_layers = BufferAlloc<String8>(vk_ctx->arena, ArrayCount(validation_layers));
+    for (U32 i = 0; i < ArrayCount(validation_layers); i++)
+    {
+        vk_ctx->validation_layers.data[i] = {Str8CString(validation_layers[i])};
+    }
+
+    const char* device_extensions[2] = {VK_KHR_SWAPCHAIN_EXTENSION_NAME,
+                                        VK_KHR_DYNAMIC_RENDERING_EXTENSION_NAME};
+    vk_ctx->device_extensions = BufferAlloc<String8>(vk_ctx->arena, ArrayCount(device_extensions));
+    for (U32 i = 0; i < ArrayCount(device_extensions); i++)
+    {
+        vk_ctx->device_extensions.data[i] = {Str8CString(device_extensions[i])};
+    }
 
     VK_CreateInstance(vk_ctx);
     VK_DebugMessengerSetup(vk_ctx);

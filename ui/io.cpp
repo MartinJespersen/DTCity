@@ -35,7 +35,6 @@ IO_ScrollCallback(GLFWwindow* window, double xoffset, double yoffset)
     IO* io_ctx = ctx->io;
     io_ctx->scroll_x = xoffset;
     io_ctx->scroll_y = yoffset;
-    printf("Scroll callback called with xoffset: %f, yoffset: %f\n", xoffset, yoffset);
 }
 
 // IMPORTANT:

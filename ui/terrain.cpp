@@ -41,7 +41,7 @@ TerrainDescriptorSetLayoutCreate(VkDevice device, Terrain* terrain)
 }
 
 static void
-TerrainTextureResourceCreate(wrapper::VulkanContext* vk_ctx, Terrain* terrain, const char* cwd)
+TerrainTextureResourceCreate(wrapper::VulkanContext* vk_ctx, Terrain* terrain, String8 cwd)
 {
     Temp scratch = ScratchBegin(0, 0);
     VkBuffer vk_texture_staging_buffer;
@@ -60,10 +60,10 @@ TerrainTextureResourceCreate(wrapper::VulkanContext* vk_ctx, Terrain* terrain, c
 
     // load heightmap
     String8List heightmap_path_list = {0};
-    String8 cwd_str = Str8CString(cwd);
-    Str8ListPush(scratch.arena, &heightmap_path_list, cwd_str);
+    Str8ListPush(scratch.arena, &heightmap_path_list, cwd);
     String8 heightmap_path_abs = CreatePathFromStrings(
-        scratch.arena, Str8BufferFromCString(scratch.arena, {cwd, "textures", "heightmap_au.png"}));
+        scratch.arena,
+        Str8BufferFromCString(scratch.arena, {(char*)cwd.str, "textures", "heightmap_au.png"}));
 
     S32 tex_width, tex_height, tex_channels;
     stbi_uc* pixels = stbi_load((char*)heightmap_path_abs.str, &tex_width, &tex_height,
@@ -209,23 +209,23 @@ TerrainUniformBufferCreate(Terrain* terrain, U32 image_count)
 }
 
 static void
-TerrainGraphicsPipelineCreate(Terrain* terrain, const char* cwd)
+TerrainGraphicsPipelineCreate(Terrain* terrain, String8 cwd)
 {
     Temp scratch = ScratchBegin(0, 0);
 
     wrapper::VulkanContext* vk_ctx = GlobalContextGet()->vk_ctx;
     String8 vert_path = CreatePathFromStrings(
-        scratch.arena,
-        Str8BufferFromCString(scratch.arena, {cwd, "shaders", "terrain", "terrain_vert.spv"}));
+        scratch.arena, Str8BufferFromCString(scratch.arena, {(char*)cwd.str, "shaders", "terrain",
+                                                             "terrain_vert.spv"}));
     String8 frag_path = CreatePathFromStrings(
-        scratch.arena,
-        Str8BufferFromCString(scratch.arena, {cwd, "shaders", "terrain", "terrain_frag.spv"}));
+        scratch.arena, Str8BufferFromCString(scratch.arena, {(char*)cwd.str, "shaders", "terrain",
+                                                             "terrain_frag.spv"}));
     String8 tesc_path = CreatePathFromStrings(
-        scratch.arena,
-        Str8BufferFromCString(scratch.arena, {cwd, "shaders", "terrain", "terrain_tesc.spv"}));
+        scratch.arena, Str8BufferFromCString(scratch.arena, {(char*)cwd.str, "shaders", "terrain",
+                                                             "terrain_tesc.spv"}));
     String8 tese_path = CreatePathFromStrings(
-        scratch.arena,
-        Str8BufferFromCString(scratch.arena, {cwd, "shaders", "terrain", "terrain_tese.spv"}));
+        scratch.arena, Str8BufferFromCString(scratch.arena, {(char*)cwd.str, "shaders", "terrain",
+                                                             "terrain_tese.spv"}));
 
     wrapper::internal::ShaderModuleInfo vert_shader_stage_info =
         wrapper::internal::ShaderStageFromSpirv(scratch.arena, vk_ctx->device,

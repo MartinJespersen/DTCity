@@ -14,7 +14,6 @@ popd
 pushd road
 call glslc road.frag -o road_frag.spv
 call glslc road.vert -o road_vert.spv
-call glslc road.geom -o road_geom.spv
 popd
 
 endlocal

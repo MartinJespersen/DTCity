@@ -4,7 +4,7 @@ namespace ui
 static void
 UI_CameraInit(Camera* camera)
 {
-    camera->zoom_sensitivity = 10.0f;
+    camera->zoom_sensitivity = 20.0f;
     camera->fov = 45.0;
     camera->position = glm::vec3(0.0f, 50.0f, 1.0f);
     camera->view_dir = glm::normalize(glm::vec3(0.0f, -1.0f, -1.0f));

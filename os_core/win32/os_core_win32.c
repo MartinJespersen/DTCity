@@ -969,8 +969,8 @@ static void os_process_detach(OS_Handle handle) {
 ////////////////////////////////
 //~ rjf: @os_hooks Threads (Implemented Per-OS)
 
-static OS_Handle os_thread_launch(OS_ThreadFunctionType *func, void *ptr,
-                                  void *params) {
+static OS_Handle OS_ThreadLaunch(OS_ThreadFunctionType *func, void *ptr,
+                                 void *params) {
   OS_W32_Entity *entity = os_w32_entity_alloc(OS_W32_EntityKind_Thread);
   entity->thread.func = func;
   entity->thread.ptr = ptr;
@@ -1005,58 +1005,58 @@ static void os_thread_detach(OS_Handle thread) {
 
 //- rjf: mutexes
 
-static OS_Handle os_mutex_alloc(void) {
+static OS_Handle OS_MutexAlloc(void) {
   OS_W32_Entity *entity = os_w32_entity_alloc(OS_W32_EntityKind_Mutex);
   InitializeCriticalSection(&entity->mutex);
   OS_Handle result = {IntFromPtr(entity)};
   return result;
 }
 
-static void os_mutex_release(OS_Handle mutex) {
+static void OS_MutexRelease(OS_Handle mutex) {
   OS_W32_Entity *entity = (OS_W32_Entity *)PtrFromInt(mutex.u64[0]);
   os_w32_entity_release(entity);
 }
 
-static void os_mutex_take(OS_Handle mutex) {
+static void OS_MutexTake(OS_Handle mutex) {
   OS_W32_Entity *entity = (OS_W32_Entity *)PtrFromInt(mutex.u64[0]);
   EnterCriticalSection(&entity->mutex);
 }
 
-static void os_mutex_drop(OS_Handle mutex) {
+static void OS_MutexDrop(OS_Handle mutex) {
   OS_W32_Entity *entity = (OS_W32_Entity *)PtrFromInt(mutex.u64[0]);
   LeaveCriticalSection(&entity->mutex);
 }
 
 //- rjf: reader/writer mutexes
 
-static OS_Handle os_rw_mutex_alloc(void) {
+static OS_Handle OS_RWMutexAlloc(void) {
   OS_W32_Entity *entity = os_w32_entity_alloc(OS_W32_EntityKind_RWMutex);
   InitializeSRWLock(&entity->rw_mutex);
   OS_Handle result = {IntFromPtr(entity)};
   return result;
 }
 
-static void os_rw_mutex_release(OS_Handle rw_mutex) {
+static void OS_RWMutexRelease(OS_Handle rw_mutex) {
   OS_W32_Entity *entity = (OS_W32_Entity *)PtrFromInt(rw_mutex.u64[0]);
   os_w32_entity_release(entity);
 }
 
-static void os_rw_mutex_take_r(OS_Handle rw_mutex) {
+static void OS_RWMutexTakeR(OS_Handle rw_mutex) {
   OS_W32_Entity *entity = (OS_W32_Entity *)PtrFromInt(rw_mutex.u64[0]);
   AcquireSRWLockShared(&entity->rw_mutex);
 }
 
-static void os_rw_mutex_drop_r(OS_Handle rw_mutex) {
+static void OS_RWMutexDropR(OS_Handle rw_mutex) {
   OS_W32_Entity *entity = (OS_W32_Entity *)PtrFromInt(rw_mutex.u64[0]);
   ReleaseSRWLockShared(&entity->rw_mutex);
 }
 
-static void os_rw_mutex_take_w(OS_Handle rw_mutex) {
+static void OS_RWMutexTakeW(OS_Handle rw_mutex) {
   OS_W32_Entity *entity = (OS_W32_Entity *)PtrFromInt(rw_mutex.u64[0]);
   AcquireSRWLockExclusive(&entity->rw_mutex);
 }
 
-static void os_rw_mutex_drop_w(OS_Handle rw_mutex) {
+static void OS_RWMutexDropW(OS_Handle rw_mutex) {
   OS_W32_Entity *entity = (OS_W32_Entity *)PtrFromInt(rw_mutex.u64[0]);
   ReleaseSRWLockExclusive(&entity->rw_mutex);
 }
@@ -1128,8 +1128,8 @@ static void os_condition_variable_broadcast(OS_Handle cv) {
 
 //- rjf: cross-process semaphores
 
-static OS_Handle os_semaphore_alloc(U32 initial_count, U32 max_count,
-                                    String8 name) {
+static OS_Handle OS_SemaphoreAlloc(U32 initial_count, U32 max_count,
+                                   String8 name) {
   Temp scratch = ScratchBegin(0, 0);
   String16 name16 = Str16From8(scratch.arena, name);
   HANDLE handle =
@@ -1139,12 +1139,12 @@ static OS_Handle os_semaphore_alloc(U32 initial_count, U32 max_count,
   return result;
 }
 
-static void os_semaphore_release(OS_Handle semaphore) {
+static void OS_SemaphoreRelease(OS_Handle semaphore) {
   HANDLE handle = (HANDLE)semaphore.u64[0];
   CloseHandle(handle);
 }
 
-static OS_Handle os_semaphore_open(String8 name) {
+static OS_Handle OS_SemaphoreOpen(String8 name) {
   Temp scratch = ScratchBegin(0, 0);
   String16 name16 = Str16From8(scratch.arena, name);
   HANDLE handle = OpenSemaphoreW(SEMAPHORE_ALL_ACCESS, 0, (WCHAR *)name16.str);
@@ -1153,12 +1153,12 @@ static OS_Handle os_semaphore_open(String8 name) {
   return result;
 }
 
-static void os_semaphore_close(OS_Handle semaphore) {
+static void OS_SemaphoreClose(OS_Handle semaphore) {
   HANDLE handle = (HANDLE)semaphore.u64[0];
   CloseHandle(handle);
 }
 
-static B32 os_semaphore_take(OS_Handle semaphore, U64 endt_us) {
+static B32 OS_SemaphoreTake(OS_Handle semaphore, U64 endt_us) {
   U32 sleep_ms = os_w32_sleep_ms_from_endt_us(endt_us);
   HANDLE handle = (HANDLE)semaphore.u64[0];
   DWORD wait_result = WaitForSingleObject(handle, sleep_ms);
@@ -1166,7 +1166,7 @@ static B32 os_semaphore_take(OS_Handle semaphore, U64 endt_us) {
   return result;
 }
 
-static void os_semaphore_drop(OS_Handle semaphore) {
+static void OS_SemaphoreDrop(OS_Handle semaphore) {
   HANDLE handle = (HANDLE)semaphore.u64[0];
   ReleaseSemaphore(handle, 1, 0);
 }

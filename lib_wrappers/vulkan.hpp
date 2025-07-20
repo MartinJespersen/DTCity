@@ -154,23 +154,20 @@ struct Road
 
 struct VulkanContext
 {
+    static const U32 WIDTH = 800;
+    static const U32 HEIGHT = 600;
+    static const U32 MAX_FRAMES_IN_FLIGHT = 2;
+#ifdef NDEBUG
+    static const U8 enable_validation_layers = 0;
+#else
+    static const U8 enable_validation_layers = 1;
+#endif
     Arena* arena;
 
-    const U32 WIDTH = 800;
-    const U32 HEIGHT = 600;
-    static const U32 MAX_FRAMES_IN_FLIGHT = 2;
+    Buffer<String8> validation_layers;
+    Buffer<String8> device_extensions;
 
-    const char* validation_layers[1] = {"VK_LAYER_KHRONOS_validation"};
-
-    const char* device_extensions[2] = {VK_KHR_SWAPCHAIN_EXTENSION_NAME,
-                                        VK_KHR_DYNAMIC_RENDERING_EXTENSION_NAME};
-
-#ifdef NDEBUG
-    const U8 enable_validation_layers = 0;
-#else
-    const U8 enable_validation_layers = 1;
-#endif
-    U8 framebuffer_resized = 0;
+    U8 framebuffer_resized;
 
     VkInstance instance;
     VkDebugUtilsMessengerEXT debug_messenger;

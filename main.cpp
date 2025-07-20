@@ -27,8 +27,6 @@
 #include "ui/ui.cpp"
 #include "city/city_inc.cpp"
 
-Context g_ctx_main;
-
 static void
 ProfileBuffersCreate(wrapper::VulkanContext* vk_ctx, ProfilingContext* prof_ctx);
 static void
@@ -50,11 +48,13 @@ static void
 InitContext(Context* ctx)
 {
     ctx->arena_permanent = (Arena*)ArenaAlloc();
+    // TODO: find better solution for hardcoding the path
+    ctx->cwd = Str8CString("C:\\repos\\DTCity");
 
     wrapper::VK_VulkanInit(ctx->vk_ctx, ctx->io);
     UI_CameraInit(ctx->camera);
     ProfileBuffersCreate(ctx->vk_ctx, ctx->profilingContext);
-    city::CityInit(ctx->vk_ctx, ctx->city, Str8CString(g_ctx_main.cwd));
+    city::CityInit(ctx->vk_ctx, ctx->city, ctx->cwd);
 }
 
 // Function to load or reload the DLL
@@ -124,56 +124,59 @@ void
 run()
 {
     w32_entry_point_caller(__argc, __wargv);
-
+    ScratchScope scratch = ScratchScope(0, 0);
     HTTP_Init();
 
-    wrapper::VulkanContext vk_ctx = {};
-    ProfilingContext profilingContext = {};
-    IO io_ctx = {};
-    Terrain terrain = {};
-    ui::Camera camera = {};
-    DT_Time time = {};
-    city::City city = {};
+    Context* ctx = PushStruct(scratch.arena, Context);
+    ctx->io = PushStruct(scratch.arena, IO);
+    ctx->vk_ctx = PushStruct(scratch.arena, wrapper::VulkanContext);
+    ctx->os_w32_state = &os_w32_state;
+    ctx->camera = PushStruct(scratch.arena, ui::Camera);
+    ctx->time = PushStruct(scratch.arena, DT_Time);
+    ctx->profilingContext = PushStruct(scratch.arena, ProfilingContext);
+    ctx->terrain = PushStruct(scratch.arena, Terrain);
+    ctx->city = PushStruct(scratch.arena, city::City);
+    ctx->dll_info = PushStruct(scratch.arena, DllInfo);
 
-    DllInfo dll_info = {.func_name = "Entrypoint",
-                        .cleanup_func_name = "Cleanup",
-                        .dll_path = "build\\msc\\debug\\entrypoint.dll",
-                        .dll_temp_path = "build\\msc\\debug\\entrypoint_temp.dll",
-                        .handle = NULL,
-                        .last_modified = 0,
-                        .func = NULL};
-    g_ctx_main = {0,       &dll_info,         {0},     &os_w32_state, 0,     &terrain,
-                  &vk_ctx, &profilingContext, &io_ctx, &camera,       &time, &city};
-    g_ctx_main.running = 1;
+    DllInfo* dll_info = ctx->dll_info;
+    dll_info->func_name = "Entrypoint";
+    dll_info->cleanup_func_name = "Cleanup";
+    dll_info->dll_path = "build\\msc\\debug\\entrypoint.dll";
+    dll_info->dll_temp_path = "build\\msc\\debug\\entrypoint_temp.dll";
+    dll_info->handle = NULL;
+    dll_info->last_modified = {0};
+    dll_info->func = NULL;
 
-    InitWindow(&g_ctx_main);
-    GlobalContextSet(&g_ctx_main);
-    InitContext(&g_ctx_main);
-    city::RoadsBuild(city.arena, &city);
+    ctx->running = 1;
 
-    while (!glfwWindowShouldClose(io_ctx.window))
+    InitWindow(ctx);
+    GlobalContextSet(ctx);
+    InitContext(ctx);
+    city::RoadsBuild(ctx->city->arena, ctx->city);
+
+    while (!glfwWindowShouldClose(ctx->io->window))
     {
-        HANDLE file = CreateFile((char*)dll_info.dll_temp_path, GENERIC_READ, FILE_SHARE_READ, NULL,
-                                 OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
+        HANDLE file = CreateFile((char*)ctx->dll_info->dll_temp_path, GENERIC_READ, FILE_SHARE_READ,
+                                 NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
         if (file != INVALID_HANDLE_VALUE)
         {
             FILETIME current_modified;
             GetFileTime(file, NULL, NULL, &current_modified);
             CloseHandle(file);
 
-            if (CompareFileTime(&current_modified, &dll_info.last_modified) > 0)
+            if (CompareFileTime(&current_modified, &dll_info->last_modified) > 0)
             {
                 printf("DLL modified, reloading...\n");
-                if (g_ctx_main.main_thread_handle.u64[0])
+                if (ctx->main_thread_handle.u64[0])
                 {
-                    g_ctx_main.dll_info->cleanup_func(&g_ctx_main);
+                    dll_info->cleanup_func(ctx);
                 }
 
-                if (LoadDLL(g_ctx_main.dll_info))
+                if (LoadDLL(dll_info))
                 {
-                    g_ctx_main.running = true;
-                    g_ctx_main.main_thread_handle = g_ctx_main.dll_info->func((void*)&g_ctx_main);
-                    g_ctx_main.dll_info->last_modified = current_modified;
+                    ctx->running = true;
+                    ctx->main_thread_handle = ctx->dll_info->func((void*)ctx);
+                    ctx->dll_info->last_modified = current_modified;
                 }
                 else
                 {
@@ -182,14 +185,14 @@ run()
                 }
             }
         }
-        IO_InputStateUpdate(&io_ctx);
+        IO_InputStateUpdate(ctx->io);
     }
-    if (g_ctx_main.main_thread_handle.u64[0])
+    if (ctx->main_thread_handle.u64[0])
     {
-        g_ctx_main.dll_info->cleanup_func(&g_ctx_main);
+        dll_info->cleanup_func(ctx);
     }
 
-    city::CityCleanup(&city, &vk_ctx);
+    city::CityCleanup(ctx->city, ctx->vk_ctx);
     wrapper::VK_Cleanup();
 }
 

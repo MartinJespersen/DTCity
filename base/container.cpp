@@ -61,3 +61,17 @@ IO_ReadFile(Arena* arena, String8 filename)
     fclose(file);
     return buffer;
 }
+
+//~mgj: Strings functions
+
+static char**
+CStrArrFromStr8Buffer(Arena* arena, Buffer<String8> buffer)
+{
+    char** arr = PushArray(arena, char*, buffer.size);
+
+    for (U32 i = 0; i < buffer.size; i++)
+    {
+        arr[i] = (char*)buffer.data[i].str;
+    }
+    return arr;
+}

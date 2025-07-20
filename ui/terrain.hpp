@@ -54,7 +54,7 @@ static void
 TerrainUniformBufferCreate(Terrain* terrain, U32 frames_in_flight);
 
 static void
-TerrainGraphicsPipelineCreate(Terrain* terrain, const char* cwd);
+TerrainGraphicsPipelineCreate(Terrain* terrain, String8 cwd);
 
 static void
 TerrainVulkanCleanup(Terrain* terrain, U32 frames_in_flight);
@@ -78,7 +78,7 @@ static Buffer<VkVertexInputAttributeDescription>
 TerrainAttributeDescriptionGet(Arena* arena);
 
 static void
-TerrainTextureResourceCreate(wrapper::VulkanContext* vk_ctx, Terrain* terrain, const char* cwd);
+TerrainTextureResourceCreate(wrapper::VulkanContext* vk_ctx, Terrain* terrain, String8 cwd);
 
 static void
 TerrainGenerateBuffers(Arena* arena, Buffer<terrain::Vertex>* vertices, Buffer<U32>* indices,

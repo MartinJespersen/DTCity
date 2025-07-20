@@ -654,8 +654,8 @@ static void os_process_detach(OS_Handle handle) { NotImplemented; }
 ////////////////////////////////
 //~ rjf: @os_hooks Threads (Implemented Per-OS)
 
-static OS_Handle os_thread_launch(OS_ThreadFunctionType *func, void *ptr,
-                                  void *params) {
+static OS_Handle OS_ThreadLaunch(OS_ThreadFunctionType *func, void *ptr,
+                                 void *params) {
   OS_LNX_Entity *entity = os_lnx_entity_alloc(OS_LNX_EntityKind_Thread);
   entity->thread.func = func;
   entity->thread.ptr = ptr;
@@ -695,7 +695,7 @@ static void os_thread_detach(OS_Handle handle) {
 
 //- rjf: mutexes
 
-static OS_Handle os_mutex_alloc(void) {
+static OS_Handle OS_MutexAlloc(void) {
   OS_LNX_Entity *entity = os_lnx_entity_alloc(OS_LNX_EntityKind_Mutex);
   pthread_mutexattr_t attr;
   pthread_mutexattr_init(&attr);
@@ -708,468 +708,469 @@ static OS_Handle os_mutex_alloc(void) {
   }
   OS_Handle handle = {(U64)entity};
   return handle;
-}
 
-static void os_mutex_release(OS_Handle mutex) {
-  if (os_handle_match(mutex, os_handle_zero())) {
-    return;
-  }
-  OS_LNX_Entity *entity = (OS_LNX_Entity *)mutex.u64[0];
-  pthread_mutex_destroy(&entity->mutex_handle);
-  os_lnx_entity_release(entity);
-}
-
-static void os_mutex_take(OS_Handle mutex) {
-  if (os_handle_match(mutex, os_handle_zero())) {
-    return;
-  }
-  OS_LNX_Entity *entity = (OS_LNX_Entity *)mutex.u64[0];
-  pthread_mutex_lock(&entity->mutex_handle);
-}
-
-static void os_mutex_drop(OS_Handle mutex) {
-  if (os_handle_match(mutex, os_handle_zero())) {
-    return;
-  }
-  OS_LNX_Entity *entity = (OS_LNX_Entity *)mutex.u64[0];
-  pthread_mutex_unlock(&entity->mutex_handle);
-}
-
-//- rjf: reader/writer mutexes
-
-static OS_Handle os_rw_mutex_alloc(void) {
-  OS_LNX_Entity *entity = os_lnx_entity_alloc(OS_LNX_EntityKind_RWMutex);
-  int init_result = pthread_rwlock_init(&entity->rwmutex_handle, 0);
-  if (init_result == -1) {
+  static void OS_MutexRelease(OS_Handle mutex) {
+    if (os_handle_match(mutex, os_handle_zero())) {
+      return;
+    }
+    OS_LNX_Entity *entity = (OS_LNX_Entity *)mutex.u64[0];
+    pthread_mutex_destroy(&entity->mutex_handle);
     os_lnx_entity_release(entity);
-    entity = 0;
   }
-  OS_Handle handle = {(U64)entity};
-  return handle;
-}
 
-static void os_rw_mutex_release(OS_Handle rw_mutex) {
-  if (os_handle_match(rw_mutex, os_handle_zero())) {
-    return;
+  static void OS_MutexTake(OS_Handle mutex) {
+    if (os_handle_match(mutex, os_handle_zero())) {
+      return;
+    }
+    OS_LNX_Entity *entity = (OS_LNX_Entity *)mutex.u64[0];
+    pthread_mutex_lock(&entity->mutex_handle);
   }
-  OS_LNX_Entity *entity = (OS_LNX_Entity *)rw_mutex.u64[0];
-  pthread_rwlock_destroy(&entity->rwmutex_handle);
-  os_lnx_entity_release(entity);
-}
 
-static void os_rw_mutex_take_r(OS_Handle rw_mutex) {
-  if (os_handle_match(rw_mutex, os_handle_zero())) {
-    return;
+  static void OS_MutexDrop(OS_Handle mutex) {
+    if (os_handle_match(mutex, os_handle_zero())) {
+      return;
+    }
+    OS_LNX_Entity *entity = (OS_LNX_Entity *)mutex.u64[0];
+    pthread_mutex_unlock(&entity->mutex_handle);
   }
-  OS_LNX_Entity *entity = (OS_LNX_Entity *)rw_mutex.u64[0];
-  pthread_rwlock_rdlock(&entity->rwmutex_handle);
-}
 
-static void os_rw_mutex_drop_r(OS_Handle rw_mutex) {
-  if (os_handle_match(rw_mutex, os_handle_zero())) {
-    return;
+  //- rjf: reader/writer mutexes
+
+  static OS_Handle OS_RWMutexAlloc(void) {
+    OS_LNX_Entity *entity = os_lnx_entity_alloc(OS_LNX_EntityKind_RWMutex);
+    int init_result = pthread_rwlock_init(&entity->rwmutex_handle, 0);
+    if (init_result == -1) {
+      os_lnx_entity_release(entity);
+      entity = 0;
+    }
+    OS_Handle handle = {(U64)entity};
+    return handle;
   }
-  OS_LNX_Entity *entity = (OS_LNX_Entity *)rw_mutex.u64[0];
-  pthread_rwlock_unlock(&entity->rwmutex_handle);
-}
 
-static void os_rw_mutex_take_w(OS_Handle rw_mutex) {
-  if (os_handle_match(rw_mutex, os_handle_zero())) {
-    return;
-  }
-  OS_LNX_Entity *entity = (OS_LNX_Entity *)rw_mutex.u64[0];
-  pthread_rwlock_wrlock(&entity->rwmutex_handle);
-}
-
-static void os_rw_mutex_drop_w(OS_Handle rw_mutex) {
-  if (os_handle_match(rw_mutex, os_handle_zero())) {
-    return;
-  }
-  OS_LNX_Entity *entity = (OS_LNX_Entity *)rw_mutex.u64[0];
-  pthread_rwlock_unlock(&entity->rwmutex_handle);
-}
-
-//- rjf: condition variables
-
-static OS_Handle os_condition_variable_alloc(void) {
-  OS_LNX_Entity *entity =
-      os_lnx_entity_alloc(OS_LNX_EntityKind_ConditionVariable);
-  int init_result = pthread_cond_init(&entity->cv.cond_handle, 0);
-  if (init_result == -1) {
+  static void OS_RWMutexRelease(OS_Handle rw_mutex) {
+    if (os_handle_match(rw_mutex, os_handle_zero())) {
+      return;
+    }
+    OS_LNX_Entity *entity = (OS_LNX_Entity *)rw_mutex.u64[0];
+    pthread_rwlock_destroy(&entity->rwmutex_handle);
     os_lnx_entity_release(entity);
-    entity = 0;
   }
-  int init2_result = 0;
-  if (entity) {
-    init2_result = pthread_mutex_init(&entity->cv.rwlock_mutex_handle, 0);
+
+  static void OS_RWMutexTakeR(OS_Handle rw_mutex) {
+    if (os_handle_match(rw_mutex, os_handle_zero())) {
+      return;
+    }
+    OS_LNX_Entity *entity = (OS_LNX_Entity *)rw_mutex.u64[0];
+    pthread_rwlock_rdlock(&entity->rwmutex_handle);
   }
-  if (init2_result == -1) {
+
+  static void OS_RWMutexDropR(OS_Handle rw_mutex) {
+    if (os_handle_match(rw_mutex, os_handle_zero())) {
+      return;
+    }
+    OS_LNX_Entity *entity = (OS_LNX_Entity *)rw_mutex.u64[0];
+    pthread_rwlock_unlock(&entity->rwmutex_handle);
+  }
+
+  static void OS_RWMutexTakeW(OS_Handle rw_mutex) {
+    if (os_handle_match(rw_mutex, os_handle_zero())) {
+      return;
+    }
+    OS_LNX_Entity *entity = (OS_LNX_Entity *)rw_mutex.u64[0];
+    pthread_rwlock_wrlock(&entity->rwmutex_handle);
+  }
+
+  static void OS_RWMutexDropW(OS_Handle rw_mutex) {
+    if (os_handle_match(rw_mutex, os_handle_zero())) {
+      return;
+    }
+    OS_LNX_Entity *entity = (OS_LNX_Entity *)rw_mutex.u64[0];
+    pthread_rwlock_unlock(&entity->rwmutex_handle);
+  }
+
+  //- rjf: condition variables
+
+  static OS_Handle os_condition_variable_alloc(void) {
+    OS_LNX_Entity *entity =
+        os_lnx_entity_alloc(OS_LNX_EntityKind_ConditionVariable);
+    int init_result = pthread_cond_init(&entity->cv.cond_handle, 0);
+    if (init_result == -1) {
+      os_lnx_entity_release(entity);
+      entity = 0;
+    }
+    int init2_result = 0;
+    if (entity) {
+      init2_result = pthread_mutex_init(&entity->cv.rwlock_mutex_handle, 0);
+    }
+    if (init2_result == -1) {
+      pthread_cond_destroy(&entity->cv.cond_handle);
+      os_lnx_entity_release(entity);
+      entity = 0;
+    }
+    OS_Handle handle = {(U64)entity};
+    return handle;
+  }
+
+  static void os_condition_variable_release(OS_Handle cv) {
+    if (os_handle_match(cv, os_handle_zero())) {
+      return;
+    }
+    OS_LNX_Entity *entity = (OS_LNX_Entity *)cv.u64[0];
     pthread_cond_destroy(&entity->cv.cond_handle);
+    pthread_mutex_destroy(&entity->cv.rwlock_mutex_handle);
     os_lnx_entity_release(entity);
-    entity = 0;
   }
-  OS_Handle handle = {(U64)entity};
-  return handle;
-}
 
-static void os_condition_variable_release(OS_Handle cv) {
-  if (os_handle_match(cv, os_handle_zero())) {
-    return;
+  static B32 os_condition_variable_wait(OS_Handle cv, OS_Handle mutex,
+                                        U64 endt_us) {
+    if (os_handle_match(cv, os_handle_zero())) {
+      return 0;
+    }
+    if (os_handle_match(mutex, os_handle_zero())) {
+      return 0;
+    }
+    OS_LNX_Entity *cv_entity = (OS_LNX_Entity *)cv.u64[0];
+    OS_LNX_Entity *mutex_entity = (OS_LNX_Entity *)mutex.u64[0];
+    struct timespec endt_timespec;
+    endt_timespec.tv_sec = endt_us / Million(1);
+    endt_timespec.tv_nsec =
+        Thousand(1) * (endt_us - (endt_us / Million(1)) * Million(1));
+    int wait_result =
+        pthread_cond_timedwait(&cv_entity->cv.cond_handle,
+                               &mutex_entity->mutex_handle, &endt_timespec);
+    B32 result = (wait_result != ETIMEDOUT);
+    return result;
   }
-  OS_LNX_Entity *entity = (OS_LNX_Entity *)cv.u64[0];
-  pthread_cond_destroy(&entity->cv.cond_handle);
-  pthread_mutex_destroy(&entity->cv.rwlock_mutex_handle);
-  os_lnx_entity_release(entity);
-}
 
-static B32 os_condition_variable_wait(OS_Handle cv, OS_Handle mutex,
-                                      U64 endt_us) {
-  if (os_handle_match(cv, os_handle_zero())) {
-    return 0;
-  }
-  if (os_handle_match(mutex, os_handle_zero())) {
-    return 0;
-  }
-  OS_LNX_Entity *cv_entity = (OS_LNX_Entity *)cv.u64[0];
-  OS_LNX_Entity *mutex_entity = (OS_LNX_Entity *)mutex.u64[0];
-  struct timespec endt_timespec;
-  endt_timespec.tv_sec = endt_us / Million(1);
-  endt_timespec.tv_nsec =
-      Thousand(1) * (endt_us - (endt_us / Million(1)) * Million(1));
-  int wait_result = pthread_cond_timedwait(
-      &cv_entity->cv.cond_handle, &mutex_entity->mutex_handle, &endt_timespec);
-  B32 result = (wait_result != ETIMEDOUT);
-  return result;
-}
-
-static B32 os_condition_variable_wait_rw_r(OS_Handle cv, OS_Handle mutex_rw,
-                                           U64 endt_us) {
-  // TODO(rjf): because pthread does not supply cv/rw natively, I had to hack
-  // this together, but this would probably just be a lot better if we just
-  // implemented the primitives ourselves with e.g. futexes
-  //
-  if (os_handle_match(cv, os_handle_zero())) {
-    return 0;
-  }
-  if (os_handle_match(mutex_rw, os_handle_zero())) {
-    return 0;
-  }
-  OS_LNX_Entity *cv_entity = (OS_LNX_Entity *)cv.u64[0];
-  OS_LNX_Entity *rw_mutex_entity = (OS_LNX_Entity *)mutex_rw.u64[0];
-  struct timespec endt_timespec;
-  endt_timespec.tv_sec = endt_us / Million(1);
-  endt_timespec.tv_nsec =
-      Thousand(1) * (endt_us - (endt_us / Million(1)) * Million(1));
-  B32 result = 0;
-  for (;;) {
-    pthread_mutex_lock(&cv_entity->cv.rwlock_mutex_handle);
-    int wait_result = pthread_cond_timedwait(&cv_entity->cv.cond_handle,
-                                             &cv_entity->cv.rwlock_mutex_handle,
-                                             &endt_timespec);
-    if (wait_result != ETIMEDOUT) {
-      pthread_rwlock_rdlock(&rw_mutex_entity->rwmutex_handle);
+  static B32 os_condition_variable_wait_rw_r(OS_Handle cv, OS_Handle mutex_rw,
+                                             U64 endt_us) {
+    // TODO(rjf): because pthread does not supply cv/rw natively, I had to hack
+    // this together, but this would probably just be a lot better if we just
+    // implemented the primitives ourselves with e.g. futexes
+    //
+    if (os_handle_match(cv, os_handle_zero())) {
+      return 0;
+    }
+    if (os_handle_match(mutex_rw, os_handle_zero())) {
+      return 0;
+    }
+    OS_LNX_Entity *cv_entity = (OS_LNX_Entity *)cv.u64[0];
+    OS_LNX_Entity *rw_mutex_entity = (OS_LNX_Entity *)mutex_rw.u64[0];
+    struct timespec endt_timespec;
+    endt_timespec.tv_sec = endt_us / Million(1);
+    endt_timespec.tv_nsec =
+        Thousand(1) * (endt_us - (endt_us / Million(1)) * Million(1));
+    B32 result = 0;
+    for (;;) {
+      pthread_mutex_lock(&cv_entity->cv.rwlock_mutex_handle);
+      int wait_result = pthread_cond_timedwait(
+          &cv_entity->cv.cond_handle, &cv_entity->cv.rwlock_mutex_handle,
+          &endt_timespec);
+      if (wait_result != ETIMEDOUT) {
+        pthread_rwlock_rdlock(&rw_mutex_entity->rwmutex_handle);
+        pthread_mutex_unlock(&cv_entity->cv.rwlock_mutex_handle);
+        result = 1;
+        break;
+      }
       pthread_mutex_unlock(&cv_entity->cv.rwlock_mutex_handle);
-      result = 1;
-      break;
-    }
-    pthread_mutex_unlock(&cv_entity->cv.rwlock_mutex_handle);
-    if (wait_result == ETIMEDOUT) {
-      break;
-    }
-  }
-  return result;
-}
-
-static B32 os_condition_variable_wait_rw_w(OS_Handle cv, OS_Handle mutex_rw,
-                                           U64 endt_us) {
-  // TODO(rjf): because pthread does not supply cv/rw natively, I had to hack
-  // this together, but this would probably just be a lot better if we just
-  // implemented the primitives ourselves with e.g. futexes
-  //
-  if (os_handle_match(cv, os_handle_zero())) {
-    return 0;
-  }
-  if (os_handle_match(mutex_rw, os_handle_zero())) {
-    return 0;
-  }
-  OS_LNX_Entity *cv_entity = (OS_LNX_Entity *)cv.u64[0];
-  OS_LNX_Entity *rw_mutex_entity = (OS_LNX_Entity *)mutex_rw.u64[0];
-  struct timespec endt_timespec;
-  endt_timespec.tv_sec = endt_us / Million(1);
-  endt_timespec.tv_nsec =
-      Thousand(1) * (endt_us - (endt_us / Million(1)) * Million(1));
-  B32 result = 0;
-  for (;;) {
-    pthread_mutex_lock(&cv_entity->cv.rwlock_mutex_handle);
-    int wait_result = pthread_cond_timedwait(&cv_entity->cv.cond_handle,
-                                             &cv_entity->cv.rwlock_mutex_handle,
-                                             &endt_timespec);
-    if (wait_result != ETIMEDOUT) {
-      pthread_rwlock_wrlock(&rw_mutex_entity->rwmutex_handle);
-      pthread_mutex_unlock(&cv_entity->cv.rwlock_mutex_handle);
-      result = 1;
-      break;
-    }
-    pthread_mutex_unlock(&cv_entity->cv.rwlock_mutex_handle);
-    if (wait_result == ETIMEDOUT) {
-      break;
-    }
-  }
-  return result;
-}
-
-static void os_condition_variable_signal(OS_Handle cv) {
-  if (os_handle_match(cv, os_handle_zero())) {
-    return;
-  }
-  OS_LNX_Entity *cv_entity = (OS_LNX_Entity *)cv.u64[0];
-  pthread_cond_signal(&cv_entity->cv.cond_handle);
-}
-
-static void os_condition_variable_broadcast(OS_Handle cv) {
-  if (os_handle_match(cv, os_handle_zero())) {
-    return;
-  }
-  OS_LNX_Entity *cv_entity = (OS_LNX_Entity *)cv.u64[0];
-  pthread_cond_broadcast(&cv_entity->cv.cond_handle);
-}
-
-//- rjf: cross-process semaphores
-
-static OS_Handle os_semaphore_alloc(U32 initial_count, U32 max_count,
-                                    String8 name) {
-  OS_Handle result = {0};
-  if (name.size > 0) {
-    // TODO: we need to allocate shared memory to store sem_t
-    NotImplemented;
-  } else {
-    sem_t *s = mmap(0, sizeof(*s), PROT_READ | PROT_WRITE,
-                    MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
-    AssertAlways(s != MAP_FAILED);
-    int err = sem_init(s, 0, initial_count);
-    if (err == 0) {
-      result.u64[0] = (U64)s;
-    }
-  }
-  return result;
-}
-
-static void os_semaphore_release(OS_Handle semaphore) {
-  int err = munmap((void *)semaphore.u64[0], sizeof(sem_t));
-  AssertAlways(err == 0);
-}
-
-static OS_Handle os_semaphore_open(String8 name) { NotImplemented; }
-
-static void os_semaphore_close(OS_Handle semaphore) { NotImplemented; }
-
-static B32 os_semaphore_take(OS_Handle semaphore, U64 endt_us) {
-  AssertAlways(endt_us == max_U64);
-  for (;;) {
-    int err = sem_wait((sem_t *)semaphore.u64[0]);
-    if (err == 0) {
-      break;
-    } else {
-      if (errno == EAGAIN) {
-        continue;
+      if (wait_result == ETIMEDOUT) {
+        break;
       }
     }
-    InvalidPath;
-    break;
+    return result;
   }
-  return 1;
-}
 
-static void os_semaphore_drop(OS_Handle semaphore) {
-  for (;;) {
-    int err = sem_post((sem_t *)semaphore.u64[0]);
-    if (err == 0) {
-      break;
-    } else {
-      if (errno == EAGAIN) {
-        continue;
+  static B32 os_condition_variable_wait_rw_w(OS_Handle cv, OS_Handle mutex_rw,
+                                             U64 endt_us) {
+    // TODO(rjf): because pthread does not supply cv/rw natively, I had to hack
+    // this together, but this would probably just be a lot better if we just
+    // implemented the primitives ourselves with e.g. futexes
+    //
+    if (os_handle_match(cv, os_handle_zero())) {
+      return 0;
+    }
+    if (os_handle_match(mutex_rw, os_handle_zero())) {
+      return 0;
+    }
+    OS_LNX_Entity *cv_entity = (OS_LNX_Entity *)cv.u64[0];
+    OS_LNX_Entity *rw_mutex_entity = (OS_LNX_Entity *)mutex_rw.u64[0];
+    struct timespec endt_timespec;
+    endt_timespec.tv_sec = endt_us / Million(1);
+    endt_timespec.tv_nsec =
+        Thousand(1) * (endt_us - (endt_us / Million(1)) * Million(1));
+    B32 result = 0;
+    for (;;) {
+      pthread_mutex_lock(&cv_entity->cv.rwlock_mutex_handle);
+      int wait_result = pthread_cond_timedwait(
+          &cv_entity->cv.cond_handle, &cv_entity->cv.rwlock_mutex_handle,
+          &endt_timespec);
+      if (wait_result != ETIMEDOUT) {
+        pthread_rwlock_wrlock(&rw_mutex_entity->rwmutex_handle);
+        pthread_mutex_unlock(&cv_entity->cv.rwlock_mutex_handle);
+        result = 1;
+        break;
+      }
+      pthread_mutex_unlock(&cv_entity->cv.rwlock_mutex_handle);
+      if (wait_result == ETIMEDOUT) {
+        break;
       }
     }
-    InvalidPath;
-    break;
-  }
-}
-
-////////////////////////////////
-//~ rjf: @os_hooks Dynamically-Loaded Libraries (Implemented Per-OS)
-
-static OS_Handle os_library_open(String8 path) {
-  Temp scratch = ScratchBegin(0, 0);
-  char *path_cstr = (char *)push_str8_copy(scratch.arena, path).str;
-  void *so = dlopen(path_cstr, RTLD_LAZY | RTLD_LOCAL);
-  OS_Handle lib = {(U64)so};
-  ScratchEnd(scratch);
-  return lib;
-}
-
-static VoidProc *os_library_load_proc(OS_Handle lib, String8 name) {
-  Temp scratch = ScratchBegin(0, 0);
-  void *so = (void *)lib.u64;
-  char *name_cstr = (char *)push_str8_copy(scratch.arena, name).str;
-  VoidProc *proc = (VoidProc *)dlsym(so, name_cstr);
-  ScratchEnd(scratch);
-  return proc;
-}
-
-static void os_library_close(OS_Handle lib) {
-  void *so = (void *)lib.u64;
-  dlclose(so);
-}
-
-////////////////////////////////
-//~ rjf: @os_hooks Safe Calls (Implemented Per-OS)
-
-static void os_safe_call(OS_ThreadFunctionType *func,
-                         OS_ThreadFunctionType *fail_handler, void *ptr) {
-  // rjf: push handler to chain
-  OS_LNX_SafeCallChain chain = {0};
-  SLLStackPush(os_lnx_safe_call_chain, &chain);
-  chain.fail_handler = fail_handler;
-  chain.ptr = ptr;
-
-  // rjf: set up sig handler info
-  struct sigaction new_act = {0};
-  new_act.sa_handler = os_lnx_safe_call_sig_handler;
-  int signals_to_handle[] = {
-      SIGILL, SIGFPE, SIGSEGV, SIGBUS, SIGTRAP,
-  };
-  struct sigaction og_act[ArrayCount(signals_to_handle)] = {0};
-
-  // rjf: attach handler info for all signals
-  for (U32 i = 0; i < ArrayCount(signals_to_handle); i += 1) {
-    sigaction(signals_to_handle[i], &new_act, &og_act[i]);
+    return result;
   }
 
-  // rjf: call function
-  func(ptr);
-
-  // rjf: reset handler info for all signals
-  for (U32 i = 0; i < ArrayCount(signals_to_handle); i += 1) {
-    sigaction(signals_to_handle[i], &og_act[i], 0);
-  }
-}
-
-////////////////////////////////
-//~ rjf: @os_hooks GUIDs (Implemented Per-OS)
-
-static Guid os_make_guid(void) {
-  Guid guid = {0};
-  getrandom(guid.v, sizeof(guid.v), 0);
-  guid.data3 &= 0x0fff;
-  guid.data3 |= (4 << 12);
-  guid.data4[0] &= 0x3f;
-  guid.data4[0] |= 0x80;
-  return guid;
-}
-
-////////////////////////////////
-//~ rjf: @os_hooks Entry Points (Implemented Per-OS)
-
-int main(int argc, char **argv) {
-  //- rjf: set up OS layer
-  {
-    //- rjf: get statically-allocated system/process info
-    {
-      OS_SystemInfo *info = &os_lnx_state.system_info;
-      info->logical_processor_count = (U32)get_nprocs();
-      info->page_size = (U64)getpagesize();
-      info->large_page_size = MB(2);
-      info->allocation_granularity = info->page_size;
+  static void os_condition_variable_signal(OS_Handle cv) {
+    if (os_handle_match(cv, os_handle_zero())) {
+      return;
     }
-    {
-      OS_ProcessInfo *info = &os_lnx_state.process_info;
-      info->pid = (U32)getpid();
+    OS_LNX_Entity *cv_entity = (OS_LNX_Entity *)cv.u64[0];
+    pthread_cond_signal(&cv_entity->cv.cond_handle);
+  }
+
+  static void os_condition_variable_broadcast(OS_Handle cv) {
+    if (os_handle_match(cv, os_handle_zero())) {
+      return;
     }
+    OS_LNX_Entity *cv_entity = (OS_LNX_Entity *)cv.u64[0];
+    pthread_cond_broadcast(&cv_entity->cv.cond_handle);
+  }
 
-    //- rjf: set up thread context
-    local_persist TCTX tctx;
-    tctx_init_and_equip(&tctx);
+  //- rjf: cross-process semaphores
 
-    //- rjf: set up dynamically allocated state
-    os_lnx_state.arena = ArenaAlloc();
-    os_lnx_state.entity_arena = ArenaAlloc();
-    pthread_mutex_init(&os_lnx_state.entity_mutex, 0);
+  static OS_Handle os_semaphore_alloc(U32 initial_count, U32 max_count,
+                                      String8 name) {
+    OS_Handle result = {0};
+    if (name.size > 0) {
+      // TODO: we need to allocate shared memory to store sem_t
+      NotImplemented;
+    } else {
+      sem_t *s = mmap(0, sizeof(*s), PROT_READ | PROT_WRITE,
+                      MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+      AssertAlways(s != MAP_FAILED);
+      int err = sem_init(s, 0, initial_count);
+      if (err == 0) {
+        result.u64[0] = (U64)s;
+      }
+    }
+    return result;
+  }
 
-    //- rjf: grab dynamically allocated system info
-    {
-      Temp scratch = ScratchBegin(0, 0);
-      OS_SystemInfo *info = &os_lnx_state.system_info;
+  static void OS_SemaphoreRelease(OS_Handle semaphore) {
+    int err = munmap((void *)semaphore.u64[0], sizeof(sem_t));
+    AssertAlways(err == 0);
+  }
 
-      // rjf: get machine name
-      B32 got_final_result = 0;
-      U8 *buffer = 0;
-      int size = 0;
-      for (S64 cap = 4096, r = 0; r < 4; cap *= 2, r += 1) {
-        ScratchEnd(scratch);
-        buffer = PushArrayNoZero(scratch.arena, U8, cap);
-        size = gethostname((char *)buffer, cap);
-        if (size < cap) {
-          got_final_result = 1;
-          break;
+  static OS_Handle os_semaphore_open(String8 name) { NotImplemented; }
+
+  static void os_semaphore_close(OS_Handle semaphore) { NotImplemented; }
+
+  static B32 os_semaphore_take(OS_Handle semaphore, U64 endt_us) {
+    AssertAlways(endt_us == max_U64);
+    for (;;) {
+      int err = sem_wait((sem_t *)semaphore.u64[0]);
+      if (err == 0) {
+        break;
+      } else {
+        if (errno == EAGAIN) {
+          continue;
         }
       }
+      InvalidPath;
+      break;
+    }
+    return 1;
+  }
 
-      // rjf: save name to info
-      if (got_final_result && size > 0) {
-        info->machine_name.size = size;
-        info->machine_name.str = PushArrayNoZero(os_lnx_state.arena, U8,
-                                                 info->machine_name.size + 1);
-        MemoryCopy(info->machine_name.str, buffer, info->machine_name.size);
-        info->machine_name.str[info->machine_name.size] = 0;
+  static void os_semaphore_drop(OS_Handle semaphore) {
+    for (;;) {
+      int err = sem_post((sem_t *)semaphore.u64[0]);
+      if (err == 0) {
+        break;
+      } else {
+        if (errno == EAGAIN) {
+          continue;
+        }
       }
+      InvalidPath;
+      break;
+    }
+  }
 
-      ScratchEnd(scratch);
+  ////////////////////////////////
+  //~ rjf: @os_hooks Dynamically-Loaded Libraries (Implemented Per-OS)
+
+  static OS_Handle os_library_open(String8 path) {
+    Temp scratch = ScratchBegin(0, 0);
+    char *path_cstr = (char *)push_str8_copy(scratch.arena, path).str;
+    void *so = dlopen(path_cstr, RTLD_LAZY | RTLD_LOCAL);
+    OS_Handle lib = {(U64)so};
+    ScratchEnd(scratch);
+    return lib;
+  }
+
+  static VoidProc *os_library_load_proc(OS_Handle lib, String8 name) {
+    Temp scratch = ScratchBegin(0, 0);
+    void *so = (void *)lib.u64;
+    char *name_cstr = (char *)push_str8_copy(scratch.arena, name).str;
+    VoidProc *proc = (VoidProc *)dlsym(so, name_cstr);
+    ScratchEnd(scratch);
+    return proc;
+  }
+
+  static void os_library_close(OS_Handle lib) {
+    void *so = (void *)lib.u64;
+    dlclose(so);
+  }
+
+  ////////////////////////////////
+  //~ rjf: @os_hooks Safe Calls (Implemented Per-OS)
+
+  static void os_safe_call(OS_ThreadFunctionType * func,
+                           OS_ThreadFunctionType * fail_handler, void *ptr) {
+    // rjf: push handler to chain
+    OS_LNX_SafeCallChain chain = {0};
+    SLLStackPush(os_lnx_safe_call_chain, &chain);
+    chain.fail_handler = fail_handler;
+    chain.ptr = ptr;
+
+    // rjf: set up sig handler info
+    struct sigaction new_act = {0};
+    new_act.sa_handler = os_lnx_safe_call_sig_handler;
+    int signals_to_handle[] = {
+        SIGILL, SIGFPE, SIGSEGV, SIGBUS, SIGTRAP,
+    };
+    struct sigaction og_act[ArrayCount(signals_to_handle)] = {0};
+
+    // rjf: attach handler info for all signals
+    for (U32 i = 0; i < ArrayCount(signals_to_handle); i += 1) {
+      sigaction(signals_to_handle[i], &new_act, &og_act[i]);
     }
 
-    //- rjf: grab dynamically allocated process info
-    {
-      Temp scratch = ScratchBegin(0, 0);
-      OS_ProcessInfo *info = &os_lnx_state.process_info;
+    // rjf: call function
+    func(ptr);
 
-      // rjf: grab binary path
+    // rjf: reset handler info for all signals
+    for (U32 i = 0; i < ArrayCount(signals_to_handle); i += 1) {
+      sigaction(signals_to_handle[i], &og_act[i], 0);
+    }
+  }
+
+  ////////////////////////////////
+  //~ rjf: @os_hooks GUIDs (Implemented Per-OS)
+
+  static Guid os_make_guid(void) {
+    Guid guid = {0};
+    getrandom(guid.v, sizeof(guid.v), 0);
+    guid.data3 &= 0x0fff;
+    guid.data3 |= (4 << 12);
+    guid.data4[0] &= 0x3f;
+    guid.data4[0] |= 0x80;
+    return guid;
+  }
+
+  ////////////////////////////////
+  //~ rjf: @os_hooks Entry Points (Implemented Per-OS)
+
+  int main(int argc, char **argv) {
+    //- rjf: set up OS layer
+    {
+      //- rjf: get statically-allocated system/process info
       {
-        // rjf: get self string
+        OS_SystemInfo *info = &os_lnx_state.system_info;
+        info->logical_processor_count = (U32)get_nprocs();
+        info->page_size = (U64)getpagesize();
+        info->large_page_size = MB(2);
+        info->allocation_granularity = info->page_size;
+      }
+      {
+        OS_ProcessInfo *info = &os_lnx_state.process_info;
+        info->pid = (U32)getpid();
+      }
+
+      //- rjf: set up thread context
+      local_persist TCTX tctx;
+      tctx_init_and_equip(&tctx);
+
+      //- rjf: set up dynamically allocated state
+      os_lnx_state.arena = ArenaAlloc();
+      os_lnx_state.entity_arena = ArenaAlloc();
+      pthread_mutex_init(&os_lnx_state.entity_mutex, 0);
+
+      //- rjf: grab dynamically allocated system info
+      {
+        Temp scratch = ScratchBegin(0, 0);
+        OS_SystemInfo *info = &os_lnx_state.system_info;
+
+        // rjf: get machine name
         B32 got_final_result = 0;
         U8 *buffer = 0;
         int size = 0;
-        for (S64 cap = PATH_MAX, r = 0; r < 4; cap *= 2, r += 1) {
+        for (S64 cap = 4096, r = 0; r < 4; cap *= 2, r += 1) {
           ScratchEnd(scratch);
           buffer = PushArrayNoZero(scratch.arena, U8, cap);
-          size = readlink("/proc/self/exe", (char *)buffer, cap);
+          size = gethostname((char *)buffer, cap);
           if (size < cap) {
             got_final_result = 1;
             break;
           }
         }
 
-        // rjf: save
+        // rjf: save name to info
         if (got_final_result && size > 0) {
-          String8 full_name = Str8(buffer, size);
-          String8 name_chopped = str8_chop_last_slash(full_name);
-          info->binary_path = push_str8_copy(os_lnx_state.arena, name_chopped);
+          info->machine_name.size = size;
+          info->machine_name.str = PushArrayNoZero(os_lnx_state.arena, U8,
+                                                   info->machine_name.size + 1);
+          MemoryCopy(info->machine_name.str, buffer, info->machine_name.size);
+          info->machine_name.str[info->machine_name.size] = 0;
         }
+
+        ScratchEnd(scratch);
       }
 
-      // rjf: grab initial directory
+      //- rjf: grab dynamically allocated process info
       {
-        info->initial_path = os_get_current_path(os_lnx_state.arena);
-      }
+        Temp scratch = ScratchBegin(0, 0);
+        OS_ProcessInfo *info = &os_lnx_state.process_info;
 
-      // rjf: grab home directory
-      {
-        char *home = getenv("HOME");
-        info->user_program_data_path = str8_cstring(home);
-      }
+        // rjf: grab binary path
+        {
+          // rjf: get self string
+          B32 got_final_result = 0;
+          U8 *buffer = 0;
+          int size = 0;
+          for (S64 cap = PATH_MAX, r = 0; r < 4; cap *= 2, r += 1) {
+            ScratchEnd(scratch);
+            buffer = PushArrayNoZero(scratch.arena, U8, cap);
+            size = readlink("/proc/self/exe", (char *)buffer, cap);
+            if (size < cap) {
+              got_final_result = 1;
+              break;
+            }
+          }
 
-      ScratchEnd(scratch);
+          // rjf: save
+          if (got_final_result && size > 0) {
+            String8 full_name = Str8(buffer, size);
+            String8 name_chopped = str8_chop_last_slash(full_name);
+            info->binary_path =
+                push_str8_copy(os_lnx_state.arena, name_chopped);
+          }
+        }
+
+        // rjf: grab initial directory
+        {
+          info->initial_path = os_get_current_path(os_lnx_state.arena);
+        }
+
+        // rjf: grab home directory
+        {
+          char *home = getenv("HOME");
+          info->user_program_data_path = str8_cstring(home);
+        }
+
+        ScratchEnd(scratch);
+      }
     }
-  }
 
-  //- rjf: call into "real" entry point
-  main_thread_base_entry_point(argc, argv);
-}
+    //- rjf: call into "real" entry point
+    main_thread_base_entry_point(argc, argv);
+  }

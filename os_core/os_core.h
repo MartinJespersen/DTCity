@@ -328,7 +328,7 @@ os_process_detach(OS_Handle handle);
 //~ rjf: @os_hooks Threads (Implemented Per-OS)
 
 static OS_Handle
-os_thread_launch(OS_ThreadFunctionType* func, void* ptr, void* params);
+OS_ThreadLaunch(OS_ThreadFunctionType* func, void* ptr, void* params);
 static B32
 os_thread_join(OS_Handle handle, U64 endt_us);
 static void
@@ -339,27 +339,27 @@ os_thread_detach(OS_Handle handle);
 
 //- rjf: recursive mutexes
 static OS_Handle
-os_mutex_alloc(void);
+OS_MutexAlloc(void);
 static void
-os_mutex_release(OS_Handle mutex);
+OS_MutexRelease(OS_Handle mutex);
 static void
-os_mutex_take(OS_Handle mutex);
+OS_MutexTake(OS_Handle mutex);
 static void
-os_mutex_drop(OS_Handle mutex);
+OS_MutexDrop(OS_Handle mutex);
 
 //- rjf: reader/writer mutexes
 static OS_Handle
-os_rw_mutex_alloc(void);
+OS_RWMutexAlloc(void);
 static void
-os_rw_mutex_release(OS_Handle rw_mutex);
+OS_RWMutexRelease(OS_Handle rw_mutex);
 static void
-os_rw_mutex_take_r(OS_Handle mutex);
+OS_RWMutexTakeR(OS_Handle mutex);
 static void
-os_rw_mutex_drop_r(OS_Handle mutex);
+OS_RWMutexDropR(OS_Handle mutex);
 static void
-os_rw_mutex_take_w(OS_Handle mutex);
+OS_RWMutexTakeW(OS_Handle mutex);
 static void
-os_rw_mutex_drop_w(OS_Handle mutex);
+OS_RWMutexDropW(OS_Handle mutex);
 
 //- rjf: condition variables
 static OS_Handle
@@ -380,25 +380,25 @@ os_condition_variable_broadcast(OS_Handle cv);
 
 //- rjf: cross-process semaphores
 static OS_Handle
-os_semaphore_alloc(U32 initial_count, U32 max_count, String8 name);
+OS_SemaphoreAlloc(U32 initial_count, U32 max_count, String8 name);
 static void
-os_semaphore_release(OS_Handle semaphore);
+OS_SemaphoreRelease(OS_Handle semaphore);
 static OS_Handle
-os_semaphore_open(String8 name);
+OS_SemaphoreOpen(String8 name);
 static void
-os_semaphore_close(OS_Handle semaphore);
+OS_SemaphoreClose(OS_Handle semaphore);
 static B32
-os_semaphore_take(OS_Handle semaphore, U64 endt_us);
+OS_SemaphoreTake(OS_Handle semaphore, U64 endt_us);
 static void
-os_semaphore_drop(OS_Handle semaphore);
+OS_SemaphoreDrop(OS_Handle semaphore);
 
 //- rjf: scope macros
-#define OS_MutexScope(mutex) DeferLoop(os_mutex_take(mutex), os_mutex_drop(mutex))
-#define OS_MutexScopeR(mutex) DeferLoop(os_rw_mutex_take_r(mutex), os_rw_mutex_drop_r(mutex))
-#define OS_MutexScopeW(mutex) DeferLoop(os_rw_mutex_take_w(mutex), os_rw_mutex_drop_w(mutex))
+#define OS_MutexScope(mutex) DeferLoop(OS_MutexTake(mutex), OS_MutexDrop(mutex))
+#define OS_MutexScopeR(mutex) DeferLoop(OS_RWMutexTakeR(mutex), OS_RWMutexDropR(mutex))
+#define OS_MutexScopeW(mutex) DeferLoop(OS_RWMutexTakeW(mutex), OS_RWMutexDropW(mutex))
 #define OS_MutexScopeRWPromote(mutex)                                                              \
-    DeferLoop((os_rw_mutex_drop_r(mutex), os_rw_mutex_take_w(mutex)),                              \
-              (os_rw_mutex_drop_w(mutex), os_rw_mutex_take_r(mutex)))
+    DeferLoop((OS_RWMutexDropR(mutex), OS_RWMutexTakeW(mutex)),                                    \
+              (OS_RWMutexDropW(mutex), OS_RWMutexTakeR(mutex)))
 
 ////////////////////////////////
 //~ rjf: @os_hooks Dynamically-Loaded Libraries (Implemented Per-OS)

@@ -38,6 +38,7 @@ struct Camera;
 struct Context
 {
     B32 running;
+    String8 cwd;
 
     DllInfo* dll_info;
     OS_Handle main_thread_handle;
@@ -52,6 +53,4 @@ struct Context
     ui::Camera* camera;
     DT_Time* time;
     city::City* city;
-    // TODO: CWD should be set in init function
-    const char* cwd = "C:\\repos\\DTCity";
 };
