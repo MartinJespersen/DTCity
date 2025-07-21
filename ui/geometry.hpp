@@ -16,8 +16,8 @@ struct Camera
 };
 
 static void
-UI_CameraInit(Camera* camera);
+CameraInit(Camera* camera);
 
 static void
-UI_CameraUpdate(Camera* camera, IO* input, DT_Time* time, VkExtent2D extent);
+CameraUpdate(Camera* camera, IO* input, DT_Time* time, VkExtent2D extent);
 } // namespace ui

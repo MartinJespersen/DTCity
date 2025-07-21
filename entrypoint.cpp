@@ -15,6 +15,7 @@
 // // domain: cpp
 #include "base/base_inc.cpp"
 #include "os_core/os_core_inc.c"
+#include "async/async.cpp"
 #include "http/http_inc.c"
 #include "lib_wrappers/lib_wrappers_inc.cpp"
 #include "ui/ui.cpp"
@@ -95,7 +96,7 @@ CommandBufferRecord(U32 image_index, U32 current_frame)
         VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, 0, 0, nullptr, 0, nullptr, 1, &barrier);
 
     DT_UpdateTime(time);
-    UI_CameraUpdate(camera, ctx->io, ctx->time, vk_ctx->swapchain_extent);
+    CameraUpdate(camera, ctx->io, ctx->time, vk_ctx->swapchain_extent);
     wrapper::internal::CameraUniformBufferUpdate(
         vk_ctx, camera,
         Vec2F32{(F32)vk_ctx->swapchain_extent.width, (F32)vk_ctx->swapchain_extent.height},
@@ -154,135 +155,6 @@ Cleanup(void* ptr)
     ctx->main_thread_handle.u64[0] = 0;
 }
 
-struct Queue;
-struct ThreadInfo
-{
-    Queue* queue;
-    U32 thread_id;
-};
-typedef void (*WorkerFunc)(ThreadInfo, void*);
-
-struct QueueItem
-{
-    void* data;
-    WorkerFunc worker_func;
-};
-
-struct Queue
-{
-    volatile U32 next_index;
-    volatile U32 fill_index;
-    U32 queue_size;
-    QueueItem* items;
-    OS_Handle mutex;
-    OS_Handle semaphore_empty;
-    OS_Handle semaphore_full;
-};
-
-struct ThreadInput
-{
-    Queue* queue;
-
-    U32 thread_count;
-    U32 thread_id;
-};
-
-Queue*
-QueueInit(Arena* arena, U32 queue_size, U32 thread_count)
-{
-    //~mgj: Semaphore size count in the full state is 1 less than the queue size so that assert
-    // works in thread worker when the queue is full and full_index is equal to next_index
-    U32 semaphore_full_size = queue_size - 1;
-    Queue* queue = PushStruct(arena, Queue);
-    queue->queue_size = queue_size;
-    queue->items = PushArray(arena, QueueItem, queue_size);
-    queue->mutex = OS_RWMutexAlloc();
-    queue->semaphore_empty =
-        OS_SemaphoreAlloc(0, thread_count, Str8CString("queue_empty_semaphore"));
-    queue->semaphore_full = OS_SemaphoreAlloc(semaphore_full_size, semaphore_full_size,
-                                              Str8CString("queue_full_semaphore"));
-    return queue;
-}
-
-void
-QueueDestroy(Queue* queue)
-{
-    OS_MutexRelease(queue->mutex);
-    OS_SemaphoreRelease(queue->semaphore_empty);
-}
-
-void
-PushToQueue(Queue* queue, void* data, WorkerFunc worker_func)
-{
-    QueueItem* item;
-    U32 fill_index;
-    OS_SemaphoreTake(queue->semaphore_full, max_U64);
-    OS_MutexScopeW(queue->mutex)
-    {
-        fill_index = queue->fill_index;
-        queue->fill_index = (fill_index + 1) % queue->queue_size;
-        Assert(queue->fill_index != queue->next_index);
-    }
-    OS_SemaphoreDrop(queue->semaphore_empty);
-    item = &queue->items[fill_index];
-    item->data = data;
-    item->worker_func = worker_func;
-}
-
-void
-ThreadWorker(void* data)
-{
-    ThreadInput* input = (ThreadInput*)data;
-    Queue* queue = input->queue;
-    U32 thread_count = input->thread_count;
-    U32 thread_id = input->thread_id;
-
-    ThreadInfo thread_info;
-    thread_info.thread_id = thread_id;
-    thread_info.queue = queue;
-
-    QueueItem item;
-    U32 cur_index;
-    B32 is_waiting = 0;
-    while (true)
-    {
-        OS_MutexScopeW(queue->mutex)
-        {
-            cur_index = queue->next_index;
-            if (cur_index != queue->fill_index)
-            {
-                queue->next_index = (cur_index + 1) % queue->queue_size;
-            }
-            else
-            {
-                is_waiting = 1;
-            }
-        }
-        if (is_waiting)
-        {
-            OS_SemaphoreTake(queue->semaphore_empty, max_U64);
-            is_waiting = 0;
-        }
-        else
-        {
-            OS_SemaphoreDrop(queue->semaphore_full);
-            QueueItem* item = &queue->items[cur_index];
-            item->worker_func(thread_info, item->data);
-        }
-    }
-}
-
-void
-TestWorker(ThreadInfo thread_info, void* data)
-{
-    ScratchScope scratch = ScratchScope(0, 0);
-    char* message = (char*)data;
-    String8 str =
-        PushStr8F(scratch.arena, (char*)"%s threadid: %d", message, thread_info.thread_id);
-    printf("%s\n", str.str);
-    fflush(stdout);
-}
-
 static void
 MainLoop(void* ptr)
 {
@@ -291,28 +163,6 @@ MainLoop(void* ptr)
     DT_Time* time = ctx->time;
     os_set_thread_name(Str8CString("Entrypoint thread"));
 
-    ScratchScope scratch = ScratchScope(0, 0);
-
-    // U32 test_push_count = 100;
-    U32 queue_size = 30;
-    U32 processor_count = ctx->os_w32_state->system_info.logical_processor_count;
-    Queue* queue = QueueInit(ctx->arena_permanent, queue_size, processor_count);
-    ThreadInput* thread_inputs = PushArray(ctx->arena_permanent, ThreadInput, processor_count);
-    for (U32 i = 0; i < processor_count; i++)
-    {
-        thread_inputs[i].thread_count = processor_count;
-        thread_inputs[i].thread_id = i;
-        thread_inputs[i].queue = queue;
-
-        OS_ThreadLaunch(ThreadWorker, &thread_inputs[i], NULL);
-    }
-
-    for (U32 i = 0; i < 10; i++)
-    {
-        String8 str = PushStr8F(scratch.arena, (char*)"Count: %d, ", i);
-        PushToQueue(queue, (void*)str.str, TestWorker);
-    }
-    Sleep(5000);
     DT_TimeInit(time);
 
     while (ctx->running)

@@ -52,7 +52,7 @@ InitContext(Context* ctx)
     ctx->cwd = Str8CString("C:\\repos\\DTCity");
 
     wrapper::VK_VulkanInit(ctx->vk_ctx, ctx->io);
-    UI_CameraInit(ctx->camera);
+    CameraInit(ctx->camera);
     ProfileBuffersCreate(ctx->vk_ctx, ctx->profilingContext);
     city::CityInit(ctx->vk_ctx, ctx->city, ctx->cwd);
 }

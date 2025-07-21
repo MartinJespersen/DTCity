@@ -9,6 +9,7 @@ CompileFlags:
     - -include=C:/repos/DTCity/ui/ui.hpp
     - -include=C:/repos/DTCity/http/http_inc.h
     - -include=C:/repos/DTCity/city/city_inc.hpp
+    - -include=C:/repos/DTCity/async/async.hpp
     - -include=C:/repos/DTCity/lib_wrappers/lib_wrappers_inc.hpp
     - -IC:/VulkanSDK/Include
     - -IC:/repos/DTCity/third_party/glfw/include

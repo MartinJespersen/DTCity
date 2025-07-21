@@ -3,6 +3,7 @@
 // user defined: [hpp]
 #include "base/base_inc.hpp"
 #include "os_core/os_core_inc.h"
+#include "async/async.hpp"
 #include "http/http_inc.h"
 #include "lib_wrappers/lib_wrappers_inc.hpp"
 #include "ui/ui.hpp"

@@ -1,19 +1,30 @@
 namespace ui
 {
 
-static void
-UI_CameraInit(Camera* camera)
+glm::vec3
+DirectionNormalFromEulerAngles(F32 yaw, F32 pitch)
 {
-    camera->zoom_sensitivity = 20.0f;
-    camera->fov = 45.0;
-    camera->position = glm::vec3(0.0f, 50.0f, 1.0f);
-    camera->view_dir = glm::normalize(glm::vec3(0.0f, -1.0f, -1.0f));
-    camera->yaw = 0.0f;
-    camera->pitch = -88.0f;
+    glm::vec3 direction;
+    direction.x = cos(glm::radians(yaw)) * cos(glm::radians(pitch));
+    direction.y = sin(glm::radians(pitch));
+    direction.z = sin(glm::radians(yaw)) * cos(glm::radians(pitch));
+
+    return glm::normalize(direction);
 }
 
 static void
-UI_CameraUpdate(Camera* camera, IO* input, DT_Time* time, VkExtent2D extent)
+CameraInit(Camera* camera)
+{
+    camera->zoom_sensitivity = 20.0f;
+    camera->fov = 45.0;
+    camera->position = glm::vec3(0.0f, 150.0f, 1.0f);
+    camera->yaw = 0.0f;
+    camera->pitch = -88.0f;
+    camera->view_dir = DirectionNormalFromEulerAngles(camera->yaw, camera->pitch);
+}
+
+static void
+CameraUpdate(Camera* camera, IO* input, DT_Time* time, VkExtent2D extent)
 {
     F32 mouse_sensitivity = 0.1f;
 
@@ -29,12 +40,7 @@ UI_CameraUpdate(Camera* camera, IO* input, DT_Time* time, VkExtent2D extent)
         if (camera->pitch < -89.0f)
             camera->pitch = -89.0f;
 
-        glm::vec3 direction;
-        direction.x = cos(glm::radians(camera->yaw)) * cos(glm::radians(camera->pitch));
-        direction.y = sin(glm::radians(camera->pitch));
-        direction.z = sin(glm::radians(camera->yaw)) * cos(glm::radians(camera->pitch));
-
-        camera->view_dir = glm::normalize(direction);
+        camera->view_dir = DirectionNormalFromEulerAngles(camera->yaw, camera->pitch);
     }
     camera->mouse_pos_last.x = input->mouse_pos_cur.x;
     camera->mouse_pos_last.y = input->mouse_pos_cur.y;
