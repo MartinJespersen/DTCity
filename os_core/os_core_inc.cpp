@@ -1,7 +1,7 @@
-#include "os_core/os_core.c"
+#include "os_core/os_core.cpp"
 
 #if _WIN64
-#include "os_core/win32/os_core_win32.c"
+#include "os_core/win32/os_core_win32.cpp"
 #elif OS_LINUX
 #include "os_core/linux/os_core_linux.c"
 #else

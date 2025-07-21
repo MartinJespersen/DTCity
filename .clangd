@@ -5,7 +5,7 @@ CompileFlags:
     - -IC:/repos/DTCity
     - -include=C:/repos/DTCity/base/base_inc.hpp
     - -include=C:/repos/DTCity/os_core/os_core.h
-    - -include=C:/repos/DTCity/os_core/win32/os_core_win32.h
+    - -include=C:/repos/DTCity/os_core/win32/os_core_win32.hpp
     - -include=C:/repos/DTCity/ui/ui.hpp
     - -include=C:/repos/DTCity/http/http_inc.h
     - -include=C:/repos/DTCity/city/city_inc.hpp

@@ -14,12 +14,17 @@
 
 // // domain: cpp
 #include "base/base_inc.cpp"
-#include "os_core/os_core_inc.c"
+#include "os_core/os_core_inc.cpp"
 #include "async/async.cpp"
 #include "http/http_inc.c"
 #include "lib_wrappers/lib_wrappers_inc.cpp"
 #include "ui/ui.cpp"
 #include "city/city_inc.cpp"
+
+//~ mgj: Entrypoint Stub for application. Necessary as this layer includes the os layer but does not
+//contain the entrypoint in a hot reloading scenario.
+// TODO: Find a better way maybe.
+void App(HotReloadFunc){};
 
 static void
 DT_TimeInit(DT_Time* time)
@@ -150,9 +155,10 @@ shared_function void
 Cleanup(void* ptr)
 {
     Context* ctx = (Context*)ptr;
+
     ctx->running = false;
-    os_thread_join(ctx->main_thread_handle, max_U64);
-    ctx->main_thread_handle.u64[0] = 0;
+    os_thread_join(ctx->dll_info->entrypoint_thread_handle, max_U64);
+    ctx->dll_info->entrypoint_thread_handle.u64[0] = 0;
 }
 
 static void

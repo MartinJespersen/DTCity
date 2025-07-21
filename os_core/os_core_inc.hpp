@@ -1,10 +1,10 @@
 #ifndef OS_INC_H
 #define OS_INC_H
 
-#include "os_core/os_core.h"
+#include "os_core/os_core.hpp"
 
 #ifdef _WIN32
-#include "os_core/win32/os_core_win32.h"
+#include "os_core/win32/os_core_win32.hpp"
 #elif defined(_GNUC_)
 #include "os_core/linux/os_core_linux.h"
 #else

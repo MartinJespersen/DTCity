@@ -18,6 +18,7 @@ struct DllInfo
     const char* cleanup_func_name;
     const char* dll_path;
     const char* dll_temp_path;
+    OS_Handle entrypoint_thread_handle;
     HMODULE handle;
     FILETIME last_modified;
     OS_Handle (*func)(void*);
@@ -41,7 +42,6 @@ struct Context
     String8 cwd;
 
     DllInfo* dll_info;
-    OS_Handle main_thread_handle;
     OS_W32_State* os_w32_state;
 
     Arena* arena_permanent;
