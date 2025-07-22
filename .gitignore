@@ -9,4 +9,5 @@ build
 .cache
 .venv
 .zed
+.vscode
 .clangd
