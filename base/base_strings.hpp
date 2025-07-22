@@ -239,7 +239,7 @@ backslashed_from_str8(Arena* arena, String8 string);
 //~ rjf: String Matching
 
 #define str8_match_lit(a_lit, b, flags) str8_match(str8_lit(a_lit), (b), (flags))
-#define str8_match_cstr(a_cstr, b, flags) str8_match(str8_cstring(a_cstr), (b), (flags))
+#define str8_match_cstr(a_cstr, b, flags) str8_match(Str8CString(a_cstr), (b), (flags))
 static B32
 Str8Match(String8 a, String8 b, StringMatchFlags flags);
 static U64
@@ -275,7 +275,7 @@ str8_skip_chop_slashes(String8 string);
 static String8
 push_str8_cat(Arena* arena, String8 s1, String8 s2);
 static String8
-push_str8_copy(Arena* arena, String8 s);
+PushStr8Copy(Arena* arena, String8 s);
 static String8
 push_str8fv(Arena* arena, const char* fmt, va_list args);
 static String8

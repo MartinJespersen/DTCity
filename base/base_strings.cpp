@@ -291,7 +291,7 @@ str8_cstring_capped_reverse(void* raw_start, void* raw_cap)
 static String8
 upper_from_str8(Arena* arena, String8 string)
 {
-    string = push_str8_copy(arena, string);
+    string = PushStr8Copy(arena, string);
     for (U64 idx = 0; idx < string.size; idx += 1)
     {
         string.str[idx] = char_to_upper(string.str[idx]);
@@ -302,7 +302,7 @@ upper_from_str8(Arena* arena, String8 string)
 static String8
 lower_from_str8(Arena* arena, String8 string)
 {
-    string = push_str8_copy(arena, string);
+    string = PushStr8Copy(arena, string);
     for (U64 idx = 0; idx < string.size; idx += 1)
     {
         string.str[idx] = char_to_lower(string.str[idx]);
@@ -313,7 +313,7 @@ lower_from_str8(Arena* arena, String8 string)
 static String8
 backslashed_from_str8(Arena* arena, String8 string)
 {
-    string = push_str8_copy(arena, string);
+    string = PushStr8Copy(arena, string);
     for (U64 idx = 0; idx < string.size; idx += 1)
     {
         string.str[idx] = char_is_slash(string.str[idx]) ? '\\' : string.str[idx];
@@ -533,17 +533,6 @@ push_str8_cat(Arena* arena, String8 s1, String8 s2)
     str.str = PushArrayNoZero(arena, U8, str.size + 1);
     MemoryCopy(str.str, s1.str, s1.size);
     MemoryCopy(str.str + s1.size, s2.str, s2.size);
-    str.str[str.size] = 0;
-    return (str);
-}
-
-static String8
-push_str8_copy(Arena* arena, String8 s)
-{
-    String8 str;
-    str.size = s.size;
-    str.str = PushArrayNoZero(arena, U8, str.size + 1);
-    MemoryCopy(str.str, s.str, s.size);
     str.str[str.size] = 0;
     return (str);
 }
@@ -1141,7 +1130,7 @@ str8_list_copy(Arena* arena, String8List* list)
     for (String8Node* node = list->first; node != 0; node = node->next)
     {
         String8Node* new_node = PushArrayNoZero(arena, String8Node, 1);
-        String8 new_string = push_str8_copy(arena, node->string);
+        String8 new_string = PushStr8Copy(arena, node->string);
         str8_list_push_node_set_string(&result, new_node, new_string);
     }
     return (result);
@@ -1305,7 +1294,7 @@ str8_array_copy(Arena* arena, String8Array array)
   for
       EachIndex(idx, result.count)
       {
-          result.v[idx] = push_str8_copy(arena, array.v[idx]);
+          result.v[idx] = PushStr8Copy(arena, array.v[idx]);
       }
   return result;
 }
@@ -2308,7 +2297,7 @@ raw_from_escaped_str8(Arena* arena, String8 string)
                 replace_byte = '?';
                 break;
             }
-            String8 replace_string = push_str8_copy(scratch.arena, Str8(&replace_byte, 1));
+            String8 replace_string = PushStr8Copy(scratch.arena, Str8(&replace_byte, 1));
             Str8ListPush(scratch.arena, &strs, replace_string);
             idx += 1;
             start += 1;

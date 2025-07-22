@@ -25,6 +25,19 @@ Str8BufferFromCString(Arena* arena, std::initializer_list<const char*> strings)
 }
 
 static String8
+Str8PathFromStr8List(Arena* arena, std::initializer_list<String8> strings)
+{
+    String8List path_list = {0};
+    StringJoin join_params = {.sep = OS_PathDelimiter()};
+    for (const String8* str = strings.begin(); str != strings.end(); ++str)
+    {
+        Str8ListPush(arena, &path_list, *str);
+    }
+    String8 result = Str8ListJoin(arena, &path_list, &join_params);
+    return result;
+}
+
+static String8
 CreatePathFromStrings(Arena* arena, Buffer<String8> path_elements)
 {
     String8List path_list = {0};

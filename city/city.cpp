@@ -122,6 +122,7 @@ RoadsBuild(Arena* arena, City* city)
 
     HTTP_RequestParams params = {};
     params.method = HTTP_Method_Post;
+    params.content_type = Str8CString("text/html");
 
     const char* query = R"(data=
         [out:json] [timeout:25];
@@ -136,7 +137,7 @@ RoadsBuild(Arena* arena, City* city)
         PushStr8F(scratch.arena, (char*)query, lat_low, lon_low, lat_high, lon_high);
 
     HTTP_Response response = HTTP_Request(
-        arena, Str8CString("https://overpass-api.de/api/interpreter"), query_str, &params);
+        arena, Str8CString("http://overpass-api.de/api/interpreter"), query_str, &params);
 
     String8 content = Str8((U8*)response.body.str, response.body.size);
 

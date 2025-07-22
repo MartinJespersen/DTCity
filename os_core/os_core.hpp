@@ -138,9 +138,11 @@ OS_ThreadFunctionType(void* ptr);
 //~ rjf: Handle Type Functions (Helpers, Implemented Once)
 
 static OS_Handle
-os_handle_zero(void);
+OS_HandleIsZero(void);
+static OS_Handle
+OS_HandleFromPtr(void* ptr);
 static B32
-os_handle_match(OS_Handle a, OS_Handle b);
+OS_HandleMatch(OS_Handle a, OS_Handle b);
 static void
 os_handle_list_push(Arena* arena, OS_HandleList* handles, OS_Handle handle);
 static OS_HandleArray
@@ -186,7 +188,7 @@ os_get_system_info(void);
 static OS_ProcessInfo*
 os_get_process_info(void);
 static String8
-os_get_current_path(Arena* arena);
+OS_GetCurrentPath(Arena* arena);
 static U32
 os_get_process_start_time_unix(void);
 static inline String8
@@ -421,6 +423,18 @@ os_safe_call(OS_ThreadFunctionType* func, OS_ThreadFunctionType* fail_handler, v
 
 static Guid
 os_make_guid(void);
+
+//~mgj: HotReload
+// TODO: remove these forward declarations
+struct DllInfo;
+struct Context;
+
+typedef void (*HotReloadFunc)(Context*);
+//~ mgj: Entrypoint to the application from os layer
+void App(HotReloadFunc);
+
+static void
+OS_GlobalStateSetFromPtr(void* ptr);
 
 ////////////////////////////////
 //~ rjf: @os_hooks Entry Points (Implemented Per-OS)

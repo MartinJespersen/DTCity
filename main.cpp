@@ -9,12 +9,10 @@
 #include "profiler/tracy/Tracy.hpp"
 #include "profiler/tracy/TracyVulkan.hpp"
 
-#include <windows.h>
-
 // user defined: [hpp]
 #include "base/base_inc.hpp"
 #include "os_core/os_core_inc.hpp"
-#include "http/http_inc.h"
+#include "http/http_inc.hpp"
 #include "lib_wrappers/lib_wrappers_inc.hpp"
 #include "ui/ui.hpp"
 #include "city/city_inc.hpp"
@@ -22,7 +20,7 @@
 // domain: cpp
 #include "base/base_inc.cpp"
 #include "os_core/os_core_inc.cpp"
-#include "http/http_inc.c"
+#include "http/http_inc.cpp"
 #include "lib_wrappers/lib_wrappers_inc.cpp"
 #include "ui/ui.cpp"
 #include "city/city_inc.cpp"
@@ -47,33 +45,27 @@ ProfileBuffersCreate(wrapper::VulkanContext* vk_ctx, ProfilingContext* prof_ctx)
 static Context*
 ContextInit()
 {
+    ScratchScope scratch = ScratchScope(0, 0);
     //~mgj: app context setup
     Arena* app_arena = (Arena*)ArenaAlloc();
     Context* ctx = PushStruct(app_arena, Context);
     ctx->arena_permanent = app_arena;
     ctx->io = PushStruct(app_arena, IO);
     ctx->vk_ctx = PushStruct(app_arena, wrapper::VulkanContext);
-    ctx->os_w32_state = &os_w32_state;
     ctx->camera = PushStruct(app_arena, ui::Camera);
     ctx->time = PushStruct(app_arena, DT_Time);
     ctx->profilingContext = PushStruct(app_arena, ProfilingContext);
     ctx->terrain = PushStruct(app_arena, Terrain);
     ctx->city = PushStruct(app_arena, city::City);
     ctx->dll_info = PushStruct(app_arena, DllInfo);
-    ctx->running = 1;
     // TODO: find better solution for hardcoding the path
-    ctx->cwd = Str8CString("C:\\repos\\DTCity");
+    // static Buffer<String8>
+    // Str8BufferFromCString(Arena* arena, std::initializer_list<const char*> strings);
+    // static String8
+    // CreatePathFromStrings(Arena* arena, Buffer<String8> path_elements);
 
-    //~mgj: Hotreload
-    ctx->dll_info = PushStruct(app_arena, DllInfo);
-    DllInfo* dll_info = ctx->dll_info;
-    dll_info->func_name = "Entrypoint";
-    dll_info->cleanup_func_name = "Cleanup";
-    dll_info->dll_path = "build\\msc\\debug\\entrypoint.dll";
-    dll_info->dll_temp_path = "build\\msc\\debug\\entrypoint_temp.dll";
-    dll_info->handle = NULL;
-    dll_info->last_modified = {0};
-    dll_info->func = NULL;
+    ctx->cwd = Str8PathFromStr8List(app_arena, {OS_GetCurrentPath(scratch.arena), Str8CString(".."),
+                                                Str8CString(".."), Str8CString("..")});
 
     GlobalContextSet(ctx);
     InitWindow(ctx);

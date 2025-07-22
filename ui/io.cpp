@@ -37,7 +37,7 @@ IO_ScrollCallback(GLFWwindow* window, double xoffset, double yoffset)
     io_ctx->scroll_y = yoffset;
 }
 
-// IMPORTANT:
+// ~mgj: IMPORTANT:
 // Never pass a reference to a glfw function if you expect it to be consistent value.
 // I have run into an issue where the glfwGetCursorPos function resets the cursor position
 // internally to a 0 value. This means that another thread may view the reset value before it is set

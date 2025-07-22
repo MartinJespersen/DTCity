@@ -71,7 +71,8 @@ struct City
 
 static void
 CityInit(wrapper::VulkanContext* vk_ctx, City* city, String8 cwd);
-
+static void
+CityUpdate(City* city, wrapper::VulkanContext* vk_ctx, U32 image_index);
 static void
 CityCleanup(City* city);
 

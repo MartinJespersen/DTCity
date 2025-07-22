@@ -562,8 +562,11 @@ VK_SwapChainImageViewsCreate(VulkanContext* vk_ctx)
 static void
 VK_SwapChainImagesCreate(VulkanContext* vk_ctx, SwapChainInfo swapChainInfo, U32 imageCount)
 {
-    vkGetSwapchainImagesKHR(vk_ctx->device, vk_ctx->swapchain, &imageCount,
-                            vk_ctx->swapchain_images.data);
+    if (vkGetSwapchainImagesKHR(vk_ctx->device, vk_ctx->swapchain, &imageCount,
+                                vk_ctx->swapchain_images.data) != VK_SUCCESS)
+    {
+        exitWithError("failed to get swapchain images!");
+    }
 
     vk_ctx->swapchain_image_format = swapChainInfo.surfaceFormat.format;
     vk_ctx->swapchain_extent = swapChainInfo.extent;
@@ -573,7 +576,11 @@ static U32
 VK_SwapChainImageCountGet(VulkanContext* vk_ctx)
 {
     U32 imageCount = {0};
-    vkGetSwapchainImagesKHR(vk_ctx->device, vk_ctx->swapchain, &imageCount, nullptr);
+    if (vkGetSwapchainImagesKHR(vk_ctx->device, vk_ctx->swapchain, &imageCount, nullptr) !=
+        VK_SUCCESS)
+    {
+        exitWithError("failed to get swapchain image count!");
+    }
     return imageCount;
 }
 

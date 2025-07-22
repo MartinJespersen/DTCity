@@ -5,7 +5,7 @@
 
 #ifdef _WIN32
 #include "os_core/win32/os_core_win32.hpp"
-#elif defined(_GNUC_)
+#elif OS_LINUX
 #include "os_core/linux/os_core_linux.h"
 #else
 #error OS core layer not implemented for this operating system.

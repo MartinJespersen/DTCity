@@ -125,13 +125,6 @@ os_w32_entity_release(OS_W32_Entity* entity);
 
 ////////////////////////////////
 //~ mgj: HotReload
-// TODO: remove these forward declarations
-struct DllInfo;
-struct Context;
-typedef void (*HotReloadFunc)(Context*);
-
-//~ mgj: Entrypoint to the application from os layer
-void App(HotReloadFunc);
 
 static int
 LoadDLL(DllInfo* dll_info);

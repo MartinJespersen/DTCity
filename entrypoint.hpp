@@ -4,7 +4,7 @@
 #include "base/base_inc.hpp"
 #include "os_core/os_core_inc.hpp"
 #include "async/async.hpp"
-#include "http/http_inc.h"
+#include "http/http_inc.hpp"
 #include "lib_wrappers/lib_wrappers_inc.hpp"
 #include "ui/ui.hpp"
 #include "city/city_inc.hpp"

@@ -422,16 +422,16 @@ typedef union U128 U128;
 union U128
 {
     U8 u8[16];
-    U16 U16[8];
-    U32 U32[4];
+    U16 u16[8];
+    U32 u32[4];
     U64 u64[2];
 };
 typedef union U256 U256;
 union U256
 {
     U8 u8[32];
-    U16 U16[16];
-    U32 U32[8];
+    U16 u16[16];
+    U32 u32[8];
     U64 u64[4];
     U128 u128[2];
 };
@@ -439,8 +439,8 @@ typedef union U512 U512;
 union U512
 {
     U8 u8[64];
-    U16 U16[32];
-    U32 U32[16];
+    U16 u16[32];
+    U32 u32[16];
     U64 u64[8];
     U128 u128[4];
     U256 u256[2];
@@ -992,7 +992,6 @@ u64_array_bsearch(U64* arr, U64 count, U64 value);
 // compiler specifics
 #ifdef __GNUC__
 #define LSBIndex(n) (__builtin_ffs((n)) - 1)
-#define AlignOf(n) __alignof__(n)
 #elif defined(_MSC_VER)
 #define LSBIndex(n) (31 - __lzcnt(n))
 #define AlignOf(n) __alignof(n)

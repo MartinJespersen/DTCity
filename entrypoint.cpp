@@ -16,13 +16,13 @@
 #include "base/base_inc.cpp"
 #include "os_core/os_core_inc.cpp"
 #include "async/async.cpp"
-#include "http/http_inc.c"
+#include "http/http_inc.cpp"
 #include "lib_wrappers/lib_wrappers_inc.cpp"
 #include "ui/ui.cpp"
 #include "city/city_inc.cpp"
 
 //~ mgj: Entrypoint Stub for application. Necessary as this layer includes the os layer but does not
-//contain the entrypoint in a hot reloading scenario.
+// contain the entrypoint in a hot reloading scenario.
 // TODO: Find a better way maybe.
 void App(HotReloadFunc){};
 
@@ -148,6 +148,8 @@ Entrypoint(void* ptr)
 {
     Context* ctx = (Context*)ptr;
     GlobalContextSet(ctx);
+    OS_GlobalStateSetFromPtr(ctx->os_state);
+
     return OS_ThreadLaunch(MainLoop, ptr, NULL);
 }
 

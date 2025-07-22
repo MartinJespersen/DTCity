@@ -8,3 +8,5 @@ build
 */BROWSE.VC.DB*
 .cache
 .venv
+.zed
+.clangd

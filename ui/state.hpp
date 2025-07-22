@@ -19,8 +19,6 @@ struct DllInfo
     const char* dll_path;
     const char* dll_temp_path;
     OS_Handle entrypoint_thread_handle;
-    HMODULE handle;
-    FILETIME last_modified;
     OS_Handle (*func)(void*);
     void (*cleanup_func)(void*);
 };
@@ -42,7 +40,6 @@ struct Context
     String8 cwd;
 
     DllInfo* dll_info;
-    OS_W32_State* os_w32_state;
 
     Arena* arena_permanent;
     Terrain* terrain;
@@ -53,4 +50,7 @@ struct Context
     ui::Camera* camera;
     DT_Time* time;
     city::City* city;
+
+    // TODO: change this. moves os global state for use in DLL
+    void* os_state;
 };
