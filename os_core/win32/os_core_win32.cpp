@@ -769,7 +769,7 @@ static OS_FileIter*
 os_file_iter_begin(Arena* arena, String8 path, OS_FileIterFlags flags)
 {
     Temp scratch = ScratchBegin(&arena, 1);
-    String8 path_with_wildcard = push_str8_cat(scratch.arena, path, Str8Lit("\\*"));
+    String8 path_with_wildcard = PushStr8Cat(scratch.arena, path, Str8Lit("\\*"));
     String16 path16 = Str16From8(scratch.arena, path_with_wildcard);
     OS_FileIter* iter = PushArray(arena, OS_FileIter, 1);
     iter->flags = flags;

@@ -162,7 +162,7 @@ HTTP_Init(void);
 //~ rjf: Low-Level Request Functions
 
 static HTTP_Response
-HTTP_Request(Arena* arena, String8 url, String8 body, HTTP_RequestParams* params);
+HTTP_Request(Arena* arena, String8 host, String8 path, String8 body, HTTP_RequestParams* params);
 ////////////////////////////////////////////////////////////////
 //~ rjf: High-Level Request Wrappers
 

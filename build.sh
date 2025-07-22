@@ -13,7 +13,7 @@ cxxflags="-fsanitize=address -pedantic -Wno-unused-function -Wno-missing-field-i
 # remove flags: -w (disable warnings) and -fmax-errors (ceiling on errors)
 cflags="-std=c++20 -w -fmax-errors=10 -g ${cxxflags}"
 cwd_ldflags="-I. -Ithird_party -I./third_party/glfw/include -L./third_party/glfw/lib"
-shared_ldflags="-lvulkan -lglfw -lpthread -lssl -lcrypto -ldl"
+shared_ldflags="-lvulkan -lglfw -lpthread -ldl"
 entrypoint_ldflags="${shared_ldflags} -lX11 -lXxf86vm -lXrandr -lXi ${cwd_ldflags}"
 exec_ldflags="${shared_ldflags} ${cwd_ldflags}"
 

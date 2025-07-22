@@ -10,28 +10,21 @@
 static void
 HTTP_Init(void)
 {
-    if (http_lnx_state == 0)
-    {
-        Arena* arena = ArenaAlloc();
-        http_lnx_state = PushArray(arena, HTTP_LNX_State, 1);
-        http_lnx_state->arena = arena;
-    }
 }
 
 ////////////////////////////////////////////////////////////////
 //~ rjf: Low-Level Request Functions
 
 static HTTP_Response
-HTTP_Request(Arena* arena, String8 url, String8 body, HTTP_RequestParams* params)
+HTTP_Request(Arena* arena, String8 host, String8 path, String8 body, HTTP_RequestParams* params)
 {
     httplib::Headers headers;
 
     httplib::Result res;
-    // httplib::SSLClient cli((char*)url.str);
-    httplib::Client cli((char*)"http://overpass-api.de");
+    httplib::Client cli((char*)host.str);
 
     if (params->method == HTTP_Method_Post)
-        res = cli.Post("/api/interpreter", (char*)body.str, (U32)body.size,
+        res = cli.Post((char*)path.str, (char*)body.str, (U32)body.size,
                        (char*)params->content_type.str);
     else
     {

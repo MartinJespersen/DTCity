@@ -136,8 +136,9 @@ RoadsBuild(Arena* arena, City* city)
     String8 query_str =
         PushStr8F(scratch.arena, (char*)query, lat_low, lon_low, lat_high, lon_high);
 
-    HTTP_Response response = HTTP_Request(
-        arena, Str8CString("http://overpass-api.de/api/interpreter"), query_str, &params);
+    String8 host = Str8CString("http://overpass-api.de");
+    String8 path = Str8CString("/api/interpreter");
+    HTTP_Response response = HTTP_Request(arena, host, path, query_str, &params);
 
     String8 content = Str8((U8*)response.body.str, response.body.size);
 

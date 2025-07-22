@@ -273,7 +273,7 @@ str8_skip_chop_slashes(String8 string);
 //~ rjf: String Formatting & Copying
 
 static String8
-push_str8_cat(Arena* arena, String8 s1, String8 s2);
+PushStr8Cat(Arena* arena, String8 s1, String8 s2);
 static String8
 PushStr8Copy(Arena* arena, String8 s);
 static String8
