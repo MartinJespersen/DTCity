@@ -6,12 +6,6 @@ struct ProfilingContext
 #endif
 };
 
-// Threading Context
-struct ThreadCtx
-{
-    Arena* scratchArenas[2];
-};
-
 struct DllInfo
 {
     const char* func_name;

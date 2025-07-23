@@ -109,16 +109,16 @@ typedef enum HTTP_StatusCodeEnum
 
 typedef enum HTTP_Method
 {
-    // HTTP_Method_Get,
-    // TODO: implement the below methods for linux
-    //  HTTP_Method_Head,
     HTTP_Method_Post,
-    //  HTTP_Method_Put,
-    //  HTTP_Method_Delete,
-    //  HTTP_Method_Connect,
-    //  HTTP_Method_Options,
-    //  HTTP_Method_Trace,
-    //  HTTP_Method_Patch,
+    // TODO: implement the below methods for linux
+    HTTP_Method_Get,
+    HTTP_Method_Head,
+    HTTP_Method_Put,
+    HTTP_Method_Delete,
+    HTTP_Method_Connect,
+    HTTP_Method_Options,
+    HTTP_Method_Trace,
+    HTTP_Method_Patch,
     HTTP_Method_COUNT
 } HTTP_Method;
 
@@ -129,10 +129,10 @@ typedef struct HTTP_RequestParams HTTP_RequestParams;
 struct HTTP_RequestParams
 {
     HTTP_Method method;
-    // TODO: implement linux http to include the below params
-    // String8 user_agent;
-    // String8 authorization;
     String8 content_type;
+    // TODO: implement linux http to include the below params
+    String8 user_agent;
+    String8 authorization;
 };
 
 ////////////////////////////////////////////////////////////////

@@ -574,4 +574,6 @@ PushStr8F(Arena* arena, char* fmt, ...);
 static String8
 PushStr8FillByte(Arena* arena, U64 size, U8 byte);
 
+// ~mgj: String Macros
+#define S(str) Str8((U8*)str, sizeof(str) - 1)
 #endif // BASE_STRINGS_H

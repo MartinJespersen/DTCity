@@ -1895,17 +1895,16 @@ w32_entry_point_caller(int argc, WCHAR** wargv)
             }
         }
     }
-
-    //- rjf: set up entity storage
-    InitializeCriticalSection(&os_w32_state.entity_mutex);
+    //- rjf: set up entity storage InitializeCriticalSection(&os_w32_state.entity_mutex);
     os_w32_state.entity_arena = ArenaAlloc();
-
+    InitializeCriticalSection(&os_w32_state.entity_mutex);
     //- rjf: call into "real" entry point
     // main_thread_base_entry_point(argc, argv);
 }
 
 /////////////////////////////////////
 //~mgj: HotReload
+static FILETIME hotreload_last_modified = {0};
 static void
 OS_GlobalStateSetFromPtr(void* ptr)
 {
@@ -1917,56 +1916,57 @@ LoadDLL(DllInfo* dll_info)
 {
     Temp scratch = ScratchBegin(0, 0);
     // Free the previous DLL if loaded
-    if (dll_info->handle)
+    if (dll_info->dll_handle)
     {
-        FreeLibrary(dll_info->handle);
+        FreeLibrary((HMODULE)dll_info->dll_handle);
     }
 
-    if (!CopyFileA(dll_info->dll_temp_path, dll_info->dll_path, FALSE))
+    if (!CopyFileA((char*)dll_info->dll_temp_path.str, (char*)dll_info->dll_path.str, FALSE))
     {
         printf("Error: renaming DLL failed. Hotreload fail");
         return 0;
     };
     // Load the DLL
-    dll_info->handle = LoadLibrary((char*)dll_info->dll_path);
-    if (!dll_info->handle)
+    dll_info->dll_handle = LoadLibrary((char*)dll_info->dll_path.str);
+    if (!dll_info->dll_handle)
     {
         printf("Error loading DLL: %lu\n", GetLastError());
         return 0;
     }
 
     // Load the update function
-    dll_info->func = (OS_Handle (*)(void*))GetProcAddress(dll_info->handle, dll_info->func_name);
+    dll_info->func =
+        (OS_Handle (*)(void*))GetProcAddress((HMODULE)dll_info->dll_handle, dll_info->func_name);
     if (!dll_info->func)
     {
         printf("Error loading update function: %lu\n", GetLastError());
-        FreeLibrary(dll_info->handle);
-        dll_info->handle = NULL;
+        FreeLibrary((HMODULE)dll_info->dll_handle);
+        dll_info->dll_handle = NULL;
         return 0;
     }
 
     // Load the update function
     dll_info->cleanup_func =
-        (void (*)(void*))GetProcAddress(dll_info->handle, dll_info->cleanup_func_name);
+        (void (*)(void*))GetProcAddress((HMODULE)dll_info->dll_handle, dll_info->cleanup_func_name);
     if (!dll_info->func)
     {
         printf("Error loading update function: %lu\n", GetLastError());
-        FreeLibrary(dll_info->handle);
-        dll_info->handle = NULL;
+        FreeLibrary((HMODULE)dll_info->dll_handle);
+        dll_info->dll_handle = NULL;
         return 0;
     }
 
     // Get the DLL's last modified time
-    HANDLE file = CreateFile((char*)dll_info->dll_path, GENERIC_READ, FILE_SHARE_READ, NULL,
+    HANDLE file = CreateFile((char*)dll_info->dll_path.str, GENERIC_READ, FILE_SHARE_READ, NULL,
                              OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
     if (file == INVALID_HANDLE_VALUE)
     {
         printf("Error opening DLL file: %lu\n", GetLastError());
-        FreeLibrary(dll_info->handle);
-        dll_info->handle = NULL;
+        FreeLibrary((HMODULE)dll_info->dll_handle);
+        dll_info->dll_handle = NULL;
         return 0;
     }
-    GetFileTime(file, NULL, NULL, &dll_info->last_modified);
+    GetFileTime(file, NULL, NULL, &hotreload_last_modified);
     CloseHandle(file);
 
     ScratchEnd(scratch);
@@ -1979,22 +1979,22 @@ HotReload(Context* ctx)
     DllInfo* dll_info = ctx->dll_info;
     dll_info->func_name = "Entrypoint";
     dll_info->cleanup_func_name = "Cleanup";
-    dll_info->dll_path = "build\\msc\\debug\\entrypoint.dll";
-    dll_info->dll_temp_path = "build\\msc\\debug\\entrypoint_temp.dll";
+
+    dll_info->dll_path = S("entrypoint.dll");
+    dll_info->dll_temp_path = S("entrypoint_temp.dll");
 
     FILETIME last_modified;
     HMODULE handle;
 
-    DllInfo* dll_info = ctx->dll_info;
-    HANDLE file = CreateFile((char*)dll_info->dll_temp_path, GENERIC_READ, FILE_SHARE_READ, NULL,
-                             OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
+    HANDLE file = CreateFile((char*)dll_info->dll_temp_path.str, GENERIC_READ, FILE_SHARE_READ,
+                             NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
     if (file != INVALID_HANDLE_VALUE)
     {
         FILETIME current_modified;
         GetFileTime(file, NULL, NULL, &current_modified);
         CloseHandle(file);
 
-        if (CompareFileTime(&current_modified, &dll_info->last_modified) > 0)
+        if (CompareFileTime(&current_modified, &hotreload_last_modified) > 0)
         {
             printf("DLL modified, reloading...\n");
             if (dll_info->entrypoint_thread_handle.u64[0])
@@ -2005,8 +2005,9 @@ HotReload(Context* ctx)
             if (LoadDLL(dll_info))
             {
                 ctx->running = 1;
+                ctx->os_state = &os_w32_state;
                 dll_info->entrypoint_thread_handle = dll_info->func((void*)ctx);
-                dll_info->last_modified = current_modified;
+                hotreload_last_modified = current_modified;
             }
             else
             {

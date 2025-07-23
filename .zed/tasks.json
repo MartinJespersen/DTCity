@@ -1,0 +1,75 @@
+[
+  {
+    "label": "Build DLL",
+    "command": "./build_dll.bat",
+    "cwd": "C:/repos/DTCity",
+    "use_new_terminal": false,
+    "allow_concurrent_runs": false,
+    "reveal": "always",
+    "hide": "never",
+    "shell": "system",
+    "show_summary": true,
+    "show_output": true,
+    "tags": []
+  },
+  {
+    "label": "Build",
+    "command": ".\\build.bat",
+    "cwd": "$ZED_WORKTREE_ROOT",
+    "use_new_terminal": false,
+    "allow_concurrent_runs": false,
+    "reveal": "always",
+    "hide": "never",
+    "shell": "system",
+    "show_summary": true,
+    "show_output": true,
+    "tags": []
+  },
+  {
+    "label": "Debug",
+    "command": "./debug.bat",
+    "cwd": "C:/repos/DTCity",
+    "use_new_terminal": false,
+    "allow_concurrent_runs": false,
+    "reveal": "always",
+    "hide": "never",
+    "shell": "system",
+    "show_summary": true,
+    "show_output": true,
+    "tags": []
+  },
+  {
+    "label": "Build and Run",
+    "command": "./buildrun.bat",
+    "cwd": "C:/repos/DTCity",
+    "use_new_terminal": false,
+    "allow_concurrent_runs": false,
+    "reveal": "always",
+    "hide": "never",
+    "shell": "system",
+    "show_summary": true,
+    "show_output": true,
+    "tags": []
+  },
+  {
+    "label": "run app",
+    "command": "$ZED_WORKTREE_ROOT\\build\\msc\\debug\\city.exe",
+    "cwd": "$ZED_WORKTREE_ROOT\\build\\msc\\debug",
+    "show_output": true,
+    "show_summary": true
+  },
+  {
+    "label": "Find Code Location",
+    "command": "C:\\repos\\raddebugger\\build\\raddbg.exe --ipc find_code_location \"$ZED_FILE:$ZED_ROW:$ZED_COLUMN\""
+  }
+
+  // {
+  //   "label": "text_search",
+  //   "command": "C:/repos/zed/target/release/zed.exe (C:/Users/marti/AppData/Local/Microsoft/WinGet/Packages/alexpasmantier.television_Microsoft.Winget.Source_8wekyb3d8bbwe/tv.exe text)",
+  //   "hide": "always",
+  //   "allow_concurrent_runs": true,
+  //   "use_new_terminal": true,
+  //   "program": "C:/Windows/System32/cmd.exe",
+  //   "args": [""]
+  // }
+]
