@@ -4,9 +4,6 @@
 ////////////////////////////////////////////////////////////////
 //~ rjf: Main Layer Initialization
 
-#include "http/linux/http_linux.hpp"
-#include "base/base_strings.hpp"
-#include "base/error.hpp"
 static void
 HTTP_Init(void)
 {

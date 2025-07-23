@@ -16,8 +16,9 @@ struct DllInfo
 {
     const char* func_name;
     const char* cleanup_func_name;
-    const char* dll_path;
-    const char* dll_temp_path;
+    String8 dll_path;
+    String8 dll_temp_path;
+    void* dll_handle;
     OS_Handle entrypoint_thread_handle;
     OS_Handle (*func)(void*);
     void (*cleanup_func)(void*);

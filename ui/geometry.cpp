@@ -27,7 +27,6 @@ static void
 CameraUpdate(Camera* camera, IO* input, DT_Time* time, VkExtent2D extent)
 {
     F32 mouse_sensitivity = 0.1f;
-
     if (input->mouse_left_clicked & input->is_cursor_inside_win & input->is_window_focused)
     {
         F32 mouse_delta_x = input->mouse_pos_cur.x - camera->mouse_pos_last.x;

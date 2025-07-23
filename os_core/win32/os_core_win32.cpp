@@ -1906,6 +1906,11 @@ w32_entry_point_caller(int argc, WCHAR** wargv)
 
 /////////////////////////////////////
 //~mgj: HotReload
+static void
+OS_GlobalStateSetFromPtr(void* ptr)
+{
+    os_w32_state = *(OS_W32_State*)ptr;
+}
 
 static int
 LoadDLL(DllInfo* dll_info)

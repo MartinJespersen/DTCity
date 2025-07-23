@@ -58,11 +58,6 @@ ContextInit()
     ctx->terrain = PushStruct(app_arena, Terrain);
     ctx->city = PushStruct(app_arena, city::City);
     ctx->dll_info = PushStruct(app_arena, DllInfo);
-    // TODO: find better solution for hardcoding the path
-    // static Buffer<String8>
-    // Str8BufferFromCString(Arena* arena, std::initializer_list<const char*> strings);
-    // static String8
-    // CreatePathFromStrings(Arena* arena, Buffer<String8> path_elements);
 
     ctx->cwd = Str8PathFromStr8List(app_arena, {OS_GetCurrentPath(scratch.arena), Str8CString(".."),
                                                 Str8CString(".."), Str8CString("..")});

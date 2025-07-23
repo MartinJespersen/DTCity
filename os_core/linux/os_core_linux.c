@@ -4,11 +4,6 @@
 ////////////////////////////////
 //~ rjf: Helpers
 
-#include "os_core/linux/os_core_linux.h"
-#include "base/base_inc.hpp"
-#include "base/error.hpp"
-#include "os_core/os_core.hpp"
-
 static DateTime
 os_lnx_date_time_from_tm(tm in, U32 msec)
 {
@@ -1348,13 +1343,30 @@ os_make_guid(void)
 
 ////////////////////////////////
 //~ mgj: Hot Reload
+int
+CopyFile(const char* src, const char* dst)
+{
+    unlink(dst);
+    int in_fd = open(src, O_RDONLY);
+    int out_fd = open(dst, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+
+    struct stat st;
+    fstat(in_fd, &st);
+
+    off_t bytes = st.st_size;
+    sendfile(out_fd, in_fd, NULL, bytes);
+
+    close(in_fd);
+    close(out_fd);
+    return 0;
+}
 
 static int
-LoadDLL(DllInfo* dll_info)
+LoadDLL(DllInfo* dll_info, String8 path_to_lib)
 {
-    void* handle = dlopen(dll_info->dll_path, RTLD_NOW | RTLD_LOCAL);
-    OS_Handle dll_handle = OS_HandleFromPtr(handle);
-    if (OS_HandleMatch(dll_handle, OS_HandleIsZero()))
+    void* handle = dlopen((char*)path_to_lib.str, RTLD_NOW | RTLD_LOCAL);
+    dll_info->dll_handle = handle;
+    if (!handle)
     {
         printf("Failed to load entrypoint.so: %s", dlerror());
         return 0;
@@ -1363,14 +1375,15 @@ LoadDLL(DllInfo* dll_info)
     dll_info->func = (OS_Handle (*)(void*))dlsym(handle, dll_info->func_name);
     if (!dll_info->func)
     {
-        printf("Failed to load %s: %s", dll_info->func_name, dlerror());
+        printf("Failed to load function: %s due to error: %s", dll_info->func_name, dlerror());
         return 0;
     }
 
     dll_info->cleanup_func = (void (*)(void*))dlsym(handle, dll_info->cleanup_func_name);
     if (!dll_info->cleanup_func)
     {
-        printf("Failed to load %s: %s", dll_info->cleanup_func_name, dlerror());
+        printf("Failed to load function: %s due to error: %s", dll_info->cleanup_func_name,
+               dlerror());
         return 0;
     }
 
@@ -1381,85 +1394,89 @@ LoadDLL(DllInfo* dll_info)
         return 0;
     }
 
-    // Free the previous DLL if loaded
-    // if (dll_info->handle)
-    // {
-    //     FreeLibrary(dll_info->handle);
-    // }
-
-    // if (!CopyFileA(dll_info->dll_temp_path, dll_info->dll_path, FALSE))
-    // {
-    //     printf("Error: renaming DLL failed. Hotreload fail");
-    //     return 0;
-    // };
-    // // Load the DLL
-    // dll_info->handle = LoadLibrary((char*)dll_info->dll_path);
-    // if (!dll_info->handle)
-    // {
-    //     printf("Error loading DLL: %lu\n", GetLastError());
-    //     return 0;
-    // }
-
-    // // Load the update function
-    // dll_info->func = (OS_Handle (*)(void*))GetProcAddress(dll_info->handle, dll_info->func_name);
-    // if (!dll_info->func)
-    // {
-    //     printf("Error loading update function: %lu\n", GetLastError());
-    //     FreeLibrary(dll_info->handle);
-    //     dll_info->handle = NULL;
-    //     return 0;
-    // }
-
-    // // Load the update function
-    // dll_info->cleanup_func =
-    //     (void (*)(void*))GetProcAddress(dll_info->handle, dll_info->cleanup_func_name);
-    // if (!dll_info->func)
-    // {
-    //     printf("Error loading update function: %lu\n", GetLastError());
-    //     FreeLibrary(dll_info->handle);
-    //     dll_info->handle = NULL;
-    //     return 0;
-    // }
-
-    // // Get the DLL's last modified time
-    // HANDLE file = CreateFile((char*)dll_info->dll_path, GENERIC_READ, FILE_SHARE_READ, NULL,
-    //                          OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
-    // if (file == INVALID_HANDLE_VALUE)
-    // {
-    //     printf("Error opening DLL file: %lu\n", GetLastError());
-    //     FreeLibrary(dll_info->handle);
-    //     dll_info->handle = NULL;
-    //     return 0;
-    // }
-    // GetFileTime(file, NULL, NULL, &dll_info->last_modified);
-    // CloseHandle(file);
-
     return 1;
 }
-
+static struct stat old_file, new_file;
 void
 OS_HotReload(Context* ctx)
 {
-    if (!ctx->running)
-    {
-        ScratchScope scratch = ScratchScope(0, 0);
-        DllInfo* dll_info = ctx->dll_info;
-        dll_info->func_name = "Entrypoint";
-        dll_info->cleanup_func_name = "Cleanup";
-        dll_info->dll_path =
-            (char*)Str8PathFromStr8List(scratch.arena,
-                                        {ctx->cwd, Str8CString("build"), Str8CString("linux"),
-                                         Str8CString("debug"), Str8CString("entrypoint.so")})
-                .str;
-        dll_info->dll_temp_path =
-            (char*)Str8PathFromStr8List(scratch.arena,
-                                        {ctx->cwd, Str8CString("build"), Str8CString("linux"),
-                                         Str8CString("debug"), Str8CString("entrypoint_temp.so")})
-                .str;
-        // dll_info->dll_path = "/home/au593618/repos/DTCity/build/linuxentrypoint.so";
-        // dll_info->dll_temp_path = "entrypoint_temp.so";
+    ScratchScope scratch = ScratchScope(0, 0);
 
-        if (LoadDLL(dll_info))
+    const char* entrypoint_func_name = "Entrypoint";
+    const char* cleanup_func_name = "Cleanup";
+
+    // TODO: move out of hotpath
+    DllInfo* dll_info = ctx->dll_info;
+    dll_info->func_name = entrypoint_func_name;
+    dll_info->cleanup_func_name = cleanup_func_name;
+    dll_info->dll_path =
+        Str8PathFromStr8List(scratch.arena, {ctx->cwd, Str8CString("build"), Str8CString("linux"),
+                                             Str8CString("debug"), Str8CString("entrypoint.so")});
+    dll_info->dll_temp_path = Str8PathFromStr8List(
+        scratch.arena, {ctx->cwd, Str8CString("build"), Str8CString("linux"), Str8CString("debug"),
+                        Str8CString("entrypoint_temp.so")});
+
+    if (ctx->running)
+    {
+        B32 file_info_is_not_available = (stat((char*)dll_info->dll_temp_path.str, &new_file) != 0);
+        if (file_info_is_not_available)
+        {
+            printf("Hot Reloading failed due to error when receiving file information: %s\n",
+                   strerror(errno));
+        }
+        else if (((old_file.st_size != new_file.st_size) ||
+                  (old_file.st_mtime != new_file.st_mtime)))
+        {
+            dll_info->cleanup_func(ctx);
+
+            if (dlclose(dll_info->dll_handle))
+            {
+                printf("Failed to close entrypoint.so: %s", dlerror());
+                exit(EXIT_FAILURE);
+            };
+            dll_info->dll_handle = 0;
+
+            if (stat((char*)dll_info->dll_temp_path.str, &old_file) != 0)
+            {
+                printf("Hot Reload Failed, because stat failed: %s", strerror(errno));
+                return;
+            }
+
+            if (CopyFile((char*)dll_info->dll_temp_path.str, (char*)dll_info->dll_path.str) != 0)
+            {
+                printf("Hot Reload Failed, because renaming failed: %s", strerror(errno));
+                return;
+            }
+
+            if (LoadDLL(dll_info, dll_info->dll_path))
+            {
+                ctx->running = 1;
+                ctx->os_state = &os_lnx_state;
+
+                dll_info->entrypoint_thread_handle = dll_info->func((void*)ctx);
+            }
+            else
+            {
+                printf("Failed to reload DLL\n");
+                Trap();
+            }
+        }
+    }
+    else if (!ctx->running)
+    {
+        if (stat((char*)dll_info->dll_temp_path.str, &old_file) != 0)
+        {
+            printf("Hot Reload Failed, because stat failed: %s", strerror(errno));
+            return;
+        }
+
+        if (CopyFile((char*)dll_info->dll_temp_path.str, (char*)dll_info->dll_path.str) != 0)
+        {
+            printf("Hot Reload Failed, because renaming failed: %s\n", strerror(errno));
+            return;
+        }
+
+        if (LoadDLL(dll_info, dll_info->dll_path))
         {
             ctx->running = 1;
             ctx->os_state = &os_lnx_state;
@@ -1472,39 +1489,6 @@ OS_HotReload(Context* ctx)
             Trap();
         }
     }
-    // FILETIME last_modified;
-    // HMODULE handle;
-
-    // DllInfo* dll_info = ctx->dll_info;
-    // HANDLE file = CreateFile((char*)dll_info->dll_temp_path, GENERIC_READ, FILE_SHARE_READ, NULL,
-    //                          OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
-    // if (file != INVALID_HANDLE_VALUE)
-    // {
-    //     FILETIME current_modified;
-    //     GetFileTime(file, NULL, NULL, &current_modified);
-    //     CloseHandle(file);
-
-    //     if (CompareFileTime(&current_modified, &dll_info->last_modified) > 0)
-    //     {
-    //         printf("DLL modified, reloading...\n");
-    //         if (dll_info->entrypoint_thread_handle.u64[0])
-    //         {
-    //             dll_info->cleanup_func(ctx);
-    //         }
-
-    //         if (LoadDLL(dll_info))
-    //         {
-    //             ctx->running = 1;
-    //             dll_info->entrypoint_thread_handle = dll_info->func((void*)ctx);
-    //             dll_info->last_modified = current_modified;
-    //         }
-    //         else
-    //         {
-    //             printf("Failed to reload DLL\n");
-    //             Trap();
-    //         }
-    //     }
-    // }
 }
 
 static void
