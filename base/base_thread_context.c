@@ -20,7 +20,7 @@ static void tctx_init_and_equip(TCTX *tctx) {
 
 static void tctx_release(void) {
   for (U64 i = 0; i < ArrayCount(tctx_thread_local->arenas); i += 1) {
-    arena_release(tctx_thread_local->arenas[i]);
+    ArenaRelease(tctx_thread_local->arenas[i]);
   }
 }
 

@@ -19,12 +19,71 @@ struct Camera;
 namespace wrapper
 {
 
+// ~mgj: Internals
 namespace internal
 {
-struct BufferContext
+
+struct BufferAllocation
 {
     VkBuffer buffer;
-    VkDeviceMemory memory;
+    VmaAllocation allocation;
+    VkDeviceSize size;
+};
+
+struct BufferAllocationMapped
+{
+    BufferAllocation buffer_alloc;
+    void* mapped_ptr;
+    VkMemoryPropertyFlags mem_prop_flags;
+
+    BufferAllocation staging_buffer_alloc;
+    Arena* arena;
+};
+
+struct ImageAllocation
+{
+    VkImage image;
+    VmaAllocation allocation;
+    VkDeviceSize size;
+};
+
+struct ImageViewResource
+{
+    VkImageView image_view;
+    VkDevice device;
+};
+
+struct ImageResource
+{
+    ImageAllocation image_alloc;
+    ImageViewResource image_view_resource;
+};
+
+struct ImageSwapchainResource
+{
+    VkImage image;
+    VkDeviceSize size;
+    ImageViewResource image_view_resource;
+};
+
+struct SwapChainSupportDetails
+{
+    VkSurfaceCapabilitiesKHR capabilities;
+    Buffer<VkSurfaceFormatKHR> formats;
+    Buffer<VkPresentModeKHR> presentModes;
+};
+
+struct SwapChainInfo
+{
+    SwapChainSupportDetails swapChainSupport;
+    VkSurfaceFormatKHR surfaceFormat;
+    VkPresentModeKHR presentMode;
+    VkExtent2D extent;
+};
+
+struct BufferContext
+{
+    BufferAllocation buffer_alloc;
     U32 size;
     U32 capacity;
 };
@@ -52,13 +111,6 @@ struct QueueFamilyIndexBits
     U32 presentFamilyIndexBits;
 };
 
-struct SwapChainSupportDetails
-{
-    VkSurfaceCapabilitiesKHR capabilities;
-    Buffer<VkSurfaceFormatKHR> formats;
-    Buffer<VkPresentModeKHR> presentModes;
-};
-
 enum PlaneType
 {
     LEFT,
@@ -82,6 +134,55 @@ struct CameraUniformBuffer
     Frustum frustum;
     glm::vec2 viewport_dim;
 };
+// ~mgj: Buffers helpers
+//
+// buffer usage patterns with VMA:
+// https://gpuopen-librariesandsdks.github.io/VulkanMemoryAllocator/html/usage_patterns.html
+static internal::BufferAllocation
+BufferAllocationCreate(VmaAllocator allocator, VkDeviceSize size, VkBufferUsageFlags buffer_usage,
+                       VmaMemoryUsage vma_usage, VmaAllocationCreateFlags vma_flags);
+static void
+BufferMappedUpdate(VkCommandBuffer cmd_buffer, VmaAllocator allocator,
+                   internal::BufferAllocationMapped mapped_buffer);
+
+static internal::BufferAllocationMapped
+BufferMappedCreate(VkCommandBuffer cmd_buffer, VmaAllocator allocator, VkDeviceSize size,
+                   VkBufferUsageFlags buffer_usage);
+static void
+BufferDestroy(VmaAllocator allocator, internal::BufferAllocation* buffer_allocation);
+
+static void
+BufferMappedDestroy(VmaAllocator allocator, internal::BufferAllocationMapped* mapped_buffer);
+// ~mgj: Images
+//
+
+static internal::ImageAllocation
+ImageAllocationCreate(VmaAllocator allocator, U32 width, U32 height,
+                      VkSampleCountFlagBits numSamples, VkFormat format, VkImageTiling tiling,
+                      VkImageUsageFlags usage, U32 mipmap_level, VmaMemoryUsage memory_usage,
+                      VmaAllocationCreateFlags memory_properties);
+
+static void
+SwapChainImageResourceCreate(VulkanContext* vk_ctx, SwapChainInfo swapchain_info, U32 image_count);
+static ImageViewResource
+ImageViewResourceCreate(VkDevice device, VkImage image, VkFormat format,
+                        VkImageAspectFlags aspect_mask, U32 mipmap_level);
+
+static void
+ImageViewResourceDestroy(internal::ImageViewResource image_view_resource);
+static void
+ImageAllocationDestroy(VmaAllocator allocator, ImageAllocation image_alloc);
+static ImageResource
+ImageResourceCreate(ImageViewResource image_view_resource, ImageAllocation image_alloc,
+                    VkImageView image_view);
+static void
+ImageResourceDestroy(VmaAllocator allocator, internal::ImageResource image);
+
+// ~mgj: Swapchain functions
+static U32
+VK_SwapChainImageCountGet(VulkanContext* vk_ctx);
+static SwapChainInfo
+VK_SwapChainCreate(Arena* arena, VulkanContext* vk_ctx, IO* io_ctx);
 
 static void
 DescriptorPoolCreate(VulkanContext* vk_ctx);
@@ -92,13 +193,13 @@ static VkShaderModule
 ShaderModuleCreate(VkDevice device, Buffer<U8> buffer);
 template <typename T>
 static void
-VkBufferFromBuffers(VkDevice device, VkPhysicalDevice physical_device, BufferContext* vk_buffer_ctx,
-                    Buffer<Buffer<T>> buffers, VkBufferUsageFlags usage);
+VkBufferFromBuffers(VulkanContext* vk_ctx, BufferContext* vk_buffer_ctx, Buffer<Buffer<T>> buffers,
+                    VkBufferUsageFlags usage);
 
 template <typename T>
 static void
-VkBufferFromBufferMapping(VkDevice device, VkPhysicalDevice physical_device,
-                          BufferContext* vk_buffer_ctx, Buffer<T> buffer, VkBufferUsageFlags usage);
+VkBufferFromBufferMapping(VulkanContext* vk_ctx, BufferContext* vk_buffer_ctx, Buffer<T> buffer,
+                          VkBufferUsageFlags usage);
 
 static QueueFamilyIndices
 VK_QueueFamilyIndicesFromBitFields(QueueFamilyIndexBits queueFamilyBits);
@@ -110,7 +211,7 @@ static QueueFamilyIndexBits
 VK_QueueFamiliesFind(VulkanContext* vk_ctx, VkPhysicalDevice device);
 
 static void
-VK_BufferContextCleanup(VkDevice device, BufferContext* buffer_context);
+BufferContextDestroy(VmaAllocator allocator, BufferContext* buffer_context);
 
 static bool
 VK_IsDeviceSuitable(VulkanContext* vk_ctx, VkPhysicalDevice device, QueueFamilyIndexBits indexBits);
@@ -142,6 +243,8 @@ static void
 CameraDescriptorSetLayoutCreate(VulkanContext* vk_ctx);
 static void
 CameraDescriptorSetCreate(VulkanContext* vk_ctx);
+static void
+VK_ColorResourcesCreate(VulkanContext* vk_ctx);
 
 } // namespace internal
 
@@ -169,6 +272,7 @@ struct VulkanContext
 
     U8 framebuffer_resized;
 
+    VmaAllocator allocator;
     VkInstance instance;
     VkDebugUtilsMessengerEXT debug_messenger;
     VkDevice device;
@@ -178,12 +282,10 @@ struct VulkanContext
     VkSurfaceKHR surface;
     VkQueue present_queue;
     VkSwapchainKHR swapchain;
-    Buffer<VkImage> swapchain_images;
     VkFormat swapchain_image_format;
     VkExtent2D swapchain_extent;
-    Buffer<VkImageView> swapchain_image_views;
+    Buffer<internal::ImageSwapchainResource> swapchain_image_resources;
 
-    Buffer<VkFramebuffer> swapchain_framebuffers;
     VkCommandPool command_pool;
     Buffer<VkCommandBuffer> command_buffers;
 
@@ -192,14 +294,10 @@ struct VulkanContext
     Buffer<VkFence> in_flight_fences;
     U32 current_frame = 0;
 
+    internal::ImageResource color_image_resource;
     VkFormat color_attachment_format;
-    VkImage color_image;
-    VkDeviceMemory color_image_memory;
-    VkImageView color_image_view;
 
-    VkImage depth_image;
-    VkDeviceMemory depth_image_memory;
-    VkImageView depth_image_view;
+    internal::ImageResource depth_image_resource;
     VkFormat depth_attachment_format;
 
     VkSampleCountFlagBits msaa_samples = VK_SAMPLE_COUNT_1_BIT;
@@ -212,12 +310,9 @@ struct VulkanContext
 
     VkDescriptorPool descriptor_pool;
     // ~mgj: camera resources for uniform buffers
-    VkBuffer camera_buffer[MAX_FRAMES_IN_FLIGHT];
-    VkDeviceMemory camera_buffer_memory[MAX_FRAMES_IN_FLIGHT];
-    void* camera_buffer_memory_mapped[MAX_FRAMES_IN_FLIGHT];
+    internal::BufferAllocationMapped camera_buffer_alloc_mapped[MAX_FRAMES_IN_FLIGHT];
     VkDescriptorSetLayout camera_descriptor_set_layout;
     VkDescriptorSet camera_descriptor_sets[MAX_FRAMES_IN_FLIGHT];
-    internal::CameraUniformBuffer camera_uniform_buffer;
 };
 
 struct RoadPushConstants
@@ -241,35 +336,7 @@ struct Vulkan_PushConstantInfo
     uint32_t size;
 };
 
-struct SwapChainInfo
-{
-    internal::SwapChainSupportDetails swapChainSupport;
-    VkSurfaceFormatKHR surfaceFormat;
-    VkPresentModeKHR presentMode;
-    VkExtent2D extent;
-};
-
-// buffers helpers
-static void
-VK_BufferCreate(VkPhysicalDevice physicalDevice, VkDevice device, VkDeviceSize size,
-                VkBufferUsageFlags usage, VkMemoryPropertyFlags properties, VkBuffer* buffer,
-                VkDeviceMemory* bufferMemory);
-
 // image helpers
-
-static void
-VK_ImageFromBufferCopy(VkCommandBuffer command_buffer, VkBuffer buffer, VkImage image,
-                       uint32_t width, uint32_t height);
-
-static void
-VK_ImageCreate(VkPhysicalDevice physicalDevice, VkDevice device, uint32_t width, uint32_t height,
-               VkSampleCountFlagBits numSamples, VkFormat format, VkImageTiling tiling,
-               VkImageUsageFlags usage, VkMemoryPropertyFlags properties, VkImage* image,
-               VkDeviceMemory* imageMemory, U32 mipmap_level);
-
-static void
-VK_ImageViewCreate(VkImageView* out_image_view, VkDevice device, VkImage image, VkFormat format,
-                   VkImageAspectFlags aspect_mask, U32 mipmap_level);
 
 static void
 VK_ImageLayoutTransition(VkCommandBuffer command_buffer, VkImage image, VkFormat format,
@@ -295,8 +362,6 @@ static void
 VK_SyncObjectsCreate(VulkanContext* vk_ctx);
 
 static void
-VK_SwapChainImageViewsCreate(VulkanContext* vk_ctx);
-static void
 VK_CommandPoolCreate(VulkanContext* vk_ctx);
 
 static void
@@ -313,13 +378,6 @@ static void
 VK_PhysicalDevicePick(VulkanContext* vk_ctx);
 static void
 VK_LogicalDeviceCreate(Arena* arena, VulkanContext* vk_ctx);
-
-static SwapChainInfo
-VK_SwapChainCreate(Arena* arena, VulkanContext* vk_ctx, IO* io_ctx);
-static U32
-VK_SwapChainImageCountGet(VulkanContext* vk_ctx);
-static void
-VK_SwapChainImagesCreate(VulkanContext* vk_ctx, SwapChainInfo swapChainInfo, U32 imageCount);
 
 static VkExtent2D
 VK_ChooseSwapExtent(IO* io_ctx, VulkanContext* vk_ctx,
@@ -347,12 +405,6 @@ static VkPresentModeKHR
 VK_ChooseSwapPresentMode(Buffer<VkPresentModeKHR> availablePresentModes);
 
 static void
-VK_ColorResourcesCreate(VkPhysicalDevice physicalDevice, VkDevice device,
-                        VkFormat swapChainImageFormat, VkExtent2D swapChainExtent,
-                        VkSampleCountFlagBits msaaSamples, VkImageView* out_color_image_view,
-                        VkImage* out_color_image, VkDeviceMemory* out_color_image_memory);
-
-static void
 VK_CommandBuffersCreate(VulkanContext* vk_ctx);
 
 static VkResult
@@ -370,9 +422,9 @@ VK_BeginSingleTimeCommands(VulkanContext* vk_ctx);
 
 static void
 VK_EndSingleTimeCommands(VulkanContext* vk_ctx, VkCommandBuffer commandBuffer);
+static VulkanContext*
+VK_VulkanInit(Arena* arena, IO* io_ctx);
 static void
-VK_VulkanInit(VulkanContext* vk_ctx, IO* io_ctx);
-static void
-VK_Cleanup();
+VK_Cleanup(VulkanContext* vk_ctx);
 
 } // namespace wrapper

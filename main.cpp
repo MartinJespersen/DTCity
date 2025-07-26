@@ -31,8 +31,7 @@ static void
 ProfileBuffersCreate(wrapper::VulkanContext* vk_ctx, ProfilingContext* prof_ctx)
 {
 #ifdef TRACY_ENABLE
-    prof_ctx->tracyContexts =
-        BufferAlloc<TracyVkCtx>(vk_ctx->arena, vk_ctx->swapchain_framebuffers.size);
+    prof_ctx->tracyContexts = BufferAlloc<TracyVkCtx>(vk_ctx->arena, vk_ctx->MAX_FRAMES_IN_FLIGHT);
     for (U32 i = 0; i < vk_ctx->command_buffers.size; i++)
     {
         prof_ctx->tracyContexts.data[i] =
@@ -51,20 +50,19 @@ ContextInit()
     Context* ctx = PushStruct(app_arena, Context);
     ctx->arena_permanent = app_arena;
     ctx->io = PushStruct(app_arena, IO);
-    ctx->vk_ctx = PushStruct(app_arena, wrapper::VulkanContext);
     ctx->camera = PushStruct(app_arena, ui::Camera);
     ctx->time = PushStruct(app_arena, DT_Time);
     ctx->profilingContext = PushStruct(app_arena, ProfilingContext);
-    ctx->terrain = PushStruct(app_arena, Terrain);
     ctx->city = PushStruct(app_arena, city::City);
     ctx->dll_info = PushStruct(app_arena, DllInfo);
 
-    ctx->cwd = Str8PathFromStr8List(app_arena, {OS_GetCurrentPath(scratch.arena), Str8CString(".."),
-                                                Str8CString(".."), Str8CString("..")});
+    ctx->cwd = Str8PathFromStr8List(app_arena,
+                                    {OS_GetCurrentPath(scratch.arena), S(".."), S(".."), S("..")});
+    ctx->texture_path = Str8PathFromStr8List(app_arena, {ctx->cwd, S("textures")});
 
     GlobalContextSet(ctx);
     InitWindow(ctx);
-    wrapper::VK_VulkanInit(ctx->vk_ctx, ctx->io);
+    ctx->vk_ctx = wrapper::VK_VulkanInit(app_arena, ctx->io);
     CameraInit(ctx->camera);
     ProfileBuffersCreate(ctx->vk_ctx, ctx->profilingContext);
     city::CityInit(ctx->vk_ctx, ctx->city, ctx->cwd);
@@ -91,5 +89,8 @@ App(HotReloadFunc HotReload)
     }
 
     city::CityCleanup(ctx->city, ctx->vk_ctx);
-    wrapper::VK_Cleanup();
+    wrapper::VK_Cleanup(ctx->vk_ctx);
+
+    glfwDestroyWindow(ctx->io->window);
+    glfwTerminate();
 }

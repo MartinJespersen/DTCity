@@ -72,7 +72,7 @@ static Arena*
 ArenaAlloc();
 
 static void
-arena_release(Arena* arena);
+ArenaRelease(Arena* arena);
 
 //- rjf: arena push/pop/pos core functions
 static void*

@@ -76,10 +76,10 @@ TerrainTextureResourceCreate(wrapper::VulkanContext* vk_ctx, Terrain* terrain, S
         exitWithError("failed to load texture image!");
     }
 
-    wrapper::VK_BufferCreate(
-        vk_ctx->physical_device, vk_ctx->device, image_size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-        VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-        &vk_texture_staging_buffer, &vk_texture_staging_buffer_memory);
+    wrapper::BufferAllocationCreate(vk_ctx->allocator, image_size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+                                    VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
+                                        VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+                                    &vk_texture_staging_buffer, &vk_texture_staging_buffer_memory);
 
     void* data;
     vkMapMemory(vk_ctx->device, vk_texture_staging_buffer_memory, 0, image_size, 0, &data);
@@ -88,12 +88,12 @@ TerrainTextureResourceCreate(wrapper::VulkanContext* vk_ctx, Terrain* terrain, S
 
     stbi_image_free(pixels);
 
-    wrapper::VK_ImageCreate(vk_ctx->physical_device, vk_ctx->device, tex_width, tex_height,
-                            VK_SAMPLE_COUNT_1_BIT, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_TILING_OPTIMAL,
-                            VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT |
-                                VK_IMAGE_USAGE_SAMPLED_BIT,
-                            VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, &terrain->vk_texture_image,
-                            &terrain->vk_texture_image_memory, terrain->vk_mip_levels);
+    wrapper::ImageAllocationCreate(vk_ctx->allocator, tex_width, tex_height, VK_SAMPLE_COUNT_1_BIT,
+                                   VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_TILING_OPTIMAL,
+                                   VK_IMAGE_USAGE_TRANSFER_SRC_BIT |
+                                       VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
+                                   VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, &terrain->vk_texture_image,
+                                   &terrain->vk_texture_image_memory, terrain->vk_mip_levels);
 
     VkCommandBuffer command_buffer = VK_BeginSingleTimeCommands(vk_ctx);
     wrapper::VK_ImageLayoutTransition(command_buffer, terrain->vk_texture_image,
@@ -110,9 +110,9 @@ TerrainTextureResourceCreate(wrapper::VulkanContext* vk_ctx, Terrain* terrain, S
     vkDestroyBuffer(vk_ctx->device, vk_texture_staging_buffer, nullptr);
     vkFreeMemory(vk_ctx->device, vk_texture_staging_buffer_memory, nullptr);
 
-    wrapper::VK_ImageViewCreate(&terrain->vk_texture_image_view, vk_ctx->device,
-                                terrain->vk_texture_image, VK_FORMAT_R8G8B8A8_SRGB,
-                                VK_IMAGE_ASPECT_COLOR_BIT, terrain->vk_mip_levels);
+    wrapper::ImageViewResourceCreate(vk_ctx->device, terrain->vk_texture_image,
+                                     VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_ASPECT_COLOR_BIT,
+                                     terrain->vk_mip_levels);
     wrapper::VK_SamplerCreate(&terrain->vk_texture_sampler, vk_ctx->device, VK_FILTER_LINEAR,
                               VK_SAMPLER_MIPMAP_MODE_LINEAR, terrain->vk_mip_levels,
                               vk_ctx->physical_device_properties.limits.maxSamplerAnisotropy);
@@ -194,11 +194,10 @@ TerrainUniformBufferCreate(Terrain* terrain, U32 image_count)
 
     for (U32 i = 0; i < image_count; i++)
     {
-        wrapper::VK_BufferCreate(vk_ctx->physical_device, vk_ctx->device, terrain_buffer_size,
-                                 VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
-                                 VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
-                                     VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-                                 &terrain->buffer[i], &terrain->buffer_memory[i]);
+        wrapper::BufferAllocationCreate(
+            vk_ctx, terrain_buffer_size, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
+            VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+            &terrain->buffer[i], &terrain->buffer_memory[i]);
 
         if (vkMapMemory(vk_ctx->device, terrain->buffer_memory[i], 0, terrain_buffer_size, 0,
                         &terrain->buffer_memory_mapped[i]) != VK_SUCCESS)

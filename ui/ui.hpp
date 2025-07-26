@@ -25,4 +25,3 @@
 #include "state.hpp"
 #include "globals.hpp"
 #include "geometry.hpp"
-#include "terrain.hpp"

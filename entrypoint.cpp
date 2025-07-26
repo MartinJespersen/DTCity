@@ -66,20 +66,6 @@ CommandBufferRecord(U32 image_index, U32 current_frame)
     TracyVkCollect(profilingContext->tracyContexts.data[current_frame],
                    vk_ctx->command_buffers.data[current_frame]);
 
-    Buffer<Buffer<terrain::Vertex>> buf_of_vert_buffers =
-        BufferAlloc<Buffer<terrain::Vertex>>(scratch.arena, 1);
-    buf_of_vert_buffers.data[0] = ctx->terrain->vertices;
-
-    Buffer<Buffer<U32>> buf_of_indice_buffers = BufferAlloc<Buffer<U32>>(scratch.arena, 1);
-    buf_of_indice_buffers.data[0] = ctx->terrain->indices;
-
-    wrapper::internal::VkBufferFromBuffers(vk_ctx->device, vk_ctx->physical_device,
-                                           &vk_ctx->vk_vertex_context, buf_of_vert_buffers,
-                                           VK_BUFFER_USAGE_VERTEX_BUFFER_BIT);
-    wrapper::internal::VkBufferFromBuffers(vk_ctx->device, vk_ctx->physical_device,
-                                           &vk_ctx->vk_indice_context, buf_of_indice_buffers,
-                                           VK_BUFFER_USAGE_INDEX_BUFFER_BIT);
-
     // ~ transition swapchain image from undefined to color attachment optimal
     VkImageMemoryBarrier barrier{};
     barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
@@ -87,7 +73,7 @@ CommandBufferRecord(U32 image_index, U32 current_frame)
     barrier.newLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
     barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
     barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-    barrier.image = vk_ctx->swapchain_images.data[image_index];
+    barrier.image = vk_ctx->swapchain_image_resources.data[image_index].image;
     barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
     barrier.subresourceRange.baseMipLevel = 0;
     barrier.subresourceRange.levelCount = 1;
@@ -106,11 +92,6 @@ CommandBufferRecord(U32 image_index, U32 current_frame)
         vk_ctx, camera,
         Vec2F32{(F32)vk_ctx->swapchain_extent.width, (F32)vk_ctx->swapchain_extent.height},
         current_frame);
-    UpdateTerrainUniformBuffer(
-        ctx->terrain,
-        Vec2F32{(F32)vk_ctx->swapchain_extent.width, (F32)vk_ctx->swapchain_extent.height},
-        current_frame);
-    TerrainRenderPassBegin(vk_ctx, ctx->terrain, image_index, current_frame);
     city::CityUpdate(ctx->city, vk_ctx, image_index);
 
     // ~mgj: transition swapchain image layout from VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL to
@@ -121,7 +102,7 @@ CommandBufferRecord(U32 image_index, U32 current_frame)
     barrier.newLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
     barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
     barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-    barrier.image = vk_ctx->swapchain_images.data[image_index];
+    barrier.image = vk_ctx->swapchain_image_resources.data[image_index].image;
     barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
     barrier.subresourceRange.baseMipLevel = 0;
     barrier.subresourceRange.levelCount = 1;

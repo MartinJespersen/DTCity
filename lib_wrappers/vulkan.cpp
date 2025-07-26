@@ -1,3 +1,5 @@
+
+
 namespace wrapper
 {
 
@@ -11,30 +13,27 @@ RoadRenderPass(wrapper::VulkanContext* vk_ctx, wrapper::Road* w_road, city::Road
     // Color attachment (assuming you want to render to the same targets)
     VkRenderingAttachmentInfo color_attachment{};
     color_attachment.sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO;
-    color_attachment.imageView = vk_ctx->color_image_view;
+    color_attachment.imageView = vk_ctx->color_image_resource.image_view_resource.image_view;
     color_attachment.imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-    color_attachment.loadOp = VK_ATTACHMENT_LOAD_OP_LOAD; // Load existing content
+    color_attachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR; // Load existing content
     color_attachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
-
-    // Resolve attachment
-    VkRenderingAttachmentInfo resolve_attachment{};
-    resolve_attachment.sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO;
-    resolve_attachment.imageView = vk_ctx->swapchain_image_views.data[image_index];
-    resolve_attachment.imageLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+    color_attachment.clearValue.color = {{0.0f, 0.0f, 0.0f, 1.0f}}; // Clear to black
 
     // Depth attachment
     VkRenderingAttachmentInfo depth_attachment{};
     depth_attachment.sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO;
-    depth_attachment.imageView = vk_ctx->depth_image_view;
+    depth_attachment.imageView = vk_ctx->depth_image_resource.image_view_resource.image_view;
     depth_attachment.imageLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
-    depth_attachment.loadOp = VK_ATTACHMENT_LOAD_OP_LOAD; // Load existing depth
+    depth_attachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR; // Load existing depth
     depth_attachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+    depth_attachment.clearValue.depthStencil = {1.0f, 0}; // Clear to far plane
 
     // Set up MSAA resolve if needed
     if (vk_ctx->msaa_samples != VK_SAMPLE_COUNT_1_BIT)
     {
         color_attachment.resolveMode = VK_RESOLVE_MODE_AVERAGE_BIT;
-        color_attachment.resolveImageView = resolve_attachment.imageView;
+        color_attachment.resolveImageView =
+            vk_ctx->swapchain_image_resources.data[image_index].image_view_resource.image_view;
         color_attachment.resolveImageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
     }
 
@@ -66,7 +65,7 @@ RoadRenderPass(wrapper::VulkanContext* vk_ctx, wrapper::Road* w_road, city::Road
     scissor.extent = swap_chain_extent;
     vkCmdSetScissor(command_buffer, 0, 1, &scissor);
 
-    VkBuffer vertex_buffers[] = {w_road->vertex_buffer.buffer};
+    VkBuffer vertex_buffers[] = {w_road->vertex_buffer.buffer_alloc.buffer};
     VkDeviceSize offsets[] = {0};
 
     RoadPushConstants road_push_constant = {.model = road->model_matrix,
@@ -93,9 +92,9 @@ RoadInit(wrapper::VulkanContext* vk_ctx, city::City* city, String8 cwd)
 static void
 RoadUpdate(city::Road* road, Road* w_road, wrapper::VulkanContext* vk_ctx, U32 image_index)
 {
+    // TODO: this should be mapped to GPU memory (DEVICE_LOCAL)
     internal::VkBufferFromBufferMapping<city::RoadVertex>(
-        vk_ctx->device, vk_ctx->physical_device, &w_road->vertex_buffer, road->vertex_buffer,
-        VK_BUFFER_USAGE_VERTEX_BUFFER_BIT);
+        vk_ctx, &w_road->vertex_buffer, road->vertex_buffer, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT);
     RoadRenderPass(vk_ctx, w_road, road, image_index);
 }
 
@@ -103,30 +102,9 @@ static void
 RoadCleanup(city::City* city, wrapper::VulkanContext* vk_ctx)
 {
     Road* road = city->w_road;
-    internal::VK_BufferContextCleanup(vk_ctx->device, &road->vertex_buffer);
+    internal::BufferContextDestroy(vk_ctx->allocator, &road->vertex_buffer);
     vkDestroyPipelineLayout(vk_ctx->device, road->pipeline_layout, nullptr);
     vkDestroyPipeline(vk_ctx->device, road->pipeline, nullptr);
-}
-
-static void
-VK_ImageFromBufferCopy(VkCommandBuffer command_buffer, VkBuffer buffer, VkImage image,
-                       uint32_t width, uint32_t height)
-{
-    VkBufferImageCopy region{};
-    region.bufferOffset = 0;
-    region.bufferRowLength = 0;
-    region.bufferImageHeight = 0;
-
-    region.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-    region.imageSubresource.mipLevel = 0;
-    region.imageSubresource.baseArrayLayer = 0;
-    region.imageSubresource.layerCount = 1;
-
-    region.imageOffset = {0, 0, 0};
-    region.imageExtent = {width, height, 1};
-
-    vkCmdCopyBufferToImage(command_buffer, buffer, image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1,
-                           &region);
 }
 
 static void
@@ -362,131 +340,16 @@ VK_FindMemoryType(VkPhysicalDevice physicalDevice, uint32_t typeFilter,
     return 0;
 }
 
-static void
-VK_BufferCreate(VkPhysicalDevice physicalDevice, VkDevice device, VkDeviceSize size,
-                VkBufferUsageFlags usage, VkMemoryPropertyFlags properties, VkBuffer* buffer,
-                VkDeviceMemory* bufferMemory)
-{
-    VkBufferCreateInfo bufferInfo{};
-    bufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
-    bufferInfo.size = size;
-    bufferInfo.usage = usage;
-    bufferInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
-
-    if (vkCreateBuffer(device, &bufferInfo, nullptr, buffer) != VK_SUCCESS)
-    {
-        exitWithError("failed to create buffer!");
-    }
-
-    VkMemoryRequirements memRequirements;
-    vkGetBufferMemoryRequirements(device, *buffer, &memRequirements);
-
-    VkMemoryAllocateInfo allocInfo{};
-    allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
-    allocInfo.allocationSize = memRequirements.size;
-    allocInfo.memoryTypeIndex =
-        VK_FindMemoryType(physicalDevice, memRequirements.memoryTypeBits, properties);
-
-    if (vkAllocateMemory(device, &allocInfo, nullptr, bufferMemory) != VK_SUCCESS)
-    {
-        exitWithError("failed to allocate buffer memory!");
-    }
-
-    vkBindBufferMemory(device, *buffer, *bufferMemory, 0);
-}
-
-static void
-VK_ImageViewCreate(VkImageView* view_out, VkDevice device, VkImage image, VkFormat format,
-                   VkImageAspectFlags aspect_mask, U32 mipmap_level)
-{
-    VkImageViewCreateInfo viewInfo{};
-    viewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
-    viewInfo.image = image;
-    viewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
-    viewInfo.format = format;
-    viewInfo.subresourceRange.aspectMask = aspect_mask;
-    viewInfo.subresourceRange.baseMipLevel = 0;
-    viewInfo.subresourceRange.levelCount = mipmap_level;
-    viewInfo.subresourceRange.baseArrayLayer = 0;
-    viewInfo.subresourceRange.layerCount = 1;
-
-    if (vkCreateImageView(device, &viewInfo, nullptr, view_out) != VK_SUCCESS)
-    {
-        exitWithError("failed to create texture image view!");
-    }
-}
-
-static void
-VK_ImageCreate(VkPhysicalDevice physicalDevice, VkDevice device, U32 width, U32 height,
-               VkSampleCountFlagBits numSamples, VkFormat format, VkImageTiling tiling,
-               VkImageUsageFlags usage, VkMemoryPropertyFlags properties, VkImage* image,
-               VkDeviceMemory* imageMemory, U32 mipmap_level)
-{
-    VkImageCreateInfo imageInfo{};
-    imageInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
-    imageInfo.imageType = VK_IMAGE_TYPE_2D;
-    imageInfo.extent.width = width;
-    imageInfo.extent.height = height;
-    imageInfo.extent.depth = 1;
-    imageInfo.mipLevels = mipmap_level;
-    imageInfo.arrayLayers = 1;
-    imageInfo.format = format;
-    imageInfo.tiling = tiling;
-    imageInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-    imageInfo.usage = usage;
-    imageInfo.samples = numSamples;
-    imageInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
-
-    if (vkCreateImage(device, &imageInfo, nullptr, image) != VK_SUCCESS)
-    {
-        exitWithError("failed to create image!");
-    }
-
-    VkMemoryRequirements memRequirements;
-    vkGetImageMemoryRequirements(device, *image, &memRequirements);
-
-    VkMemoryAllocateInfo allocInfo{};
-    allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
-    allocInfo.allocationSize = memRequirements.size;
-    allocInfo.memoryTypeIndex =
-        VK_FindMemoryType(physicalDevice, memRequirements.memoryTypeBits, properties);
-
-    if (vkAllocateMemory(device, &allocInfo, nullptr, imageMemory) != VK_SUCCESS)
-    {
-        exitWithError("failed to allocate image memory!");
-    }
-
-    vkBindImageMemory(device, *image, *imageMemory, 0);
-}
-
-static void
-VK_ColorResourcesCreate(VkPhysicalDevice physicalDevice, VkDevice device,
-                        VkFormat swapChainImageFormat, VkExtent2D swapChainExtent,
-                        VkSampleCountFlagBits msaaSamples, VkImageView* out_color_image_view,
-                        VkImage* out_color_image, VkDeviceMemory* out_color_image_memory)
-{
-    VkFormat colorFormat = swapChainImageFormat;
-
-    VK_ImageCreate(physicalDevice, device, swapChainExtent.width, swapChainExtent.height,
-                   msaaSamples, colorFormat, VK_IMAGE_TILING_OPTIMAL,
-                   VK_IMAGE_USAGE_TRANSIENT_ATTACHMENT_BIT | VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT,
-                   VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, out_color_image, out_color_image_memory, 1);
-
-    VK_ImageViewCreate(out_color_image_view, device, *out_color_image, colorFormat,
-                       VK_IMAGE_ASPECT_COLOR_BIT, 1);
-}
-
 // queue family
 
 VkFormat
-VK_SupportedFormat(const VkFormat candidates[3], VkImageTiling tiling,
-                   VkFormatFeatureFlags features)
+VK_SupportedFormat(VkPhysicalDevice physical_device, const VkFormat candidates[3],
+                   VkImageTiling tiling, VkFormatFeatureFlags features)
 {
     for (U32 i = 0; i < ArrayCount(candidates); i++)
     {
         VkFormatProperties props;
-        vkGetPhysicalDeviceFormatProperties(GlobalContextGet()->vk_ctx->physical_device,
-                                            candidates[i], &props);
+        vkGetPhysicalDeviceFormatProperties(physical_device, candidates[i], &props);
 
         if (tiling == VK_IMAGE_TILING_LINEAR && (props.linearTilingFeatures & features) == features)
         {
@@ -510,24 +373,24 @@ VK_DepthResourcesCreate(VulkanContext* vk_ctx)
     VkFormat depth_formats[3] = {VK_FORMAT_D16_UNORM, VK_FORMAT_D32_SFLOAT,
                                  VK_FORMAT_D24_UNORM_S8_UINT};
 
-    VkFormat depth_format = VK_SupportedFormat(depth_formats, VK_IMAGE_TILING_OPTIMAL,
-                                               VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT);
+    VkFormat depth_format =
+        VK_SupportedFormat(vk_ctx->physical_device, depth_formats, VK_IMAGE_TILING_OPTIMAL,
+                           VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT);
     vk_ctx->depth_attachment_format = depth_format;
 
     B32 has_stencil_component =
         depth_format == VK_FORMAT_D32_SFLOAT_S8_UINT || depth_format == VK_FORMAT_D24_UNORM_S8_UINT;
 
-    VK_ImageCreate(vk_ctx->physical_device, vk_ctx->device, vk_ctx->swapchain_extent.width,
-                   vk_ctx->swapchain_extent.height, vk_ctx->msaa_samples, depth_format,
-                   VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT,
-                   VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, &vk_ctx->depth_image,
-                   &vk_ctx->depth_image_memory, 1);
+    internal::ImageAllocation image_alloc = internal::ImageAllocationCreate(
+        vk_ctx->allocator, vk_ctx->swapchain_extent.width, vk_ctx->swapchain_extent.height,
+        vk_ctx->msaa_samples, depth_format, VK_IMAGE_TILING_OPTIMAL,
+        VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT, 1, VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE, 0);
 
-    VK_ImageViewCreate(&vk_ctx->depth_image_view, vk_ctx->device, vk_ctx->depth_image, depth_format,
-                       VK_IMAGE_ASPECT_DEPTH_BIT, 1);
+    internal::ImageViewResource image_view_resource = internal::ImageViewResourceCreate(
+        vk_ctx->device, image_alloc.image, depth_format, VK_IMAGE_ASPECT_DEPTH_BIT, 1);
 
-    // transitioning image layout happens in renderpass
-
+    vk_ctx->depth_image_resource = {.image_alloc = image_alloc,
+                                    .image_view_resource = image_view_resource};
     ScratchEnd(scratch);
 }
 
@@ -546,108 +409,6 @@ VK_CommandPoolCreate(VulkanContext* vk_ctx)
     {
         exitWithError("failed to create command pool!");
     }
-}
-
-static void
-VK_SwapChainImageViewsCreate(VulkanContext* vk_ctx)
-{
-    for (uint32_t i = 0; i < vk_ctx->swapchain_images.size; i++)
-    {
-        VK_ImageViewCreate(&vk_ctx->swapchain_image_views.data[i], vk_ctx->device,
-                           vk_ctx->swapchain_images.data[i], vk_ctx->swapchain_image_format,
-                           VK_IMAGE_ASPECT_COLOR_BIT, 1);
-    }
-}
-
-static void
-VK_SwapChainImagesCreate(VulkanContext* vk_ctx, SwapChainInfo swapChainInfo, U32 imageCount)
-{
-    if (vkGetSwapchainImagesKHR(vk_ctx->device, vk_ctx->swapchain, &imageCount,
-                                vk_ctx->swapchain_images.data) != VK_SUCCESS)
-    {
-        exitWithError("failed to get swapchain images!");
-    }
-
-    vk_ctx->swapchain_image_format = swapChainInfo.surfaceFormat.format;
-    vk_ctx->swapchain_extent = swapChainInfo.extent;
-}
-
-static U32
-VK_SwapChainImageCountGet(VulkanContext* vk_ctx)
-{
-    U32 imageCount = {0};
-    if (vkGetSwapchainImagesKHR(vk_ctx->device, vk_ctx->swapchain, &imageCount, nullptr) !=
-        VK_SUCCESS)
-    {
-        exitWithError("failed to get swapchain image count!");
-    }
-    return imageCount;
-}
-
-static SwapChainInfo
-VK_SwapChainCreate(Arena* arena, VulkanContext* vk_ctx, IO* io_ctx)
-{
-    SwapChainInfo swapChainInfo = {0};
-
-    swapChainInfo.swapChainSupport =
-        internal::VK_QuerySwapChainSupport(arena, vk_ctx, vk_ctx->physical_device);
-
-    swapChainInfo.surfaceFormat =
-        VK_ChooseSwapSurfaceFormat(swapChainInfo.swapChainSupport.formats);
-    swapChainInfo.presentMode =
-        VK_ChooseSwapPresentMode(swapChainInfo.swapChainSupport.presentModes);
-    swapChainInfo.extent =
-        VK_ChooseSwapExtent(io_ctx, vk_ctx, swapChainInfo.swapChainSupport.capabilities);
-
-    U32 imageCount = swapChainInfo.swapChainSupport.capabilities.minImageCount + 1;
-
-    if (swapChainInfo.swapChainSupport.capabilities.maxImageCount > 0 &&
-        imageCount > swapChainInfo.swapChainSupport.capabilities.maxImageCount)
-    {
-        imageCount = swapChainInfo.swapChainSupport.capabilities.maxImageCount;
-    }
-
-    internal::QueueFamilyIndices queueFamilyIndices = vk_ctx->queue_family_indices;
-    VkSwapchainCreateInfoKHR createInfo{};
-    createInfo.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
-    createInfo.surface = vk_ctx->surface;
-
-    createInfo.minImageCount = imageCount;
-    createInfo.imageFormat = swapChainInfo.surfaceFormat.format;
-    createInfo.imageColorSpace = swapChainInfo.surfaceFormat.colorSpace;
-    createInfo.imageExtent = swapChainInfo.extent;
-    createInfo.imageArrayLayers = 1;
-    createInfo.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
-
-    if (queueFamilyIndices.graphicsFamilyIndex != queueFamilyIndices.presentFamilyIndex)
-    {
-        U32 queueFamilyIndicesSame[] = {vk_ctx->queue_family_indices.graphicsFamilyIndex,
-                                        vk_ctx->queue_family_indices.presentFamilyIndex};
-        createInfo.imageSharingMode = VK_SHARING_MODE_CONCURRENT;
-        createInfo.queueFamilyIndexCount = 2;
-        createInfo.pQueueFamilyIndices = queueFamilyIndicesSame;
-    }
-    else
-    {
-        createInfo.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
-        createInfo.queueFamilyIndexCount = 0;     // Optional
-        createInfo.pQueueFamilyIndices = nullptr; // Optional
-    }
-
-    createInfo.preTransform = swapChainInfo.swapChainSupport.capabilities.currentTransform;
-    createInfo.compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
-    createInfo.presentMode = swapChainInfo.presentMode;
-    createInfo.clipped = VK_TRUE;
-    // TODO: It is possible to specify the old swap chain to be replaced by a new one
-    createInfo.oldSwapchain = VK_NULL_HANDLE;
-
-    if (vkCreateSwapchainKHR(vk_ctx->device, &createInfo, nullptr, &vk_ctx->swapchain) !=
-        VK_SUCCESS)
-    {
-        exitWithError("failed to create swap chain!");
-    }
-
-    return swapChainInfo;
 }
 
 static void
@@ -1066,27 +827,20 @@ VK_RecreateSwapChain(IO* io_ctx, VulkanContext* vk_ctx)
 
     VK_SwapChainCleanup(vk_ctx);
 
-    SwapChainInfo swapChainInfo = VK_SwapChainCreate(scratch.arena, vk_ctx, io_ctx);
-    U32 swapChainImageCount = VK_SwapChainImageCountGet(vk_ctx);
-    VK_SwapChainImagesCreate(vk_ctx, swapChainInfo, swapChainImageCount);
+    internal::SwapChainInfo swapchain_info =
+        internal::VK_SwapChainCreate(scratch.arena, vk_ctx, io_ctx);
+    U32 swapchain_image_count = internal::VK_SwapChainImageCountGet(vk_ctx);
+    internal::SwapChainImageResourceCreate(vk_ctx, swapchain_info, swapchain_image_count);
 
-    VK_SwapChainImageViewsCreate(vk_ctx);
-    VK_ColorResourcesCreate(vk_ctx->physical_device, vk_ctx->device, vk_ctx->swapchain_image_format,
-                            vk_ctx->swapchain_extent, vk_ctx->msaa_samples,
-                            &vk_ctx->color_image_view, &vk_ctx->color_image,
-                            &vk_ctx->color_image_memory);
+    internal::VK_ColorResourcesCreate(vk_ctx);
 
     VK_DepthResourcesCreate(vk_ctx);
     ScratchEnd(scratch);
 }
 
 static void
-VK_Cleanup()
+VK_Cleanup(VulkanContext* vk_ctx)
 {
-    Context* ctx = GlobalContextGet();
-    VulkanContext* vk_ctx = ctx->vk_ctx;
-    IO* io_ctx = ctx->io;
-
     vkDeviceWaitIdle(vk_ctx->device);
 
     if (vk_ctx->enable_validation_layers)
@@ -1094,11 +848,10 @@ VK_Cleanup()
         DestroyDebugUtilsMessengerEXT(vk_ctx->instance, vk_ctx->debug_messenger, nullptr);
     }
     // indice and vertex buffers
-    VK_BufferContextCleanup(vk_ctx->device, &vk_ctx->vk_indice_context);
-    VK_BufferContextCleanup(vk_ctx->device, &vk_ctx->vk_vertex_context);
+    BufferContextDestroy(vk_ctx->allocator, &vk_ctx->vk_indice_context);
+    BufferContextDestroy(vk_ctx->allocator, &vk_ctx->vk_vertex_context);
 
     internal::CameraCleanup(vk_ctx);
-    TerrainVulkanCleanup(ctx->terrain, vk_ctx->MAX_FRAMES_IN_FLIGHT);
 
     VK_SwapChainCleanup(vk_ctx);
 
@@ -1111,7 +864,6 @@ VK_Cleanup()
     vkDestroyCommandPool(vk_ctx->device, vk_ctx->command_pool, nullptr);
 
     vkDestroySurfaceKHR(vk_ctx->instance, vk_ctx->surface, nullptr);
-
     for (U32 i = 0; i < (U32)vk_ctx->MAX_FRAMES_IN_FLIGHT; i++)
     {
         vkDestroySemaphore(vk_ctx->device, vk_ctx->render_finished_semaphores.data[i], nullptr);
@@ -1119,28 +871,23 @@ VK_Cleanup()
         vkDestroyFence(vk_ctx->device, vk_ctx->in_flight_fences.data[i], nullptr);
     }
 
+    vkDestroyDescriptorPool(vk_ctx->device, vk_ctx->descriptor_pool, 0);
+
+    vmaDestroyAllocator(vk_ctx->allocator);
     vkDestroyDevice(vk_ctx->device, nullptr);
     vkDestroyInstance(vk_ctx->instance, nullptr);
-
-    glfwDestroyWindow(io_ctx->window);
-
-    glfwTerminate();
 }
 
 static void
 VK_ColorResourcesCleanup(VulkanContext* vk_ctx)
 {
-    vkDestroyImageView(vk_ctx->device, vk_ctx->color_image_view, nullptr);
-    vkDestroyImage(vk_ctx->device, vk_ctx->color_image, nullptr);
-    vkFreeMemory(vk_ctx->device, vk_ctx->color_image_memory, nullptr);
+    internal::ImageResourceDestroy(vk_ctx->allocator, vk_ctx->color_image_resource);
 }
 
 static void
 VK_DepthResourcesCleanup(VulkanContext* vk_ctx)
 {
-    vkDestroyImageView(vk_ctx->device, vk_ctx->depth_image_view, nullptr);
-    vkDestroyImage(vk_ctx->device, vk_ctx->depth_image, nullptr);
-    vkFreeMemory(vk_ctx->device, vk_ctx->depth_image_memory, nullptr);
+    internal::ImageResourceDestroy(vk_ctx->allocator, vk_ctx->depth_image_resource);
 }
 
 static void
@@ -1149,14 +896,10 @@ VK_SwapChainCleanup(VulkanContext* vk_ctx)
     VK_ColorResourcesCleanup(vk_ctx);
     VK_DepthResourcesCleanup(vk_ctx);
 
-    for (size_t i = 0; i < vk_ctx->swapchain_framebuffers.size; i++)
+    for (size_t i = 0; i < vk_ctx->swapchain_image_resources.size; i++)
     {
-        vkDestroyFramebuffer(vk_ctx->device, vk_ctx->swapchain_framebuffers.data[i], nullptr);
-    }
-
-    for (size_t i = 0; i < vk_ctx->swapchain_image_views.size; i++)
-    {
-        vkDestroyImageView(vk_ctx->device, vk_ctx->swapchain_image_views.data[i], nullptr);
+        internal::ImageViewResourceDestroy(
+            vk_ctx->swapchain_image_resources.data[i].image_view_resource);
     }
 
     vkDestroySwapchainKHR(vk_ctx->device, vk_ctx->swapchain, nullptr);
@@ -1196,7 +939,7 @@ static void
 VK_CommandBuffersCreate(VulkanContext* vk_ctx)
 {
     vk_ctx->command_buffers =
-        BufferAlloc<VkCommandBuffer>(vk_ctx->arena, vk_ctx->swapchain_framebuffers.size);
+        BufferAlloc<VkCommandBuffer>(vk_ctx->arena, vk_ctx->MAX_FRAMES_IN_FLIGHT);
     VkCommandBufferAllocateInfo allocInfo{};
     allocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
     allocInfo.commandPool = vk_ctx->command_pool;
@@ -1209,9 +952,12 @@ VK_CommandBuffersCreate(VulkanContext* vk_ctx)
         exitWithError("failed to allocate command buffers!");
     }
 }
-static void
-VK_VulkanInit(VulkanContext* vk_ctx, IO* io_ctx)
+
+static VulkanContext*
+VK_VulkanInit(Arena* arena, IO* io_ctx)
 {
+    VulkanContext* vk_ctx = PushStruct(arena, VulkanContext);
+
     Temp scratch = ScratchBegin(0, 0);
     vk_ctx->arena = ArenaAlloc();
 
@@ -1237,24 +983,22 @@ VK_VulkanInit(VulkanContext* vk_ctx, IO* io_ctx)
     VK_SurfaceCreate(vk_ctx, io_ctx);
     VK_PhysicalDevicePick(vk_ctx);
     VK_LogicalDeviceCreate(scratch.arena, vk_ctx);
-    SwapChainInfo swapChainInfo = VK_SwapChainCreate(scratch.arena, vk_ctx, io_ctx);
-    U32 swapChainImageCount = VK_SwapChainImageCountGet(vk_ctx);
-    vk_ctx->swapchain_images = BufferAlloc<VkImage>(vk_ctx->arena, (U64)swapChainImageCount);
-    vk_ctx->swapchain_image_views =
-        BufferAlloc<VkImageView>(vk_ctx->arena, (U64)swapChainImageCount);
-    vk_ctx->swapchain_framebuffers =
-        BufferAlloc<VkFramebuffer>(vk_ctx->arena, (U64)swapChainImageCount);
+    internal::SwapChainInfo swapchain_info =
+        internal::VK_SwapChainCreate(scratch.arena, vk_ctx, io_ctx);
+    U32 swapchain_image_count = internal::VK_SwapChainImageCountGet(vk_ctx);
 
-    VK_SwapChainImagesCreate(vk_ctx, swapChainInfo, swapChainImageCount);
-    VK_SwapChainImageViewsCreate(vk_ctx);
+    internal::SwapChainImageResourceCreate(vk_ctx, swapchain_info, swapchain_image_count);
     vk_ctx->color_attachment_format = vk_ctx->swapchain_image_format;
 
     VK_CommandPoolCreate(vk_ctx);
 
-    VK_ColorResourcesCreate(vk_ctx->physical_device, vk_ctx->device, vk_ctx->swapchain_image_format,
-                            vk_ctx->swapchain_extent, vk_ctx->msaa_samples,
-                            &vk_ctx->color_image_view, &vk_ctx->color_image,
-                            &vk_ctx->color_image_memory);
+    VmaAllocatorCreateInfo allocatorInfo = {};
+    allocatorInfo.physicalDevice = vk_ctx->physical_device;
+    allocatorInfo.device = vk_ctx->device;
+    allocatorInfo.instance = vk_ctx->instance;
+    vmaCreateAllocator(&allocatorInfo, &vk_ctx->allocator);
+
+    internal::VK_ColorResourcesCreate(vk_ctx);
 
     VK_DepthResourcesCreate(vk_ctx);
 
@@ -1266,8 +1010,9 @@ VK_VulkanInit(VulkanContext* vk_ctx, IO* io_ctx)
     internal::CameraUniformBufferCreate(vk_ctx);
     internal::CameraDescriptorSetLayoutCreate(vk_ctx);
     internal::CameraDescriptorSetCreate(vk_ctx);
-    TerrainInit();
     ScratchEnd(scratch);
+
+    return vk_ctx;
 }
 
 namespace internal
@@ -1509,11 +1254,31 @@ ShaderModuleCreate(VkDevice device, Buffer<U8> buffer)
 
     return shaderModule;
 }
+static void
+BufferDestroy(VmaAllocator allocator, BufferAllocation buffer_allocation)
+{
+    vmaDestroyBuffer(allocator, buffer_allocation.buffer, buffer_allocation.allocation);
+}
+
+static void
+BufferMappedDestroy(VmaAllocator allocator, internal::BufferAllocationMapped mapped_buffer)
+{
+    BufferDestroy(allocator, mapped_buffer.buffer_alloc);
+    BufferDestroy(allocator, mapped_buffer.staging_buffer_alloc);
+    ArenaRelease(mapped_buffer.arena);
+}
+
+static void
+BufferContextDestroy(VmaAllocator allocator, BufferContext* buffer_context)
+{
+    vmaDestroyBuffer(allocator, buffer_context->buffer_alloc.buffer,
+                     buffer_context->buffer_alloc.allocation);
+}
 
 template <typename T>
 static void
-VkBufferFromBuffers(VkDevice device, VkPhysicalDevice physical_device, BufferContext* vk_buffer_ctx,
-                    Buffer<Buffer<T>> buffers, VkBufferUsageFlags usage)
+VkBufferFromBuffers(VulkanContext* vk_ctx, BufferContext* vk_buffer_ctx, Buffer<Buffer<T>> buffers,
+                    VkBufferUsageFlags usage)
 {
     // calculate number of vertices
     U32 total_buffer_size = 0;
@@ -1528,13 +1293,11 @@ VkBufferFromBuffers(VkDevice device, VkPhysicalDevice physical_device, BufferCon
         VkDeviceSize buffer_byte_size = sizeof(T) * total_buffer_size;
         if (total_buffer_size > vk_buffer_ctx->capacity)
         {
-            vkDestroyBuffer(device, vk_buffer_ctx->buffer, nullptr);
-            vkFreeMemory(device, vk_buffer_ctx->memory, nullptr);
+            BufferDestroy(vk_ctx->allocator, vk_buffer_ctx->buffer_alloc);
 
-            VK_BufferCreate(physical_device, device, buffer_byte_size, usage,
-                            VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
-                                VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-                            &vk_buffer_ctx->buffer, &vk_buffer_ctx->memory);
+            vk_buffer_ctx->buffer_alloc = BufferAllocationCreate(
+                vk_ctx->allocator, buffer_byte_size, usage,
+                VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
 
             vk_buffer_ctx->capacity = total_buffer_size;
         }
@@ -1542,7 +1305,7 @@ VkBufferFromBuffers(VkDevice device, VkPhysicalDevice physical_device, BufferCon
         // TODO: Consider using vkFlushMappedMemoryRanges and vkInvalidateMappedMemoryRanges instead
         // of VK_MEMORY_PROPERTY_HOST_COHERENT_BIT for performance.
         void* data;
-        vkMapMemory(device, vk_buffer_ctx->memory, 0, buffer_byte_size, 0, &data);
+        vmaMapMemory(vk_ctx->allocator, vk_buffer_ctx->buffer_alloc.allocation, &data);
 
         U32 data_offset = 0;
         for (U32 buf_i = 0; buf_i < buffers.size; buf_i++)
@@ -1551,7 +1314,7 @@ VkBufferFromBuffers(VkDevice device, VkPhysicalDevice physical_device, BufferCon
             MemoryCopy((T*)data + data_offset, buffer.data, buffer.size * sizeof(T));
             data_offset += buffer.size;
         }
-        vkUnmapMemory(device, vk_buffer_ctx->memory);
+        vmaUnmapMemory(vk_ctx->allocator, vk_buffer_ctx->buffer_alloc.allocation);
 
         vk_buffer_ctx->size = total_buffer_size;
     }
@@ -1559,8 +1322,8 @@ VkBufferFromBuffers(VkDevice device, VkPhysicalDevice physical_device, BufferCon
 
 template <typename T>
 static void
-VkBufferFromBufferMapping(VkDevice device, VkPhysicalDevice physical_device,
-                          BufferContext* vk_buffer_ctx, Buffer<T> buffer, VkBufferUsageFlags usage)
+VkBufferFromBufferMapping(VulkanContext* vk_ctx, BufferContext* vk_buffer_ctx, Buffer<T> buffer,
+                          VkBufferUsageFlags usage)
 {
     // calculate number of vertices
     U32 total_buffer_size = buffer.size;
@@ -1570,26 +1333,22 @@ VkBufferFromBufferMapping(VkDevice device, VkPhysicalDevice physical_device,
         VkDeviceSize buffer_byte_size = sizeof(T) * total_buffer_size;
         if (total_buffer_size > vk_buffer_ctx->capacity)
         {
-            vkDestroyBuffer(device, vk_buffer_ctx->buffer, nullptr);
-            vkFreeMemory(device, vk_buffer_ctx->memory, nullptr);
+            BufferContextDestroy(vk_ctx->allocator, vk_buffer_ctx);
 
-            VK_BufferCreate(physical_device, device, buffer_byte_size, usage,
-                            VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
-                                VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-                            &vk_buffer_ctx->buffer, &vk_buffer_ctx->memory);
+            vk_buffer_ctx->buffer_alloc = BufferAllocationCreate(
+                vk_ctx->allocator, buffer_byte_size, usage, VMA_MEMORY_USAGE_CPU_ONLY,
+                VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT |
+                    VMA_ALLOCATION_CREATE_MAPPED_BIT);
 
             vk_buffer_ctx->capacity = total_buffer_size;
         }
-
-        // TODO: Consider using vkFlushMappedMemoryRanges and vkInvalidateMappedMemoryRanges instead
-        // of VK_MEMORY_PROPERTY_HOST_COHERENT_BIT for performance.
-        void* data;
-        vkMapMemory(device, vk_buffer_ctx->memory, 0, buffer_byte_size, 0, &data);
-
-        MemoryCopy((T*)data, buffer.data, buffer.size * sizeof(T));
-        vkUnmapMemory(device, vk_buffer_ctx->memory);
-
         vk_buffer_ctx->size = total_buffer_size;
+
+        void* data;
+        vmaMapMemory(vk_ctx->allocator, vk_buffer_ctx->buffer_alloc.allocation, &data);
+
+        MemoryCopy((T*)data, buffer.data, total_buffer_size * sizeof(T));
+        vmaUnmapMemory(vk_ctx->allocator, vk_buffer_ctx->buffer_alloc.allocation);
     }
 }
 
@@ -1671,13 +1430,6 @@ VK_IsDeviceSuitable(VulkanContext* vk_ctx, VkPhysicalDevice device, QueueFamilyI
 
     return VK_QueueFamilyIsComplete(indexBits) && extensionsSupported && swapChainAdequate &&
            supportedFeatures.samplerAnisotropy;
-}
-
-static void
-VK_BufferContextCleanup(VkDevice device, BufferContext* buffer_context)
-{
-    vkDestroyBuffer(device, buffer_context->buffer, NULL);
-    vkFreeMemory(device, buffer_context->memory, NULL);
 }
 
 static bool
@@ -1792,20 +1544,12 @@ static void
 CameraUniformBufferCreate(VulkanContext* vk_ctx)
 {
     VkDeviceSize camera_buffer_size = sizeof(CameraUniformBuffer);
+    VkBufferUsageFlags buffer_usage = VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT;
 
     for (U32 i = 0; i < vk_ctx->MAX_FRAMES_IN_FLIGHT; i++)
     {
-        wrapper::VK_BufferCreate(vk_ctx->physical_device, vk_ctx->device, camera_buffer_size,
-                                 VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
-                                 VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
-                                     VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-                                 &vk_ctx->camera_buffer[i], &vk_ctx->camera_buffer_memory[i]);
-
-        if (vkMapMemory(vk_ctx->device, vk_ctx->camera_buffer_memory[i], 0, camera_buffer_size, 0,
-                        &vk_ctx->camera_buffer_memory_mapped[i]) != VK_SUCCESS)
-        {
-            exitWithError("failed to map terrain buffer memory!");
-        }
+        vk_ctx->camera_buffer_alloc_mapped[i] = BufferMappedCreate(
+            vk_ctx->command_buffers.data[i], vk_ctx->allocator, camera_buffer_size, buffer_usage);
     }
 }
 
@@ -1813,8 +1557,8 @@ static void
 CameraUniformBufferUpdate(VulkanContext* vk_ctx, ui::Camera* camera, Vec2F32 screen_res,
                           U32 current_frame)
 {
-    CameraUniformBuffer* ubo = &vk_ctx->camera_uniform_buffer;
-
+    BufferAllocationMapped* buffer = &vk_ctx->camera_buffer_alloc_mapped[current_frame];
+    CameraUniformBuffer* ubo = (CameraUniformBuffer*)buffer->mapped_ptr;
     glm::mat4 transform = camera->projection_matrix * camera->view_matrix;
     FrustumPlanesCalculate(&ubo->frustum, transform);
     ubo->viewport_dim.x = screen_res.x;
@@ -1822,7 +1566,7 @@ CameraUniformBufferUpdate(VulkanContext* vk_ctx, ui::Camera* camera, Vec2F32 scr
     ubo->view = camera->view_matrix;
     ubo->proj = camera->projection_matrix;
 
-    MemoryCopy(vk_ctx->camera_buffer_memory_mapped[current_frame], ubo, sizeof(*ubo));
+    BufferMappedUpdate(vk_ctx->command_buffers.data[current_frame], vk_ctx->allocator, *buffer);
 }
 
 static void
@@ -1880,7 +1624,7 @@ CameraDescriptorSetCreate(VulkanContext* vk_ctx)
     for (size_t i = 0; i < max_frames_in_flight; i++)
     {
         VkDescriptorBufferInfo buffer_info{};
-        buffer_info.buffer = vk_ctx->camera_buffer[i];
+        buffer_info.buffer = vk_ctx->camera_buffer_alloc_mapped[i].buffer_alloc.buffer;
         buffer_info.offset = 0;
         buffer_info.range = sizeof(CameraUniformBuffer);
 
@@ -1906,19 +1650,352 @@ CameraDescriptorSetCreate(VulkanContext* vk_ctx)
 static void
 CameraCleanup(VulkanContext* vk_ctx)
 {
-    VkBuffer camera_buffer[VulkanContext::MAX_FRAMES_IN_FLIGHT];
-    VkDeviceMemory camera_buffer_memory[VulkanContext::MAX_FRAMES_IN_FLIGHT];
-    void* camera_buffer_memory_mapped[VulkanContext::MAX_FRAMES_IN_FLIGHT];
-    VkDescriptorSetLayout camera_descriptor_set_layout;
-    VkDescriptorSet camera_descriptor_sets[VulkanContext::MAX_FRAMES_IN_FLIGHT];
-
     for (size_t i = 0; i < VulkanContext::MAX_FRAMES_IN_FLIGHT; i++)
     {
-        vkDestroyBuffer(vk_ctx->device, vk_ctx->camera_buffer[i], NULL);
-        vkFreeMemory(vk_ctx->device, vk_ctx->camera_buffer_memory[i], NULL);
+        BufferMappedDestroy(vk_ctx->allocator, vk_ctx->camera_buffer_alloc_mapped[i]);
     }
 
     vkDestroyDescriptorSetLayout(vk_ctx->device, vk_ctx->camera_descriptor_set_layout, NULL);
+}
+
+static void
+ImageViewResourceDestroy(ImageViewResource image_view_resource)
+{
+    vkDestroyImageView(image_view_resource.device, image_view_resource.image_view, 0);
+}
+
+static ImageResource
+ImageResourceCreate(ImageViewResource image_view_resource, ImageAllocation image_alloc,
+                    VkImageView image_view)
+{
+    return {.image_alloc = image_alloc, .image_view_resource = image_view_resource};
+}
+
+static void
+ImageAllocationDestroy(VmaAllocator allocator, ImageAllocation image_alloc)
+{
+    vmaDestroyImage(allocator, image_alloc.image, image_alloc.allocation);
+}
+
+static void
+ImageResourceDestroy(VmaAllocator allocator, internal::ImageResource image)
+{
+    ImageViewResourceDestroy(image.image_view_resource);
+    ImageAllocationDestroy(allocator, image.image_alloc);
+}
+
+static internal::BufferAllocation
+BufferAllocationCreate(VmaAllocator allocator, VkDeviceSize size, VkBufferUsageFlags buffer_usage,
+                       VmaMemoryUsage vma_usage, VmaAllocationCreateFlags vma_flags)
+{
+    internal::BufferAllocation buffer = {};
+    buffer.size = size;
+
+    VkBufferCreateInfo bufferInfo = {};
+    bufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+    bufferInfo.size = size;
+    bufferInfo.usage = buffer_usage;
+    bufferInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+
+    VmaAllocationCreateInfo vmaallocInfo = {};
+    vmaallocInfo.usage = vma_usage;
+
+    if (vmaCreateBuffer(allocator, &bufferInfo, &vmaallocInfo, &buffer.buffer, &buffer.allocation,
+                        nullptr) != VK_SUCCESS)
+    {
+        exitWithError("Failed to create buffer!");
+    }
+
+    return buffer;
+}
+
+// inspiration:
+// https://gpuopen-librariesandsdks.github.io/VulkanMemoryAllocator/html/usage_patterns.html
+static internal::BufferAllocationMapped
+BufferMappedCreate(VkCommandBuffer cmd_buffer, VmaAllocator allocator, VkDeviceSize size,
+                   VkBufferUsageFlags buffer_usage)
+{
+    Arena* arena = ArenaAlloc();
+
+    internal::BufferAllocation buffer = BufferAllocationCreate(
+        allocator, size, buffer_usage | VK_BUFFER_USAGE_TRANSFER_DST_BIT, VMA_MEMORY_USAGE_AUTO,
+        VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT |
+            VMA_ALLOCATION_CREATE_HOST_ACCESS_ALLOW_TRANSFER_INSTEAD_BIT |
+            VMA_ALLOCATION_CREATE_MAPPED_BIT);
+
+    VkMemoryPropertyFlags mem_prop_flags;
+    vmaGetAllocationMemoryProperties(allocator, buffer.allocation, &mem_prop_flags);
+
+    VmaAllocationInfo alloc_info;
+    vmaGetAllocationInfo(allocator, buffer.allocation, &alloc_info);
+
+    internal::BufferAllocationMapped mapped_buffer = {
+        .buffer_alloc = buffer, .mem_prop_flags = mem_prop_flags, .arena = arena};
+
+    if (!alloc_info.pMappedData)
+    {
+        mapped_buffer.mapped_ptr = (void*)PushArray(mapped_buffer.arena, U8, size);
+        mapped_buffer.staging_buffer_alloc = BufferAllocationCreate(
+            allocator, size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VMA_MEMORY_USAGE_CPU_ONLY,
+            VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT |
+                VMA_ALLOCATION_CREATE_MAPPED_BIT);
+    }
+
+    return mapped_buffer;
+}
+
+static void
+BufferMappedUpdate(VkCommandBuffer cmd_buffer, VmaAllocator allocator,
+                   internal::BufferAllocationMapped mapped_buffer)
+{
+    if (mapped_buffer.mem_prop_flags & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT)
+    {
+        if ((mapped_buffer.mem_prop_flags & VK_MEMORY_PROPERTY_HOST_COHERENT_BIT) == 0)
+        {
+            vmaFlushAllocation(allocator, mapped_buffer.buffer_alloc.allocation, 0,
+                               mapped_buffer.buffer_alloc.size);
+        }
+
+        VkBufferMemoryBarrier buf_mem_barrier = {VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER};
+        buf_mem_barrier.srcAccessMask = VK_ACCESS_HOST_WRITE_BIT;
+        buf_mem_barrier.dstAccessMask = VK_ACCESS_UNIFORM_READ_BIT;
+        buf_mem_barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        buf_mem_barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        buf_mem_barrier.buffer = mapped_buffer.buffer_alloc.buffer;
+        buf_mem_barrier.offset = 0;
+        buf_mem_barrier.size = VK_WHOLE_SIZE;
+
+        vkCmdPipelineBarrier(cmd_buffer, VK_PIPELINE_STAGE_HOST_BIT,
+                             VK_PIPELINE_STAGE_VERTEX_SHADER_BIT, 0, 0, nullptr, 1,
+                             &buf_mem_barrier, 0, nullptr);
+    }
+    else
+    {
+        if (vmaCopyMemoryToAllocation(allocator, mapped_buffer.mapped_ptr,
+                                      mapped_buffer.staging_buffer_alloc.allocation, 0,
+                                      mapped_buffer.buffer_alloc.size))
+        {
+            exitWithError("BufferMappedUpdate: Could not copy data to staging buffer");
+        }
+
+        VkBufferMemoryBarrier bufMemBarrier = {VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER};
+        bufMemBarrier.srcAccessMask = VK_ACCESS_HOST_WRITE_BIT;
+        bufMemBarrier.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
+        bufMemBarrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        bufMemBarrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        bufMemBarrier.buffer = mapped_buffer.staging_buffer_alloc.buffer;
+        bufMemBarrier.offset = 0;
+        bufMemBarrier.size = VK_WHOLE_SIZE;
+
+        vkCmdPipelineBarrier(cmd_buffer, VK_PIPELINE_STAGE_HOST_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT,
+                             0, 0, nullptr, 1, &bufMemBarrier, 0, nullptr);
+
+        VkBufferCopy bufCopy = {
+            0,
+            0,
+            mapped_buffer.buffer_alloc.size,
+        };
+
+        vkCmdCopyBuffer(cmd_buffer, mapped_buffer.staging_buffer_alloc.buffer,
+                        mapped_buffer.buffer_alloc.buffer, 1, &bufCopy);
+
+        VkBufferMemoryBarrier bufMemBarrier2 = {VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER};
+        bufMemBarrier2.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+        bufMemBarrier2.dstAccessMask = VK_ACCESS_UNIFORM_READ_BIT;
+        bufMemBarrier2.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        bufMemBarrier2.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        bufMemBarrier2.buffer = mapped_buffer.buffer_alloc.buffer;
+        bufMemBarrier2.offset = 0;
+        bufMemBarrier2.size = VK_WHOLE_SIZE;
+
+        vkCmdPipelineBarrier(cmd_buffer, VK_PIPELINE_STAGE_TRANSFER_BIT,
+                             VK_PIPELINE_STAGE_VERTEX_SHADER_BIT, 0, 0, nullptr, 1, &bufMemBarrier2,
+                             0, nullptr);
+    }
+}
+
+static ImageViewResource
+ImageViewResourceCreate(VkDevice device, VkImage image, VkFormat format,
+                        VkImageAspectFlags aspect_mask, U32 mipmap_level)
+{
+    VkImageViewCreateInfo viewInfo{};
+    viewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+    viewInfo.image = image;
+    viewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
+    viewInfo.format = format;
+    viewInfo.subresourceRange.aspectMask = aspect_mask;
+    viewInfo.subresourceRange.baseMipLevel = 0;
+    viewInfo.subresourceRange.levelCount = mipmap_level;
+    viewInfo.subresourceRange.baseArrayLayer = 0;
+    viewInfo.subresourceRange.layerCount = 1;
+
+    VkImageView view;
+    if (vkCreateImageView(device, &viewInfo, nullptr, &view) != VK_SUCCESS)
+    {
+        exitWithError("failed to create texture image view!");
+    }
+
+    return {.image_view = view, .device = device};
+}
+
+static ImageAllocation
+ImageAllocationCreate(VmaAllocator allocator, U32 width, U32 height,
+                      VkSampleCountFlagBits numSamples, VkFormat format, VkImageTiling tiling,
+                      VkImageUsageFlags usage, U32 mipmap_level, VmaMemoryUsage memory_usage,
+                      VmaAllocationCreateFlags memory_properties)
+{
+    ImageAllocation image_alloc = {0};
+
+    VkImageCreateInfo image_create_info{};
+    image_create_info.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
+    image_create_info.imageType = VK_IMAGE_TYPE_2D;
+    image_create_info.extent.width = width;
+    image_create_info.extent.height = height;
+    image_create_info.extent.depth = 1;
+    image_create_info.mipLevels = mipmap_level;
+    image_create_info.arrayLayers = 1;
+    image_create_info.format = format;
+    image_create_info.tiling = tiling;
+    image_create_info.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+    image_create_info.usage = usage;
+    image_create_info.samples = numSamples;
+    image_create_info.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+
+    VmaAllocationCreateInfo alloc_create_info = {};
+    alloc_create_info.usage = memory_usage;
+    alloc_create_info.flags = memory_properties;
+
+    if (vmaCreateImage(allocator, &image_create_info, &alloc_create_info, &image_alloc.image,
+                       &image_alloc.allocation, 0))
+    {
+        exitWithError("ImageCreate: Could not create image");
+    };
+
+    return image_alloc;
+}
+
+static void
+VK_ColorResourcesCreate(VulkanContext* vk_ctx)
+{
+    VkFormat colorFormat = vk_ctx->color_attachment_format;
+
+    internal::ImageAllocation image_alloc = ImageAllocationCreate(
+        vk_ctx->allocator, vk_ctx->swapchain_extent.width, vk_ctx->swapchain_extent.height,
+        vk_ctx->msaa_samples, colorFormat, VK_IMAGE_TILING_OPTIMAL,
+        VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT, 1, VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE, 0);
+
+    ImageViewResource color_image_view = ImageViewResourceCreate(
+        vk_ctx->device, image_alloc.image, colorFormat, VK_IMAGE_ASPECT_COLOR_BIT, 1);
+
+    vk_ctx->color_image_resource = {.image_alloc = image_alloc,
+                                    .image_view_resource = color_image_view};
+}
+static void
+SwapChainImageResourceCreate(VulkanContext* vk_ctx, internal::SwapChainInfo swapchain_info,
+                             U32 image_count)
+{
+    ScratchScope scratch = ScratchScope(0, 0);
+
+    vk_ctx->swapchain_image_resources =
+        BufferAlloc<internal::ImageSwapchainResource>(vk_ctx->arena, image_count);
+
+    VkImage* images = PushArray(scratch.arena, VkImage, image_count);
+    if (vkGetSwapchainImagesKHR(vk_ctx->device, vk_ctx->swapchain, &image_count, images) !=
+        VK_SUCCESS)
+    {
+        exitWithError("failed to get swapchain images!");
+    }
+
+    vk_ctx->swapchain_image_format = swapchain_info.surfaceFormat.format;
+    vk_ctx->swapchain_extent = swapchain_info.extent;
+
+    for (uint32_t i = 0; i < image_count; i++)
+    {
+        internal::ImageViewResource image_view_resource = internal::ImageViewResourceCreate(
+            vk_ctx->device, images[i], vk_ctx->swapchain_image_format, VK_IMAGE_ASPECT_COLOR_BIT,
+            1);
+
+        vk_ctx->swapchain_image_resources.data[i] = {.image = images[i],
+                                                     .image_view_resource = image_view_resource};
+    }
+}
+
+static U32
+VK_SwapChainImageCountGet(VulkanContext* vk_ctx)
+{
+    U32 imageCount = {0};
+    if (vkGetSwapchainImagesKHR(vk_ctx->device, vk_ctx->swapchain, &imageCount, nullptr) !=
+        VK_SUCCESS)
+    {
+        exitWithError("failed to get swapchain image count!");
+    }
+    return imageCount;
+}
+
+static SwapChainInfo
+VK_SwapChainCreate(Arena* arena, VulkanContext* vk_ctx, IO* io_ctx)
+{
+    SwapChainInfo swapChainInfo = {0};
+
+    swapChainInfo.swapChainSupport =
+        internal::VK_QuerySwapChainSupport(arena, vk_ctx, vk_ctx->physical_device);
+
+    swapChainInfo.surfaceFormat =
+        VK_ChooseSwapSurfaceFormat(swapChainInfo.swapChainSupport.formats);
+    swapChainInfo.presentMode =
+        VK_ChooseSwapPresentMode(swapChainInfo.swapChainSupport.presentModes);
+    swapChainInfo.extent =
+        VK_ChooseSwapExtent(io_ctx, vk_ctx, swapChainInfo.swapChainSupport.capabilities);
+
+    U32 imageCount = swapChainInfo.swapChainSupport.capabilities.minImageCount + 1;
+
+    if (swapChainInfo.swapChainSupport.capabilities.maxImageCount > 0 &&
+        imageCount > swapChainInfo.swapChainSupport.capabilities.maxImageCount)
+    {
+        imageCount = swapChainInfo.swapChainSupport.capabilities.maxImageCount;
+    }
+
+    internal::QueueFamilyIndices queueFamilyIndices = vk_ctx->queue_family_indices;
+    VkSwapchainCreateInfoKHR createInfo{};
+    createInfo.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
+    createInfo.surface = vk_ctx->surface;
+
+    createInfo.minImageCount = imageCount;
+    createInfo.imageFormat = swapChainInfo.surfaceFormat.format;
+    createInfo.imageColorSpace = swapChainInfo.surfaceFormat.colorSpace;
+    createInfo.imageExtent = swapChainInfo.extent;
+    createInfo.imageArrayLayers = 1;
+    createInfo.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
+
+    if (queueFamilyIndices.graphicsFamilyIndex != queueFamilyIndices.presentFamilyIndex)
+    {
+        U32 queueFamilyIndicesSame[] = {vk_ctx->queue_family_indices.graphicsFamilyIndex,
+                                        vk_ctx->queue_family_indices.presentFamilyIndex};
+        createInfo.imageSharingMode = VK_SHARING_MODE_CONCURRENT;
+        createInfo.queueFamilyIndexCount = 2;
+        createInfo.pQueueFamilyIndices = queueFamilyIndicesSame;
+    }
+    else
+    {
+        createInfo.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
+        createInfo.queueFamilyIndexCount = 0;     // Optional
+        createInfo.pQueueFamilyIndices = nullptr; // Optional
+    }
+
+    createInfo.preTransform = swapChainInfo.swapChainSupport.capabilities.currentTransform;
+    createInfo.compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
+    createInfo.presentMode = swapChainInfo.presentMode;
+    createInfo.clipped = VK_TRUE;
+    // TODO: It is possible to specify the old swap chain to be replaced by a new one
+    createInfo.oldSwapchain = VK_NULL_HANDLE;
+
+    if (vkCreateSwapchainKHR(vk_ctx->device, &createInfo, nullptr, &vk_ctx->swapchain) !=
+        VK_SUCCESS)
+    {
+        exitWithError("failed to create swap chain!");
+    }
+
+    return swapChainInfo;
 }
 
 } // namespace internal
