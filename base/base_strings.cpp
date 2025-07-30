@@ -2760,3 +2760,13 @@ PushStr8FillByte(Arena* arena, U64 size, U8 byte)
     result.size = size;
     return result;
 }
+
+// ~mgj: String <==> float/double copy
+B32
+F32FromStr8(String8 string, F32* result)
+{
+    char* is_not_success = 0;
+    *result = strtof((char*)string.str, &is_not_success);
+    B32 ret = !(*is_not_success);
+    return ret;
+}

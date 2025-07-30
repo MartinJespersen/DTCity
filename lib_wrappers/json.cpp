@@ -63,7 +63,7 @@ OverpassHighways(Arena* arena, city::Road* roads, String8 json)
 
             // Reset and iterate again to store the tags
             tags_object = element["tags"].get_object();
-            way->tags = PushArray(arena, city::RoadTags, way->tag_count);
+            way->tags = PushArray(arena, city::RoadTag, way->tag_count);
             U64 tag_cur_index = 0;
             for (auto tag : tags_object)
             {

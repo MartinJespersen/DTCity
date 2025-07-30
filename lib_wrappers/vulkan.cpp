@@ -3,9 +3,198 @@
 namespace wrapper
 {
 
+// ~mgj: Asset Streaming
+static AssetStore*
+AssetStoreCreate(VkDevice device, U32 queue_family_index, async::Threads* threads,
+                 U64 texture_map_size, U64 total_size_in_bytes)
+{
+    Arena* arena = ArenaAlloc();
+    AssetStore* asset_store = PushStruct(arena, AssetStore);
+    asset_store->arena = arena;
+    asset_store->hashmap = BufferAlloc<AssetStoreItemStateList>(arena, texture_map_size);
+    asset_store->total_size = total_size_in_bytes;
+    asset_store->work_queue = threads->msg_queue;
+    asset_store->cmd_pools = BufferAlloc<VkCommandPool>(arena, threads->thread_handles.size);
+    asset_store->fences = BufferAlloc<VkFence>(arena, threads->thread_handles.size);
+    asset_store->free_list = nullptr;
+
+    VkFenceCreateInfo fence_info{};
+    fence_info.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
+
+    for (U32 i = 0; i < threads->thread_handles.size; i++)
+    {
+        asset_store->cmd_pools.data[i] = VK_CommandPoolCreate(device, queue_family_index);
+        vkCreateFence(device, &fence_info, 0, &asset_store->fences.data[i]);
+    }
+
+    return asset_store;
+}
 static void
-RoadRenderPass(wrapper::VulkanContext* vk_ctx, wrapper::Road* w_road, city::Road* road,
-               U32 image_index)
+AssetStoreDestroy(VkDevice device, AssetStore* asset_store)
+{
+    for (U32 i = 0; i < asset_store->cmd_pools.size; i++)
+    {
+        vkDestroyCommandPool(device, asset_store->cmd_pools.data[i], 0);
+        vkDestroyFence(device, asset_store->fences.data[i], 0);
+    }
+    ArenaRelease(asset_store->arena);
+}
+
+static AssetStoreTexture*
+AssetStoreTextureGetSlot(AssetStore* asset_store, U64 texture_id)
+{
+    AssetStoreItemStateList* texture_list =
+        &asset_store->hashmap.data[texture_id % asset_store->hashmap.size];
+    for (AssetStoreTexture* texture_result = texture_list->first; texture_result;
+         texture_result = texture_result->next)
+    {
+        if (texture_result->id == texture_id)
+        {
+            return texture_result;
+        }
+    }
+    AssetStoreTexture* texture_result = {0};
+    if (asset_store->free_list)
+    {
+        texture_result = asset_store->free_list;
+        SLLStackPop(texture_result);
+    }
+    else
+    {
+        texture_result = PushStruct(asset_store->arena, AssetStoreTexture);
+        texture_result->id = texture_id;
+        SLLQueuePushFront(texture_list->first, texture_list->last, texture_result);
+    }
+    return texture_result;
+}
+
+static void
+AssetStoreTextureLoadAsync(AssetStore* asset_store, AssetStoreTexture* texture,
+                           VulkanContext* vk_ctx, String8 texture_path, VkFormat blit_format)
+{
+    TextureCreateInput* input = PushStruct(asset_store->arena, TextureCreateInput);
+    input->texture_path = PushStr8Copy(asset_store->arena, texture_path);
+    input->blit_format = blit_format;
+    input->vk_ctx = vk_ctx;
+
+    TextureThreadInput* thread_input = PushStruct(asset_store->arena, TextureThreadInput);
+    thread_input->asset_store_texture = texture;
+    thread_input->input = input;
+    thread_input->func = TextureCreate;
+    thread_input->cmd_pools = asset_store->cmd_pools;
+    thread_input->fences = asset_store->fences;
+
+    async::QueuePush(asset_store->work_queue, thread_input, AssetStoreTextureThreadMain);
+}
+
+static void
+AssetStoreTextureThreadMain(async::ThreadInfo thread_info, void* data)
+{
+    TextureThreadInput* input = (TextureThreadInput*)data;
+    AssetStoreTexture* item = input->asset_store_texture;
+    item->is_loaded = 0;
+    item->in_progress = 1;
+    input->func(input->cmd_pools.data[thread_info.thread_id],
+                input->fences.data[thread_info.thread_id], input->input, &item->asset);
+    item->in_progress = 0;
+    item->is_loaded = 1;
+}
+// TODO: check for blitting format beforehand
+static void
+TextureCreate(VkCommandPool cmd_pool, VkFence fence, TextureCreateInput* thread_input,
+              Texture* texture)
+{
+    ScratchScope scratch = ScratchScope(0, 0);
+    VulkanContext* vk_ctx = thread_input->vk_ctx;
+    String8 texture_path = thread_input->texture_path;
+    VkFormat blit_format = thread_input->blit_format;
+
+    // check for blitting format
+    VkFormatProperties formatProperties;
+    vkGetPhysicalDeviceFormatProperties(vk_ctx->physical_device, blit_format, &formatProperties);
+    if (!(formatProperties.optimalTilingFeatures &
+          VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT))
+    {
+        exitWithError("texture image format does not support linear blitting!");
+    }
+
+    S32 tex_width, tex_height, tex_channels;
+    stbi_uc* pixels =
+        stbi_load((char*)texture_path.str, &tex_width, &tex_height, &tex_channels, STBI_rgb_alpha);
+    VkDeviceSize image_size = tex_width * tex_height * 4;
+    U32 mip_level = (U32)(floor(log2(Max(tex_width, tex_height)))) + 1;
+
+    if (!pixels)
+    {
+        exitWithError("TextureCreate: failed to load texture image!");
+    }
+
+    VmaAllocationCreateInfo vma_staging_info = {0};
+    vma_staging_info.usage = VMA_MEMORY_USAGE_AUTO;
+    vma_staging_info.flags =
+        VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
+    vma_staging_info.requiredFlags = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT;
+
+    wrapper::internal::BufferAllocation texture_staging_buffer =
+        wrapper::internal::BufferAllocationCreate(
+            vk_ctx->allocator, image_size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, vma_staging_info);
+
+    vmaCopyMemoryToAllocation(vk_ctx->allocator, pixels, texture_staging_buffer.allocation, 0,
+                              image_size);
+
+    stbi_image_free(pixels);
+
+    VmaAllocationCreateInfo vma_info = {.usage = VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE};
+
+    wrapper::internal::ImageAllocation image_alloc = wrapper::internal::ImageAllocationCreate(
+        vk_ctx->allocator, tex_width, tex_height, VK_SAMPLE_COUNT_1_BIT, VK_FORMAT_R8G8B8A8_SRGB,
+        VK_IMAGE_TILING_OPTIMAL,
+        VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT |
+            VK_IMAGE_USAGE_SAMPLED_BIT,
+        mip_level, vma_info);
+
+    VkCommandBuffer command_buffer = VK_BeginSingleTimeCommands(vk_ctx->device, cmd_pool);
+    wrapper::ImageLayoutTransition(command_buffer, image_alloc.image, VK_FORMAT_R8G8B8A8_SRGB,
+                                   VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                                   mip_level);
+    wrapper::internal::ImageFromBufferCopy(command_buffer, texture_staging_buffer.buffer,
+                                           image_alloc.image, tex_width, tex_height);
+    wrapper::VK_GenerateMipmaps(command_buffer, image_alloc.image, tex_width, tex_height,
+                                mip_level); // TODO: mip maps are usually not generated at runtime.
+                                            // They are usually stored in the texture file
+    VK_EndSingleTimeCommands(vk_ctx, cmd_pool, command_buffer, fence);
+
+    wrapper::internal::BufferDestroy(vk_ctx->allocator, texture_staging_buffer);
+
+    wrapper::internal::ImageViewResource image_view_resource =
+        wrapper::internal::ImageViewResourceCreate(vk_ctx->device, image_alloc.image,
+                                                   VK_FORMAT_R8G8B8A8_SRGB,
+                                                   VK_IMAGE_ASPECT_COLOR_BIT, mip_level);
+
+    VkSampler sampler = wrapper::internal::SamplerCreate(
+        vk_ctx->device, VK_FILTER_LINEAR, VK_SAMPLER_MIPMAP_MODE_LINEAR, mip_level,
+        vk_ctx->physical_device_properties.limits.maxSamplerAnisotropy);
+
+    wrapper::internal::ImageResource image_resource = {.image_alloc = image_alloc,
+                                                       .image_view_resource = image_view_resource};
+
+    texture->image_resource = image_resource;
+    texture->sampler = sampler;
+    texture->format = blit_format;
+    texture->width = tex_width;
+    texture->height = tex_height;
+    texture->mip_level_count = mip_level;
+}
+
+static void
+TextureDestroy(VulkanContext* vk_ctx, Texture* texture)
+{
+    internal::ImageResourceDestroy(vk_ctx->allocator, texture->image_resource);
+    vkDestroySampler(vk_ctx->device, texture->sampler, nullptr);
+}
+// mgj: Road
+static void
+RoadRenderPass(VulkanContext* vk_ctx, Road* w_road, city::Road* road, U32 image_index)
 {
     VkExtent2D swap_chain_extent = vk_ctx->swapchain_extent;
     VkCommandBuffer command_buffer = vk_ctx->command_buffers.data[vk_ctx->current_frame];
@@ -68,12 +257,13 @@ RoadRenderPass(wrapper::VulkanContext* vk_ctx, wrapper::Road* w_road, city::Road
     VkBuffer vertex_buffers[] = {w_road->vertex_buffer.buffer_alloc.buffer};
     VkDeviceSize offsets[] = {0};
 
-    RoadPushConstants road_push_constant = {.model = road->model_matrix,
-                                            .road_width = road->road_width,
-                                            .road_height = road->road_height};
-    vkCmdPushConstants(command_buffer, w_road->pipeline_layout, VK_SHADER_STAGE_VERTEX_BIT, 0,
+    RoadPushConstants road_push_constant = {.road_height = road->road_height,
+                                            .texture_scale = road->texture_scale};
+    vkCmdPushConstants(command_buffer, w_road->pipeline_layout,
+                       VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 0,
                        sizeof(RoadPushConstants), &road_push_constant);
-    VkDescriptorSet descriptor_sets[] = {vk_ctx->camera_descriptor_sets[vk_ctx->current_frame]};
+    VkDescriptorSet descriptor_sets[] = {vk_ctx->camera_descriptor_sets[vk_ctx->current_frame],
+                                         w_road->descriptor_sets.data[vk_ctx->current_frame]};
     vkCmdBindDescriptorSets(command_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS,
                             w_road->pipeline_layout, 0, ArrayCount(descriptor_sets),
                             descriptor_sets, 0, NULL);
@@ -83,33 +273,145 @@ RoadRenderPass(wrapper::VulkanContext* vk_ctx, wrapper::Road* w_road, city::Road
 
     vkCmdEndRendering(command_buffer);
 }
-static void
-RoadInit(wrapper::VulkanContext* vk_ctx, city::City* city, String8 cwd)
+
+static VkDescriptorSetLayout
+RoadDescriptorSetLayoutCreate(VkDevice device, Road* road)
 {
-    internal::RoadPipelineCreate(city, cwd);
+    VkDescriptorSetLayoutBinding sampler_layout_binding{};
+    sampler_layout_binding.binding = 0;
+    sampler_layout_binding.descriptorCount = 1;
+    sampler_layout_binding.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+    sampler_layout_binding.stageFlags = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT;
+
+    VkDescriptorSetLayoutBinding descriptor_layout_bindings[] = {sampler_layout_binding};
+
+    return internal::DescriptorSetLayoutCreate(device, descriptor_layout_bindings,
+                                               ArrayCount(descriptor_layout_bindings));
 }
 
 static void
-RoadUpdate(city::Road* road, Road* w_road, wrapper::VulkanContext* vk_ctx, U32 image_index)
+RoadDescriptorSetCreate(VulkanContext* vk_ctx, Texture* texture, Road* road, U32 frames_in_flight)
 {
-    // TODO: this should be mapped to GPU memory (DEVICE_LOCAL)
-    internal::VkBufferFromBufferMapping<city::RoadVertex>(
-        vk_ctx, &w_road->vertex_buffer, road->vertex_buffer, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT);
-    RoadRenderPass(vk_ctx, w_road, road, image_index);
+    ScratchScope scratch = ScratchScope(0, 0);
+    Buffer<VkDescriptorSetLayout> layouts =
+        BufferAlloc<VkDescriptorSetLayout>(scratch.arena, frames_in_flight);
+
+    for (U32 i = 0; i < layouts.size; i++)
+    {
+        layouts.data[i] = road->descriptor_set_layout;
+    }
+
+    VkDescriptorSetAllocateInfo allocInfo{};
+    allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+    allocInfo.descriptorPool = vk_ctx->descriptor_pool;
+    allocInfo.descriptorSetCount = layouts.size;
+    allocInfo.pSetLayouts = layouts.data;
+
+    Buffer<VkDescriptorSet> desc_sets = BufferAlloc<VkDescriptorSet>(road->arena, layouts.size);
+    if (vkAllocateDescriptorSets(vk_ctx->device, &allocInfo, desc_sets.data) != VK_SUCCESS)
+    {
+        exitWithError("RoadDescriptorSetCreate: failed to allocate descriptor sets!");
+    }
+
+    for (size_t i = 0; i < desc_sets.size; i++)
+    {
+        VkDescriptorImageInfo image_info{};
+        image_info.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+        image_info.imageView = texture->image_resource.image_view_resource.image_view;
+        image_info.sampler = texture->sampler;
+
+        VkWriteDescriptorSet texture_sampler_desc{};
+        texture_sampler_desc.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+        texture_sampler_desc.dstSet = desc_sets.data[i];
+        texture_sampler_desc.dstBinding = 0;
+        texture_sampler_desc.dstArrayElement = 0;
+        texture_sampler_desc.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+        texture_sampler_desc.descriptorCount = 1;
+        texture_sampler_desc.pImageInfo = &image_info;
+
+        VkWriteDescriptorSet descriptors[] = {texture_sampler_desc};
+
+        vkUpdateDescriptorSets(vk_ctx->device, ArrayCount(descriptors), descriptors, 0, nullptr);
+    }
+
+    road->descriptor_sets = desc_sets;
+}
+
+static Road*
+RoadCreate(async::Queue* work_queue, VulkanContext* vk_ctx, city::Road* road, String8 shader_path,
+           String8 texture_path)
+{
+    ScratchScope scratch = ScratchScope(0, 0);
+    Arena* road_arena = ArenaAlloc();
+    Road* w_road = PushStruct(road_arena, Road);
+    w_road->arena = road_arena;
+    road->texture_scale = 0.2f;
+
+    w_road->descriptor_sets =
+        BufferAlloc<VkDescriptorSet>(w_road->arena, vk_ctx->MAX_FRAMES_IN_FLIGHT);
+
+    String8 texture_path_with_name =
+        Str8PathFromStr8List(scratch.arena, {texture_path, S("road_texture.jpg")});
+
+    AssetStoreTexture* asset_item_state =
+        AssetStoreTextureGetSlot(vk_ctx->asset_store, w_road->texture_id);
+
+    AssetStoreTextureLoadAsync(vk_ctx->asset_store, asset_item_state, vk_ctx,
+                               texture_path_with_name, VK_FORMAT_R8G8B8A8_SRGB);
+
+    return w_road;
 }
 
 static void
 RoadCleanup(city::City* city, wrapper::VulkanContext* vk_ctx)
 {
-    Road* road = city->w_road;
-    internal::BufferContextDestroy(vk_ctx->allocator, &road->vertex_buffer);
-    vkDestroyPipelineLayout(vk_ctx->device, road->pipeline_layout, nullptr);
-    vkDestroyPipeline(vk_ctx->device, road->pipeline, nullptr);
+    Road* w_road = city->w_road;
+    AssetStoreTexture* texture_state =
+        AssetStoreTextureGetSlot(vk_ctx->asset_store, w_road->texture_id);
+
+    Texture* texture = &texture_state->asset;
+
+    if (texture_state->is_loaded)
+    {
+        TextureDestroy(vk_ctx, &texture_state->asset);
+    }
+    internal::BufferContextDestroy(vk_ctx->allocator, &w_road->vertex_buffer);
+    vkDestroyDescriptorSetLayout(vk_ctx->device, w_road->descriptor_set_layout, 0);
+    vkDestroyPipelineLayout(vk_ctx->device, w_road->pipeline_layout, nullptr);
+    vkDestroyPipeline(vk_ctx->device, w_road->pipeline, nullptr);
+
+    ArenaRelease(w_road->arena);
 }
 
 static void
-VK_ImageLayoutTransition(VkCommandBuffer command_buffer, VkImage image, VkFormat format,
-                         VkImageLayout oldLayout, VkImageLayout newLayout, U32 mipmap_level)
+RoadUpdate(city::Road* road, Road* w_road, wrapper::VulkanContext* vk_ctx, U32 image_index,
+           String8 shader_path)
+{
+    AssetStoreTexture* texture_state =
+        AssetStoreTextureGetSlot(vk_ctx->asset_store, w_road->texture_id);
+
+    if (texture_state->is_loaded && !w_road->descriptors_are_created)
+    {
+        w_road->descriptor_set_layout = RoadDescriptorSetLayoutCreate(vk_ctx->device, w_road);
+        RoadDescriptorSetCreate(vk_ctx, &texture_state->asset, w_road,
+                                vk_ctx->MAX_FRAMES_IN_FLIGHT);
+
+        RoadPipelineCreate(w_road, shader_path);
+        w_road->descriptors_are_created = 1;
+    }
+
+    if (w_road->descriptors_are_created)
+    {
+        // TODO: this should be mapped to GPU memory (DEVICE_LOCAL)
+        internal::VkBufferFromBufferMapping<city::RoadVertex>(
+            vk_ctx, &w_road->vertex_buffer, road->vertex_buffer, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT);
+        RoadRenderPass(vk_ctx, w_road, road, image_index);
+    }
+}
+
+static void
+ImageLayoutTransition(VkCommandBuffer command_buffer, VkImage image, VkFormat format,
+                      VkImageLayout oldLayout, VkImageLayout newLayout, U32 mipmap_level)
 {
     VkImageMemoryBarrier barrier{};
     barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
@@ -225,34 +527,6 @@ VK_GenerateMipmaps(VkCommandBuffer command_buffer, VkImage image, int32_t tex_wi
                          &barrier);
 }
 
-// Samplers helpers
-static void
-VK_SamplerCreate(VkSampler* sampler, VkDevice device, VkFilter filter,
-                 VkSamplerMipmapMode mipmap_mode, U32 mip_level_count, F32 max_anisotrophy)
-{
-    VkSamplerCreateInfo samplerInfo{};
-    samplerInfo.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
-    samplerInfo.magFilter = filter;
-    samplerInfo.minFilter = filter;
-    samplerInfo.addressModeU = VK_SAMPLER_ADDRESS_MODE_MIRRORED_REPEAT;
-    samplerInfo.addressModeV = samplerInfo.addressModeU;
-    samplerInfo.addressModeW = samplerInfo.addressModeU;
-    samplerInfo.compareOp = VK_COMPARE_OP_NEVER;
-    samplerInfo.unnormalizedCoordinates = VK_FALSE;
-    samplerInfo.mipmapMode = mipmap_mode;
-    samplerInfo.mipLodBias = 0.0f;
-    samplerInfo.minLod = 0.0f;
-    samplerInfo.maxLod = 0.0f;
-    samplerInfo.borderColor = VK_BORDER_COLOR_INT_OPAQUE_BLACK;
-    samplerInfo.anisotropyEnable = VK_TRUE;
-    samplerInfo.maxAnisotropy = max_anisotrophy; // Use max anisotropy supported
-
-    if (vkCreateSampler(device, &samplerInfo, nullptr, sampler) != VK_SUCCESS)
-    {
-        exitWithError("failed to create texture sampler!");
-    }
-}
-
 static VkResult
 CreateDebugUtilsMessengerEXT(VkInstance instance,
                              const VkDebugUtilsMessengerCreateInfoEXT* pCreateInfo,
@@ -284,16 +558,16 @@ DestroyDebugUtilsMessengerEXT(VkInstance instance, VkDebugUtilsMessengerEXT debu
 }
 
 static VkCommandBuffer
-VK_BeginSingleTimeCommands(VulkanContext* vk_ctx)
+VK_BeginSingleTimeCommands(VkDevice device, VkCommandPool cmd_pool)
 {
     VkCommandBufferAllocateInfo allocInfo{};
     allocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
     allocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
-    allocInfo.commandPool = vk_ctx->command_pool;
+    allocInfo.commandPool = cmd_pool;
     allocInfo.commandBufferCount = 1;
 
     VkCommandBuffer commandBuffer;
-    vkAllocateCommandBuffers(vk_ctx->device, &allocInfo, &commandBuffer);
+    vkAllocateCommandBuffers(device, &allocInfo, &commandBuffer);
 
     VkCommandBufferBeginInfo beginInfo{};
     beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
@@ -305,7 +579,8 @@ VK_BeginSingleTimeCommands(VulkanContext* vk_ctx)
 }
 
 static void
-VK_EndSingleTimeCommands(VulkanContext* vk_ctx, VkCommandBuffer command_buffer)
+VK_EndSingleTimeCommands(VulkanContext* vk_ctx, VkCommandPool cmd_pool,
+                         VkCommandBuffer command_buffer, VkFence fence)
 {
     vkEndCommandBuffer(command_buffer);
 
@@ -314,10 +589,11 @@ VK_EndSingleTimeCommands(VulkanContext* vk_ctx, VkCommandBuffer command_buffer)
     submitInfo.commandBufferCount = 1;
     submitInfo.pCommandBuffers = &command_buffer;
 
-    vkQueueSubmit(vk_ctx->graphics_queue, 1, &submitInfo, VK_NULL_HANDLE);
-    vkQueueWaitIdle(vk_ctx->graphics_queue);
+    ThreadedGraphicsQueueSubmit(vk_ctx->graphics_queue, &submitInfo, fence);
+    vkWaitForFences(vk_ctx->device, 1, &fence, VK_TRUE, UINT64_MAX);
+    vkResetFences(vk_ctx->device, 1, &fence);
 
-    vkFreeCommandBuffers(vk_ctx->device, vk_ctx->command_pool, 1, &command_buffer);
+    vkFreeCommandBuffers(vk_ctx->device, cmd_pool, 1, &command_buffer);
 }
 
 static uint32_t
@@ -381,10 +657,14 @@ VK_DepthResourcesCreate(VulkanContext* vk_ctx)
     B32 has_stencil_component =
         depth_format == VK_FORMAT_D32_SFLOAT_S8_UINT || depth_format == VK_FORMAT_D24_UNORM_S8_UINT;
 
+    VmaAllocationCreateInfo vma_info = {
+        .usage = VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE,
+    };
+
     internal::ImageAllocation image_alloc = internal::ImageAllocationCreate(
         vk_ctx->allocator, vk_ctx->swapchain_extent.width, vk_ctx->swapchain_extent.height,
         vk_ctx->msaa_samples, depth_format, VK_IMAGE_TILING_OPTIMAL,
-        VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT, 1, VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE, 0);
+        VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT, 1, vma_info);
 
     internal::ImageViewResource image_view_resource = internal::ImageViewResourceCreate(
         vk_ctx->device, image_alloc.image, depth_format, VK_IMAGE_ASPECT_DEPTH_BIT, 1);
@@ -394,21 +674,20 @@ VK_DepthResourcesCreate(VulkanContext* vk_ctx)
     ScratchEnd(scratch);
 }
 
-static void
-VK_CommandPoolCreate(VulkanContext* vk_ctx)
+static VkCommandPool
+VK_CommandPoolCreate(VkDevice device, U32 queue_family_index)
 {
-    internal::QueueFamilyIndices queueFamilyIndices = vk_ctx->queue_family_indices;
-
     VkCommandPoolCreateInfo poolInfo{};
     poolInfo.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
     poolInfo.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
-    poolInfo.queueFamilyIndex = queueFamilyIndices.graphicsFamilyIndex;
+    poolInfo.queueFamilyIndex = queue_family_index;
 
-    if (vkCreateCommandPool(vk_ctx->device, &poolInfo, nullptr, &vk_ctx->command_pool) !=
-        VK_SUCCESS)
+    VkCommandPool cmd_pool;
+    if (vkCreateCommandPool(device, &poolInfo, nullptr, &cmd_pool) != VK_SUCCESS)
     {
         exitWithError("failed to create command pool!");
     }
+    return cmd_pool;
 }
 
 static void
@@ -473,6 +752,34 @@ VK_CreateInstance(VulkanContext* vk_ctx)
     }
 
     ScratchEnd(scratch);
+}
+
+static GraphicsQueue
+ThreadedGraphicsQueueCreate(VkDevice device, U32 graphics_index)
+{
+    GraphicsQueue graphics_queue;
+    graphics_queue.mutex = OS_RWMutexAlloc();
+    vkGetDeviceQueue(device, graphics_index, 0, &graphics_queue.graphics_queue);
+
+    return graphics_queue;
+}
+
+static void
+ThreadedGraphicsQueueDestroy(GraphicsQueue graphics_queue)
+{
+    OS_RWMutexRelease(graphics_queue.mutex);
+}
+
+static void
+ThreadedGraphicsQueueSubmit(GraphicsQueue graphics_queue, VkSubmitInfo* info, VkFence fence)
+{
+    OS_MutexScopeW(graphics_queue.mutex)
+    {
+        if (vkQueueSubmit(graphics_queue.graphics_queue, 1, info, fence))
+        {
+            exitWithError("ThreadedGraphicsQueueSubmit: failed to submit draw command buffer!");
+        };
+    }
 }
 
 static void
@@ -544,8 +851,8 @@ VK_LogicalDeviceCreate(Arena* arena, VulkanContext* vk_ctx)
         exitWithError("failed to create logical device!");
     }
 
-    vkGetDeviceQueue(vk_ctx->device, queueFamilyIndicies.graphicsFamilyIndex, 0,
-                     &vk_ctx->graphics_queue);
+    vk_ctx->graphics_queue =
+        ThreadedGraphicsQueueCreate(vk_ctx->device, queueFamilyIndicies.graphicsFamilyIndex);
     vkGetDeviceQueue(vk_ctx->device, queueFamilyIndicies.presentFamilyIndex, 0,
                      &vk_ctx->present_queue);
 }
@@ -847,6 +1154,7 @@ VK_Cleanup(VulkanContext* vk_ctx)
     {
         DestroyDebugUtilsMessengerEXT(vk_ctx->instance, vk_ctx->debug_messenger, nullptr);
     }
+
     // indice and vertex buffers
     BufferContextDestroy(vk_ctx->allocator, &vk_ctx->vk_indice_context);
     BufferContextDestroy(vk_ctx->allocator, &vk_ctx->vk_vertex_context);
@@ -874,6 +1182,9 @@ VK_Cleanup(VulkanContext* vk_ctx)
     vkDestroyDescriptorPool(vk_ctx->device, vk_ctx->descriptor_pool, 0);
 
     vmaDestroyAllocator(vk_ctx->allocator);
+
+    AssetStoreDestroy(vk_ctx->device, vk_ctx->asset_store);
+
     vkDestroyDevice(vk_ctx->device, nullptr);
     vkDestroyInstance(vk_ctx->instance, nullptr);
 }
@@ -935,6 +1246,23 @@ VK_SyncObjectsCreate(VulkanContext* vk_ctx)
     }
 }
 
+static VkCommandBuffer
+CommandBufferCreate(VkDevice device, VkCommandPool cmd_pool)
+{
+    VkCommandBufferAllocateInfo allocInfo{};
+    allocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+    allocInfo.commandPool = cmd_pool;
+    allocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+    allocInfo.commandBufferCount = 1;
+
+    VkCommandBuffer cmd_buf;
+    if (vkAllocateCommandBuffers(device, &allocInfo, &cmd_buf) != VK_SUCCESS)
+    {
+        exitWithError("failed to allocate command buffers!");
+    }
+    return cmd_buf;
+}
+
 static void
 VK_CommandBuffersCreate(VulkanContext* vk_ctx)
 {
@@ -954,9 +1282,10 @@ VK_CommandBuffersCreate(VulkanContext* vk_ctx)
 }
 
 static VulkanContext*
-VK_VulkanInit(Arena* arena, IO* io_ctx)
+VK_VulkanInit(Arena* arena, Context* ctx)
 {
     VulkanContext* vk_ctx = PushStruct(arena, VulkanContext);
+    IO* io_ctx = ctx->io;
 
     Temp scratch = ScratchBegin(0, 0);
     vk_ctx->arena = ArenaAlloc();
@@ -990,7 +1319,8 @@ VK_VulkanInit(Arena* arena, IO* io_ctx)
     internal::SwapChainImageResourceCreate(vk_ctx, swapchain_info, swapchain_image_count);
     vk_ctx->color_attachment_format = vk_ctx->swapchain_image_format;
 
-    VK_CommandPoolCreate(vk_ctx);
+    vk_ctx->command_pool =
+        VK_CommandPoolCreate(vk_ctx->device, vk_ctx->queue_family_indices.graphicsFamilyIndex);
 
     VmaAllocatorCreateInfo allocatorInfo = {};
     allocatorInfo.physicalDevice = vk_ctx->physical_device;
@@ -1010,27 +1340,30 @@ VK_VulkanInit(Arena* arena, IO* io_ctx)
     internal::CameraUniformBufferCreate(vk_ctx);
     internal::CameraDescriptorSetLayoutCreate(vk_ctx);
     internal::CameraDescriptorSetCreate(vk_ctx);
+
+    // TODO: change from 1 to much larger value
+    vk_ctx->asset_store =
+        AssetStoreCreate(vk_ctx->device, vk_ctx->queue_family_indices.graphicsFamilyIndex,
+                         ctx->thread_info, 1, GB(1));
+
     ScratchEnd(scratch);
 
     return vk_ctx;
 }
 
-namespace internal
-{
 static void
-RoadPipelineCreate(city::City* city, String8 cwd)
+RoadPipelineCreate(wrapper::Road* road, String8 shader_path)
 {
     ScratchScope scratch = ScratchScope(0, 0);
-    wrapper::Road* w_road = city->w_road;
 
     VulkanContext* vk_ctx = GlobalContextGet()->vk_ctx;
 
     String8 vert_path = CreatePathFromStrings(
         scratch.arena,
-        Str8BufferFromCString(scratch.arena, {(char*)cwd.str, "shaders", "road", "road_vert.spv"}));
+        Str8BufferFromCString(scratch.arena, {(char*)shader_path.str, "road", "road_vert.spv"}));
     String8 frag_path = CreatePathFromStrings(
         scratch.arena,
-        Str8BufferFromCString(scratch.arena, {(char*)cwd.str, "shaders", "road", "road_frag.spv"}));
+        Str8BufferFromCString(scratch.arena, {(char*)shader_path.str, "road", "road_frag.spv"}));
 
     internal::ShaderModuleInfo vert_shader_stage_info = internal::ShaderStageFromSpirv(
         scratch.arena, vk_ctx->device, VK_SHADER_STAGE_VERTEX_BIT, vert_path);
@@ -1133,13 +1466,13 @@ RoadPipelineCreate(city::City* city, String8 cwd)
     colorBlending.blendConstants[2] = 0.0f; // Optional
     colorBlending.blendConstants[3] = 0.0f; // Optional
 
-    // Add push constant range for geometry shader
     VkPushConstantRange pushConstantRange{};
-    pushConstantRange.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+    pushConstantRange.stageFlags = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT;
     pushConstantRange.offset = 0;
     pushConstantRange.size = sizeof(RoadPushConstants);
 
-    VkDescriptorSetLayout descriptor_set_layouts[1] = {vk_ctx->camera_descriptor_set_layout};
+    VkDescriptorSetLayout descriptor_set_layouts[2] = {vk_ctx->camera_descriptor_set_layout,
+                                                       road->descriptor_set_layout};
     VkPipelineLayoutCreateInfo pipelineLayoutInfo{};
     pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
     pipelineLayoutInfo.setLayoutCount = ArrayCount(descriptor_set_layouts);
@@ -1161,7 +1494,7 @@ RoadPipelineCreate(city::City* city, String8 cwd)
     depthStencil.back = {};  // Optional
 
     if (vkCreatePipelineLayout(vk_ctx->device, &pipelineLayoutInfo, nullptr,
-                               &w_road->pipeline_layout) != VK_SUCCESS)
+                               &road->pipeline_layout) != VK_SUCCESS)
     {
         exitWithError("failed to create pipeline layout!");
     }
@@ -1186,20 +1519,23 @@ RoadPipelineCreate(city::City* city, String8 cwd)
     pipelineInfo.pColorBlendState = &colorBlending;
     pipelineInfo.pDynamicState = &dynamicState;
 
-    pipelineInfo.layout = w_road->pipeline_layout;
+    pipelineInfo.layout = road->pipeline_layout;
     pipelineInfo.renderPass = VK_NULL_HANDLE;
 
     pipelineInfo.basePipelineHandle = VK_NULL_HANDLE; // Optional
     pipelineInfo.basePipelineIndex = -1;              // Optional
 
     if (vkCreateGraphicsPipelines(vk_ctx->device, VK_NULL_HANDLE, 1, &pipelineInfo, nullptr,
-                                  &w_road->pipeline) != VK_SUCCESS)
+                                  &road->pipeline) != VK_SUCCESS)
     {
         exitWithError("failed to create graphics pipeline!");
     }
 
     return;
 }
+namespace internal
+{
+
 static VkVertexInputBindingDescription
 RoadBindingDescriptionGet()
 {
@@ -1295,9 +1631,13 @@ VkBufferFromBuffers(VulkanContext* vk_ctx, BufferContext* vk_buffer_ctx, Buffer<
         {
             BufferDestroy(vk_ctx->allocator, vk_buffer_ctx->buffer_alloc);
 
-            vk_buffer_ctx->buffer_alloc = BufferAllocationCreate(
-                vk_ctx->allocator, buffer_byte_size, usage,
-                VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+            VmaAllocationCreateInfo vma_info = {0};
+            vma_info.usage = VMA_MEMORY_USAGE_AUTO;
+            vma_info.requiredFlags =
+                VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
+
+            vk_buffer_ctx->buffer_alloc =
+                BufferAllocationCreate(vk_ctx->allocator, buffer_byte_size, usage, vma_info);
 
             vk_buffer_ctx->capacity = total_buffer_size;
         }
@@ -1335,20 +1675,22 @@ VkBufferFromBufferMapping(VulkanContext* vk_ctx, BufferContext* vk_buffer_ctx, B
         {
             BufferContextDestroy(vk_ctx->allocator, vk_buffer_ctx);
 
-            vk_buffer_ctx->buffer_alloc = BufferAllocationCreate(
-                vk_ctx->allocator, buffer_byte_size, usage, VMA_MEMORY_USAGE_CPU_ONLY,
-                VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT |
-                    VMA_ALLOCATION_CREATE_MAPPED_BIT);
+            VmaAllocationCreateInfo vma_info = {0};
+            vma_info.usage = VMA_MEMORY_USAGE_AUTO;
+            vma_info.flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT |
+                             VMA_ALLOCATION_CREATE_MAPPED_BIT;
+            vma_info.requiredFlags = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT;
+
+            vk_buffer_ctx->buffer_alloc =
+                BufferAllocationCreate(vk_ctx->allocator, buffer_byte_size, usage, vma_info);
 
             vk_buffer_ctx->capacity = total_buffer_size;
         }
         vk_buffer_ctx->size = total_buffer_size;
 
-        void* data;
-        vmaMapMemory(vk_ctx->allocator, vk_buffer_ctx->buffer_alloc.allocation, &data);
-
-        MemoryCopy((T*)data, buffer.data, total_buffer_size * sizeof(T));
-        vmaUnmapMemory(vk_ctx->allocator, vk_buffer_ctx->buffer_alloc.allocation);
+        vmaCopyMemoryToAllocation(vk_ctx->allocator, buffer.data,
+                                  vk_buffer_ctx->buffer_alloc.allocation, 0,
+                                  total_buffer_size * sizeof(T));
     }
 }
 
@@ -1618,7 +1960,7 @@ CameraDescriptorSetCreate(VulkanContext* vk_ctx)
     if (vkAllocateDescriptorSets(vk_ctx->device, &allocInfo, vk_ctx->camera_descriptor_sets) !=
         VK_SUCCESS)
     {
-        exitWithError("failed to allocate descriptor sets!");
+        exitWithError("CameraDescriptorSetCreate: failed to allocate descriptor sets!");
     }
 
     for (size_t i = 0; i < max_frames_in_flight; i++)
@@ -1686,7 +2028,7 @@ ImageResourceDestroy(VmaAllocator allocator, internal::ImageResource image)
 
 static internal::BufferAllocation
 BufferAllocationCreate(VmaAllocator allocator, VkDeviceSize size, VkBufferUsageFlags buffer_usage,
-                       VmaMemoryUsage vma_usage, VmaAllocationCreateFlags vma_flags)
+                       VmaAllocationCreateInfo vma_info)
 {
     internal::BufferAllocation buffer = {};
     buffer.size = size;
@@ -1697,10 +2039,7 @@ BufferAllocationCreate(VmaAllocator allocator, VkDeviceSize size, VkBufferUsageF
     bufferInfo.usage = buffer_usage;
     bufferInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
 
-    VmaAllocationCreateInfo vmaallocInfo = {};
-    vmaallocInfo.usage = vma_usage;
-
-    if (vmaCreateBuffer(allocator, &bufferInfo, &vmaallocInfo, &buffer.buffer, &buffer.allocation,
+    if (vmaCreateBuffer(allocator, &bufferInfo, &vma_info, &buffer.buffer, &buffer.allocation,
                         nullptr) != VK_SUCCESS)
     {
         exitWithError("Failed to create buffer!");
@@ -1717,11 +2056,14 @@ BufferMappedCreate(VkCommandBuffer cmd_buffer, VmaAllocator allocator, VkDeviceS
 {
     Arena* arena = ArenaAlloc();
 
+    VmaAllocationCreateInfo vma_info = {0};
+    vma_info.usage = VMA_MEMORY_USAGE_AUTO;
+    vma_info.flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT |
+                     VMA_ALLOCATION_CREATE_HOST_ACCESS_ALLOW_TRANSFER_INSTEAD_BIT |
+                     VMA_ALLOCATION_CREATE_MAPPED_BIT;
+
     internal::BufferAllocation buffer = BufferAllocationCreate(
-        allocator, size, buffer_usage | VK_BUFFER_USAGE_TRANSFER_DST_BIT, VMA_MEMORY_USAGE_AUTO,
-        VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT |
-            VMA_ALLOCATION_CREATE_HOST_ACCESS_ALLOW_TRANSFER_INSTEAD_BIT |
-            VMA_ALLOCATION_CREATE_MAPPED_BIT);
+        allocator, size, buffer_usage | VK_BUFFER_USAGE_TRANSFER_DST_BIT, vma_info);
 
     VkMemoryPropertyFlags mem_prop_flags;
     vmaGetAllocationMemoryProperties(allocator, buffer.allocation, &mem_prop_flags);
@@ -1729,16 +2071,22 @@ BufferMappedCreate(VkCommandBuffer cmd_buffer, VmaAllocator allocator, VkDeviceS
     VmaAllocationInfo alloc_info;
     vmaGetAllocationInfo(allocator, buffer.allocation, &alloc_info);
 
-    internal::BufferAllocationMapped mapped_buffer = {
-        .buffer_alloc = buffer, .mem_prop_flags = mem_prop_flags, .arena = arena};
+    internal::BufferAllocationMapped mapped_buffer = {.buffer_alloc = buffer,
+                                                      .mapped_ptr = alloc_info.pMappedData,
+                                                      .mem_prop_flags = mem_prop_flags,
+                                                      .arena = arena};
 
-    if (!alloc_info.pMappedData)
+    if (!mapped_buffer.mapped_ptr)
     {
         mapped_buffer.mapped_ptr = (void*)PushArray(mapped_buffer.arena, U8, size);
-        mapped_buffer.staging_buffer_alloc = BufferAllocationCreate(
-            allocator, size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VMA_MEMORY_USAGE_CPU_ONLY,
-            VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT |
-                VMA_ALLOCATION_CREATE_MAPPED_BIT);
+
+        VmaAllocationCreateInfo vma_info = {0};
+        vma_info.usage = VMA_MEMORY_USAGE_CPU_ONLY;
+        vma_info.flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT |
+                         VMA_ALLOCATION_CREATE_MAPPED_BIT;
+
+        mapped_buffer.staging_buffer_alloc =
+            BufferAllocationCreate(allocator, size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, vma_info);
     }
 
     return mapped_buffer;
@@ -1838,11 +2186,10 @@ ImageViewResourceCreate(VkDevice device, VkImage image, VkFormat format,
     return {.image_view = view, .device = device};
 }
 
-static ImageAllocation
+static internal::ImageAllocation
 ImageAllocationCreate(VmaAllocator allocator, U32 width, U32 height,
                       VkSampleCountFlagBits numSamples, VkFormat format, VkImageTiling tiling,
-                      VkImageUsageFlags usage, U32 mipmap_level, VmaMemoryUsage memory_usage,
-                      VmaAllocationCreateFlags memory_properties)
+                      VkImageUsageFlags usage, U32 mipmap_level, VmaAllocationCreateInfo vma_info)
 {
     ImageAllocation image_alloc = {0};
 
@@ -1861,11 +2208,7 @@ ImageAllocationCreate(VmaAllocator allocator, U32 width, U32 height,
     image_create_info.samples = numSamples;
     image_create_info.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
 
-    VmaAllocationCreateInfo alloc_create_info = {};
-    alloc_create_info.usage = memory_usage;
-    alloc_create_info.flags = memory_properties;
-
-    if (vmaCreateImage(allocator, &image_create_info, &alloc_create_info, &image_alloc.image,
+    if (vmaCreateImage(allocator, &image_create_info, &vma_info, &image_alloc.image,
                        &image_alloc.allocation, 0))
     {
         exitWithError("ImageCreate: Could not create image");
@@ -1875,14 +2218,39 @@ ImageAllocationCreate(VmaAllocator allocator, U32 width, U32 height,
 }
 
 static void
+ImageFromBufferCopy(VkCommandBuffer command_buffer, VkBuffer buffer, VkImage image, uint32_t width,
+                    uint32_t height)
+{
+    VkBufferImageCopy region{};
+    region.bufferOffset = 0;
+    region.bufferRowLength = 0;
+    region.bufferImageHeight = 0;
+
+    region.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+    region.imageSubresource.mipLevel = 0;
+    region.imageSubresource.baseArrayLayer = 0;
+    region.imageSubresource.layerCount = 1;
+
+    region.imageOffset = {0, 0, 0};
+    region.imageExtent = {width, height, 1};
+
+    vkCmdCopyBufferToImage(command_buffer, buffer, image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1,
+                           &region);
+}
+
+static void
 VK_ColorResourcesCreate(VulkanContext* vk_ctx)
 {
     VkFormat colorFormat = vk_ctx->color_attachment_format;
 
+    VmaAllocationCreateInfo vma_info = {
+        .usage = VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE,
+    };
+
     internal::ImageAllocation image_alloc = ImageAllocationCreate(
         vk_ctx->allocator, vk_ctx->swapchain_extent.width, vk_ctx->swapchain_extent.height,
         vk_ctx->msaa_samples, colorFormat, VK_IMAGE_TILING_OPTIMAL,
-        VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT, 1, VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE, 0);
+        VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT, 1, vma_info);
 
     ImageViewResource color_image_view = ImageViewResourceCreate(
         vk_ctx->device, image_alloc.image, colorFormat, VK_IMAGE_ASPECT_COLOR_BIT, 1);
@@ -1998,6 +2366,54 @@ VK_SwapChainCreate(Arena* arena, VulkanContext* vk_ctx, IO* io_ctx)
     return swapChainInfo;
 }
 
+// Samplers helpers
+static VkSampler
+SamplerCreate(VkDevice device, VkFilter filter, VkSamplerMipmapMode mipmap_mode,
+              U32 mip_level_count, F32 max_anisotrophy)
+{
+    VkSamplerCreateInfo samplerInfo{};
+    samplerInfo.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
+    samplerInfo.magFilter = filter;
+    samplerInfo.minFilter = filter;
+    samplerInfo.addressModeU = VK_SAMPLER_ADDRESS_MODE_MIRRORED_REPEAT;
+    samplerInfo.addressModeV = samplerInfo.addressModeU;
+    samplerInfo.addressModeW = samplerInfo.addressModeU;
+    samplerInfo.compareOp = VK_COMPARE_OP_NEVER;
+    samplerInfo.unnormalizedCoordinates = VK_FALSE;
+    samplerInfo.mipmapMode = mipmap_mode;
+    samplerInfo.mipLodBias = 0.0f;
+    samplerInfo.minLod = 0.0f;
+    samplerInfo.maxLod = 0.0f;
+    samplerInfo.borderColor = VK_BORDER_COLOR_INT_OPAQUE_BLACK;
+    samplerInfo.anisotropyEnable = VK_TRUE;
+    samplerInfo.maxAnisotropy = max_anisotrophy; // Use max anisotropy supported
+
+    VkSampler sampler;
+    if (vkCreateSampler(device, &samplerInfo, nullptr, &sampler) != VK_SUCCESS)
+    {
+        exitWithError("failed to create texture sampler!");
+    }
+    return sampler;
+}
+
+// ~mgj: Descriptor Related Functions
+static VkDescriptorSetLayout
+DescriptorSetLayoutCreate(VkDevice device, VkDescriptorSetLayoutBinding* bindings,
+                          U32 binding_count)
+{
+    VkDescriptorSetLayoutCreateInfo layoutInfo{};
+    layoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+    layoutInfo.bindingCount = binding_count;
+    layoutInfo.pBindings = bindings;
+
+    VkDescriptorSetLayout desc_set_layout;
+    if (vkCreateDescriptorSetLayout(device, &layoutInfo, nullptr, &desc_set_layout) != VK_SUCCESS)
+    {
+        exitWithError("failed to create descriptor set layout!");
+    }
+
+    return desc_set_layout;
+}
 } // namespace internal
 
 } // namespace wrapper

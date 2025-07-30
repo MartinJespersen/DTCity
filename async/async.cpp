@@ -1,6 +1,6 @@
 namespace async
 {
-Queue*
+static Queue*
 QueueInit(Arena* arena, U32 queue_size, U32 thread_count)
 {
     //~mgj: Semaphore size count in the full state is 1 less than the queue size so that assert
@@ -17,14 +17,14 @@ QueueInit(Arena* arena, U32 queue_size, U32 thread_count)
     return queue;
 }
 
-void
+static void
 QueueDestroy(Queue* queue)
 {
     OS_MutexRelease(queue->mutex);
     OS_SemaphoreRelease(queue->semaphore_empty);
 }
 
-void
+static void
 QueuePush(Queue* queue, void* data, WorkerFunc worker_func)
 {
     QueueItem* item;
@@ -42,7 +42,7 @@ QueuePush(Queue* queue, void* data, WorkerFunc worker_func)
     item->worker_func = worker_func;
 }
 
-void
+static void
 ThreadWorker(void* data)
 {
     ThreadInput* input = (ThreadInput*)data;
@@ -57,7 +57,7 @@ ThreadWorker(void* data)
     QueueItem item;
     U32 cur_index;
     B32 is_waiting = 0;
-    while (true)
+    while (!(*input->kill_switch))
     {
         OS_MutexScopeW(queue->mutex)
         {
@@ -83,5 +83,35 @@ ThreadWorker(void* data)
             item->worker_func(thread_info, item->data);
         }
     }
+}
+static Threads*
+WorkerThreadsCreate(Arena* arena, U32 thread_count, U32 queue_size)
+{
+    Queue* queue = QueueInit(arena, queue_size, thread_count);
+    Threads* thread_info = PushStruct(arena, Threads);
+    thread_info->thread_handles = BufferAlloc<OS_Handle>(arena, thread_count);
+    thread_info->msg_queue = queue;
+    thread_info->kill_switch = 0;
+
+    for (U32 i = 0; i < thread_count; i++)
+    {
+        ThreadInput* input = PushStruct(arena, ThreadInput);
+        input->queue = queue;
+        input->thread_count = thread_count;
+        input->thread_id = i;
+        input->kill_switch = &thread_info->kill_switch;
+        thread_info->thread_handles.data[i] = OS_ThreadLaunch(ThreadWorker, input, NULL);
+    }
+
+    return thread_info;
+}
+
+static void
+WorkerThreadDestroy(Threads* thread_info)
+{
+    thread_info->kill_switch = 1;
+    for (U32 i = 0; i < thread_info->thread_handles.size; i++)
+
+        OS_ThreadJoin(thread_info->thread_handles.data[i], max_U32);
 }
 } // namespace async

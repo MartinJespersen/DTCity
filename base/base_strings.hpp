@@ -561,9 +561,6 @@ str8_deserial_read_block(String8 string, U64 off, U64 size, String8* block_out);
     str8_deserial_read((string), (off), (ptr), sizeof(*(ptr)) * (count), sizeof(*(ptr)))
 #define str8_deserial_read_struct(string, off, ptr) str8_deserial_read_array(string, off, ptr, 1)
 
-// string manipulation helpers
-#define CStrEqual(a, b) (!strcmp((a), (b)))
-
 //- rjf: Allocation
 static String8
 PushStr8Copy(Arena* arena, String8 string);
@@ -574,6 +571,13 @@ PushStr8F(Arena* arena, char* fmt, ...);
 static String8
 PushStr8FillByte(Arena* arena, U64 size, U8 byte);
 
+// ~mgj: String <==> float/double copy
+B32
+F32FromStr8(String8 string, F32* out);
+
+// string manipulation helpers
+#define CStrEqual(a, b) (!strcmp((a), (b)))
 // ~mgj: String Macros
+#define Str8Cmp(a, b) (!strcmp(((char*)a.str), ((char*)b.str)))
 #define S(str) Str8((U8*)str, sizeof(str) - 1)
 #endif // BASE_STRINGS_H

@@ -66,7 +66,7 @@ static ArenaFlags arena_default_flags = 0;
 
 //- rjf: arena creation/destruction
 static Arena*
-arena_alloc_(ArenaParams* params);
+ArenaAlloc(ArenaParams* params);
 
 static Arena*
 ArenaAlloc();

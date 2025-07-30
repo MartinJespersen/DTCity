@@ -13,6 +13,7 @@
 #include "base/base_inc.hpp"
 #include "os_core/os_core_inc.hpp"
 #include "http/http_inc.hpp"
+#include "async/async.hpp"
 #include "lib_wrappers/lib_wrappers_inc.hpp"
 #include "ui/ui.hpp"
 #include "city/city_inc.hpp"
@@ -21,6 +22,7 @@
 #include "base/base_inc.cpp"
 #include "os_core/os_core_inc.cpp"
 #include "http/http_inc.cpp"
+#include "async/async.cpp"
 #include "lib_wrappers/lib_wrappers_inc.cpp"
 #include "ui/ui.cpp"
 #include "city/city_inc.cpp"
@@ -42,7 +44,7 @@ ProfileBuffersCreate(wrapper::VulkanContext* vk_ctx, ProfilingContext* prof_ctx)
 }
 
 static Context*
-ContextInit()
+ContextCreate()
 {
     ScratchScope scratch = ScratchScope(0, 0);
     //~mgj: app context setup
@@ -59,38 +61,53 @@ ContextInit()
     ctx->cwd = Str8PathFromStr8List(app_arena,
                                     {OS_GetCurrentPath(scratch.arena), S(".."), S(".."), S("..")});
     ctx->texture_path = Str8PathFromStr8List(app_arena, {ctx->cwd, S("textures")});
+    ctx->shader_path = Str8PathFromStr8List(app_arena, {ctx->cwd, S("shaders")});
 
     GlobalContextSet(ctx);
     InitWindow(ctx);
-    ctx->vk_ctx = wrapper::VK_VulkanInit(app_arena, ctx->io);
+
+    // ~mgj: -2 as 2 are used for Main thread and IO thread
+    U32 thread_count = OS_GetSystemInfo()->logical_processor_count - 2;
+    U32 queue_size = 10; // TODO: should be increased
+    ctx->thread_info = async::WorkerThreadsCreate(app_arena, thread_count, queue_size);
+
+    ctx->vk_ctx = wrapper::VK_VulkanInit(app_arena, ctx);
     CameraInit(ctx->camera);
     ProfileBuffersCreate(ctx->vk_ctx, ctx->profilingContext);
-    city::CityInit(ctx->vk_ctx, ctx->city, ctx->cwd);
 
     HTTP_Init();
 
+    //~mgj: City Creation
+    city::CityCreate(ctx, ctx->city);
+    city::RoadsBuild(ctx->city->arena, ctx->city);
+
     return ctx;
+}
+
+static void
+ContextDestroy(Context* ctx)
+{
+    if (ctx->dll_info->entrypoint_thread_handle.u64[0])
+    {
+        ctx->dll_info->cleanup_func(ctx);
+    }
+
+    city::CityDestroy(ctx->city, ctx->vk_ctx);
+    wrapper::VK_Cleanup(ctx->vk_ctx);
+
+    glfwDestroyWindow(ctx->io->window);
+    glfwTerminate();
 }
 
 void
 App(HotReloadFunc HotReload)
 {
-    Context* ctx = ContextInit();
-    city::RoadsBuild(ctx->city->arena, ctx->city);
+    Context* ctx = ContextCreate();
 
     while (!glfwWindowShouldClose(ctx->io->window))
     {
         HotReload(ctx);
         IO_InputStateUpdate(ctx->io);
     }
-    if (ctx->dll_info->entrypoint_thread_handle.u64[0])
-    {
-        ctx->dll_info->cleanup_func(ctx);
-    }
-
-    city::CityCleanup(ctx->city, ctx->vk_ctx);
-    wrapper::VK_Cleanup(ctx->vk_ctx);
-
-    glfwDestroyWindow(ctx->io->window);
-    glfwTerminate();
+    ContextDestroy(ctx);
 }

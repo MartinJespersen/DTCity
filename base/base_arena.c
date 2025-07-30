@@ -6,17 +6,16 @@
 
 //- rjf: arena creation/destruction
 
-static Arena *arena_alloc_(ArenaParams *params) {
+static Arena *ArenaAlloc(ArenaParams *params) {
   // rjf: round up reserve/commit sizes
   U64 reserve_size = params->reserve_size;
   U64 commit_size = params->commit_size;
   if (params->flags & ArenaFlag_LargePages) {
-    reserve_size =
-        AlignPow2(reserve_size, os_get_system_info()->large_page_size);
-    commit_size = AlignPow2(commit_size, os_get_system_info()->large_page_size);
+    reserve_size = AlignPow2(reserve_size, OS_GetSystemInfo()->large_page_size);
+    commit_size = AlignPow2(commit_size, OS_GetSystemInfo()->large_page_size);
   } else {
-    reserve_size = AlignPow2(reserve_size, os_get_system_info()->page_size);
-    commit_size = AlignPow2(commit_size, os_get_system_info()->page_size);
+    reserve_size = AlignPow2(reserve_size, OS_GetSystemInfo()->page_size);
+    commit_size = AlignPow2(commit_size, OS_GetSystemInfo()->page_size);
   }
 
   // rjf: reserve/commit initial block
@@ -63,7 +62,7 @@ static Arena *ArenaAlloc() {
   ArenaParams arena_params = {.reserve_size = arena_default_reserve_size,
                               .commit_size = arena_default_commit_size,
                               .flags = arena_default_flags};
-  return arena_alloc_(&arena_params);
+  return ArenaAlloc(&arena_params);
 }
 
 static void ArenaRelease(Arena *arena) {
@@ -112,7 +111,7 @@ static void *arena_push(Arena *arena, U64 size, U64 align) {
       ArenaParams params = {.reserve_size = res_size,
                             .commit_size = cmt_size,
                             .flags = current->flags};
-      new_block = arena_alloc_(&params);
+      new_block = ArenaAlloc(&params);
     }
 
     new_block->base_pos = current->base_pos + current->res;
@@ -205,16 +204,10 @@ static void arena_pop(Arena *arena, U64 amt) {
 
 //- rjf: temporary arena scopes
 
-static Temp
-temp_begin(Arena* arena)
-{
-    U64 pos = arena_pos(arena);
-    Temp temp = {arena, pos};
-    return temp;
+static Temp temp_begin(Arena *arena) {
+  U64 pos = arena_pos(arena);
+  Temp temp = {arena, pos};
+  return temp;
 }
 
-static void
-temp_end(Temp temp)
-{
-    arena_pop_to(temp.arena, temp.pos);
-}
+static void temp_end(Temp temp) { arena_pop_to(temp.arena, temp.pos); }

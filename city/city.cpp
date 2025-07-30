@@ -1,29 +1,30 @@
 namespace city
 {
 static void
-CityInit(wrapper::VulkanContext* vk_ctx, City* city, String8 cwd)
+CityCreate(Context* ctx, City* city)
 {
     city->arena = ArenaAlloc();
     city->road.node_slot_count = 100;
 
     city->w_road = PushStruct(city->arena, wrapper::Road);
     city->road.road_height = 10.0f;
-    city->road.road_width = 3.0f;
+    city->road.default_road_width = 3.0f;
 
-    wrapper::RoadInit(vk_ctx, city, cwd);
+    city->w_road = wrapper::RoadCreate(ctx->thread_info->msg_queue, ctx->vk_ctx, &city->road,
+                                       ctx->shader_path, ctx->texture_path);
 }
 
 static void
-CityUpdate(City* city, wrapper::VulkanContext* vk_ctx, U32 image_index)
+CityUpdate(City* city, wrapper::VulkanContext* vk_ctx, U32 image_index, String8 shader_path)
 {
     // ~mgj: road building update
     wrapper::Road* w_road = city->w_road;
     Road* road = &city->road;
-    wrapper::RoadUpdate(road, w_road, vk_ctx, image_index);
+    wrapper::RoadUpdate(road, w_road, vk_ctx, image_index, shader_path);
 };
 
 static void
-CityCleanup(City* city, wrapper::VulkanContext* vk_ctx)
+CityDestroy(City* city, wrapper::VulkanContext* vk_ctx)
 {
     wrapper::RoadCleanup(city, vk_ctx);
 }
@@ -92,6 +93,23 @@ RoadSegmentFromNodeIds(Road* road, RoadWay* way, U32 index_0, U32 index_1, F64 c
     return road_quad_coords;
 }
 
+static RoadTagResult
+RoadTagFind(Arena* arena, Buffer<RoadTag> tags, String8 tag_to_find)
+{
+    RoadTagResult result = {};
+    result.result = ROAD_TAG_NOT_FOUND;
+    for (U32 i = 0; i < tags.size; i++)
+    {
+        if (Str8Cmp(tags.data[i].key, tag_to_find))
+        {
+            result.result = ROAD_TAG_FOUND;
+            result.value = PushStr8Copy(arena, tags.data[i].value);
+            break;
+        }
+    }
+    return result;
+}
+
 static void
 RoadsBuild(Arena* arena, City* city)
 {
@@ -144,7 +162,6 @@ RoadsBuild(Arena* arena, City* city)
 
     wrapper::OverpassHighways(scratch.arena, road, content);
 
-    F32 road_half_width = road->road_width / 2.0f; // Example value, adjust as needed
     F64 long_low_utm;
     F64 lat_low_utm;
     F64 long_high_utm;
@@ -178,9 +195,25 @@ RoadsBuild(Arena* arena, City* city)
     {
         RoadWay* way = &road->ways[way_index];
 
-        // TODO: what if way has less than two nodes?
-        // first road segment
+        // ~mgj: road width calculation
+        F32 road_width = road->default_road_width; // Example value, adjust as needed
+        {
+            Buffer<RoadTag> tags = {.data = way->tags, .size = way->tag_count};
+            RoadTagResult result = RoadTagFind(scratch.arena, tags, S("width"));
+            if (result.result == RoadTagResultEnum::ROAD_TAG_FOUND)
+            {
+                F32 float_result = {0};
+                if (F32FromStr8(result.value, &float_result))
+                {
+                    road_width = float_result;
+                }
+            }
+        }
+        F32 road_half_width = road_width / 2.0f;
 
+        // TODO: what if way has less than two nodes?
+        //
+        // first road segment
         RoadQuadCoord road_quad_coords_first = RoadSegmentFromNodeIds(
             road, way, 0, 1, center_transform_x, center_transform_y, road_half_width);
         // last road segment
@@ -210,6 +243,9 @@ RoadsBuild(Arena* arena, City* city)
                                            center_transform_x, center_transform_y, road_half_width);
             }
 
+            F32 y_len = road_quad_coords.pos[1].y - road_quad_coords.pos[0].y;
+            F32 x_len = road_quad_coords.pos[2].x - road_quad_coords.pos[0].x;
+
             // +1 due to duplicate of first and last way node to seperate roadways in triangle strip
             // topology
             road->vertex_buffer.data[current_vertex_index++].pos = road_quad_coords.pos[0];
@@ -223,6 +259,8 @@ RoadsBuild(Arena* arena, City* city)
                     RoadSegmentFromNodeIds(road, way, node_index, node_index + 1,
                                            center_transform_x, center_transform_y, road_half_width);
 
+                F32 x_len_conn = road_quad_coords_next.pos[2].x - road_quad_coords.pos[0].x;
+
                 road->vertex_buffer.data[current_vertex_index++].pos = road_quad_coords_next.pos[1];
                 road->vertex_buffer.data[current_vertex_index++].pos = road_quad_coords.pos[2];
                 road->vertex_buffer.data[current_vertex_index++].pos = road_quad_coords.pos[3];
@@ -235,96 +273,4 @@ RoadsBuild(Arena* arena, City* city)
     }
 }
 
-struct VK_Texture
-{
-    VkImage image;
-    VkDeviceMemory image_memory;
-    VkImageView image_view;
-    VkSampler sampler;
-
-    VkFormat format;
-    U32 mip_level_count;
-};
-
-struct VK_TextureResult
-{
-    VK_Texture texture;
-};
-
-// TODO: check for blitting format beforehand
-// void
-// RoadTextureCreate(Arena* arena, Context* ctx, String8 texture_name, VkFormat blit_format)
-// {
-//     ScratchScope scratch = ScratchScope(0, 0);
-
-//     wrapper::VulkanContext* vk_ctx = ctx->vk_ctx;
-//     VK_TextureResult result = {0};
-//     VK_Texture* vk_texture = PushStruct(arena, VK_Texture);
-//     vk_texture->format = blit_format;
-
-//     // check for blitting format
-//     VkFormatProperties formatProperties;
-//     vkGetPhysicalDeviceFormatProperties(vk_ctx->physical_device, blit_format, &formatProperties);
-//     if (!(formatProperties.optimalTilingFeatures &
-//           VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT))
-//     {
-//         exitWithError("texture image format does not support linear blitting!");
-//     }
-
-//     S32 tex_width, tex_height, tex_channels;
-//     stbi_uc* pixels = stbi_load((char*)ctx->texture_path.str, &tex_width, &tex_height,
-//                                 &tex_channels, STBI_rgb_alpha);
-//     VkDeviceSize image_size = tex_width * tex_height * 4;
-//     U32 mip_level = (U32)(floor(log2(Max(tex_width, tex_height)))) + 1;
-//     vk_texture->mip_level_count = mip_level;
-
-//     if (!pixels)
-//     {
-//         exitWithError("failed to load texture image!");
-//     }
-
-//     wrapper::internal::BufferAllocation texture_staging_buffer = wrapper::BufferAllocationCreate(
-//         vk_ctx->allocator, image_size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VMA_MEMORY_USAGE_AUTO,
-//         VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT);
-
-//     void* data;
-//     vmaMapMemory(vk_ctx->allocator, texture_staging_buffer.allocation, &data);
-//     // vkMapMemory(vk_ctx->device, texture_staging_buffer, 0, image_size, 0, &data);
-//     memcpy(data, pixels, image_size);
-//     vmaUnmapMemory(vk_ctx->allocator, texture_staging_buffer.allocation);
-//     // vkUnmapMemory(vk_ctx->device, texture_staging_buffer);
-
-//     stbi_image_free(pixels);
-
-//     wrapper::internal::ImageAllocation image_alloc =
-//         wrapper::VK_ImageCreate(vk_ctx->allocator, tex_width, tex_height, VK_SAMPLE_COUNT_1_BIT,
-//                                 VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_TILING_OPTIMAL,
-//                                 VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT
-//                                 |
-//                                     VK_IMAGE_USAGE_SAMPLED_BIT,
-//                                 mip_level, VMA_MEMORY_USAGE_AUTO);
-
-//     VkCommandBuffer command_buffer = VK_BeginSingleTimeCommands(vk_ctx);
-//     wrapper::VK_ImageLayoutTransition(command_buffer, terrain->vk_texture_image,
-//                                       VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_LAYOUT_UNDEFINED,
-//                                       VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-//                                       terrain->vk_mip_levels);
-//     wrapper::VK_ImageFromBufferCopy(command_buffer, vk_texture_staging_buffer,
-//                                     terrain->vk_texture_image, tex_width, tex_height);
-//     wrapper::VK_GenerateMipmaps(
-//         command_buffer, terrain->vk_texture_image, tex_width, tex_height,
-//         terrain->vk_mip_levels); // TODO: mip maps are usually not generated at runtime. They are
-//                                  // usually stored in the texture file
-//     VK_EndSingleTimeCommands(vk_ctx, command_buffer);
-
-//     vkDestroyBuffer(vk_ctx->device, vk_texture_staging_buffer, nullptr);
-//     vkFreeMemory(vk_ctx->device, vk_texture_staging_buffer_memory, nullptr);
-
-//     wrapper::ImageViewResourceCreate(&terrain->vk_texture_image_view, vk_ctx->device,
-//                                 terrain->vk_texture_image, VK_FORMAT_R8G8B8A8_SRGB,
-//                                 VK_IMAGE_ASPECT_COLOR_BIT, terrain->vk_mip_levels);
-//     wrapper::VK_SamplerCreate(&terrain->vk_texture_sampler, vk_ctx->device, VK_FILTER_LINEAR,
-//                               VK_SAMPLER_MIPMAP_MODE_LINEAR, terrain->vk_mip_levels,
-//                               vk_ctx->physical_device_properties.limits.maxSamplerAnisotropy);
-// }
 } // namespace city

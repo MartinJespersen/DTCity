@@ -95,10 +95,10 @@ TerrainTextureResourceCreate(wrapper::VulkanContext* vk_ctx, Terrain* terrain, S
                                    VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, &terrain->vk_texture_image,
                                    &terrain->vk_texture_image_memory, terrain->vk_mip_levels);
 
-    VkCommandBuffer command_buffer = VK_BeginSingleTimeCommands(vk_ctx);
-    wrapper::VK_ImageLayoutTransition(command_buffer, terrain->vk_texture_image,
-                                      VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_LAYOUT_UNDEFINED,
-                                      VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, terrain->vk_mip_levels);
+    VkCommandBuffer command_buffer = VK_BeginSingleTimeCommands(vk_ctx, vk_ctx->cmd_pool);
+    wrapper::ImageLayoutTransition(command_buffer, terrain->vk_texture_image,
+                                   VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_LAYOUT_UNDEFINED,
+                                   VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, terrain->vk_mip_levels);
     wrapper::VK_ImageFromBufferCopy(command_buffer, vk_texture_staging_buffer,
                                     terrain->vk_texture_image, tex_width, tex_height);
     wrapper::VK_GenerateMipmaps(
@@ -113,9 +113,9 @@ TerrainTextureResourceCreate(wrapper::VulkanContext* vk_ctx, Terrain* terrain, S
     wrapper::ImageViewResourceCreate(vk_ctx->device, terrain->vk_texture_image,
                                      VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_ASPECT_COLOR_BIT,
                                      terrain->vk_mip_levels);
-    wrapper::VK_SamplerCreate(&terrain->vk_texture_sampler, vk_ctx->device, VK_FILTER_LINEAR,
-                              VK_SAMPLER_MIPMAP_MODE_LINEAR, terrain->vk_mip_levels,
-                              vk_ctx->physical_device_properties.limits.maxSamplerAnisotropy);
+    wrapper::SamplerCreate(vk_ctx->device, VK_FILTER_LINEAR, VK_SAMPLER_MIPMAP_MODE_LINEAR,
+                           terrain->vk_mip_levels,
+                           vk_ctx->physical_device_properties.limits.maxSamplerAnisotropy);
 
     ScratchEnd(scratch);
 }

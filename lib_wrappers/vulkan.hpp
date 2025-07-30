@@ -134,13 +134,14 @@ struct CameraUniformBuffer
     Frustum frustum;
     glm::vec2 viewport_dim;
 };
+
 // ~mgj: Buffers helpers
 //
 // buffer usage patterns with VMA:
 // https://gpuopen-librariesandsdks.github.io/VulkanMemoryAllocator/html/usage_patterns.html
 static internal::BufferAllocation
 BufferAllocationCreate(VmaAllocator allocator, VkDeviceSize size, VkBufferUsageFlags buffer_usage,
-                       VmaMemoryUsage vma_usage, VmaAllocationCreateFlags vma_flags);
+                       VmaAllocationCreateInfo vma_info);
 static void
 BufferMappedUpdate(VkCommandBuffer cmd_buffer, VmaAllocator allocator,
                    internal::BufferAllocationMapped mapped_buffer);
@@ -149,25 +150,20 @@ static internal::BufferAllocationMapped
 BufferMappedCreate(VkCommandBuffer cmd_buffer, VmaAllocator allocator, VkDeviceSize size,
                    VkBufferUsageFlags buffer_usage);
 static void
-BufferDestroy(VmaAllocator allocator, internal::BufferAllocation* buffer_allocation);
-
+BufferDestroy(VmaAllocator allocator, internal::BufferAllocation buffer_allocation);
 static void
 BufferMappedDestroy(VmaAllocator allocator, internal::BufferAllocationMapped* mapped_buffer);
-// ~mgj: Images
-//
 
+// ~mgj: Images
 static internal::ImageAllocation
 ImageAllocationCreate(VmaAllocator allocator, U32 width, U32 height,
                       VkSampleCountFlagBits numSamples, VkFormat format, VkImageTiling tiling,
-                      VkImageUsageFlags usage, U32 mipmap_level, VmaMemoryUsage memory_usage,
-                      VmaAllocationCreateFlags memory_properties);
-
+                      VkImageUsageFlags usage, U32 mipmap_level, VmaAllocationCreateInfo vma_info);
 static void
 SwapChainImageResourceCreate(VulkanContext* vk_ctx, SwapChainInfo swapchain_info, U32 image_count);
 static ImageViewResource
 ImageViewResourceCreate(VkDevice device, VkImage image, VkFormat format,
                         VkImageAspectFlags aspect_mask, U32 mipmap_level);
-
 static void
 ImageViewResourceDestroy(internal::ImageViewResource image_view_resource);
 static void
@@ -177,6 +173,9 @@ ImageResourceCreate(ImageViewResource image_view_resource, ImageAllocation image
                     VkImageView image_view);
 static void
 ImageResourceDestroy(VmaAllocator allocator, internal::ImageResource image);
+static void
+ImageFromBufferCopy(VkCommandBuffer command_buffer, VkBuffer buffer, VkImage image, uint32_t width,
+                    uint32_t height);
 
 // ~mgj: Swapchain functions
 static U32
@@ -224,8 +223,6 @@ static VkVertexInputBindingDescription
 RoadBindingDescriptionGet();
 static Buffer<VkVertexInputAttributeDescription>
 RoadAttributeDescriptionGet(Arena* arena);
-static void
-RoadPipelineCreate(city::City* city, String8 cwd);
 
 //~mgj: camera
 static void
@@ -246,13 +243,89 @@ CameraDescriptorSetCreate(VulkanContext* vk_ctx);
 static void
 VK_ColorResourcesCreate(VulkanContext* vk_ctx);
 
+// sampler helpers
+static VkSampler
+SamplerCreate(VkDevice device, VkFilter filter, VkSamplerMipmapMode mipmap_mode,
+              U32 mip_level_count, F32 max_anisotrophy);
+// ~mgj: Descriptor Related Functions
+static VkDescriptorSetLayout
+DescriptorSetLayoutCreate(VkDevice device, VkDescriptorSetLayoutBinding* bindings,
+                          U32 binding_count);
+
 } // namespace internal
+
+struct Texture
+{
+    internal::ImageResource image_resource;
+    VkSampler sampler;
+    VkFormat format;
+    S32 width;
+    S32 height;
+    U32 mip_level_count;
+};
 
 struct Road
 {
+    Arena* arena;
+    U64 texture_id;
     internal::BufferContext vertex_buffer;
     VkPipelineLayout pipeline_layout;
     VkPipeline pipeline;
+    VkDescriptorSetLayout descriptor_set_layout;
+    Buffer<VkDescriptorSet> descriptor_sets;
+    B32 descriptors_are_created;
+};
+
+struct AssetStoreTexture
+{
+    AssetStoreTexture* next;
+    U64 id;
+    B32 in_progress;
+    B32 is_loaded;
+    Texture asset;
+};
+
+struct TextureCreateInput
+{
+    VulkanContext* vk_ctx;
+    String8 texture_path;
+    VkFormat blit_format;
+};
+
+typedef void(TextureCreateFunc)(VkCommandPool cmd_pool, VkFence fence, TextureCreateInput* input,
+                                Texture* texture);
+
+struct TextureThreadInput
+{
+    AssetStoreTexture* asset_store_texture;
+    Buffer<VkCommandPool> cmd_pools;
+    Buffer<VkFence> fences;
+    TextureCreateFunc* func;
+    TextureCreateInput* input;
+};
+
+struct AssetStoreItemStateList
+{
+    AssetStoreTexture* first;
+    AssetStoreTexture* last;
+};
+
+struct AssetStore
+{
+    Arena* arena;
+    async::Queue* work_queue;
+    Buffer<AssetStoreItemStateList> hashmap;
+    Buffer<VkCommandPool> cmd_pools;
+    Buffer<VkFence> fences;
+    AssetStoreTexture* free_list;
+    U64 total_size;
+    U64 used_size;
+};
+
+struct GraphicsQueue
+{
+    OS_Handle mutex;
+    VkQueue graphics_queue;
 };
 
 struct VulkanContext
@@ -278,7 +351,8 @@ struct VulkanContext
     VkDevice device;
     VkPhysicalDevice physical_device;
     VkPhysicalDeviceProperties physical_device_properties;
-    VkQueue graphics_queue;
+    // VkQueue graphics_queue;
+    GraphicsQueue graphics_queue;
     VkSurfaceKHR surface;
     VkQueue present_queue;
     VkSwapchainKHR swapchain;
@@ -313,20 +387,34 @@ struct VulkanContext
     internal::BufferAllocationMapped camera_buffer_alloc_mapped[MAX_FRAMES_IN_FLIGHT];
     VkDescriptorSetLayout camera_descriptor_set_layout;
     VkDescriptorSet camera_descriptor_sets[MAX_FRAMES_IN_FLIGHT];
+
+    // ~mgj: Asset Streaming
+    AssetStore* asset_store;
 };
 
 struct RoadPushConstants
 {
-    glm::mat4 model;
-    F32 road_width;
     F32 road_height;
+    F32 texture_scale;
 };
 
+//~mgj: Asset Store
+static AssetStore*
+AssetStoreCreate(VkDevice device, U32 queue_family_index, async::Threads* threads,
+                 U64 texture_map_size, U64 total_size_in_bytes);
+static void
+AssetStoreDestroy(VkDevice device, AssetStore* asset_stream);
+static void
+AssetStoreTextureThreadMain(async::ThreadInfo thread_info, void* data);
+static AssetStoreTexture*
+AssetStoreTextureGetSlot(AssetStore* asset_store, U64 texture_id);
 // ~mgj: road function
+static Road*
+RoadCreate(async::Queue* work_queue, VulkanContext* vk_ctx, city::Road* road, String8 shader_path,
+           String8 texture_path);
 static void
-RoadInit(wrapper::VulkanContext* vk_ctx, city::City* city, String8 cwd);
-static void
-RoadUpdate(city::Road* road, Road* w_road, wrapper::VulkanContext* vk_ctx, U32 image_index);
+RoadUpdate(city::Road* road, Road* w_road, wrapper::VulkanContext* vk_ctx, U32 image_index,
+           String8 shader_path);
 static void
 RoadCleanup(city::City* city, wrapper::VulkanContext* vk_ctx);
 
@@ -339,16 +427,12 @@ struct Vulkan_PushConstantInfo
 // image helpers
 
 static void
-VK_ImageLayoutTransition(VkCommandBuffer command_buffer, VkImage image, VkFormat format,
-                         VkImageLayout oldLayout, VkImageLayout newLayout, U32 mipmap_level);
+ImageLayoutTransition(VkCommandBuffer command_buffer, VkImage image, VkFormat format,
+                      VkImageLayout oldLayout, VkImageLayout newLayout, U32 mipmap_level);
 
 static void
 VK_GenerateMipmaps(VkCommandBuffer command_buffer, VkImage image, int32_t tex_width,
                    int32_t text_height, uint32_t mip_levels);
-// sampler helpers
-static void
-VK_SamplerCreate(VkSampler* sampler, VkDevice device, VkFilter filter,
-                 VkSamplerMipmapMode mipmap_mode, U32 mip_level_count, F32 max_anisotrophy);
 
 // queue family
 
@@ -361,8 +445,10 @@ VK_RecreateSwapChain(IO* io_ctx, VulkanContext* vk_ctx);
 static void
 VK_SyncObjectsCreate(VulkanContext* vk_ctx);
 
-static void
-VK_CommandPoolCreate(VulkanContext* vk_ctx);
+static VkCommandBuffer
+CommandBufferCreate(VkDevice device, VkCommandPool cmd_pool);
+static VkCommandPool
+VK_CommandPoolCreate(VkDevice device, U32 queue_family_index);
 
 static void
 VK_ColorResourcesCleanup(VulkanContext* vk_ctx);
@@ -418,13 +504,35 @@ DestroyDebugUtilsMessengerEXT(VkInstance instance, VkDebugUtilsMessengerEXT debu
                               const VkAllocationCallbacks* pAllocator);
 
 static VkCommandBuffer
-VK_BeginSingleTimeCommands(VulkanContext* vk_ctx);
+VK_BeginSingleTimeCommands(VkDevice device, VkCommandPool cmd_pool);
 
 static void
-VK_EndSingleTimeCommands(VulkanContext* vk_ctx, VkCommandBuffer commandBuffer);
+VK_EndSingleTimeCommands(VulkanContext* vk_ctx, VkCommandPool cmd_pool,
+                         VkCommandBuffer command_buffer, VkFence fence);
 static VulkanContext*
-VK_VulkanInit(Arena* arena, IO* io_ctx);
+VK_VulkanInit(Arena* arena, Context* ctx);
 static void
 VK_Cleanup(VulkanContext* vk_ctx);
 
+// ~mgj: Threaded Graphics Queue
+static GraphicsQueue
+TreadedGraphicsQueueCreate(VkDevice device, U32 graphics_index);
+static void
+ThreadedGraphicsQueueDestroy(GraphicsQueue graphics_queue);
+static void
+ThreadedGraphicsQueueSubmit(GraphicsQueue graphics_queue, VkSubmitInfo* info, VkFence fence);
+
+// ~mgj: texture functions
+static void
+TextureCreate(VkCommandPool cmd_pool, VkFence fence, TextureCreateInput* thread_input,
+              Texture* texture);
+static void
+TextureDestroy(VulkanContext* vk_ctx, Texture* texture);
+
+static void
+RoadPipelineCreate(Road* road, String8 shader_path);
+
+static void
+RoadDescriptorSetCreate(VulkanContext* vk_ctx, Texture* texture, Road* road, U32 frames_in_flight);
+// ~mgj: Descriptor Related Functions
 } // namespace wrapper

@@ -159,7 +159,7 @@ os_w32_thread_entry_point(void* ptr)
 //~ rjf: @os_hooks System/Process Info (Implemented Per-OS)
 
 static OS_SystemInfo*
-os_get_system_info(void)
+OS_GetSystemInfo(void)
 {
     return &os_w32_state.system_info;
 }
@@ -264,7 +264,7 @@ os_tid(void)
 }
 
 static void
-os_set_thread_name(String8 name)
+OS_SetThreadName(String8 name)
 {
     Temp scratch = ScratchBegin(0, 0);
 
@@ -1188,7 +1188,7 @@ OS_ThreadLaunch(OS_ThreadFunctionType* func, void* ptr, void* params)
 }
 
 static B32
-os_thread_join(OS_Handle handle, U64 endt_us)
+OS_ThreadJoin(OS_Handle handle, U64 endt_us)
 {
     DWORD sleep_ms = os_w32_sleep_ms_from_endt_us(endt_us);
     OS_W32_Entity* entity = (OS_W32_Entity*)PtrFromInt(handle.u64[0]);
@@ -1811,7 +1811,7 @@ w32_entry_point_caller(int argc, WCHAR** wargv)
     //- rjf: extract arguments
     ArenaParams params = {
         .reserve_size = MB(1), .commit_size = KB(32), .flags = arena_default_flags};
-    Arena* args_arena = arena_alloc_(&params);
+    Arena* args_arena = ArenaAlloc(&params);
     char** argv = PushArray(args_arena, char*, argc);
     for (int i = 0; i < argc; i += 1)
     {

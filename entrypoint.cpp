@@ -92,7 +92,7 @@ CommandBufferRecord(U32 image_index, U32 current_frame)
         vk_ctx, camera,
         Vec2F32{(F32)vk_ctx->swapchain_extent.width, (F32)vk_ctx->swapchain_extent.height},
         current_frame);
-    city::CityUpdate(ctx->city, vk_ctx, image_index);
+    city::CityUpdate(ctx->city, vk_ctx, image_index, ctx->shader_path);
 
     // ~mgj: transition swapchain image layout from VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL to
     // VK_IMAGE_LAYOUT_PRESENT_SRC_KHR
@@ -140,7 +140,7 @@ Cleanup(void* ptr)
     Context* ctx = (Context*)ptr;
 
     ctx->running = false;
-    os_thread_join(ctx->dll_info->entrypoint_thread_handle, max_U64);
+    OS_ThreadJoin(ctx->dll_info->entrypoint_thread_handle, max_U64);
     ctx->dll_info->entrypoint_thread_handle.u64[0] = 0;
 }
 
@@ -150,7 +150,7 @@ MainLoop(void* ptr)
     Context* ctx = (Context*)ptr;
     wrapper::VulkanContext* vk_ctx = ctx->vk_ctx;
     DT_Time* time = ctx->time;
-    os_set_thread_name(Str8CString("Entrypoint thread"));
+    OS_SetThreadName(Str8CString("Entrypoint thread"));
 
     DT_TimeInit(time);
 
@@ -206,11 +206,8 @@ MainLoop(void* ptr)
         submitInfo.signalSemaphoreCount = 1;
         submitInfo.pSignalSemaphores = signalSemaphores;
 
-        if (vkQueueSubmit(vk_ctx->graphics_queue, 1, &submitInfo,
-                          vk_ctx->in_flight_fences.data[vk_ctx->current_frame]) != VK_SUCCESS)
-        {
-            exitWithError("failed to submit draw command buffer!");
-        }
+        wrapper::ThreadedGraphicsQueueSubmit(vk_ctx->graphics_queue, &submitInfo,
+                                             vk_ctx->in_flight_fences.data[vk_ctx->current_frame]);
 
         VkPresentInfoKHR presentInfo{};
         presentInfo.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;

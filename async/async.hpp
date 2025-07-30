@@ -1,3 +1,4 @@
+#pragma once
 namespace async
 {
 struct ThreadInfo;
@@ -27,18 +28,29 @@ struct ThreadInfo
 struct ThreadInput
 {
     Queue* queue;
-
     U32 thread_count;
     U32 thread_id;
+    B32* kill_switch;
 };
 
-Queue*
+struct Threads
+{
+    B32 kill_switch;
+    async::Queue* msg_queue;
+    Buffer<OS_Handle> thread_handles;
+};
+
+static Queue*
 QueueInit(Arena* arena, U32 queue_size, U32 thread_count);
-void
+static void
 QueueDestroy(Queue* queue);
-void
+static void
 QueuePush(Queue* queue, void* data, WorkerFunc worker_func);
-void
+static void
 ThreadWorker(void* data);
+static Threads*
+WorkerThreadsCreate(Arena* arena, U32 thread_count, U32 queue_size);
+static void
+WorkerThreadDestroy(Threads* thread_info);
 
 }; // namespace async

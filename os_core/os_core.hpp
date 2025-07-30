@@ -184,7 +184,7 @@ os_cmd_line_launchf(char* fmt, ...);
 //~ rjf: @os_hooks System/Process Info (Implemented Per-OS)
 
 static OS_SystemInfo*
-os_get_system_info(void);
+OS_GetSystemInfo(void);
 static OS_ProcessInfo*
 os_get_process_info(void);
 static String8
@@ -219,7 +219,7 @@ os_commit_large(void* ptr, U64 size);
 static U32
 os_tid(void);
 static void
-os_set_thread_name(String8 string);
+OS_SetThreadName(String8 string);
 
 ////////////////////////////////
 //~ rjf: @os_hooks Aborting (Implemented Per-OS)
@@ -332,7 +332,7 @@ os_process_detach(OS_Handle handle);
 static OS_Handle
 OS_ThreadLaunch(OS_ThreadFunctionType* func, void* ptr, void* params);
 static B32
-os_thread_join(OS_Handle handle, U64 endt_us);
+OS_ThreadJoin(OS_Handle handle, U64 endt_us);
 static void
 os_thread_detach(OS_Handle handle);
 

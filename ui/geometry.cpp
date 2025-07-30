@@ -64,7 +64,7 @@ CameraUpdate(Camera* camera, IO* input, DT_Time* time, VkExtent2D extent)
     camera->view_matrix =
         glm::lookAt(camera->position, camera->position + camera->view_dir, camera_up);
     camera->projection_matrix = glm::perspective(
-        glm::radians(camera->fov), (F32)((F32)extent.width / (F32)extent.height), 0.1f, 300.0f);
+        glm::radians(camera->fov), (F32)((F32)extent.width / (F32)extent.height), 0.1f, 1000.0f);
     camera->projection_matrix[1][1] *= -1.0f;
 }
 
