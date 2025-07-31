@@ -73,7 +73,7 @@ CommandBufferRecord(U32 image_index, U32 current_frame)
     barrier.newLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
     barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
     barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-    barrier.image = vk_ctx->swapchain_image_resources.data[image_index].image;
+    barrier.image = vk_ctx->swapchain_resources->image_resources.data[image_index].image;
     barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
     barrier.subresourceRange.baseMipLevel = 0;
     barrier.subresourceRange.levelCount = 1;
@@ -87,10 +87,11 @@ CommandBufferRecord(U32 image_index, U32 current_frame)
         VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, 0, 0, nullptr, 0, nullptr, 1, &barrier);
 
     DT_UpdateTime(time);
-    CameraUpdate(camera, ctx->io, ctx->time, vk_ctx->swapchain_extent);
-    wrapper::internal::CameraUniformBufferUpdate(
+    CameraUpdate(camera, ctx->io, ctx->time, vk_ctx->swapchain_resources->swapchain_extent);
+    wrapper::CameraUniformBufferUpdate(
         vk_ctx, camera,
-        Vec2F32{(F32)vk_ctx->swapchain_extent.width, (F32)vk_ctx->swapchain_extent.height},
+        Vec2F32{(F32)vk_ctx->swapchain_resources->swapchain_extent.width,
+                (F32)vk_ctx->swapchain_resources->swapchain_extent.height},
         current_frame);
     city::CityUpdate(ctx->city, vk_ctx, image_index, ctx->shader_path);
 
@@ -102,7 +103,7 @@ CommandBufferRecord(U32 image_index, U32 current_frame)
     barrier.newLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
     barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
     barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-    barrier.image = vk_ctx->swapchain_image_resources.data[image_index].image;
+    barrier.image = vk_ctx->swapchain_resources->image_resources.data[image_index].image;
     barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
     barrier.subresourceRange.baseMipLevel = 0;
     barrier.subresourceRange.levelCount = 1;
@@ -168,16 +169,17 @@ MainLoop(void* ptr)
         }
 
         uint32_t imageIndex;
-        VkResult result =
-            vkAcquireNextImageKHR(vk_ctx->device, vk_ctx->swapchain, UINT64_MAX,
-                                  vk_ctx->image_available_semaphores.data[vk_ctx->current_frame],
-                                  VK_NULL_HANDLE, &imageIndex);
+        VkResult result = vkAcquireNextImageKHR(
+            vk_ctx->device, vk_ctx->swapchain_resources->swapchain, UINT64_MAX,
+            vk_ctx->image_available_semaphores.data[vk_ctx->current_frame], VK_NULL_HANDLE,
+            &imageIndex);
 
         if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR ||
             vk_ctx->framebuffer_resized)
         {
             vk_ctx->framebuffer_resized = false;
             VK_RecreateSwapChain(io_ctx, vk_ctx);
+            vk_ctx->current_frame = (vk_ctx->current_frame + 1) % vk_ctx->MAX_FRAMES_IN_FLIGHT;
             continue;
         }
         else if (result != VK_SUCCESS)
@@ -215,7 +217,7 @@ MainLoop(void* ptr)
         presentInfo.waitSemaphoreCount = 1;
         presentInfo.pWaitSemaphores = signalSemaphores;
 
-        VkSwapchainKHR swapChains[] = {vk_ctx->swapchain};
+        VkSwapchainKHR swapChains[] = {vk_ctx->swapchain_resources->swapchain};
         presentInfo.swapchainCount = 1;
         presentInfo.pSwapchains = swapChains;
         presentInfo.pImageIndices = &imageIndex;

@@ -80,7 +80,8 @@ ContextCreate()
     //~mgj: City Creation
     city::CityCreate(ctx, ctx->city);
     city::RoadsBuild(ctx->city->arena, ctx->city);
-
+    ctx->city->w_road = wrapper::RoadCreate(ctx->thread_info->msg_queue, ctx->vk_ctx,
+                                            &ctx->city->road, ctx->shader_path, ctx->texture_path);
     return ctx;
 }
 

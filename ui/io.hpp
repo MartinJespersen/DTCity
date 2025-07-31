@@ -6,6 +6,9 @@ struct IO
     F32 mouse_sensitivity;
     B32 is_cursor_inside_win;
 
+    S32 framebuffer_width;
+    S32 framebuffer_height;
+
     F64 scroll_x;
     F64 scroll_y;
     B32 w_btn_clicked;

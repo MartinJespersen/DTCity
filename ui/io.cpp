@@ -74,6 +74,17 @@ IO_InputStateUpdate(IO* input)
         input->mouse_pos_cur.x >= 0 && input->mouse_pos_cur.x < input->window_size.x &&
         input->mouse_pos_cur.y >= 0 && input->mouse_pos_cur.y < input->window_size.y;
     input->is_window_focused = glfwGetWindowAttrib(input->window, GLFW_FOCUSED) == GLFW_TRUE;
+
+    // framebuffer update
+    S32 framebuffer_width = 0;
+    S32 framebuffer_height = 0;
+    glfwGetFramebufferSize(input->window, &framebuffer_width, &framebuffer_height);
+
+    if (framebuffer_width != 0 && framebuffer_height != 0)
+    {
+        input->framebuffer_width = framebuffer_width;
+        input->framebuffer_height = framebuffer_height;
+    }
 }
 
 static void

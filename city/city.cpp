@@ -9,9 +9,6 @@ CityCreate(Context* ctx, City* city)
     city->w_road = PushStruct(city->arena, wrapper::Road);
     city->road.road_height = 10.0f;
     city->road.default_road_width = 3.0f;
-
-    city->w_road = wrapper::RoadCreate(ctx->thread_info->msg_queue, ctx->vk_ctx, &city->road,
-                                       ctx->shader_path, ctx->texture_path);
 }
 
 static void
