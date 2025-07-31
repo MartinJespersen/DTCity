@@ -203,7 +203,7 @@ VkBufferFromBuffers(VulkanContext* vk_ctx, BufferContext* vk_buffer_ctx, Buffer<
 
 template <typename T>
 static void
-VkBufferFromBufferMapping(VulkanContext* vk_ctx, BufferContext* vk_buffer_ctx, Buffer<T> buffer,
+VkBufferFromBufferMapping(VmaAllocator allocator, BufferContext* vk_buffer_ctx, Buffer<T> buffer,
                           VkBufferUsageFlags usage);
 
 static QueueFamilyIndices
@@ -277,13 +277,13 @@ struct Road
     VkDescriptorSetLayout descriptor_set_layout;
     Buffer<VkDescriptorSet> descriptor_sets;
     B32 descriptors_are_created;
+    String8 road_texture_path;
 };
 
 struct AssetStoreTexture
 {
     AssetStoreTexture* next;
     U64 id;
-    B32 in_progress;
     B32 is_loaded;
     Texture asset;
 };
@@ -291,20 +291,26 @@ struct AssetStoreTexture
 struct TextureCreateInput
 {
     VulkanContext* vk_ctx;
-    String8 texture_path;
-    String8 shader_path;
     Road* w_road;
+};
+
+struct RoadDescriptorCreateInfo
+{
+    VulkanContext* vk_ctx;
     city::Road* road;
+    Road* w_road;
 };
 
 typedef void(TextureCreateFunc)(VkCommandPool cmd_pool, VkFence fence, TextureCreateInput* input,
                                 Texture* texture);
 
-struct TextureThreadInput
+struct RoadThreadInput
 {
     AssetStoreTexture* asset_store_texture;
-    TextureCreateFunc* func;
-    TextureCreateInput* input;
+
+    TextureCreateFunc* texture_func;
+    TextureCreateInput* texture_input;
+
     Buffer<VkCommandPool> cmd_pools;
     Buffer<VkFence> fences;
 };
@@ -322,6 +328,7 @@ struct AssetStore
     Buffer<AssetStoreItemStateList> hashmap;
     Buffer<VkCommandPool> cmd_pools;
     Buffer<VkFence> fences;
+    Buffer<VkDescriptorPool> descriptor_pools;
     AssetStoreTexture* free_list;
     U64 total_size;
     U64 used_size;
@@ -344,6 +351,9 @@ struct VulkanContext
     static const U8 enable_validation_layers = 1;
 #endif
     Arena* arena;
+
+    String8 texture_path;
+    String8 shader_path;
 
     Buffer<String8> validation_layers;
     Buffer<String8> device_extensions;
@@ -407,9 +417,11 @@ AssetStoreTextureThreadMain(async::ThreadInfo thread_info, void* data);
 static AssetStoreTexture*
 AssetStoreTextureGetSlot(AssetStore* asset_store, U64 texture_id);
 // ~mgj: road function
+static void
+RoadDescriptorCreate(VkDescriptorPool desc_pool, RoadDescriptorCreateInfo* info, Texture* texture);
+
 static Road*
-RoadCreate(async::Queue* work_queue, VulkanContext* vk_ctx, city::Road* road, String8 shader_path,
-           String8 texture_path);
+RoadCreate(async::Queue* work_queue, VulkanContext* vk_ctx, city::Road* road);
 static void
 RoadUpdate(city::Road* road, Road* w_road, VulkanContext* vk_ctx, U32 image_index,
            String8 shader_path);
@@ -511,7 +523,7 @@ static void
 VK_EndSingleTimeCommands(VulkanContext* vk_ctx, VkCommandPool cmd_pool,
                          VkCommandBuffer command_buffer, VkFence fence);
 static VulkanContext*
-VK_VulkanInit(Arena* arena, Context* ctx);
+VK_VulkanInit(Context* ctx);
 static void
 VK_Cleanup(VulkanContext* vk_ctx);
 
@@ -526,7 +538,7 @@ ThreadedGraphicsQueueSubmit(GraphicsQueue graphics_queue, VkSubmitInfo* info, Vk
 // ~mgj: texture functions
 static void
 TextureCreate(VkCommandPool cmd_pool, VkFence fence, TextureCreateInput* thread_input,
-              Texture* texture);
+              Texture* asset_store_texture);
 static void
 TextureDestroy(VulkanContext* vk_ctx, Texture* texture);
 
@@ -536,7 +548,8 @@ RoadPipelineCreate(Road* road, String8 shader_path);
 static VkDescriptorSetLayout
 RoadDescriptorSetLayoutCreate(VkDevice device, Road* road);
 static void
-RoadDescriptorSetCreate(VulkanContext* vk_ctx, Texture* texture, Road* road, U32 frames_in_flight);
+RoadDescriptorSetCreate(VkDevice device, VkDescriptorPool desc_pool, Texture* texture, Road* road,
+                        U32 frames_in_flight);
 // ~mgj: Descriptor Related Functions
 //
 

@@ -60,8 +60,6 @@ ContextCreate()
 
     ctx->cwd = Str8PathFromStr8List(app_arena,
                                     {OS_GetCurrentPath(scratch.arena), S(".."), S(".."), S("..")});
-    ctx->texture_path = Str8PathFromStr8List(app_arena, {ctx->cwd, S("textures")});
-    ctx->shader_path = Str8PathFromStr8List(app_arena, {ctx->cwd, S("shaders")});
 
     GlobalContextSet(ctx);
     InitWindow(ctx);
@@ -71,17 +69,12 @@ ContextCreate()
     U32 queue_size = 10; // TODO: should be increased
     ctx->thread_info = async::WorkerThreadsCreate(app_arena, thread_count, queue_size);
 
-    ctx->vk_ctx = wrapper::VK_VulkanInit(app_arena, ctx);
+    ctx->vk_ctx = wrapper::VK_VulkanInit(ctx);
     CameraInit(ctx->camera);
     ProfileBuffersCreate(ctx->vk_ctx, ctx->profilingContext);
 
     HTTP_Init();
 
-    //~mgj: City Creation
-    city::CityCreate(ctx, ctx->city);
-    city::RoadsBuild(ctx->city->arena, ctx->city);
-    ctx->city->w_road = wrapper::RoadCreate(ctx->thread_info->msg_queue, ctx->vk_ctx,
-                                            &ctx->city->road, ctx->shader_path, ctx->texture_path);
     return ctx;
 }
 
@@ -104,6 +97,13 @@ void
 App(HotReloadFunc HotReload)
 {
     Context* ctx = ContextCreate();
+
+    wrapper::VulkanContext* vk_ctx = ctx->vk_ctx;
+    //~mgj: City Creation
+    city::CityCreate(ctx, ctx->city);
+    city::RoadsBuild(ctx->city->arena, ctx->city);
+    ctx->city->w_road =
+        wrapper::RoadCreate(ctx->thread_info->msg_queue, ctx->vk_ctx, &ctx->city->road);
 
     while (!glfwWindowShouldClose(ctx->io->window))
     {

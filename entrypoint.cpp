@@ -93,7 +93,7 @@ CommandBufferRecord(U32 image_index, U32 current_frame)
         Vec2F32{(F32)vk_ctx->swapchain_resources->swapchain_extent.width,
                 (F32)vk_ctx->swapchain_resources->swapchain_extent.height},
         current_frame);
-    city::CityUpdate(ctx->city, vk_ctx, image_index, ctx->shader_path);
+    city::CityUpdate(ctx->city, vk_ctx, image_index, vk_ctx->shader_path);
 
     // ~mgj: transition swapchain image layout from VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL to
     // VK_IMAGE_LAYOUT_PRESENT_SRC_KHR

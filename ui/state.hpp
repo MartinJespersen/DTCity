@@ -34,8 +34,6 @@ struct Context
 {
     B32 running;
     String8 cwd;
-    String8 texture_path;
-    String8 shader_path;
 
     DllInfo* dll_info;
 

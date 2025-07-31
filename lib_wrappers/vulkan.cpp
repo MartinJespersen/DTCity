@@ -73,41 +73,34 @@ AssetStoreTextureGetSlot(AssetStore* asset_store, U64 texture_id)
 }
 
 static void
-AssetStoreTextureLoadAsync(AssetStore* asset_store, AssetStoreTexture* texture,
-                           VulkanContext* vk_ctx, String8 texture_path, String8 shader_path,
-                           Road* w_road, city::Road* road)
+AssetStoreRoadResourceLoadAsync(AssetStore* asset_store, AssetStoreTexture* texture,
+                                VulkanContext* vk_ctx, String8 shader_path, Road* w_road,
+                                city::Road* road)
 {
     TextureCreateInput* input = PushStruct(asset_store->arena, TextureCreateInput);
-    input->texture_path = PushStr8Copy(asset_store->arena, texture_path);
     input->vk_ctx = vk_ctx;
-    input->shader_path = shader_path;
     input->w_road = w_road;
-    input->road = road;
 
-    TextureThreadInput* thread_input = PushStruct(asset_store->arena, TextureThreadInput);
+    RoadThreadInput* thread_input = PushStruct(asset_store->arena, RoadThreadInput);
     thread_input->asset_store_texture = texture;
-    thread_input->input = input;
-    thread_input->func = TextureCreate;
+    thread_input->texture_input = input;
+    thread_input->texture_func = TextureCreate;
     thread_input->cmd_pools = asset_store->cmd_pools;
     thread_input->fences = asset_store->fences;
 
-    // async::QueuePush(asset_store->work_queue, thread_input, AssetStoreTextureThreadMain);
-    async::ThreadInfo thread_info;
-    thread_info.thread_id = 0;
-    thread_info.queue = NULL;
-    AssetStoreTextureThreadMain(thread_info, thread_input);
+    async::QueuePush(asset_store->work_queue, thread_input, AssetStoreTextureThreadMain);
 }
 
 static void
 AssetStoreTextureThreadMain(async::ThreadInfo thread_info, void* data)
 {
-    TextureThreadInput* input = (TextureThreadInput*)data;
+    RoadThreadInput* input = (RoadThreadInput*)data;
     AssetStoreTexture* item = input->asset_store_texture;
     item->is_loaded = 0;
-    item->in_progress = 1;
-    input->func(input->cmd_pools.data[thread_info.thread_id],
-                input->fences.data[thread_info.thread_id], input->input, &item->asset);
-    item->in_progress = 0;
+    input->texture_func(input->cmd_pools.data[thread_info.thread_id],
+                        input->fences.data[thread_info.thread_id], input->texture_input,
+                        &item->asset);
+
     item->is_loaded = 1;
 }
 // TODO: check for blitting format beforehand
@@ -116,7 +109,7 @@ TextureCreate(VkCommandPool cmd_pool, VkFence fence, TextureCreateInput* input, 
 {
     ScratchScope scratch = ScratchScope(0, 0);
     VulkanContext* vk_ctx = input->vk_ctx;
-    String8 texture_path = input->texture_path;
+    String8 texture_path = input->w_road->road_texture_path;
 
     S32 tex_width, tex_height, tex_channels;
     stbi_uc* pixels =
@@ -182,17 +175,17 @@ TextureCreate(VkCommandPool cmd_pool, VkFence fence, TextureCreateInput* input, 
     texture->width = tex_width;
     texture->height = tex_height;
     texture->mip_level_count = mip_level;
+}
 
-    input->w_road->descriptor_set_layout =
-        RoadDescriptorSetLayoutCreate(vk_ctx->device, input->w_road);
-    RoadDescriptorSetCreate(vk_ctx, texture, input->w_road, vk_ctx->MAX_FRAMES_IN_FLIGHT);
+static void
+RoadDescriptorCreate(VkDescriptorPool desc_pool, RoadDescriptorCreateInfo* info, Texture* texture)
+{
+    info->w_road->descriptor_set_layout =
+        RoadDescriptorSetLayoutCreate(info->vk_ctx->device, info->w_road);
+    RoadDescriptorSetCreate(info->vk_ctx->device, desc_pool, texture, info->w_road,
+                            info->vk_ctx->MAX_FRAMES_IN_FLIGHT);
 
-    RoadPipelineCreate(input->w_road, input->shader_path);
-
-    // TODO: this should be mapped to GPU memory (DEVICE_LOCAL)
-    VkBufferFromBufferMapping<city::RoadVertex>(vk_ctx, &input->w_road->vertex_buffer,
-                                                input->road->vertex_buffer,
-                                                VK_BUFFER_USAGE_VERTEX_BUFFER_BIT);
+    RoadPipelineCreate(info->w_road, info->vk_ctx->shader_path);
 }
 
 static void
@@ -302,7 +295,8 @@ RoadDescriptorSetLayoutCreate(VkDevice device, Road* road)
 }
 
 static void
-RoadDescriptorSetCreate(VulkanContext* vk_ctx, Texture* texture, Road* road, U32 frames_in_flight)
+RoadDescriptorSetCreate(VkDevice device, VkDescriptorPool desc_pool, Texture* texture, Road* road,
+                        U32 frames_in_flight)
 {
     ScratchScope scratch = ScratchScope(0, 0);
     Buffer<VkDescriptorSetLayout> layouts =
@@ -315,12 +309,12 @@ RoadDescriptorSetCreate(VulkanContext* vk_ctx, Texture* texture, Road* road, U32
 
     VkDescriptorSetAllocateInfo allocInfo{};
     allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
-    allocInfo.descriptorPool = vk_ctx->descriptor_pool;
+    allocInfo.descriptorPool = desc_pool;
     allocInfo.descriptorSetCount = layouts.size;
     allocInfo.pSetLayouts = layouts.data;
 
     Buffer<VkDescriptorSet> desc_sets = BufferAlloc<VkDescriptorSet>(road->arena, layouts.size);
-    if (vkAllocateDescriptorSets(vk_ctx->device, &allocInfo, desc_sets.data) != VK_SUCCESS)
+    if (vkAllocateDescriptorSets(device, &allocInfo, desc_sets.data) != VK_SUCCESS)
     {
         exitWithError("RoadDescriptorSetCreate: failed to allocate descriptor sets!");
     }
@@ -343,15 +337,14 @@ RoadDescriptorSetCreate(VulkanContext* vk_ctx, Texture* texture, Road* road, U32
 
         VkWriteDescriptorSet descriptors[] = {texture_sampler_desc};
 
-        vkUpdateDescriptorSets(vk_ctx->device, ArrayCount(descriptors), descriptors, 0, nullptr);
+        vkUpdateDescriptorSets(device, ArrayCount(descriptors), descriptors, 0, nullptr);
     }
 
     road->descriptor_sets = desc_sets;
 }
 
 static Road*
-RoadCreate(async::Queue* work_queue, VulkanContext* vk_ctx, city::Road* road, String8 shader_path,
-           String8 texture_path)
+RoadCreate(async::Queue* work_queue, VulkanContext* vk_ctx, city::Road* road)
 {
     ScratchScope scratch = ScratchScope(0, 0);
     Arena* road_arena = ArenaAlloc();
@@ -362,14 +355,14 @@ RoadCreate(async::Queue* work_queue, VulkanContext* vk_ctx, city::Road* road, St
     w_road->descriptor_sets =
         BufferAlloc<VkDescriptorSet>(w_road->arena, vk_ctx->MAX_FRAMES_IN_FLIGHT);
 
-    String8 texture_path_with_name =
-        Str8PathFromStr8List(scratch.arena, {texture_path, S("road_texture.jpg")});
+    w_road->road_texture_path =
+        Str8PathFromStr8List(scratch.arena, {vk_ctx->texture_path, S("road_texture.jpg")});
 
     AssetStoreTexture* asset_item_state =
         AssetStoreTextureGetSlot(vk_ctx->asset_store, w_road->texture_id);
 
-    AssetStoreTextureLoadAsync(vk_ctx->asset_store, asset_item_state, vk_ctx,
-                               texture_path_with_name, shader_path, w_road, road);
+    AssetStoreRoadResourceLoadAsync(vk_ctx->asset_store, asset_item_state, vk_ctx,
+                                    vk_ctx->shader_path, w_road, road);
 
     return w_road;
 }
@@ -402,8 +395,19 @@ RoadUpdate(city::Road* road, Road* w_road, wrapper::VulkanContext* vk_ctx, U32 i
     AssetStoreTexture* texture_state =
         AssetStoreTextureGetSlot(vk_ctx->asset_store, w_road->texture_id);
 
-    if (texture_state->is_loaded)
+    if (texture_state->is_loaded && !w_road->descriptors_are_created)
     {
+        RoadDescriptorCreateInfo desc_info = {.vk_ctx = vk_ctx, .road = road, .w_road = w_road};
+        RoadDescriptorCreate(vk_ctx->descriptor_pool, &desc_info, &texture_state->asset);
+        w_road->descriptors_are_created = 1;
+    }
+
+    if (texture_state->is_loaded && w_road->descriptors_are_created)
+    {
+        // TODO: this should be mapped to GPU memory (DEVICE_LOCAL)
+        VkBufferFromBufferMapping<city::RoadVertex>(vk_ctx->allocator, &w_road->vertex_buffer,
+                                                    road->vertex_buffer,
+                                                    VK_BUFFER_USAGE_VERTEX_BUFFER_BIT);
         RoadRenderPass(vk_ctx, w_road, road, image_index);
     }
 }
@@ -1159,13 +1163,18 @@ VK_CommandBuffersCreate(VulkanContext* vk_ctx)
 }
 
 static VulkanContext*
-VK_VulkanInit(Arena* arena, Context* ctx)
+VK_VulkanInit(Context* ctx)
 {
-    VulkanContext* vk_ctx = PushStruct(arena, VulkanContext);
     IO* io_ctx = ctx->io;
 
     Temp scratch = ScratchBegin(0, 0);
-    vk_ctx->arena = ArenaAlloc();
+
+    Arena* arena = ArenaAlloc();
+
+    VulkanContext* vk_ctx = PushStruct(arena, VulkanContext);
+    vk_ctx->arena = arena;
+    vk_ctx->texture_path = Str8PathFromStr8List(arena, {ctx->cwd, S("textures")});
+    vk_ctx->shader_path = Str8PathFromStr8List(arena, {ctx->cwd, S("shaders")});
 
     static const U32 MAX_FRAMES_IN_FLIGHT = 2;
 
@@ -1543,7 +1552,7 @@ VkBufferFromBuffers(VulkanContext* vk_ctx, BufferContext* vk_buffer_ctx, Buffer<
 
 template <typename T>
 static void
-VkBufferFromBufferMapping(VulkanContext* vk_ctx, BufferContext* vk_buffer_ctx, Buffer<T> buffer,
+VkBufferFromBufferMapping(VmaAllocator allocator, BufferContext* vk_buffer_ctx, Buffer<T> buffer,
                           VkBufferUsageFlags usage)
 {
     // calculate number of vertices
@@ -1554,7 +1563,7 @@ VkBufferFromBufferMapping(VulkanContext* vk_ctx, BufferContext* vk_buffer_ctx, B
         VkDeviceSize buffer_byte_size = sizeof(T) * total_buffer_size;
         if (total_buffer_size > vk_buffer_ctx->capacity)
         {
-            BufferContextDestroy(vk_ctx->allocator, vk_buffer_ctx);
+            BufferContextDestroy(allocator, vk_buffer_ctx);
 
             VmaAllocationCreateInfo vma_info = {0};
             vma_info.usage = VMA_MEMORY_USAGE_AUTO;
@@ -1563,14 +1572,13 @@ VkBufferFromBufferMapping(VulkanContext* vk_ctx, BufferContext* vk_buffer_ctx, B
             vma_info.requiredFlags = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT;
 
             vk_buffer_ctx->buffer_alloc =
-                BufferAllocationCreate(vk_ctx->allocator, buffer_byte_size, usage, vma_info);
+                BufferAllocationCreate(allocator, buffer_byte_size, usage, vma_info);
 
             vk_buffer_ctx->capacity = total_buffer_size;
         }
         vk_buffer_ctx->size = total_buffer_size;
 
-        vmaCopyMemoryToAllocation(vk_ctx->allocator, buffer.data,
-                                  vk_buffer_ctx->buffer_alloc.allocation, 0,
+        vmaCopyMemoryToAllocation(allocator, buffer.data, vk_buffer_ctx->buffer_alloc.allocation, 0,
                                   total_buffer_size * sizeof(T));
     }
 }

@@ -34,7 +34,6 @@ if not exist "%debug_dir%" mkdir "%debug_dir%"
 if exist %exec_full_path% del %exec_full_path%
 
 copy %glfw_dll_path% %debug_dir%
-::/fsanitize=address
 :: Compile main executable
 cl /D_USRDLL /D_WINDLL %entrypoint_file_name% %cxxflags%  %include_dirs% /nologo /link /DLL /OUT:%dll_full_path% %link_dirs% %link_libs% %link_flags% /INCREMENTAL:NO /noexp
-cl %main_file_name% %tracy_src% /Fe"%exec_full_path%"  %cxxflags%  %include_dirs% /DBUILD_CONSOLE_INTERFACE /nologo /link %link_dirs% %link_libs% %link_flags% /INCREMENTAL:NO /noexp
+cl /fsanitize=address %main_file_name% %tracy_src% /Fe"%exec_full_path%"  %cxxflags%  %include_dirs% /DBUILD_CONSOLE_INTERFACE /nologo /link %link_dirs% %link_libs% %link_flags% /INCREMENTAL:NO /noexp

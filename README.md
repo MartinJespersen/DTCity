@@ -2,7 +2,8 @@
 * Device loss happens during swapchain recreation on AMD integrated graphics hardware
 # Things to do:
 
-* Move vulkan helpers to lib_wrappers and refactor to function as a wrapper
+* Asset Store is currently not thread safe for eviction cases and memory needs to be managed properly.
+  * When asset getting evicted we have to make sure no other threads are using the resource.
 * Linux support:
   * entrypoint caller currently implemented for windows should change to linux.
   * HTTP client implementation improvements on linux (move away from httplib)
