@@ -875,6 +875,8 @@ VK_PhysicalDevicePick(VulkanContext* vk_ctx)
             VkPhysicalDeviceProperties properties{};
             vkGetPhysicalDeviceProperties(devices[i], &properties);
 
+            printf("Name of device: %s\nDevice Type: %d\n", properties.deviceName,
+                   properties.deviceType);
             vk_ctx->physical_device = devices[i];
             vk_ctx->physical_device_properties = properties;
             vk_ctx->msaa_samples = VK_MaxUsableSampleCountGet(devices[i]);
@@ -2274,11 +2276,6 @@ VK_SwapChainCreate(VulkanContext* vk_ctx, IO* io_ctx)
     VkSurfaceFormatKHR surface_format = VK_ChooseSwapSurfaceFormat(swapchain_details.formats);
     VkPresentModeKHR present_mode = VK_ChooseSwapPresentMode(swapchain_details.presentModes);
     VkExtent2D swapchain_extent = VK_ChooseSwapExtent(io_ctx, swapchain_details.capabilities);
-
-    if (swapchain_extent.width > 2000 || swapchain_extent.height > 2000)
-    {
-        exitWithError("this should not be possible");
-    }
 
     U32 imageCount = swapchain_details.capabilities.minImageCount + 1;
 

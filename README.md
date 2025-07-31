@@ -1,3 +1,5 @@
+# Problems:
+* Device loss happens during swapchain recreation on AMD integrated graphics hardware
 # Things to do:
 
 * Move vulkan helpers to lib_wrappers and refactor to function as a wrapper
