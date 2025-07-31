@@ -1,9 +1,14 @@
 # Problems:
+* ASAN notice leak when freeing depth buffer with at swapchain recreation, but it only happens sometimes.
+ * AddressSanitizer: attempting free on address which was not malloc()
+
 * Device loss happens during swapchain recreation on AMD integrated graphics hardware
+
 # Things to do:
 
 * Asset Store is currently not thread safe for eviction cases and memory needs to be managed properly.
   * When asset getting evicted we have to make sure no other threads are using the resource.
+
 * Linux support:
   * entrypoint caller currently implemented for windows should change to linux.
   * HTTP client implementation improvements on linux (move away from httplib)
