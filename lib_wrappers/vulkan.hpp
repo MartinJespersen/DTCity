@@ -26,6 +26,12 @@ struct BufferAllocation
     VkDeviceSize size;
 };
 
+template <typename T> struct BufferInfo
+{
+    BufferAllocation buffer_alloc;
+    Buffer<T> buffer;
+};
+
 struct BufferAllocationMapped
 {
     BufferAllocation buffer_alloc;
@@ -140,6 +146,52 @@ struct CameraUniformBuffer
     glm::vec2 viewport_dim;
 };
 
+struct PipelineInfo
+{
+    VkPipeline pipeline;
+    VkPipelineLayout pipeline_layout;
+};
+
+struct CarInstance
+{
+    glm::vec4 row0;
+    glm::vec4 row1;
+    glm::vec4 row2;
+    glm::vec4 row3;
+};
+
+struct CarVertex
+{
+    F32 position[3];
+    F32 uv[2];
+};
+
+struct Texture
+{
+    ImageResource image_resource;
+    VkSampler sampler;
+    S32 width;
+    S32 height;
+    U32 mip_level_count;
+};
+
+struct Car
+{
+    PipelineInfo pipeline_info;
+    BufferInfo<CarVertex> vertex_buffer_info;
+    BufferInfo<U32> index_buffer_info;
+    Buffer<CarInstance> car_instances; // each car has this.
+    BufferContext instance_buffer_mapped;
+    Texture* texture;
+    VkDescriptorSetLayout descriptor_set_layout;
+    Buffer<VkDescriptorSet> descriptor_sets;
+};
+
+static PipelineInfo
+CarPipelineCreate(VulkanContext* vk_ctx, VkDescriptorSetLayout layout);
+
+static void
+CarRendering(VulkanContext* vk_ctx, Car* car, U32 image_idx);
 // ~mgj: Buffers helpers
 //
 // buffer usage patterns with VMA:
@@ -152,13 +204,16 @@ BufferMappedUpdate(VkCommandBuffer cmd_buffer, VmaAllocator allocator,
                    BufferAllocationMapped mapped_buffer);
 
 static BufferAllocationMapped
-BufferMappedCreate(VkCommandBuffer cmd_buffer, VmaAllocator allocator, VkDeviceSize size,
-                   VkBufferUsageFlags buffer_usage);
+BufferMappedCreate(VmaAllocator allocator, VkDeviceSize size, VkBufferUsageFlags buffer_usage);
 static void
 BufferDestroy(VmaAllocator allocator, BufferAllocation buffer_allocation);
 static void
 BufferMappedDestroy(VmaAllocator allocator, BufferAllocationMapped* mapped_buffer);
 
+template <typename T>
+static BufferAllocation
+BufferUploadDevice(VkFence fence, VkCommandPool cmd_pool, VulkanContext* vk_ctx,
+                   Buffer<T> buffer_host, VkBufferUsageFlagBits usage);
 // ~mgj: Images
 static ImageAllocation
 ImageAllocationCreate(VmaAllocator allocator, U32 width, U32 height,
@@ -188,9 +243,6 @@ static U32
 VK_SwapChainImageCountGet(VkDevice device, SwapchainResources* swapchain_resources);
 static SwapchainResources*
 VK_SwapChainCreate(VulkanContext* vk_ctx, IO* io_ctx);
-
-static void
-DescriptorPoolCreate(VulkanContext* vk_ctx);
 
 static ShaderModuleInfo
 ShaderStageFromSpirv(Arena* arena, VkDevice device, VkShaderStageFlagBits flag, String8 path);
@@ -254,18 +306,15 @@ static VkSampler
 SamplerCreate(VkDevice device, VkFilter filter, VkSamplerMipmapMode mipmap_mode,
               U32 mip_level_count, F32 max_anisotrophy);
 // ~mgj: Descriptor Related Functions
+static void
+DescriptorPoolCreate(VulkanContext* vk_ctx);
+static Buffer<VkDescriptorSet>
+DescriptorSetCreate(Arena* arena, VkDevice device, VkDescriptorPool desc_pool,
+                    VkDescriptorSetLayout desc_set_layout, Texture* texture, U32 frames_in_flight);
+
 static VkDescriptorSetLayout
 DescriptorSetLayoutCreate(VkDevice device, VkDescriptorSetLayoutBinding* bindings,
                           U32 binding_count);
-
-struct Texture
-{
-    ImageResource image_resource;
-    VkSampler sampler;
-    S32 width;
-    S32 height;
-    U32 mip_level_count;
-};
 
 struct Road
 {
@@ -395,6 +444,9 @@ struct VulkanContext
     BufferAllocationMapped camera_buffer_alloc_mapped[MAX_FRAMES_IN_FLIGHT];
     VkDescriptorSetLayout camera_descriptor_set_layout;
     VkDescriptorSet camera_descriptor_sets[MAX_FRAMES_IN_FLIGHT];
+
+    // ~mgj: Car (move this!)
+    Car* car;
 
     // ~mgj: Asset Streaming
     AssetStore* asset_store;

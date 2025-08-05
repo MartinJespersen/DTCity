@@ -59,9 +59,10 @@ static Arena *ArenaAlloc(ArenaParams *params) {
 }
 
 static Arena *ArenaAlloc() {
-  ArenaParams arena_params = {.reserve_size = arena_default_reserve_size,
-                              .commit_size = arena_default_commit_size,
-                              .flags = arena_default_flags};
+  ArenaParams arena_params = {};
+  arena_params.reserve_size = arena_default_reserve_size;
+  arena_params.commit_size = arena_default_commit_size;
+  arena_params.flags = arena_default_flags;
   return ArenaAlloc(&arena_params);
 }
 

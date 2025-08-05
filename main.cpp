@@ -98,7 +98,6 @@ App(HotReloadFunc HotReload)
 {
     Context* ctx = ContextCreate();
 
-    wrapper::VulkanContext* vk_ctx = ctx->vk_ctx;
     //~mgj: City Creation
     city::CityCreate(ctx, ctx->city);
     city::RoadsBuild(ctx->city->arena, ctx->city);
