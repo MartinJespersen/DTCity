@@ -72,6 +72,7 @@ ContextCreate()
     ctx->vk_ctx = wrapper::VK_VulkanInit(ctx);
     CameraInit(ctx->camera);
     ProfileBuffersCreate(ctx->vk_ctx, ctx->profilingContext);
+    ctx->car = wrapper::CarCreate(ctx->vk_ctx);
 
     HTTP_Init();
 
@@ -87,6 +88,7 @@ ContextDestroy(Context* ctx)
     }
 
     city::CityDestroy(ctx->city, ctx->vk_ctx);
+    wrapper::CarDestroy(ctx->vk_ctx, ctx->car);
     wrapper::VK_Cleanup(ctx->vk_ctx);
 
     glfwDestroyWindow(ctx->io->window);

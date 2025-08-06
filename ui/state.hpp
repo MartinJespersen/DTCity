@@ -45,6 +45,7 @@ struct Context
     ui::Camera* camera;
     DT_Time* time;
     city::City* city;
+    wrapper::Car* car;
 
     async::Threads* thread_info;
     // TODO: change this. moves os global state for use in DLL

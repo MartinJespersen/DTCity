@@ -19,7 +19,7 @@ set "cxxflags=/W0 /std:c++20 /wd4201 /EHsc /Z7"
 set "include_dirs=/I. /I%vulkan_path%Include /I%lib_dir%glfw\include /I%lib_dir% /I%lib_dir%ktx\include"
 :: free typed is the debug lib
 
-set "link_libs=glfw3dll.lib vulkan-1.lib gdi32.lib"
+set "link_libs=glfw3dll.lib vulkan-1.lib gdi32.lib ktx_read.lib"
 set "link_flags=/ignore:4099 /MACHINE:X64"
 set "link_dirs=/LIBPATH:%glfw_lib_dir% /LIBPATH:%vulkan_path%Lib /LIBPATH:%ktx_lib_dir%"
 set "glfw_dll_path=%glfw_lib_dir%\glfw3.dll"
@@ -37,5 +37,5 @@ if exist %exec_full_path% del %exec_full_path%
 
 copy %glfw_dll_path% %debug_dir%
 :: Compile main executable
-cl /MD /fsanitize=address /D_USRDLL /D_WINDLL %entrypoint_file_name% %cxxflags%  %include_dirs% /nologo /link /DLL /OUT:%dll_full_path% %link_dirs% %link_libs% ktx_read.lib %link_flags% /INCREMENTAL:NO /noexp
+cl /MD /fsanitize=address /D_USRDLL /D_WINDLL %entrypoint_file_name% %cxxflags%  %include_dirs% /nologo /link /DLL /OUT:%dll_full_path% %link_dirs% %link_libs% %link_flags% /INCREMENTAL:NO /noexp
 cl /MD /fsanitize=address %main_file_name% %tracy_src% /Fe"%exec_full_path%"  %cxxflags%  %include_dirs% /DBUILD_CONSOLE_INTERFACE /nologo /link %link_dirs% %link_libs% %link_flags% /INCREMENTAL:NO /noexp
