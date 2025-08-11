@@ -10,8 +10,10 @@ struct Camera;
 }
 namespace city
 {
-struct City;
-}
+struct Road;
+struct CarSim;
+struct CarInstance;
+} // namespace city
 
 namespace wrapper
 {
@@ -24,28 +26,14 @@ struct CameraUniformBuffer
     glm::vec2 viewport_dim;
 };
 
-struct CarInstance
-{
-    glm::vec4 row0;
-    glm::vec4 row1;
-    glm::vec4 row2;
-    glm::vec4 row3;
-};
-
-struct CarVertex
-{
-    F32 position[3];
-    F32 uv[2];
-};
-
 struct Car
 {
     Arena* arena;
 
+    BufferAllocation vertex_buffer_alloc;
+    BufferAllocation index_buffer_alloc;
+
     PipelineInfo pipeline_info;
-    BufferInfo<CarVertex> vertex_buffer_info;
-    BufferInfo<U32> index_buffer_info;
-    Buffer<CarInstance> car_instances; // each car has this.
     BufferContext instance_buffer_mapped;
     Texture* texture;
     VkDescriptorSetLayout descriptor_set_layout;
@@ -178,15 +166,18 @@ struct VulkanContext
 };
 
 // ~mgj: Car functions
-static wrapper::Car*
-CarCreate(wrapper::VulkanContext* vk_ctx);
+static Car*
+CarCreate(VulkanContext* vk_ctx, CgltfSampler sampler, Buffer<city::CarVertex> vertex_buffer,
+          Buffer<U32> index_buffer);
 static void
 CarDestroy(wrapper::VulkanContext* vk_ctx, wrapper::Car* car);
+static void
+CarUpdate(VulkanContext* vk_ctx, Car* w_car, Buffer<city::CarInstance> instance_buffer);
 static PipelineInfo
 CarPipelineCreate(VulkanContext* vk_ctx, VkDescriptorSetLayout layout);
 
 static void
-CarRendering(VulkanContext* vk_ctx, Car* car, U32 image_idx);
+CarRendering(VulkanContext* vk_ctx, city::CarSim* car, U32 image_idx, U32 instance_count);
 
 //~mgj: camera functions
 static void
@@ -206,15 +197,14 @@ CameraDescriptorSetCreate(VulkanContext* vk_ctx);
 static void
 RoadDescriptorCreate(VkDescriptorPool desc_pool, RoadDescriptorCreateInfo* info, Texture* texture);
 static Road*
-RoadCreate(async::Queue* work_queue, VulkanContext* vk_ctx, city::Road* road);
+RoadCreate(VulkanContext* vk_ctx, city::Road* road);
 static void
-RoadUpdate(city::Road* road, Road* w_road, VulkanContext* vk_ctx, U32 image_index,
-           String8 shader_path);
+RoadUpdate(city::Road* road, VulkanContext* vk_ctx, U32 image_index, String8 shader_path);
 static void
 RoadTextureCreate(VkCommandPool cmd_pool, VkFence fence, RoadTextureCreateInput* thread_input,
                   Texture* asset_store_texture);
 static void
-RoadCleanup(city::City* city, VulkanContext* vk_ctx);
+RoadDestroy(city::Road* road, VulkanContext* vk_ctx);
 
 // ~mgj: Road Functions
 static void
@@ -229,7 +219,10 @@ static VkVertexInputBindingDescription
 RoadBindingDescriptionGet();
 static Buffer<VkVertexInputAttributeDescription>
 RoadAttributeDescriptionGet(Arena* arena);
-
+static void
+AssetStoreRoadResourceLoadAsync(AssetStore* asset_store, AssetStoreTexture* texture,
+                                VulkanContext* vk_ctx, String8 shader_path, Road* w_road,
+                                city::Road* road);
 //~mgj: Asset Store
 static AssetStore*
 AssetStoreCreate(VkDevice device, U32 queue_family_index, async::Threads* threads,
@@ -240,10 +233,7 @@ static void
 AssetStoreTextureThreadMain(async::ThreadInfo thread_info, void* data);
 static AssetStoreTexture*
 AssetStoreTextureGetSlot(AssetStore* asset_store, U64 texture_id);
-static void
-AssetStoreRoadResourceLoadAsync(AssetStore* asset_store, AssetStoreTexture* texture,
-                                VulkanContext* vk_ctx, String8 shader_path, Road* w_road,
-                                city::Road* road);
+
 // ~mgj: Vulkan Lifetime
 static VulkanContext*
 VK_VulkanInit(Context* ctx);

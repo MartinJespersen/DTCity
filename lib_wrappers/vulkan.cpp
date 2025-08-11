@@ -58,14 +58,14 @@ RoadTextureCreate(VkCommandPool cmd_pool, VkFence fence, RoadTextureCreateInput*
                               mip_level, vma_info);
 
     VkCommandBuffer command_buffer = VK_BeginSingleTimeCommands(vk_ctx->device, cmd_pool);
-    wrapper::ImageLayoutTransition(command_buffer, image_alloc.image, VK_FORMAT_R8G8B8A8_SRGB,
-                                   VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-                                   mip_level);
+    ImageLayoutTransition(command_buffer, image_alloc.image, VK_FORMAT_R8G8B8A8_SRGB,
+                          VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                          mip_level);
     ImageFromBufferCopy(command_buffer, texture_staging_buffer.buffer, image_alloc.image, tex_width,
                         tex_height);
-    wrapper::VK_GenerateMipmaps(command_buffer, image_alloc.image, tex_width, tex_height,
-                                mip_level); // TODO: mip maps are usually not generated at
-                                            // runtime.
+    VK_GenerateMipmaps(command_buffer, image_alloc.image, tex_width, tex_height,
+                       mip_level); // TODO: mip maps are usually not generated at
+                                   // runtime.
     // They are usually stored in the texture file
     VK_EndSingleTimeCommands(vk_ctx, cmd_pool, command_buffer, fence);
 
@@ -237,9 +237,8 @@ RoadDescriptorSetCreate(VkDevice device, VkDescriptorPool desc_pool, Texture* te
 }
 
 static Road*
-RoadCreate(async::Queue* work_queue, VulkanContext* vk_ctx, city::Road* road)
+RoadCreate(VulkanContext* vk_ctx, city::Road* road)
 {
-    ScratchScope scratch = ScratchScope(0, 0);
     Arena* road_arena = ArenaAlloc();
     Road* w_road = PushStruct(road_arena, Road);
     w_road->arena = road_arena;
@@ -249,7 +248,7 @@ RoadCreate(async::Queue* work_queue, VulkanContext* vk_ctx, city::Road* road)
         BufferAlloc<VkDescriptorSet>(w_road->arena, vk_ctx->MAX_FRAMES_IN_FLIGHT);
 
     w_road->road_texture_path =
-        Str8PathFromStr8List(scratch.arena, {vk_ctx->texture_path, S("road_texture.jpg")});
+        Str8PathFromStr8List(road->arena, {vk_ctx->texture_path, S("road_texture.jpg")});
 
     AssetStoreTexture* asset_item_state =
         AssetStoreTextureGetSlot(vk_ctx->asset_store, w_road->texture_id);
@@ -261,9 +260,9 @@ RoadCreate(async::Queue* work_queue, VulkanContext* vk_ctx, city::Road* road)
 }
 
 static void
-RoadCleanup(city::City* city, wrapper::VulkanContext* vk_ctx)
+RoadDestroy(city::Road* road, VulkanContext* vk_ctx)
 {
-    Road* w_road = city->w_road;
+    wrapper::Road* w_road = road->w_road;
     AssetStoreTexture* texture_state =
         AssetStoreTextureGetSlot(vk_ctx->asset_store, w_road->texture_id);
 
@@ -282,9 +281,9 @@ RoadCleanup(city::City* city, wrapper::VulkanContext* vk_ctx)
 }
 
 static void
-RoadUpdate(city::Road* road, Road* w_road, wrapper::VulkanContext* vk_ctx, U32 image_index,
-           String8 shader_path)
+RoadUpdate(city::Road* road, VulkanContext* vk_ctx, U32 image_index, String8 shader_path)
 {
+    wrapper::Road* w_road = road->w_road;
     AssetStoreTexture* texture_state =
         AssetStoreTextureGetSlot(vk_ctx->asset_store, w_road->texture_id);
 
@@ -306,247 +305,18 @@ RoadUpdate(city::Road* road, Road* w_road, wrapper::VulkanContext* vk_ctx, U32 i
 }
 
 // ~mgj: Car function
-#define CGLTF_IMPLEMENTATION
-#include "third_party/cgltf.h"
-
-static VkSamplerCreateInfo
-VkSamplerFromCgltfSampler(cgltf_filter_type min_filter, cgltf_filter_type mag_filter,
-                          cgltf_wrap_mode wrap_s, cgltf_wrap_mode wrap_t)
-{
-    VkFilter vk_min_filter = VK_FILTER_NEAREST;
-    VkFilter vk_mag_filter = VK_FILTER_NEAREST;
-    VkSamplerMipmapMode vk_mipmap_mode = VK_SAMPLER_MIPMAP_MODE_NEAREST;
-    VkSamplerAddressMode vk_address_mode_u = VK_SAMPLER_ADDRESS_MODE_REPEAT;
-    VkSamplerAddressMode vk_address_mode_v = VK_SAMPLER_ADDRESS_MODE_REPEAT;
-
-    switch (min_filter)
-    {
-    case cgltf_filter_type_nearest:
-    {
-        vk_min_filter = VK_FILTER_NEAREST;
-        vk_mag_filter = VK_FILTER_NEAREST;
-        vk_mipmap_mode = VK_SAMPLER_MIPMAP_MODE_NEAREST;
-    }
-    break;
-    case cgltf_filter_type_linear:
-    {
-        vk_min_filter = VK_FILTER_LINEAR;
-        vk_mag_filter = VK_FILTER_LINEAR;
-        vk_mipmap_mode = VK_SAMPLER_MIPMAP_MODE_NEAREST;
-    }
-    break;
-    case cgltf_filter_type_nearest_mipmap_nearest:
-    {
-        vk_min_filter = VK_FILTER_NEAREST;
-        vk_mag_filter = VK_FILTER_NEAREST;
-        vk_mipmap_mode = VK_SAMPLER_MIPMAP_MODE_NEAREST;
-    }
-    break;
-    case cgltf_filter_type_linear_mipmap_nearest:
-    {
-        vk_min_filter = VK_FILTER_LINEAR;
-        vk_mag_filter = VK_FILTER_LINEAR;
-        vk_mipmap_mode = VK_SAMPLER_MIPMAP_MODE_NEAREST;
-    }
-    break;
-    case cgltf_filter_type_nearest_mipmap_linear:
-    {
-        vk_min_filter = VK_FILTER_NEAREST;
-        vk_mag_filter = VK_FILTER_NEAREST;
-        vk_mipmap_mode = VK_SAMPLER_MIPMAP_MODE_LINEAR;
-    }
-    break;
-    case cgltf_filter_type_linear_mipmap_linear:
-    {
-        vk_min_filter = VK_FILTER_LINEAR;
-        vk_mag_filter = VK_FILTER_LINEAR;
-        vk_mipmap_mode = VK_SAMPLER_MIPMAP_MODE_NEAREST;
-    }
-    break;
-    }
-
-    if (mag_filter != min_filter)
-    {
-        switch (mag_filter)
-        {
-        case cgltf_filter_type_nearest_mipmap_nearest:
-        {
-            vk_mag_filter = VK_FILTER_NEAREST;
-        }
-        break;
-        case cgltf_filter_type_linear_mipmap_nearest:
-        {
-            vk_mag_filter = VK_FILTER_LINEAR;
-        }
-        break;
-        case cgltf_filter_type_nearest_mipmap_linear:
-        {
-            vk_mag_filter = VK_FILTER_NEAREST;
-        }
-        break;
-        case cgltf_filter_type_linear_mipmap_linear:
-        {
-            vk_mag_filter = VK_FILTER_LINEAR;
-        }
-        break;
-        case cgltf_filter_type_nearest:
-        {
-            vk_mag_filter = VK_FILTER_NEAREST;
-        }
-        break;
-        case cgltf_filter_type_linear:
-        {
-            vk_mag_filter = VK_FILTER_LINEAR;
-        }
-        break;
-
-            break;
-        }
-    }
-
-    switch (wrap_s)
-    {
-    case cgltf_wrap_mode_clamp_to_edge:
-        vk_address_mode_u = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
-        break;
-    case cgltf_wrap_mode_repeat:
-        vk_address_mode_u = VK_SAMPLER_ADDRESS_MODE_REPEAT;
-        break;
-    case cgltf_wrap_mode_mirrored_repeat:
-        vk_address_mode_u = VK_SAMPLER_ADDRESS_MODE_MIRRORED_REPEAT;
-        break;
-    }
-    switch (wrap_t)
-    {
-    case cgltf_wrap_mode_clamp_to_edge:
-        vk_address_mode_v = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
-        break;
-    case cgltf_wrap_mode_repeat:
-        vk_address_mode_v = VK_SAMPLER_ADDRESS_MODE_REPEAT;
-        break;
-    case cgltf_wrap_mode_mirrored_repeat:
-        vk_address_mode_v = VK_SAMPLER_ADDRESS_MODE_MIRRORED_REPEAT;
-        break;
-    }
-    VkSamplerCreateInfo samplerInfo{};
-    samplerInfo.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
-    samplerInfo.magFilter = vk_min_filter;
-    samplerInfo.minFilter = vk_mag_filter;
-    samplerInfo.addressModeU = vk_address_mode_u;
-    samplerInfo.addressModeV = vk_address_mode_v;
-    samplerInfo.addressModeW = samplerInfo.addressModeU;
-    samplerInfo.compareOp = VK_COMPARE_OP_NEVER;
-    samplerInfo.unnormalizedCoordinates = VK_FALSE;
-    samplerInfo.mipmapMode = vk_mipmap_mode;
-    samplerInfo.mipLodBias = 0.0f;
-    samplerInfo.minLod = 0.0f;
-    samplerInfo.maxLod = 0.0f;
-    samplerInfo.borderColor = VK_BORDER_COLOR_INT_OPAQUE_BLACK;
-
-    return samplerInfo;
-}
-
-struct CgltfResult
-{
-    Buffer<wrapper::CarVertex> vertex_buffer;
-    Buffer<U32> index_buffer;
-    VkSamplerCreateInfo sampler_info;
-};
-
-static CgltfResult
-CgltfParse(Arena* arena, String8 gltf_path)
-{
-    cgltf_options options = {0};
-    cgltf_data* data = NULL;
-
-    cgltf_accessor* accessor_position = NULL;
-    cgltf_accessor* accessor_uv = NULL;
-
-    Buffer<wrapper::CarVertex> vertex_buffer;
-    Buffer<U32> index_buffer;
-
-    cgltf_result result = cgltf_parse_file(&options, (char*)gltf_path.str, &data);
-    Assert(result == cgltf_result_success);
-    result = cgltf_load_buffers(&options, data, (char*)gltf_path.str);
-    Assert(result == cgltf_result_success);
-
-    cgltf_mesh* mesh = &data->meshes[0];
-    for (U32 prim_idx = 0; prim_idx < mesh->primitives_count; ++prim_idx)
-    {
-        cgltf_primitive* primitive = &mesh->primitives[prim_idx];
-
-        U32 expected_count = primitive->attributes[0].data->count;
-        for (size_t i = 1; i < primitive->attributes_count; ++i)
-        {
-            if (primitive->attributes[i].data->count != expected_count)
-            {
-                fprintf(stderr,
-                        "Non-shared indexing detected: attribute %zu has %zu entries (expected "
-                        "%zu)\n",
-                        i, primitive->attributes[i].data->count, expected_count);
-                exit(1); // or handle with deduplication logic
-            }
-        }
-
-        for (size_t i = 0; i < primitive->attributes_count; ++i)
-        {
-            cgltf_attribute* attr = &primitive->attributes[i];
-
-            switch (attr->type)
-            {
-            case cgltf_attribute_type_position:
-                accessor_position = attr->data;
-                break;
-            case cgltf_attribute_type_texcoord:
-                if (attr->index == 0) // TEXCOORD_0
-                    accessor_uv = attr->data;
-                break;
-            default:
-                break;
-            }
-        }
-
-        cgltf_accessor* accessor_indices = primitive->indices;
-        index_buffer = BufferAlloc<U32>(arena, accessor_indices->count);
-        for (U32 indice_idx = 0; indice_idx < accessor_indices->count; indice_idx++)
-        {
-            U32 index = cgltf_accessor_read_index(accessor_indices, indice_idx);
-            index_buffer.data[indice_idx] = index;
-        }
-
-        vertex_buffer = BufferAlloc<wrapper::CarVertex>(arena, expected_count);
-        for (U32 vertex_idx = 0; vertex_idx < vertex_buffer.size; vertex_idx++)
-        {
-            if (accessor_position)
-                cgltf_accessor_read_float(accessor_position, vertex_idx,
-                                          vertex_buffer.data[vertex_idx].position, 3);
-            if (accessor_uv)
-                cgltf_accessor_read_float(accessor_uv, vertex_idx,
-                                          vertex_buffer.data[vertex_idx].uv, 2);
-        }
-    }
-
-    cgltf_sampler* sampler = data->samplers;
-    Assert(sampler);
-    VkSamplerCreateInfo sampler_info = VkSamplerFromCgltfSampler(
-        sampler->min_filter, sampler->mag_filter, sampler->wrap_s, sampler->wrap_t);
-
-    cgltf_free(data);
-
-    return CgltfResult{vertex_buffer, index_buffer, sampler_info};
-}
 
 struct ImageKtx2
 {
-    wrapper::ImageResource image_resource;
+    ImageResource image_resource;
     S32 width;
     S32 height;
     U32 mip_level_count;
 };
 
 static ImageKtx2*
-ImageFromKtx2file(VkCommandBuffer cmd, BufferAllocation staging_buffer,
-                  wrapper::VulkanContext* vk_ctx, ktxTexture2* ktx_texture)
+ImageFromKtx2file(VkCommandBuffer cmd, BufferAllocation staging_buffer, VulkanContext* vk_ctx,
+                  ktxTexture2* ktx_texture)
 {
     ScratchScope scratch = ScratchScope(0, 0);
 
@@ -561,12 +331,12 @@ ImageFromKtx2file(VkCommandBuffer cmd, BufferAllocation staging_buffer,
 
     VmaAllocationCreateInfo vma_info = {.usage = VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE};
 
-    wrapper::ImageAllocation image_alloc = wrapper::ImageAllocationCreate(
-        vk_ctx->allocator, img_width, img_height, VK_SAMPLE_COUNT_1_BIT, VK_FORMAT_R8G8B8A8_SRGB,
-        VK_IMAGE_TILING_OPTIMAL,
-        VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT |
-            VK_IMAGE_USAGE_SAMPLED_BIT,
-        mip_levels, vma_info);
+    ImageAllocation image_alloc =
+        ImageAllocationCreate(vk_ctx->allocator, img_width, img_height, VK_SAMPLE_COUNT_1_BIT,
+                              VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_TILING_OPTIMAL,
+                              VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT |
+                                  VK_IMAGE_USAGE_SAMPLED_BIT,
+                              mip_levels, vma_info);
 
     VkCommandPoolCreateInfo cmd_pool_create_info = {
         .sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
@@ -634,12 +404,12 @@ ImageFromKtx2file(VkCommandBuffer cmd, BufferAllocation staging_buffer,
                          0, 0, NULL, 0, NULL, 1, &barrier);
 
     // create texture
-    wrapper::ImageViewResource image_view_resource =
-        wrapper::ImageViewResourceCreate(vk_ctx->device, image_alloc.image, VK_FORMAT_R8G8B8A8_SRGB,
-                                         VK_IMAGE_ASPECT_COLOR_BIT, mip_levels);
+    ImageViewResource image_view_resource =
+        ImageViewResourceCreate(vk_ctx->device, image_alloc.image, VK_FORMAT_R8G8B8A8_SRGB,
+                                VK_IMAGE_ASPECT_COLOR_BIT, mip_levels);
 
-    wrapper::ImageResource image_resource = {.image_alloc = image_alloc,
-                                             .image_view_resource = image_view_resource};
+    ImageResource image_resource = {.image_alloc = image_alloc,
+                                    .image_view_resource = image_view_resource};
 
     ImageKtx2* image_ktx = PushStruct(vk_ctx->arena, ImageKtx2);
     image_ktx->image_resource = image_resource;
@@ -650,22 +420,18 @@ ImageFromKtx2file(VkCommandBuffer cmd, BufferAllocation staging_buffer,
     return image_ktx;
 }
 
-static wrapper::Car*
-CarCreate(wrapper::VulkanContext* vk_ctx)
+static Car*
+CarCreate(VulkanContext* vk_ctx, CgltfSampler sampler, Buffer<city::CarVertex> vertex_buffer,
+          Buffer<U32> index_buffer)
 {
     ScratchScope scratch = ScratchScope(0, 0);
     // test loading car
     Arena* arena = ArenaAlloc();
-    String8 gltf_path = S("../../../assets/cars/scene.gltf");
 
-    CgltfResult parsed_result = CgltfParse(arena, gltf_path);
-    Buffer<wrapper::CarVertex> vertex_buffer = parsed_result.vertex_buffer;
-    Buffer<U32> index_buffer = parsed_result.index_buffer;
-
-    VkSamplerCreateInfo* sampler_info = &parsed_result.sampler_info;
-    sampler_info->anisotropyEnable = VK_TRUE;
-    sampler_info->maxAnisotropy = vk_ctx->msaa_samples;
-    VkSampler vk_sampler = wrapper::SamplerCreate(vk_ctx->device, sampler_info);
+    VkSamplerCreateInfo sampler_create_info = wrapper::VkSamplerFromCgltfSampler(sampler);
+    sampler_create_info.anisotropyEnable = VK_TRUE;
+    sampler_create_info.maxAnisotropy = vk_ctx->msaa_samples;
+    VkSampler vk_sampler = SamplerCreate(vk_ctx->device, &sampler_create_info);
 
     // upload vertex, index and image data to GPU
     VkFenceCreateInfo fence_info = {};
@@ -679,10 +445,9 @@ CarCreate(wrapper::VulkanContext* vk_ctx)
     VkCommandPool cmd_pool;
     vkCreateCommandPool(vk_ctx->device, &cmd_pool_info, nullptr, &cmd_pool);
 
-    VkCommandBuffer cmd =
-        wrapper::VK_BeginSingleTimeCommands(vk_ctx->device, cmd_pool); // Your helper
+    VkCommandBuffer cmd = VK_BeginSingleTimeCommands(vk_ctx->device, cmd_pool); // Your helper
 
-    U32 vertex_buffer_byte_size = vertex_buffer.size * sizeof(CarVertex);
+    U32 vertex_buffer_byte_size = vertex_buffer.size * sizeof(city::CarVertex);
     BufferAllocation vertex_staging_buffer = StagingBufferCreate(
         vk_ctx->allocator, vertex_buffer_byte_size, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT);
     U32 index_buffer_byte_size = index_buffer.size * sizeof(U32);
@@ -701,19 +466,19 @@ CarCreate(wrapper::VulkanContext* vk_ctx)
 
     ImageKtx2* image_ktx = ImageFromKtx2file(cmd, texture_staging_buffer, vk_ctx, ktx_texture);
 
-    wrapper::BufferAllocation vertex_buffer_allocation = BufferUploadDevice(
+    BufferAllocation vertex_buffer_allocation = BufferUploadDevice(
         cmd, vertex_staging_buffer, vk_ctx, vertex_buffer, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT);
-    wrapper::BufferAllocation index_buffer_allocation = BufferUploadDevice(
+    BufferAllocation index_buffer_allocation = BufferUploadDevice(
         cmd, index_staging_buffer, vk_ctx, index_buffer, VK_BUFFER_USAGE_INDEX_BUFFER_BIT);
 
-    wrapper::Texture* texture = PushStruct(arena, wrapper::Texture);
+    Texture* texture = PushStruct(arena, Texture);
     texture->image_resource = image_ktx->image_resource;
     texture->sampler = vk_sampler;
     texture->height = image_ktx->height;
     texture->width = image_ktx->width;
     texture->mip_level_count = image_ktx->mip_level_count;
 
-    wrapper::VK_EndSingleTimeCommands(vk_ctx, cmd_pool, cmd, fence);
+    VK_EndSingleTimeCommands(vk_ctx, cmd_pool, cmd, fence);
 
     BufferDestroy(vk_ctx->allocator, vertex_staging_buffer);
     BufferDestroy(vk_ctx->allocator, index_staging_buffer);
@@ -727,25 +492,23 @@ CarCreate(wrapper::VulkanContext* vk_ctx)
         .stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT,
     };
     VkDescriptorSetLayout desc_set_layout =
-        wrapper::DescriptorSetLayoutCreate(vk_ctx->device, &desc_set_layout_info, 1);
+        DescriptorSetLayoutCreate(vk_ctx->device, &desc_set_layout_info, 1);
     Buffer<VkDescriptorSet> desc_sets =
-        wrapper::DescriptorSetCreate(arena, vk_ctx->device, vk_ctx->descriptor_pool,
-                                     desc_set_layout, texture, vk_ctx->MAX_FRAMES_IN_FLIGHT);
+        DescriptorSetCreate(arena, vk_ctx->device, vk_ctx->descriptor_pool, desc_set_layout,
+                            texture, vk_ctx->MAX_FRAMES_IN_FLIGHT);
 
     // vertex buffer input
-    wrapper::PipelineInfo pipeline_info = wrapper::CarPipelineCreate(vk_ctx, desc_set_layout);
-    wrapper::BufferInfo<wrapper::CarVertex> vertex_buffer_info = {
-        .buffer_alloc = vertex_buffer_allocation, .buffer = vertex_buffer};
-    wrapper::BufferInfo<U32> index_buffer_info = {.buffer_alloc = index_buffer_allocation,
-                                                  .buffer = index_buffer};
-    wrapper::Car* car = PushStruct(arena, wrapper::Car);
+    PipelineInfo pipeline_info = CarPipelineCreate(vk_ctx, desc_set_layout);
+    BufferAllocation vertex_buffer_alloc = vertex_buffer_allocation;
+    BufferAllocation index_buffer_alloc = index_buffer_allocation;
+    Car* car = PushStruct(arena, Car);
 
     vkDestroyFence(vk_ctx->device, fence, 0);
     vkDestroyCommandPool(vk_ctx->device, cmd_pool, 0);
     car->arena = arena;
     car->pipeline_info = pipeline_info;
-    car->index_buffer_info = index_buffer_info;
-    car->vertex_buffer_info = vertex_buffer_info;
+    car->index_buffer_alloc = index_buffer_alloc;
+    car->vertex_buffer_alloc = vertex_buffer_alloc;
     car->texture = texture;
     car->descriptor_set_layout = desc_set_layout;
     car->descriptor_sets = desc_sets;
@@ -754,16 +517,23 @@ CarCreate(wrapper::VulkanContext* vk_ctx)
 }
 
 static void
-CarDestroy(wrapper::VulkanContext* vk_ctx, wrapper::Car* car)
+CarDestroy(VulkanContext* vk_ctx, Car* car)
 {
-    wrapper::BufferDestroy(vk_ctx->allocator, car->vertex_buffer_info.buffer_alloc);
-    wrapper::BufferDestroy(vk_ctx->allocator, car->index_buffer_info.buffer_alloc);
-    wrapper::BufferContextDestroy(vk_ctx->allocator, &car->instance_buffer_mapped);
+    BufferDestroy(vk_ctx->allocator, car->vertex_buffer_alloc);
+    BufferDestroy(vk_ctx->allocator, car->index_buffer_alloc);
+    BufferContextDestroy(vk_ctx->allocator, &car->instance_buffer_mapped);
     vkDestroyDescriptorSetLayout(vk_ctx->device, car->descriptor_set_layout, 0);
-    wrapper::TextureDestroy(vk_ctx, car->texture);
-    wrapper::PipelineInfoDestroy(vk_ctx->device, car->pipeline_info);
+    TextureDestroy(vk_ctx, car->texture);
+    PipelineInfoDestroy(vk_ctx->device, car->pipeline_info);
 
     ArenaRelease(car->arena);
+}
+
+static void
+CarUpdate(VulkanContext* vk_ctx, Car* w_car, Buffer<city::CarInstance> instance_buffer)
+{
+    VkBufferFromBufferMapping(vk_ctx->allocator, &w_car->instance_buffer_mapped, instance_buffer,
+                              VK_BUFFER_USAGE_VERTEX_BUFFER_BIT);
 }
 static PipelineInfo
 CarPipelineCreate(VulkanContext* vk_ctx, VkDescriptorSetLayout car_layout)
@@ -796,27 +566,29 @@ CarPipelineCreate(VulkanContext* vk_ctx, VkDescriptorSetLayout car_layout)
         {.location = 1,
          .binding = 0,
          .format = VK_FORMAT_R32G32_SFLOAT,
-         .offset = offsetof(CarVertex, uv)},
+         .offset = offsetof(city::CarVertex, uv)},
         {.location = 2,
          .binding = 1,
          .format = VK_FORMAT_R32G32B32A32_SFLOAT,
-         .offset = (U32)offsetof(wrapper::CarInstance, row0)},
+         .offset = (U32)offsetof(city::CarInstance, x_basis)},
         {.location = 3,
          .binding = 1,
          .format = VK_FORMAT_R32G32B32A32_SFLOAT,
-         .offset = (U32)offsetof(wrapper::CarInstance, row1)},
+         .offset = (U32)offsetof(city::CarInstance, y_basis)},
         {.location = 4,
          .binding = 1,
          .format = VK_FORMAT_R32G32B32A32_SFLOAT,
-         .offset = (U32)offsetof(wrapper::CarInstance, row2)},
+         .offset = (U32)offsetof(city::CarInstance, z_basis)},
         {.location = 5,
          .binding = 1,
          .format = VK_FORMAT_R32G32B32A32_SFLOAT,
-         .offset = (U32)offsetof(wrapper::CarInstance, row3)},
+         .offset = (U32)offsetof(city::CarInstance, w_basis)},
     };
     VkVertexInputBindingDescription input_desc[] = {
-        {.binding = 0, .stride = sizeof(CarVertex), .inputRate = VK_VERTEX_INPUT_RATE_VERTEX},
-        {.binding = 1, .stride = sizeof(CarInstance), .inputRate = VK_VERTEX_INPUT_RATE_INSTANCE}};
+        {.binding = 0, .stride = sizeof(city::CarVertex), .inputRate = VK_VERTEX_INPUT_RATE_VERTEX},
+        {.binding = 1,
+         .stride = sizeof(city::CarInstance),
+         .inputRate = VK_VERTEX_INPUT_RATE_INSTANCE}};
 
     vertex_input_info.vertexBindingDescriptionCount = ArrayCount(input_desc);
     vertex_input_info.vertexAttributeDescriptionCount = ArrayCount(attr_desc);
@@ -921,8 +693,9 @@ CarPipelineCreate(VulkanContext* vk_ctx, VkDescriptorSetLayout car_layout)
 }
 
 static void
-CarRendering(VulkanContext* vk_ctx, Car* car, U32 image_idx)
+CarRendering(VulkanContext* vk_ctx, city::CarSim* car, U32 image_idx, U32 instance_count)
 {
+    Car* w_car = car->car;
     SwapchainResources* swapchain_resources = vk_ctx->swapchain_resources;
     VkExtent2D swapchain_extent = swapchain_resources->swapchain_extent;
     VkImageView color_image_view =
@@ -932,8 +705,8 @@ CarRendering(VulkanContext* vk_ctx, Car* car, U32 image_idx)
     VkImageView swapchain_image_view =
         swapchain_resources->image_resources.data[image_idx].image_view_resource.image_view;
     VkCommandBuffer cmd_buffer = vk_ctx->command_buffers.data[vk_ctx->current_frame];
-    PipelineInfo pipeline_info = car->pipeline_info;
-    U32 car_count = (U32)car->car_instances.size;
+    PipelineInfo pipeline_info = w_car->pipeline_info;
+    U64 vertex_buffer_size = car->vertex_buffer.size;
 
     // Color attachment (assuming you want to render to the same targets)
     VkRenderingAttachmentInfo color_attachment{};
@@ -973,20 +746,19 @@ CarRendering(VulkanContext* vk_ctx, Car* car, U32 image_idx)
 
     vkCmdBindPipeline(cmd_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline_info.pipeline);
 
-    VkBuffer vertex_buffers[] = {car->vertex_buffer_info.buffer_alloc.buffer,
-                                 car->instance_buffer_mapped.buffer_alloc.buffer};
+    VkBuffer vertex_buffers[] = {w_car->vertex_buffer_alloc.buffer,
+                                 w_car->instance_buffer_mapped.buffer_alloc.buffer};
     VkDeviceSize offsets[] = {0, 0};
 
     VkDescriptorSet descriptor_sets[] = {vk_ctx->camera_descriptor_sets[vk_ctx->current_frame],
-                                         car->descriptor_sets.data[vk_ctx->current_frame]};
+                                         w_car->descriptor_sets.data[vk_ctx->current_frame]};
     vkCmdBindDescriptorSets(cmd_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS,
                             pipeline_info.pipeline_layout, 0, ArrayCount(descriptor_sets),
                             descriptor_sets, 0, NULL);
     vkCmdBindVertexBuffers(cmd_buffer, 0, 2, vertex_buffers, offsets);
-    vkCmdBindIndexBuffer(cmd_buffer, car->index_buffer_info.buffer_alloc.buffer, 0,
-                         VK_INDEX_TYPE_UINT32);
+    vkCmdBindIndexBuffer(cmd_buffer, w_car->index_buffer_alloc.buffer, 0, VK_INDEX_TYPE_UINT32);
 
-    vkCmdDrawIndexed(cmd_buffer, car->index_buffer_info.buffer.size, car_count, 0, 0, 0);
+    vkCmdDrawIndexed(cmd_buffer, vertex_buffer_size, instance_count, 0, 0, 0);
 
     vkCmdEndRendering(cmd_buffer);
 }
@@ -1118,7 +890,7 @@ VK_VulkanInit(Context* ctx)
 }
 
 static void
-RoadPipelineCreate(wrapper::Road* road, String8 shader_path)
+RoadPipelineCreate(Road* road, String8 shader_path)
 {
     ScratchScope scratch = ScratchScope(0, 0);
 

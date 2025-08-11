@@ -93,30 +93,11 @@ CommandBufferRecord(U32 image_index, U32 current_frame)
         Vec2F32{(F32)vk_ctx->swapchain_resources->swapchain_extent.width,
                 (F32)vk_ctx->swapchain_resources->swapchain_extent.height},
         current_frame);
-    city::CityUpdate(ctx->city, vk_ctx, image_index, vk_ctx->shader_path);
+    wrapper::RoadUpdate(ctx->road, vk_ctx, image_index, vk_ctx->shader_path);
 
-    // Cars Update
-    // NOTE: The matrix is row major on cpu but column major on gpu. This changes rotation from
-    // counter-clockise to clockwise. The translation is therefore in the last row.
-    wrapper::CarInstance car_instance = {{1.0f, 0.0f, 0.0f, 0.0f},
-                                         {0.0f, 0.0f, -1.0f, 0.0f},
-                                         {0.0f, 1.0f, 0.0f, 0.0f},
-                                         {0.0f, 10.0f, 0.0f, 1.0f}};
-    wrapper::CarInstance car_instance_1 = {{1.0f, 0.0f, 0.0f, 0.0f},
-                                           {0.0f, 0.0f, -1.0f, 0.0f},
-                                           {0.0f, 1.0f, 0.0f, 0.0f},
-                                           {0.0f, 10.0f, 10.0f, 1.0f}};
-
-    wrapper::Car* car = ctx->car;
-    Buffer<wrapper::CarInstance>* cars = &car->car_instances;
-    *cars = BufferAlloc<wrapper::CarInstance>(scratch.arena, 2);
-    cars->data[0] = car_instance;
-    cars->data[1] = car_instance_1;
-
-    VkBufferFromBufferMapping(vk_ctx->allocator, &car->instance_buffer_mapped, car->car_instances,
-                              VK_BUFFER_USAGE_VERTEX_BUFFER_BIT);
-
-    CarRendering(vk_ctx, car, image_index);
+    Buffer<city::CarInstance> instance_buffer = city::CarUpdate(scratch.arena, ctx->car_sim);
+    wrapper::CarUpdate(vk_ctx, ctx->car_sim->car, instance_buffer);
+    CarRendering(vk_ctx, ctx->car_sim, image_index, ctx->car_sim->cars.size);
     // ~mgj: transition swapchain image layout from VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL to
     // VK_IMAGE_LAYOUT_PRESENT_SRC_KHR
     barrier = {};

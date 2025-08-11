@@ -44,8 +44,8 @@ struct Context
     IO* io;
     ui::Camera* camera;
     DT_Time* time;
-    city::City* city;
-    wrapper::Car* car;
+    city::Road* road;
+    city::CarSim* car_sim;
 
     async::Threads* thread_info;
     // TODO: change this. moves os global state for use in DLL

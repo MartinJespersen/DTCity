@@ -12,6 +12,8 @@
 // #include "base_profile.h"
 #include "base_arena.h"
 #include "base_math.h"
+
+#include "base_random.hpp"
 #include "base_strings.hpp"
 #include "error.hpp"
 #include "base_thread_context.h"

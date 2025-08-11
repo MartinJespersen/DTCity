@@ -18,12 +18,6 @@ struct BufferAllocation
     VkDeviceSize size;
 };
 
-template <typename T> struct BufferInfo
-{
-    BufferAllocation buffer_alloc;
-    Buffer<T> buffer;
-};
-
 struct BufferAllocationMapped
 {
     BufferAllocation buffer_alloc;

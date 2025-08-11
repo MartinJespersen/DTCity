@@ -46,6 +46,8 @@ ProfileBuffersCreate(wrapper::VulkanContext* vk_ctx, ProfilingContext* prof_ctx)
 static Context*
 ContextCreate()
 {
+    HTTP_Init();
+
     ScratchScope scratch = ScratchScope(0, 0);
     //~mgj: app context setup
     Arena* app_arena = (Arena*)ArenaAlloc();
@@ -55,7 +57,6 @@ ContextCreate()
     ctx->camera = PushStruct(app_arena, ui::Camera);
     ctx->time = PushStruct(app_arena, DT_Time);
     ctx->profilingContext = PushStruct(app_arena, ProfilingContext);
-    ctx->city = PushStruct(app_arena, city::City);
     ctx->dll_info = PushStruct(app_arena, DllInfo);
 
     ctx->cwd = Str8PathFromStr8List(app_arena,
@@ -70,11 +71,11 @@ ContextCreate()
     ctx->thread_info = async::WorkerThreadsCreate(app_arena, thread_count, queue_size);
 
     ctx->vk_ctx = wrapper::VK_VulkanInit(ctx);
+    ctx->road = city::RoadCreate(ctx->vk_ctx);
+    city::RoadsBuild(ctx->road);
     CameraInit(ctx->camera);
     ProfileBuffersCreate(ctx->vk_ctx, ctx->profilingContext);
-    ctx->car = wrapper::CarCreate(ctx->vk_ctx);
-
-    HTTP_Init();
+    ctx->car_sim = city::CarSimCreate(ctx->vk_ctx, 100, ctx->road);
 
     return ctx;
 }
@@ -87,8 +88,8 @@ ContextDestroy(Context* ctx)
         ctx->dll_info->cleanup_func(ctx);
     }
 
-    city::CityDestroy(ctx->city, ctx->vk_ctx);
-    wrapper::CarDestroy(ctx->vk_ctx, ctx->car);
+    city::RoadDestroy(ctx->vk_ctx, ctx->road);
+    city::CarSimDestroy(ctx->vk_ctx, ctx->car_sim);
     wrapper::VK_Cleanup(ctx->vk_ctx);
 
     glfwDestroyWindow(ctx->io->window);
@@ -99,12 +100,6 @@ void
 App(HotReloadFunc HotReload)
 {
     Context* ctx = ContextCreate();
-
-    //~mgj: City Creation
-    city::CityCreate(ctx, ctx->city);
-    city::RoadsBuild(ctx->city->arena, ctx->city);
-    ctx->city->w_road =
-        wrapper::RoadCreate(ctx->thread_info->msg_queue, ctx->vk_ctx, &ctx->city->road);
 
     while (!glfwWindowShouldClose(ctx->io->window))
     {

@@ -38,13 +38,15 @@ struct RoadNodeSlot
 
 struct RoadWay
 {
+    RoadWay* next;
+
     String8 type;
     U64 id;
 
-    U64* node_ids;
+    U64* node_ids; // fixed array with node_count lenght and node ids as index
     U64 node_count;
 
-    RoadTag* tags;
+    RoadTag* tags; // linked list
     U64 tag_count;
 };
 
@@ -54,18 +56,52 @@ struct RoadVertex
     glm::vec2 uv;
 };
 
+struct RoadWayQueue
+{
+    RoadWay* first;
+    RoadWay* last;
+};
+
+struct NodeUtm
+{
+    NodeUtm* next;
+    U64 id;
+    F32 x_utm;
+    F32 y_utm;
+    String8 utm_zone;
+
+    RoadWayQueue roadway_queue; // Linked list of RoadWays sharing this node
+};
+
+struct NodeUtmSlot
+{
+    NodeUtm* first;
+    NodeUtm* last;
+};
+
 struct Road
 {
+    Arena* arena;
+
+    // raw data OpenAPI data
     F32 road_height;
     F32 default_road_width;
-    U64 node_slot_count;
     F32 texture_scale;
 
-    RoadNodeSlot* nodes;
+    RoadNodeSlot* nodes; // hash map
+    U64 node_slot_count;
+    U64 unique_node_count;
 
     U64 way_count;
     RoadWay* ways;
-
+    ////////////////////////////////
+    // UTM coordinates
+    U64 node_hashmap_size;
+    Buffer<NodeUtmSlot> node_hashmap; // key is the node id
+    Vec2F64 utm_center_offset;        // used for centering utm coordinate based on bounding box
+    ////////////////////////////////
+    // Graphics API
+    wrapper::Road* w_road;
     glm::mat4 model_matrix;
     Buffer<RoadVertex> vertex_buffer;
 };
@@ -75,27 +111,59 @@ struct RoadQuadCoord
     glm::vec2 pos[4];
 };
 
-struct City
+struct CarVertex
+{
+    Vec3F32 pos;
+    F32 uv[2];
+};
+
+struct Car
+{
+    glm::vec3 pos;
+    glm::vec3 dest;
+    F32 speed; //
+};
+
+struct CarSim
 {
     Arena* arena;
 
-    Road road;
-    wrapper::Road* w_road;
+    Buffer<Car> cars;
+
+    Buffer<city::CarVertex> vertex_buffer;
+    Buffer<U32> index_buffer;
+    Rng1F32 car_center_offset;
+    // Graphics API
+    wrapper::Car* car;
 };
 
+struct CarInstance
+{
+    glm::vec4 x_basis;
+    glm::vec4 y_basis;
+    glm::vec4 z_basis;
+    glm::vec4 w_basis;
+};
+// ~mgj: Globals
+read_only static RoadNode g_road_node = {&g_road_node, 0, 0.0f, 0.0f};
+read_only static NodeUtm g_road_node_utm = {&g_road_node_utm, 0, 0.0f, 0.0f};
+///////////////////////
+static Road*
+RoadCreate(wrapper::VulkanContext* vk_ctx);
 static void
-CityCreate(Context* ctx, City* city);
+RoadDestroy(wrapper::VulkanContext* vk_ctx, Road* road);
 static void
-CityUpdate(City* city, wrapper::VulkanContext* vk_ctx, U32 image_index, String8 shader_path);
-static void
-CityDestroy(City* city, wrapper::VulkanContext* vk_ctx);
-
-static void
-RoadsBuild(Arena* arena, City* road);
+RoadsBuild(Road* road);
 static RoadTagResult
 RoadTagFind(Arena* arena, Buffer<RoadTag> tags, String8 tag_to_find);
 static inline RoadNode*
 NodeFind(Road* road, U64 node_id);
 
 // ~mgj: Cars
+static CarSim*
+CarSimCreate(wrapper::VulkanContext* vk_ctx, U32 car_count, Road* road);
+static void
+CarSimDestroy(wrapper::VulkanContext* vk_ctx, CarSim* car_sim);
+static Buffer<CarInstance>
+CarUpdate(CarSim* car);
 } // namespace city

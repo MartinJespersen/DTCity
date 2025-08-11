@@ -9,5 +9,5 @@ struct Road;
 namespace wrapper
 {
 static void
-OverpassHighways(Arena* arena, city::Road* roads, String8 json);
+OverpassHighways(city::Road* roads, String8 json);
 };
