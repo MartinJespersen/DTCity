@@ -269,8 +269,11 @@ VK_SupportedFormat(VkPhysicalDevice physical_device, const VkFormat candidates[3
 static void
 VK_DepthResourcesCreate(VulkanContext* vk_ctx, SwapchainResources* swapchain_resources)
 {
-    VkFormat depth_formats[3] = {VK_FORMAT_D16_UNORM, VK_FORMAT_D32_SFLOAT,
-                                 VK_FORMAT_D24_UNORM_S8_UINT};
+    VkFormat depth_formats[3] = {
+        VK_FORMAT_D32_SFLOAT,
+        VK_FORMAT_D24_UNORM_S8_UINT,
+        VK_FORMAT_D16_UNORM,
+    };
 
     VkFormat depth_format =
         VK_SupportedFormat(vk_ctx->physical_device, depth_formats, VK_IMAGE_TILING_OPTIMAL,
