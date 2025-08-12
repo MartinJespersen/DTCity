@@ -16,12 +16,14 @@ RoadDescriptorCreate(VkDescriptorPool desc_pool, RoadDescriptorCreateInfo* info,
 
 // mgj: Road
 static void
-RoadTextureCreate(VkCommandPool cmd_pool, VkFence fence, RoadTextureCreateInput* input,
-                  Texture* texture)
+RoadTextureCreate(U32 thread_id, AssetStoreCommandPool threaded_cmd_pool,
+                  RoadTextureCreateInput* input, Texture* texture)
 {
     ScratchScope scratch = ScratchScope(0, 0);
     VulkanContext* vk_ctx = input->vk_ctx;
+    Road* w_road = input->w_road;
     String8 texture_path = input->w_road->road_texture_path;
+    U64 texture_id = w_road->texture_id;
 
     S32 tex_width, tex_height, tex_channels;
     stbi_uc* pixels =
@@ -40,10 +42,10 @@ RoadTextureCreate(VkCommandPool cmd_pool, VkFence fence, RoadTextureCreateInput*
         VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
     vma_staging_info.requiredFlags = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT;
 
-    BufferAllocation texture_staging_buffer = BufferAllocationCreate(
+    texture->staging_buffer = BufferAllocationCreate(
         vk_ctx->allocator, image_size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, vma_staging_info);
 
-    vmaCopyMemoryToAllocation(vk_ctx->allocator, pixels, texture_staging_buffer.allocation, 0,
+    vmaCopyMemoryToAllocation(vk_ctx->allocator, pixels, texture->staging_buffer.allocation, 0,
                               image_size);
 
     stbi_image_free(pixels);
@@ -57,19 +59,17 @@ RoadTextureCreate(VkCommandPool cmd_pool, VkFence fence, RoadTextureCreateInput*
                                   VK_IMAGE_USAGE_SAMPLED_BIT,
                               mip_level, vma_info);
 
-    VkCommandBuffer command_buffer = VK_BeginSingleTimeCommands(vk_ctx->device, cmd_pool);
+    VkCommandBuffer command_buffer = BeginCommand(vk_ctx->device, threaded_cmd_pool);
     ImageLayoutTransition(command_buffer, image_alloc.image, VK_FORMAT_R8G8B8A8_SRGB,
                           VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
                           mip_level);
-    ImageFromBufferCopy(command_buffer, texture_staging_buffer.buffer, image_alloc.image, tex_width,
-                        tex_height);
+    ImageFromBufferCopy(command_buffer, texture->staging_buffer.buffer, image_alloc.image,
+                        tex_width, tex_height);
     VK_GenerateMipmaps(command_buffer, image_alloc.image, tex_width, tex_height,
                        mip_level); // TODO: mip maps are usually not generated at
                                    // runtime.
     // They are usually stored in the texture file
-    VK_EndSingleTimeCommands(vk_ctx, cmd_pool, command_buffer, fence);
-
-    BufferDestroy(vk_ctx->allocator, texture_staging_buffer);
+    VK_CHECK_RESULT(vkEndCommandBuffer(command_buffer));
 
     ImageViewResource image_view_resource =
         ImageViewResourceCreate(vk_ctx->device, image_alloc.image, VK_FORMAT_R8G8B8A8_SRGB,
@@ -87,7 +87,12 @@ RoadTextureCreate(VkCommandPool cmd_pool, VkFence fence, RoadTextureCreateInput*
     texture->width = tex_width;
     texture->height = tex_height;
     texture->mip_level_count = mip_level;
+
+    CmdQueueItem cmd_input = {
+        .asset_id = texture_id, .thread_id = thread_id, .cmd_buffer = command_buffer};
+    async::QueuePush(vk_ctx->cmd_queue, &cmd_input);
 }
+
 static void
 RoadRenderPass(VulkanContext* vk_ctx, Road* w_road, city::Road* road, U32 image_index)
 {
@@ -440,6 +445,7 @@ CarCreate(VulkanContext* vk_ctx, CgltfSampler sampler, Buffer<city::CarVertex> v
     vkCreateFence(vk_ctx->device, &fence_info, nullptr, &fence);
     VkCommandPoolCreateInfo cmd_pool_info = {
         .sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
+        .flags = VK_COMMAND_POOL_CREATE_TRANSIENT_BIT,
         .queueFamilyIndex = vk_ctx->queue_family_indices.graphicsFamilyIndex,
     };
     VkCommandPool cmd_pool;
@@ -478,7 +484,7 @@ CarCreate(VulkanContext* vk_ctx, CgltfSampler sampler, Buffer<city::CarVertex> v
     texture->width = image_ktx->width;
     texture->mip_level_count = image_ktx->mip_level_count;
 
-    VK_EndSingleTimeCommands(vk_ctx, cmd_pool, cmd, fence);
+    VK_EndSingleTimeCommands(vk_ctx, cmd_pool, cmd);
 
     BufferDestroy(vk_ctx->allocator, vertex_staging_buffer);
     BufferDestroy(vk_ctx->allocator, index_staging_buffer);
@@ -884,6 +890,9 @@ VK_VulkanInit(Context* ctx)
         AssetStoreCreate(vk_ctx->device, vk_ctx->queue_family_indices.graphicsFamilyIndex,
                          ctx->thread_info, 1, GB(1));
 
+    U32 cmd_queue_size = 10;
+    vk_ctx->cmd_queue = async::QueueInit<CmdQueueItem>(
+        arena, cmd_queue_size, vk_ctx->queue_family_indices.graphicsFamilyIndex);
     ScratchEnd(scratch);
 
     return vk_ctx;
@@ -1226,8 +1235,8 @@ AssetStoreCreate(VkDevice device, U32 queue_family_index, async::Threads* thread
     asset_store->hashmap = BufferAlloc<AssetStoreItemStateList>(arena, texture_map_size);
     asset_store->total_size = total_size_in_bytes;
     asset_store->work_queue = threads->msg_queue;
-    asset_store->cmd_pools = BufferAlloc<VkCommandPool>(arena, threads->thread_handles.size);
-    asset_store->fences = BufferAlloc<VkFence>(arena, threads->thread_handles.size);
+    asset_store->threaded_cmd_pools =
+        BufferAlloc<AssetStoreCommandPool>(arena, threads->thread_handles.size);
     asset_store->free_list = nullptr;
 
     VkFenceCreateInfo fence_info{};
@@ -1236,11 +1245,13 @@ AssetStoreCreate(VkDevice device, U32 queue_family_index, async::Threads* thread
     VkCommandPoolCreateInfo cmd_pool_info{};
     cmd_pool_info.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
     cmd_pool_info.queueFamilyIndex = queue_family_index;
+    cmd_pool_info.flags = VK_COMMAND_POOL_CREATE_TRANSIENT_BIT;
 
     for (U32 i = 0; i < threads->thread_handles.size; i++)
     {
-        asset_store->cmd_pools.data[i] = VK_CommandPoolCreate(device, &cmd_pool_info);
-        vkCreateFence(device, &fence_info, 0, &asset_store->fences.data[i]);
+        asset_store->threaded_cmd_pools.data[i].cmd_pool =
+            VK_CommandPoolCreate(device, &cmd_pool_info);
+        asset_store->threaded_cmd_pools.data[i].mutex = OS_MutexAlloc();
     }
 
     return asset_store;
@@ -1248,12 +1259,43 @@ AssetStoreCreate(VkDevice device, U32 queue_family_index, async::Threads* thread
 static void
 AssetStoreDestroy(VkDevice device, AssetStore* asset_store)
 {
-    for (U32 i = 0; i < asset_store->cmd_pools.size; i++)
+    for (U32 i = 0; i < asset_store->threaded_cmd_pools.size; i++)
     {
-        vkDestroyCommandPool(device, asset_store->cmd_pools.data[i], 0);
-        vkDestroyFence(device, asset_store->fences.data[i], 0);
+        vkDestroyCommandPool(device, asset_store->threaded_cmd_pools.data[i].cmd_pool, 0);
+        OS_MutexRelease(asset_store->threaded_cmd_pools.data[i].mutex);
     }
     ArenaRelease(asset_store->arena);
+}
+
+static void
+AssetStoreExecuteCmds(wrapper::VulkanContext* vk_ctx)
+{
+    wrapper::AssetStore* asset_store = vk_ctx->asset_store;
+    B32 empty = 0;
+    for (U32 i = 0; i < vk_ctx->cmd_queue->queue_size; i++)
+    {
+        wrapper::CmdQueueItem item;
+        if (async::QueueTryRead(vk_ctx->cmd_queue, &item))
+        {
+            VkSubmitInfo submit_info{};
+            submit_info.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+            submit_info.commandBufferCount = 1;
+            submit_info.pCommandBuffers = &item.cmd_buffer;
+
+            vkQueueSubmit(vk_ctx->graphics_queue, 1, &submit_info, VK_NULL_HANDLE);
+            vkQueueWaitIdle(vk_ctx->graphics_queue);
+            OS_MutexScope(asset_store->threaded_cmd_pools.data[item.thread_id].mutex)
+            {
+                vkFreeCommandBuffers(vk_ctx->device,
+                                     asset_store->threaded_cmd_pools.data[item.thread_id].cmd_pool,
+                                     1, &item.cmd_buffer);
+            }
+            wrapper::AssetStoreTexture* asset =
+                wrapper::AssetStoreTextureGetSlot(vk_ctx->asset_store, item.asset_id);
+            BufferDestroy(vk_ctx->allocator, asset->asset.staging_buffer);
+            asset->is_loaded = 1;
+        }
+    }
 }
 
 static AssetStoreTexture*
@@ -1297,10 +1339,11 @@ AssetStoreRoadResourceLoadAsync(AssetStore* asset_store, AssetStoreTexture* text
     thread_input->asset_store_texture = texture;
     thread_input->texture_input = input;
     thread_input->texture_func = RoadTextureCreate;
-    thread_input->cmd_pools = asset_store->cmd_pools;
-    thread_input->fences = asset_store->fences;
+    thread_input->threaded_cmd_pools = asset_store->threaded_cmd_pools;
 
-    async::QueuePush(asset_store->work_queue, thread_input, AssetStoreTextureThreadMain);
+    async::QueueItem queue_input = {.data = thread_input,
+                                    .worker_func = AssetStoreTextureThreadMain};
+    async::QueuePush(asset_store->work_queue, &queue_input);
 }
 
 static void
@@ -1309,10 +1352,32 @@ AssetStoreTextureThreadMain(async::ThreadInfo thread_info, void* data)
     RoadThreadInput* input = (RoadThreadInput*)data;
     AssetStoreTexture* item = input->asset_store_texture;
     item->is_loaded = 0;
-    input->texture_func(input->cmd_pools.data[thread_info.thread_id],
-                        input->fences.data[thread_info.thread_id], input->texture_input,
+    input->texture_func(thread_info.thread_id,
+                        input->threaded_cmd_pools.data[thread_info.thread_id], input->texture_input,
                         &item->asset);
-
-    item->is_loaded = 1;
 }
+static VkCommandBuffer
+BeginCommand(VkDevice device, AssetStoreCommandPool threaded_cmd_pool)
+{
+    VkCommandBufferAllocateInfo allocInfo{};
+    allocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+    allocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+    allocInfo.commandPool = threaded_cmd_pool.cmd_pool;
+    allocInfo.commandBufferCount = 1;
+
+    VkCommandBuffer commandBuffer;
+    OS_MutexScope(threaded_cmd_pool.mutex)
+    {
+        vkAllocateCommandBuffers(device, &allocInfo, &commandBuffer);
+    }
+
+    VkCommandBufferBeginInfo beginInfo{};
+    beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+    beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
+
+    vkBeginCommandBuffer(commandBuffer, &beginInfo);
+
+    return commandBuffer;
+}
+
 } // namespace wrapper

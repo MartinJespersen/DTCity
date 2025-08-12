@@ -70,10 +70,10 @@ os_string_list_from_argcv(Arena* arena, int argc, char** argv)
 static String8
 os_data_from_file_path(Arena* arena, String8 path)
 {
-    OS_Handle file = os_file_open(OS_AccessFlag_Read | OS_AccessFlag_ShareRead, path);
-    FileProperties props = os_properties_from_file(file);
+    OS_Handle file = OS_FileOpen(OS_AccessFlag_Read | OS_AccessFlag_ShareRead, path);
+    FileProperties props = OS_PropertiesFromFile(file);
     String8 data = os_string_from_file_range(arena, file, r1u64(0, props.size));
-    os_file_close(file);
+    OS_FileClose(file);
     return data;
 }
 
@@ -81,12 +81,12 @@ static B32
 os_write_data_to_file_path(String8 path, String8 data)
 {
     B32 good = 0;
-    OS_Handle file = os_file_open(OS_AccessFlag_Write, path);
+    OS_Handle file = OS_FileOpen(OS_AccessFlag_Write, path);
     if (!OS_HandleMatch(file, OS_HandleIsZero()))
     {
         good = 1;
-        os_file_write(file, r1u64(0, data.size), data.str);
-        os_file_close(file);
+        OS_FileWrite(file, r1u64(0, data.size), data.str);
+        OS_FileClose(file);
     }
     return good;
 }
@@ -95,17 +95,17 @@ static B32
 os_write_data_list_to_file_path(String8 path, String8List list)
 {
     B32 good = 0;
-    OS_Handle file = os_file_open(OS_AccessFlag_Write, path);
+    OS_Handle file = OS_FileOpen(OS_AccessFlag_Write, path);
     if (!OS_HandleMatch(file, OS_HandleIsZero()))
     {
         good = 1;
         U64 off = 0;
         for (String8Node* n = list.first; n != 0; n = n->next)
         {
-            os_file_write(file, r1u64(off, off + n->string.size), n->string.str);
+            OS_FileWrite(file, r1u64(off, off + n->string.size), n->string.str);
             off += n->string.size;
         }
-        os_file_close(file);
+        OS_FileClose(file);
     }
     return good;
 }
@@ -116,13 +116,13 @@ os_append_data_to_file_path(String8 path, String8 data)
     B32 good = 0;
     if (data.size != 0)
     {
-        OS_Handle file = os_file_open(OS_AccessFlag_Write | OS_AccessFlag_Append, path);
+        OS_Handle file = OS_FileOpen(OS_AccessFlag_Write | OS_AccessFlag_Append, path);
         if (!OS_HandleMatch(file, OS_HandleIsZero()))
         {
             good = 1;
-            U64 pos = os_properties_from_file(file).size;
-            os_file_write(file, r1u64(pos, pos + data.size), data.str);
-            os_file_close(file);
+            U64 pos = OS_PropertiesFromFile(file).size;
+            OS_FileWrite(file, r1u64(pos, pos + data.size), data.str);
+            OS_FileClose(file);
         }
     }
     return good;
@@ -131,9 +131,9 @@ os_append_data_to_file_path(String8 path, String8 data)
 static OS_FileID
 os_id_from_file_path(String8 path)
 {
-    OS_Handle file = os_file_open(OS_AccessFlag_Read | OS_AccessFlag_ShareRead, path);
+    OS_Handle file = OS_FileOpen(OS_AccessFlag_Read | OS_AccessFlag_ShareRead, path);
     OS_FileID id = os_id_from_file(file);
-    os_file_close(file);
+    OS_FileClose(file);
     return id;
 }
 
@@ -151,7 +151,7 @@ os_string_from_file_range(Arena* arena, OS_Handle file, Rng1U64 range)
     String8 result;
     result.size = dim_1u64(range);
     result.str = PushArrayNoZero(arena, U8, result.size);
-    U64 actual_read_size = os_file_read(file, range, result.str);
+    U64 actual_read_size = OS_FileRead(file, range, result.str);
     if (actual_read_size < result.size)
     {
         arena_pop_to(arena, pre_pos + actual_read_size);
@@ -202,12 +202,12 @@ os_cmd_line_launch(String8 string)
         OS_Handle stdout_handle = {0};
         if (stdout_path.size != 0)
         {
-            OS_Handle file = os_file_open(OS_AccessFlag_Write | OS_AccessFlag_Read, stdout_path);
-            os_file_close(file);
+            OS_Handle file = OS_FileOpen(OS_AccessFlag_Write | OS_AccessFlag_Read, stdout_path);
+            OS_FileClose(file);
             stdout_handle =
-                os_file_open(OS_AccessFlag_Write | OS_AccessFlag_Append | OS_AccessFlag_ShareRead |
-                                 OS_AccessFlag_ShareWrite | OS_AccessFlag_Inherited,
-                             stdout_path);
+                OS_FileOpen(OS_AccessFlag_Write | OS_AccessFlag_Append | OS_AccessFlag_ShareRead |
+                                OS_AccessFlag_ShareWrite | OS_AccessFlag_Inherited,
+                            stdout_path);
         }
 
         // rjf: form command line
@@ -229,7 +229,7 @@ os_cmd_line_launch(String8 string)
         {
             if (stdout_path.size != 0)
             {
-                os_file_close(stdout_handle);
+                OS_FileClose(stdout_handle);
             }
         }
     }

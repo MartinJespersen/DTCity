@@ -1,12 +1,14 @@
 namespace city
 {
 static Road*
-RoadCreate(wrapper::VulkanContext* vk_ctx)
+RoadCreate(wrapper::VulkanContext* vk_ctx, String8 cache_path)
 {
     Arena* arena = ArenaAlloc();
 
     Road* road = PushStruct(arena, Road);
 
+    road->openapi_data_cache_path =
+        Str8PathFromStr8List(arena, {cache_path, S("openapi_data.txt")});
     road->arena = arena;
     road->node_slot_count = 100;
     road->w_road = wrapper::RoadCreate(vk_ctx, road);
@@ -204,11 +206,51 @@ RoadsBuild(Road* road)
     String8 query_str =
         PushStr8F(scratch.arena, (char*)query, lat_low, lon_low, lat_high, lon_high);
 
-    String8 host = S("https://overpass-api.de");
-    String8 path = S("/api/interpreter");
-    HTTP_Response response = HTTP_Request(scratch.arena, host, path, query_str, &params);
+    B32 read_from_cache = 0;
+    String8 content;
+    if (OS_FilePathExists(road->openapi_data_cache_path))
+    {
+        OS_Handle file_handle = OS_FileOpen(OS_AccessFlag_Read, road->openapi_data_cache_path);
+        FileProperties file_props = OS_PropertiesFromFile(file_handle);
 
-    String8 content = Str8((U8*)response.body.str, response.body.size);
+        content.str = PushArray(scratch.arena, U8, file_props.size);
+        content.size = file_props.size;
+        U64 total_read_size =
+            OS_FileRead(file_handle, {.min = 0, .max = file_props.size}, content.str);
+        if (total_read_size != file_props.size)
+        {
+            printf("RoadsBuild: Could not read everything from cache");
+        }
+        else
+        {
+            read_from_cache = 1;
+        }
+        OS_FileClose(file_handle);
+    }
+
+    if (!read_from_cache)
+    {
+        String8 host = S("https://overpass-api.de");
+        String8 path = S("/api/interpreter");
+        HTTP_Response response = HTTP_Request(scratch.arena, host, path, query_str, &params);
+
+        if (!response.good)
+        {
+            exitWithError(
+                "RoadsBuild: http request did not succeed and Road information is not available");
+        }
+        content = Str8((U8*)response.body.str, response.body.size);
+
+        OS_Handle file_write_handle =
+            OS_FileOpen(OS_AccessFlag_Write, road->openapi_data_cache_path);
+        U64 bytes_written =
+            OS_FileWrite(file_write_handle, {.min = 0, .max = content.size}, content.str);
+        if (bytes_written != content.size)
+        {
+            exitWithError("RoadsBuild: Was not able to write all openapi data to cache");
+        }
+        OS_FileClose(file_write_handle);
+    }
 
     wrapper::OverpassHighways(road, content);
 
@@ -350,7 +392,6 @@ RoadRandomNodeUtmFind(Road* road)
         NodeUtmSlot* slot = &road->node_hashmap.data[slot_index];
         if (slot->first != NULL)
         {
-            printf("Found node at index %u, random number %u\n", slot_index, rand_num);
             return slot->first;
         }
         rand_num++;
@@ -442,13 +483,13 @@ CarSimCreate(wrapper::VulkanContext* vk_ctx, U32 car_count, Road* road)
     {
         NodeUtm* node = RoadRandomNodeUtmFind(road);
         NodeUtm* next_node = NeighbourNodeChoose(node, road);
-
-        printf("Node: %lld, %f, %f\n", node->id, node->x_utm, node->y_utm);
-        car_sim->cars.data[i].pos =
+        city::Car* car = &car_sim->cars.data[i];
+        car->pos =
             glm::vec3(node->x_utm, road->road_height - car_sim->car_center_offset.min, node->y_utm);
-        car_sim->cars.data[i].dest = glm::vec3(
-            next_node->x_utm, road->road_height - car_sim->car_center_offset.min, next_node->y_utm);
-        car_sim->cars.data[i].speed = 10.0f;
+        car->dest = glm::vec3(next_node->x_utm, road->road_height - car_sim->car_center_offset.min,
+                              next_node->y_utm);
+        car->speed = 10.0f;
+        car->dir = glm::normalize(car->dest - car->pos);
     }
 
     return car_sim;
@@ -464,15 +505,28 @@ CarSimDestroy(wrapper::VulkanContext* vk_ctx, CarSim* car_sim)
 static Buffer<CarInstance>
 CarUpdate(Arena* arena, CarSim* car)
 {
+    //// temp
+    static auto startTime = std::chrono::high_resolution_clock::now();
+
+    auto currentTime = std::chrono::high_resolution_clock::now();
+    float time =
+        std::chrono::duration<float, std::chrono::seconds::period>(currentTime - startTime).count();
+    /////
     Buffer<CarInstance> instance_buffer = BufferAlloc<CarInstance>(arena, car->cars.size);
     CarInstance* instance;
     city::Car* car_info;
+
+    F32 car_speed_default = 0.001; // m/s
     for (U32 car_idx = 0; car_idx < car->cars.size; car_idx++)
     {
         instance = &instance_buffer.data[car_idx];
         car_info = &car->cars.data[car_idx];
 
-        glm::vec3 y_basis = glm::normalize(glm::normalize(car_info->dest - car_info->pos));
+        // glm::vec3 dir = glm::normalize(car_info->dest - car_info->pos);
+
+        glm::vec3 new_pos = car_info->pos + car_info->dir * car_speed_default * time;
+
+        glm::vec3 y_basis = car_info->dir;
         y_basis *= -1;
         glm::vec3 x_basis = glm::vec3(-y_basis.z, 0, y_basis.x);
         glm::vec3 z_basis = glm::cross(x_basis, y_basis);
@@ -480,7 +534,9 @@ CarUpdate(Arena* arena, CarSim* car)
         instance->x_basis = glm::vec4(x_basis, 0);
         instance->y_basis = glm::vec4(y_basis, 0);
         instance->z_basis = glm::vec4(z_basis, 0);
-        instance->w_basis = {car_info->pos, 1};
+        instance->w_basis = {new_pos, 1};
+
+        car_info->pos = new_pos;
     }
     return instance_buffer;
 }

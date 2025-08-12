@@ -132,6 +132,7 @@ struct PipelineInfo
 
 struct Texture
 {
+    BufferAllocation staging_buffer;
     ImageResource image_resource;
     VkSampler sampler;
     S32 width;
@@ -259,12 +260,6 @@ static VkDescriptorSetLayout
 DescriptorSetLayoutCreate(VkDevice device, VkDescriptorSetLayoutBinding* bindings,
                           U32 binding_count);
 
-struct GraphicsQueue
-{
-    OS_Handle mutex;
-    VkQueue graphics_queue;
-};
-
 struct Vulkan_PushConstantInfo
 {
     uint32_t offset;
@@ -358,17 +353,9 @@ VK_BeginSingleTimeCommands(VkDevice device, VkCommandPool cmd_pool);
 
 static void
 VK_EndSingleTimeCommands(VulkanContext* vk_ctx, VkCommandPool cmd_pool,
-                         VkCommandBuffer command_buffer, VkFence fence);
-
-// ~mgj: Threaded Graphics Queue
-static GraphicsQueue
-TreadedGraphicsQueueCreate(VkDevice device, U32 graphics_index);
-static void
-ThreadedGraphicsQueueDestroy(GraphicsQueue graphics_queue);
-static void
-ThreadedGraphicsQueueSubmit(GraphicsQueue graphics_queue, VkSubmitInfo* info, VkFence fence);
+                         VkCommandBuffer command_buffer);
+//
 // ~mgj: texture functions
-
 static void
 TextureDestroy(VulkanContext* vk_ctx, Texture* texture);
 

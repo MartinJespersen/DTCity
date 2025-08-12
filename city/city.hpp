@@ -83,6 +83,8 @@ struct Road
 {
     Arena* arena;
 
+    /////////////////////////////
+    String8 openapi_data_cache_path;
     // raw data OpenAPI data
     F32 road_height;
     F32 default_road_width;
@@ -104,6 +106,7 @@ struct Road
     wrapper::Road* w_road;
     glm::mat4 model_matrix;
     Buffer<RoadVertex> vertex_buffer;
+    /////////////////////////
 };
 
 struct RoadQuadCoord
@@ -121,6 +124,7 @@ struct Car
 {
     glm::vec3 pos;
     glm::vec3 dest;
+    glm::vec3 dir;
     F32 speed; //
 };
 
@@ -149,7 +153,7 @@ read_only static RoadNode g_road_node = {&g_road_node, 0, 0.0f, 0.0f};
 read_only static NodeUtm g_road_node_utm = {&g_road_node_utm, 0, 0.0f, 0.0f};
 ///////////////////////
 static Road*
-RoadCreate(wrapper::VulkanContext* vk_ctx);
+RoadCreate(wrapper::VulkanContext* vk_ctx, String8 cache_path);
 static void
 RoadDestroy(wrapper::VulkanContext* vk_ctx, Road* road);
 static void
@@ -165,5 +169,5 @@ CarSimCreate(wrapper::VulkanContext* vk_ctx, U32 car_count, Road* road);
 static void
 CarSimDestroy(wrapper::VulkanContext* vk_ctx, CarSim* car_sim);
 static Buffer<CarInstance>
-CarUpdate(CarSim* car);
+CarUpdate(Arena* arena, CarSim* car);
 } // namespace city

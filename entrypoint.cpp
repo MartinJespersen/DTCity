@@ -160,15 +160,17 @@ MainLoop(void* ptr)
 
     while (ctx->running)
     {
+        wrapper::AssetStoreExecuteCmds(vk_ctx);
+
         ZoneScoped;
         wrapper::VulkanContext* vk_ctx = ctx->vk_ctx;
         IO* io_ctx = ctx->io;
 
         {
             ZoneScopedN("Wait for frame");
-            vkWaitForFences(vk_ctx->device, 1,
-                            &vk_ctx->in_flight_fences.data[vk_ctx->current_frame], VK_TRUE,
-                            UINT64_MAX);
+            VK_CHECK_RESULT(vkWaitForFences(vk_ctx->device, 1,
+                                            &vk_ctx->in_flight_fences.data[vk_ctx->current_frame],
+                                            VK_TRUE, UINT64_MAX));
         }
 
         uint32_t imageIndex;
@@ -211,8 +213,8 @@ MainLoop(void* ptr)
         submitInfo.signalSemaphoreCount = 1;
         submitInfo.pSignalSemaphores = signalSemaphores;
 
-        wrapper::ThreadedGraphicsQueueSubmit(vk_ctx->graphics_queue, &submitInfo,
-                                             vk_ctx->in_flight_fences.data[vk_ctx->current_frame]);
+        vkQueueSubmit(vk_ctx->graphics_queue, 1, &submitInfo,
+                      vk_ctx->in_flight_fences.data[vk_ctx->current_frame]);
 
         VkPresentInfoKHR presentInfo{};
         presentInfo.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
@@ -228,7 +230,8 @@ MainLoop(void* ptr)
         presentInfo.pResults = nullptr; // Optional
 
         result = vkQueuePresentKHR(vk_ctx->present_queue, &presentInfo);
-        // TracyVkCollect(tracyContexts[currentFrame], commandBuffers[currentFrame]);
+        // TracyVkCollect(tracyContexts[currentFrame],
+        // commandBuffers[currentFrame]);
         FrameMark; // end of frame is assumed to be here
         if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR ||
             vk_ctx->framebuffer_resized)

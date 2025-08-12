@@ -207,7 +207,7 @@ static void os_abort(S32 exit_code) { exit(exit_code); }
 
 //- rjf: files
 
-static OS_Handle os_file_open(OS_AccessFlags flags, String8 path) {
+static OS_Handle OS_FileOpen(OS_AccessFlags flags, String8 path) {
   Temp scratch = ScratchBegin(0, 0);
   String8 path_copy = PushStr8Copy(scratch.arena, path);
   int lnx_flags = 0;
@@ -233,7 +233,7 @@ static OS_Handle os_file_open(OS_AccessFlags flags, String8 path) {
   return handle;
 }
 
-static void os_file_close(OS_Handle file) {
+static void OS_FileClose(OS_Handle file) {
   if (OS_HandleMatch(file, OS_HandleIsZero())) {
     return;
   }
@@ -241,7 +241,7 @@ static void os_file_close(OS_Handle file) {
   close(fd);
 }
 
-static U64 os_file_read(OS_Handle file, Rng1U64 rng, void *out_data) {
+static U64 OS_FileRead(OS_Handle file, Rng1U64 rng, void *out_data) {
   if (OS_HandleMatch(file, OS_HandleIsZero())) {
     return 0;
   }
@@ -263,7 +263,7 @@ static U64 os_file_read(OS_Handle file, Rng1U64 rng, void *out_data) {
   return total_num_bytes_read;
 }
 
-static U64 os_file_write(OS_Handle file, Rng1U64 rng, void *data) {
+static U64 OS_FileWrite(OS_Handle file, Rng1U64 rng, void *data) {
   if (OS_HandleMatch(file, OS_HandleIsZero())) {
     return 0;
   }
@@ -297,7 +297,7 @@ static B32 os_file_set_times(OS_Handle file, DateTime date_time) {
   return good;
 }
 
-static FileProperties os_properties_from_file(OS_Handle file) {
+static FileProperties OS_PropertiesFromFile(OS_Handle file) {
   if (OS_HandleMatch(file, OS_HandleIsZero())) {
     return (FileProperties){0};
   }
@@ -339,13 +339,13 @@ static B32 os_delete_file_at_path(String8 path) {
 
 static B32 os_copy_file_path(String8 dst, String8 src) {
   B32 result = 0;
-  OS_Handle src_h = os_file_open(OS_AccessFlag_Read, src);
-  OS_Handle dst_h = os_file_open(OS_AccessFlag_Write, dst);
+  OS_Handle src_h = OS_FileOpen(OS_AccessFlag_Read, src);
+  OS_Handle dst_h = OS_FileOpen(OS_AccessFlag_Write, dst);
   if (!OS_HandleMatch(src_h, OS_HandleIsZero()) &&
       !OS_HandleMatch(dst_h, OS_HandleIsZero())) {
     int src_fd = (int)src_h.u64[0];
     int dst_fd = (int)dst_h.u64[0];
-    FileProperties src_props = os_properties_from_file(src_h);
+    FileProperties src_props = OS_PropertiesFromFile(src_h);
     U64 size = src_props.size;
     U64 total_bytes_copied = 0;
     U64 bytes_left_to_copy = size;
@@ -361,8 +361,8 @@ static B32 os_copy_file_path(String8 dst, String8 src) {
       total_bytes_copied += bytes_copied;
     }
   }
-  os_file_close(src_h);
-  os_file_close(dst_h);
+  OS_FileClose(src_h);
+  OS_FileClose(dst_h);
   return result;
 }
 
@@ -380,7 +380,7 @@ static String8 os_full_path_from_path(Arena *arena, String8 path) {
   return result;
 }
 
-static B32 os_file_path_exists(String8 path) {
+static B32 OS_FilePathExists(String8 path) {
   Temp scratch = ScratchBegin(0, 0);
   String8 path_copy = PushStr8Copy(scratch.arena, path);
   int access_result = access((char *)path_copy.str, F_OK);

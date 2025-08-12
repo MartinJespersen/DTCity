@@ -323,7 +323,7 @@ os_abort(S32 exit_code)
 //- rjf: files
 
 static OS_Handle
-os_file_open(OS_AccessFlags flags, String8 path)
+OS_FileOpen(OS_AccessFlags flags, String8 path)
 {
     OS_Handle result = {0};
     Temp scratch = ScratchBegin(0, 0);
@@ -376,7 +376,7 @@ os_file_open(OS_AccessFlags flags, String8 path)
 }
 
 static void
-os_file_close(OS_Handle file)
+OS_FileClose(OS_Handle file)
 {
     if (OS_HandleMatch(file, OS_HandleIsZero()))
     {
@@ -388,7 +388,7 @@ os_file_close(OS_Handle file)
 }
 
 static U64
-os_file_read(OS_Handle file, Rng1U64 rng, void* out_data)
+OS_FileRead(OS_Handle file, Rng1U64 rng, void* out_data)
 {
     if (OS_HandleMatch(file, OS_HandleIsZero()))
     {
@@ -427,7 +427,7 @@ os_file_read(OS_Handle file, Rng1U64 rng, void* out_data)
 }
 
 static U64
-os_file_write(OS_Handle file, Rng1U64 rng, void* data)
+OS_FileWrite(OS_Handle file, Rng1U64 rng, void* data)
 {
     if (OS_HandleMatch(file, OS_HandleIsZero()))
     {
@@ -479,7 +479,7 @@ os_file_set_time(OS_Handle file, DateTime time)
 }
 
 static FileProperties
-os_properties_from_file(OS_Handle file)
+OS_PropertiesFromFile(OS_Handle file)
 {
     if (OS_HandleMatch(file, OS_HandleIsZero()))
     {
@@ -590,7 +590,7 @@ os_full_path_from_path(Arena* arena, String8 path)
 }
 
 static B32
-os_file_path_exists(String8 path)
+OS_FilePathExists(String8 path)
 {
     Temp scratch = ScratchBegin(0, 0);
     String16 path16 = Str16From8(scratch.arena, path);

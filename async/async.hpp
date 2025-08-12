@@ -8,26 +8,25 @@ struct QueueItem
     void* data;
     WorkerFunc worker_func;
 };
-
-struct Queue
+template <typename T> struct Queue
 {
     volatile U32 next_index;
     volatile U32 fill_index;
     U32 queue_size;
-    QueueItem* items;
+    T* items;
     OS_Handle mutex;
     OS_Handle semaphore_empty;
     OS_Handle semaphore_full;
 };
 struct ThreadInfo
 {
-    Queue* queue;
+    Queue<QueueItem>* queue;
     U32 thread_id;
 };
 
 struct ThreadInput
 {
-    Queue* queue;
+    Queue<QueueItem>* queue;
     U32 thread_count;
     U32 thread_id;
     B32* kill_switch;
@@ -36,16 +35,22 @@ struct ThreadInput
 struct Threads
 {
     B32 kill_switch;
-    async::Queue* msg_queue;
+    async::Queue<QueueItem>* msg_queue;
     Buffer<OS_Handle> thread_handles;
 };
 
-static Queue*
+template <typename T>
+static Queue<T>*
 QueueInit(Arena* arena, U32 queue_size, U32 thread_count);
+template <typename T>
 static void
-QueueDestroy(Queue* queue);
+QueueDestroy(Queue<T>* queue);
+template <typename T>
+static B32
+QueueTryRead(Queue<T>* queue, T* item);
+template <typename T>
 static void
-QueuePush(Queue* queue, void* data, WorkerFunc worker_func);
+QueuePush(Queue<T>* queue, T* data);
 static void
 ThreadWorker(void* data);
 static Threads*

@@ -34,6 +34,7 @@ struct Context
 {
     B32 running;
     String8 cwd;
+    String8 cache_path;
 
     DllInfo* dll_info;
 

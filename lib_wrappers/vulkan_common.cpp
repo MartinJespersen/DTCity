@@ -190,7 +190,7 @@ VK_BeginSingleTimeCommands(VkDevice device, VkCommandPool cmd_pool)
 
 static void
 VK_EndSingleTimeCommands(VulkanContext* vk_ctx, VkCommandPool cmd_pool,
-                         VkCommandBuffer command_buffer, VkFence fence)
+                         VkCommandBuffer command_buffer)
 {
     VK_CHECK_RESULT(vkEndCommandBuffer(command_buffer));
 
@@ -199,24 +199,8 @@ VK_EndSingleTimeCommands(VulkanContext* vk_ctx, VkCommandPool cmd_pool,
     submitInfo.commandBufferCount = 1;
     submitInfo.pCommandBuffers = &command_buffer;
 
-    ThreadedGraphicsQueueSubmit(vk_ctx->graphics_queue, &submitInfo, fence);
-    VK_CHECK_RESULT(vkWaitForFences(vk_ctx->device, 1, &fence, VK_TRUE, UINT64_MAX));
-    VK_CHECK_RESULT(vkResetFences(vk_ctx->device, 1, &fence));
-    vkFreeCommandBuffers(vk_ctx->device, cmd_pool, 1, &command_buffer);
-}
-
-static void
-EndSingleTimeCommands(VulkanContext* vk_ctx, VkCommandPool cmd_pool, VkCommandBuffer command_buffer,
-                      VkFence fence)
-{
-    VK_CHECK_RESULT(vkEndCommandBuffer(command_buffer));
-
-    VkSubmitInfo submitInfo{};
-    submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
-    submitInfo.commandBufferCount = 1;
-    submitInfo.pCommandBuffers = &command_buffer;
-
-    ThreadedGraphicsQueueSubmit(vk_ctx->graphics_queue, &submitInfo, fence);
+    VK_CHECK_RESULT(vkQueueSubmit(vk_ctx->graphics_queue, 1, &submitInfo, VK_NULL_HANDLE));
+    VK_CHECK_RESULT(vkQueueWaitIdle(vk_ctx->graphics_queue));
     vkFreeCommandBuffers(vk_ctx->device, cmd_pool, 1, &command_buffer);
 }
 
@@ -374,31 +358,6 @@ VK_CreateInstance(VulkanContext* vk_ctx)
     ScratchEnd(scratch);
 }
 
-static GraphicsQueue
-ThreadedGraphicsQueueCreate(VkDevice device, U32 graphics_index)
-{
-    GraphicsQueue graphics_queue;
-    graphics_queue.mutex = OS_RWMutexAlloc();
-    vkGetDeviceQueue(device, graphics_index, 0, &graphics_queue.graphics_queue);
-
-    return graphics_queue;
-}
-
-static void
-ThreadedGraphicsQueueDestroy(GraphicsQueue graphics_queue)
-{
-    OS_RWMutexRelease(graphics_queue.mutex);
-}
-
-static void
-ThreadedGraphicsQueueSubmit(GraphicsQueue graphics_queue, VkSubmitInfo* info, VkFence fence)
-{
-    OS_MutexScopeW(graphics_queue.mutex)
-    {
-        VK_CHECK_RESULT(vkQueueSubmit(graphics_queue.graphics_queue, 1, info, fence));
-    }
-}
-
 static void
 VK_LogicalDeviceCreate(Arena* arena, VulkanContext* vk_ctx)
 {
@@ -468,8 +427,8 @@ VK_LogicalDeviceCreate(Arena* arena, VulkanContext* vk_ctx)
         exitWithError("failed to create logical device!");
     }
 
-    vk_ctx->graphics_queue =
-        ThreadedGraphicsQueueCreate(vk_ctx->device, queueFamilyIndicies.graphicsFamilyIndex);
+    vkGetDeviceQueue(vk_ctx->device, queueFamilyIndicies.graphicsFamilyIndex, 0,
+                     &vk_ctx->graphics_queue);
     vkGetDeviceQueue(vk_ctx->device, queueFamilyIndicies.presentFamilyIndex, 0,
                      &vk_ctx->present_queue);
 }

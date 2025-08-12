@@ -57,7 +57,13 @@ struct RoadTextureCreateInput
     Road* w_road;
 };
 
-typedef void(TextureCreateFunc)(VkCommandPool cmd_pool, VkFence fence,
+struct AssetStoreCommandPool
+{
+    OS_Handle mutex;
+    VkCommandPool cmd_pool;
+};
+
+typedef void(TextureCreateFunc)(U32 thread_id, AssetStoreCommandPool thread_cmd_pool,
                                 RoadTextureCreateInput* input, Texture* texture);
 struct RoadDescriptorCreateInfo
 {
@@ -71,6 +77,7 @@ struct RoadPushConstants
     F32 road_height;
     F32 texture_scale;
 };
+
 struct AssetStoreTexture
 {
     AssetStoreTexture* next;
@@ -86,8 +93,7 @@ struct RoadThreadInput
     TextureCreateFunc* texture_func;
     RoadTextureCreateInput* texture_input;
 
-    Buffer<VkCommandPool> cmd_pools;
-    Buffer<VkFence> fences;
+    Buffer<AssetStoreCommandPool> threaded_cmd_pools;
 };
 
 struct AssetStoreItemStateList
@@ -99,14 +105,19 @@ struct AssetStoreItemStateList
 struct AssetStore
 {
     Arena* arena;
-    async::Queue* work_queue;
+    async::Queue<async::QueueItem>* work_queue;
     Buffer<AssetStoreItemStateList> hashmap;
-    Buffer<VkCommandPool> cmd_pools;
-    Buffer<VkFence> fences;
-    Buffer<VkDescriptorPool> descriptor_pools;
+    Buffer<AssetStoreCommandPool> threaded_cmd_pools;
     AssetStoreTexture* free_list;
     U64 total_size;
     U64 used_size;
+};
+
+struct CmdQueueItem
+{
+    U64 asset_id;
+    U32 thread_id;
+    VkCommandBuffer cmd_buffer;
 };
 struct VulkanContext
 {
@@ -136,7 +147,8 @@ struct VulkanContext
     VkPhysicalDeviceProperties physical_device_properties;
     VkFormat blit_format;
     // VkQueue graphics_queue;
-    GraphicsQueue graphics_queue;
+    async::Queue<CmdQueueItem>* cmd_queue;
+    VkQueue graphics_queue;
     VkSurfaceKHR surface;
     VkQueue present_queue;
 
@@ -201,8 +213,8 @@ RoadCreate(VulkanContext* vk_ctx, city::Road* road);
 static void
 RoadUpdate(city::Road* road, VulkanContext* vk_ctx, U32 image_index, String8 shader_path);
 static void
-RoadTextureCreate(VkCommandPool cmd_pool, VkFence fence, RoadTextureCreateInput* thread_input,
-                  Texture* asset_store_texture);
+RoadTextureCreate(U32 thread_id, AssetStoreCommandPool thread_cmd_pool,
+                  RoadTextureCreateInput* input, Texture* texture);
 static void
 RoadDestroy(city::Road* road, VulkanContext* vk_ctx);
 
@@ -233,6 +245,10 @@ static void
 AssetStoreTextureThreadMain(async::ThreadInfo thread_info, void* data);
 static AssetStoreTexture*
 AssetStoreTextureGetSlot(AssetStore* asset_store, U64 texture_id);
+static void
+AssetStoreExecuteCmds(wrapper::VulkanContext* vk_ctx);
+static VkCommandBuffer
+BeginCommand(VkDevice device, AssetStoreCommandPool threaded_cmd_pool);
 
 // ~mgj: Vulkan Lifetime
 static VulkanContext*

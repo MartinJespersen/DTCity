@@ -61,6 +61,7 @@ ContextCreate()
 
     ctx->cwd = Str8PathFromStr8List(app_arena,
                                     {OS_GetCurrentPath(scratch.arena), S(".."), S(".."), S("..")});
+    ctx->cache_path = Str8PathFromStr8List(app_arena, {ctx->cwd, S("cache")});
 
     GlobalContextSet(ctx);
     InitWindow(ctx);
@@ -71,7 +72,7 @@ ContextCreate()
     ctx->thread_info = async::WorkerThreadsCreate(app_arena, thread_count, queue_size);
 
     ctx->vk_ctx = wrapper::VK_VulkanInit(ctx);
-    ctx->road = city::RoadCreate(ctx->vk_ctx);
+    ctx->road = city::RoadCreate(ctx->vk_ctx, ctx->cache_path);
     city::RoadsBuild(ctx->road);
     CameraInit(ctx->camera);
     ProfileBuffersCreate(ctx->vk_ctx, ctx->profilingContext);
