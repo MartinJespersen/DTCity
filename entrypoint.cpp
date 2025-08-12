@@ -160,7 +160,8 @@ MainLoop(void* ptr)
 
     while (ctx->running)
     {
-        wrapper::AssetStoreExecuteCmds(vk_ctx);
+        wrapper::AssetStoreExecuteCmds(vk_ctx, vk_ctx->asset_store);
+        wrapper::AssetStoreCmdDoneCheck(vk_ctx, vk_ctx->asset_store);
 
         ZoneScoped;
         wrapper::VulkanContext* vk_ctx = ctx->vk_ctx;

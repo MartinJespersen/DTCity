@@ -801,16 +801,13 @@ VK_Cleanup(VulkanContext* vk_ctx)
 
     vkDestroyDescriptorPool(vk_ctx->device, vk_ctx->descriptor_pool, 0);
 
-    char* statsString = nullptr;
-    vmaBuildStatsString(vk_ctx->allocator, &statsString, VK_TRUE); // VK_TRUE = detailed
-    printf("%s\n", statsString);
-    vmaFreeStatsString(vk_ctx->allocator, statsString);
     vmaDestroyAllocator(vk_ctx->allocator);
 
     AssetStoreDestroy(vk_ctx->device, vk_ctx->asset_store);
 
     vkDestroyDevice(vk_ctx->device, nullptr);
     vkDestroyInstance(vk_ctx->instance, nullptr);
+    ArenaRelease(vk_ctx->arena);
 }
 
 static VulkanContext*
@@ -1254,6 +1251,8 @@ AssetStoreCreate(VkDevice device, U32 queue_family_index, async::Threads* thread
         asset_store->threaded_cmd_pools.data[i].mutex = OS_MutexAlloc();
     }
 
+    asset_store->cmd_wait_list = AssetStoreCmdListCreate();
+
     return asset_store;
 }
 static void
@@ -1264,13 +1263,13 @@ AssetStoreDestroy(VkDevice device, AssetStore* asset_store)
         vkDestroyCommandPool(device, asset_store->threaded_cmd_pools.data[i].cmd_pool, 0);
         OS_MutexRelease(asset_store->threaded_cmd_pools.data[i].mutex);
     }
+    AssetStoreCmdListDestroy(asset_store->cmd_wait_list);
     ArenaRelease(asset_store->arena);
 }
 
 static void
-AssetStoreExecuteCmds(wrapper::VulkanContext* vk_ctx)
+AssetStoreExecuteCmds(wrapper::VulkanContext* vk_ctx, AssetStore* asset_store)
 {
-    wrapper::AssetStore* asset_store = vk_ctx->asset_store;
     B32 empty = 0;
     for (U32 i = 0; i < vk_ctx->cmd_queue->queue_size; i++)
     {
@@ -1282,18 +1281,13 @@ AssetStoreExecuteCmds(wrapper::VulkanContext* vk_ctx)
             submit_info.commandBufferCount = 1;
             submit_info.pCommandBuffers = &item.cmd_buffer;
 
-            vkQueueSubmit(vk_ctx->graphics_queue, 1, &submit_info, VK_NULL_HANDLE);
-            vkQueueWaitIdle(vk_ctx->graphics_queue);
-            OS_MutexScope(asset_store->threaded_cmd_pools.data[item.thread_id].mutex)
-            {
-                vkFreeCommandBuffers(vk_ctx->device,
-                                     asset_store->threaded_cmd_pools.data[item.thread_id].cmd_pool,
-                                     1, &item.cmd_buffer);
-            }
-            wrapper::AssetStoreTexture* asset =
-                wrapper::AssetStoreTextureGetSlot(vk_ctx->asset_store, item.asset_id);
-            BufferDestroy(vk_ctx->allocator, asset->asset.staging_buffer);
-            asset->is_loaded = 1;
+            VkFenceCreateInfo fence_info{};
+            fence_info.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
+            vkCreateFence(vk_ctx->device, &fence_info, nullptr, &item.fence);
+
+            vkQueueSubmit(vk_ctx->graphics_queue, 1, &submit_info, item.fence);
+
+            AssetStoreCmdListAdd(asset_store->cmd_wait_list, item);
         }
     }
 }
@@ -1324,6 +1318,36 @@ AssetStoreTextureGetSlot(AssetStore* asset_store, U64 texture_id)
         SLLQueuePushFront(texture_list->first, texture_list->last, texture_result);
     }
     return texture_result;
+}
+
+static void
+AssetStoreCmdDoneCheck(VulkanContext* vk_ctx, AssetStore* asset_store)
+{
+    for (CmdQueueItem* cmd_queue_item = asset_store->cmd_wait_list->list_first; cmd_queue_item;
+         cmd_queue_item = cmd_queue_item->next)
+    {
+        VkResult result = vkGetFenceStatus(vk_ctx->device, cmd_queue_item->fence);
+        if (result == VK_SUCCESS)
+        {
+            OS_MutexScope(asset_store->threaded_cmd_pools.data[cmd_queue_item->thread_id].mutex)
+            {
+                vkFreeCommandBuffers(
+                    vk_ctx->device,
+                    asset_store->threaded_cmd_pools.data[cmd_queue_item->thread_id].cmd_pool, 1,
+                    &cmd_queue_item->cmd_buffer);
+            }
+            wrapper::AssetStoreTexture* asset =
+                wrapper::AssetStoreTextureGetSlot(vk_ctx->asset_store, cmd_queue_item->asset_id);
+            BufferDestroy(vk_ctx->allocator, asset->asset.staging_buffer);
+            asset->is_loaded = 1;
+            vkDestroyFence(vk_ctx->device, cmd_queue_item->fence, 0);
+            AssetStoreCmdListRemove(asset_store->cmd_wait_list, cmd_queue_item);
+        }
+        else if (result != VK_NOT_READY)
+        {
+            VK_CHECK_RESULT(result);
+        }
+    }
 }
 
 static void
@@ -1380,4 +1404,40 @@ BeginCommand(VkDevice device, AssetStoreCommandPool threaded_cmd_pool)
     return commandBuffer;
 }
 
+static AssetStoreCmdList*
+AssetStoreCmdListCreate()
+{
+    Arena* arena = ArenaAlloc();
+    AssetStoreCmdList* cmd_list = PushStruct(arena, AssetStoreCmdList);
+    cmd_list->arena = arena;
+    return cmd_list;
+}
+static void
+AssetStoreCmdListDestroy(AssetStoreCmdList* cmd_list)
+{
+    ArenaRelease(cmd_list->arena);
+}
+static void
+AssetStoreCmdListAdd(AssetStoreCmdList* cmd_list, CmdQueueItem item)
+{
+    CmdQueueItem* item_copy;
+    if (cmd_list->free_list)
+    {
+        item_copy = cmd_list->free_list;
+        SLLStackPop(cmd_list->free_list);
+    }
+    else
+    {
+        item_copy = PushStruct(cmd_list->arena, CmdQueueItem);
+    }
+    *item_copy = item;
+    DLLPushBack(cmd_list->list_first, cmd_list->list_last, item_copy);
+}
+static void
+AssetStoreCmdListRemove(AssetStoreCmdList* cmd_list, CmdQueueItem* item)
+{
+    DLLRemove(cmd_list->list_first, cmd_list->list_last, item);
+    MemoryZeroStruct(item);
+    SLLStackPush(cmd_list->free_list, item);
+}
 } // namespace wrapper

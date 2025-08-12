@@ -102,6 +102,25 @@ struct AssetStoreItemStateList
     AssetStoreTexture* last;
 };
 
+struct CmdQueueItem
+{
+    CmdQueueItem* next;
+    CmdQueueItem* prev;
+    U64 asset_id;
+    U32 thread_id;
+    VkCommandBuffer cmd_buffer;
+    VkFence fence;
+};
+
+struct AssetStoreCmdList
+{
+    Arena* arena;
+    CmdQueueItem* list_first;
+    CmdQueueItem* list_last;
+
+    CmdQueueItem* free_list;
+};
+
 struct AssetStore
 {
     Arena* arena;
@@ -111,14 +130,9 @@ struct AssetStore
     AssetStoreTexture* free_list;
     U64 total_size;
     U64 used_size;
+    AssetStoreCmdList* cmd_wait_list;
 };
 
-struct CmdQueueItem
-{
-    U64 asset_id;
-    U32 thread_id;
-    VkCommandBuffer cmd_buffer;
-};
 struct VulkanContext
 {
     static const U32 WIDTH = 800;
@@ -146,6 +160,7 @@ struct VulkanContext
     VkPhysicalDevice physical_device;
     VkPhysicalDeviceProperties physical_device_properties;
     VkFormat blit_format;
+
     // VkQueue graphics_queue;
     async::Queue<CmdQueueItem>* cmd_queue;
     VkQueue graphics_queue;
@@ -246,9 +261,20 @@ AssetStoreTextureThreadMain(async::ThreadInfo thread_info, void* data);
 static AssetStoreTexture*
 AssetStoreTextureGetSlot(AssetStore* asset_store, U64 texture_id);
 static void
-AssetStoreExecuteCmds(wrapper::VulkanContext* vk_ctx);
+AssetStoreExecuteCmds(wrapper::VulkanContext* vk_ctx, AssetStore* asset_store);
+static void
+AssetStoreCmdDoneCheck(VulkanContext* vk_ctx, AssetStore* asset_store);
 static VkCommandBuffer
 BeginCommand(VkDevice device, AssetStoreCommandPool threaded_cmd_pool);
+
+static AssetStoreCmdList*
+AssetStoreCmdListCreate();
+static void
+AssetStoreCmdListDestroy(AssetStoreCmdList* cmd_list);
+static void
+AssetStoreCmdListAdd(AssetStoreCmdList* cmd_list, CmdQueueItem item);
+static void
+AssetStoreCmdListRemove(AssetStoreCmdList* cmd_list, CmdQueueItem* item);
 
 // ~mgj: Vulkan Lifetime
 static VulkanContext*
