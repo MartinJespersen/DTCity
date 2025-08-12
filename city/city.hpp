@@ -169,5 +169,5 @@ CarSimCreate(wrapper::VulkanContext* vk_ctx, U32 car_count, Road* road);
 static void
 CarSimDestroy(wrapper::VulkanContext* vk_ctx, CarSim* car_sim);
 static Buffer<CarInstance>
-CarUpdate(Arena* arena, CarSim* car);
+CarUpdate(Arena* arena, CarSim* car, F32 time_delta);
 } // namespace city

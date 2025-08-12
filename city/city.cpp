@@ -503,20 +503,13 @@ CarSimDestroy(wrapper::VulkanContext* vk_ctx, CarSim* car_sim)
 }
 
 static Buffer<CarInstance>
-CarUpdate(Arena* arena, CarSim* car)
+CarUpdate(Arena* arena, CarSim* car, F32 time_delta)
 {
-    //// temp
-    static auto startTime = std::chrono::high_resolution_clock::now();
-
-    auto currentTime = std::chrono::high_resolution_clock::now();
-    float time =
-        std::chrono::duration<float, std::chrono::seconds::period>(currentTime - startTime).count();
-    /////
     Buffer<CarInstance> instance_buffer = BufferAlloc<CarInstance>(arena, car->cars.size);
     CarInstance* instance;
     city::Car* car_info;
 
-    F32 car_speed_default = 0.001; // m/s
+    F32 car_speed_default = 1; // m/s
     for (U32 car_idx = 0; car_idx < car->cars.size; car_idx++)
     {
         instance = &instance_buffer.data[car_idx];
@@ -524,10 +517,10 @@ CarUpdate(Arena* arena, CarSim* car)
 
         // glm::vec3 dir = glm::normalize(car_info->dest - car_info->pos);
 
-        glm::vec3 new_pos = car_info->pos + car_info->dir * car_speed_default * time;
+        glm::vec3 new_pos = car_info->pos + car_info->dir * car_speed_default * time_delta;
 
         glm::vec3 y_basis = car_info->dir;
-        y_basis *= -1;
+        y_basis *= -1; // In model space, the front of the car points in the negative y direction
         glm::vec3 x_basis = glm::vec3(-y_basis.z, 0, y_basis.x);
         glm::vec3 z_basis = glm::cross(x_basis, y_basis);
 

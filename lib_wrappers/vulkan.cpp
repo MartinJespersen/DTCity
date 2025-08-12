@@ -561,8 +561,12 @@ CarPipelineCreate(VulkanContext* vk_ctx, VkDescriptorSetLayout car_layout)
     VkPipelineShaderStageCreateInfo shader_stages[] = {vert_shader_stage_info.info,
                                                        frag_shader_stage_info.info};
 
+    VkDynamicState dynamicStates[] = {VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR};
+
     VkPipelineDynamicStateCreateInfo dynamic_state{};
     dynamic_state.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
+    dynamic_state.dynamicStateCount = (U32)(ArrayCount(dynamicStates));
+    dynamic_state.pDynamicStates = dynamicStates;
 
     VkPipelineVertexInputStateCreateInfo vertex_input_info{};
     vertex_input_info.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
@@ -749,6 +753,20 @@ CarRendering(VulkanContext* vk_ctx, city::CarSim* car, U32 image_idx, U32 instan
     rendering_info.pDepthAttachment = &depth_attachment;
 
     vkCmdBeginRendering(cmd_buffer, &rendering_info);
+
+    VkViewport viewport{};
+    viewport.x = 0.0f;
+    viewport.y = 0.0f;
+    viewport.width = (F32)swapchain_extent.width;
+    viewport.height = (F32)swapchain_extent.height;
+    viewport.minDepth = 0.0f;
+    viewport.maxDepth = 1.0f;
+    vkCmdSetViewport(cmd_buffer, 0, 1, &viewport);
+
+    VkRect2D scissor{};
+    scissor.offset = {0, 0};
+    scissor.extent = swapchain_extent;
+    vkCmdSetScissor(cmd_buffer, 0, 1, &scissor);
 
     vkCmdBindPipeline(cmd_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline_info.pipeline);
 

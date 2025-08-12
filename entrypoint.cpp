@@ -27,13 +27,13 @@
 void App(HotReloadFunc){};
 
 static void
-DT_TimeInit(DT_Time* time)
+TimeInit(DT_Time* time)
 {
     time->last_time_ms = os_now_microseconds();
 }
 
 static void
-DT_UpdateTime(DT_Time* time)
+UpdateTime(DT_Time* time)
 {
     U64 cur_time = os_now_microseconds();
     time->delta_time_sec = (F32)(cur_time - time->last_time_ms) / 1'000'000.0;
@@ -86,7 +86,7 @@ CommandBufferRecord(U32 image_index, U32 current_frame)
         vk_ctx->command_buffers.data[current_frame], VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
         VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, 0, 0, nullptr, 0, nullptr, 1, &barrier);
 
-    DT_UpdateTime(time);
+    UpdateTime(time);
     CameraUpdate(camera, ctx->io, ctx->time, vk_ctx->swapchain_resources->swapchain_extent);
     wrapper::CameraUniformBufferUpdate(
         vk_ctx, camera,
@@ -95,7 +95,8 @@ CommandBufferRecord(U32 image_index, U32 current_frame)
         current_frame);
     wrapper::RoadUpdate(ctx->road, vk_ctx, image_index, vk_ctx->shader_path);
 
-    Buffer<city::CarInstance> instance_buffer = city::CarUpdate(scratch.arena, ctx->car_sim);
+    Buffer<city::CarInstance> instance_buffer =
+        city::CarUpdate(scratch.arena, ctx->car_sim, ctx->time->delta_time_sec);
     wrapper::CarUpdate(vk_ctx, ctx->car_sim->car, instance_buffer);
     CarRendering(vk_ctx, ctx->car_sim, image_index, ctx->car_sim->cars.size);
     // ~mgj: transition swapchain image layout from VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL to
@@ -156,7 +157,7 @@ MainLoop(void* ptr)
     DT_Time* time = ctx->time;
     OS_SetThreadName(Str8CString("Entrypoint thread"));
 
-    DT_TimeInit(time);
+    TimeInit(time);
 
     while (ctx->running)
     {
