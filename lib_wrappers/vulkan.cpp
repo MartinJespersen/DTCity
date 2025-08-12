@@ -803,7 +803,7 @@ VK_Cleanup(VulkanContext* vk_ctx)
 
     vmaDestroyAllocator(vk_ctx->allocator);
 
-    AssetStoreDestroy(vk_ctx->device, vk_ctx->asset_store);
+    AssetStoreDestroy(vk_ctx, vk_ctx->asset_store);
 
     vkDestroyDevice(vk_ctx->device, nullptr);
     vkDestroyInstance(vk_ctx->instance, nullptr);
@@ -1256,14 +1256,14 @@ AssetStoreCreate(VkDevice device, U32 queue_family_index, async::Threads* thread
     return asset_store;
 }
 static void
-AssetStoreDestroy(VkDevice device, AssetStore* asset_store)
+AssetStoreDestroy(VulkanContext* vk_ctx, AssetStore* asset_store)
 {
     for (U32 i = 0; i < asset_store->threaded_cmd_pools.size; i++)
     {
-        vkDestroyCommandPool(device, asset_store->threaded_cmd_pools.data[i].cmd_pool, 0);
+        vkDestroyCommandPool(vk_ctx->device, asset_store->threaded_cmd_pools.data[i].cmd_pool, 0);
         OS_MutexRelease(asset_store->threaded_cmd_pools.data[i].mutex);
     }
-    AssetStoreCmdListDestroy(asset_store->cmd_wait_list);
+    AssetStoreCmdListDestroy(vk_ctx, asset_store);
     ArenaRelease(asset_store->arena);
 }
 
@@ -1413,9 +1413,16 @@ AssetStoreCmdListCreate()
     return cmd_list;
 }
 static void
-AssetStoreCmdListDestroy(AssetStoreCmdList* cmd_list)
+AssetStoreCmdListDestroy(VulkanContext* vk_ctx, AssetStore* asset_store)
 {
-    ArenaRelease(cmd_list->arena);
+    AssetStoreCmdList* cmd_wait_list = asset_store->cmd_wait_list;
+
+    AssetStoreExecuteCmds(vk_ctx, asset_store);
+    while (cmd_wait_list->list_first)
+    {
+        AssetStoreCmdDoneCheck(vk_ctx, asset_store);
+    }
+    ArenaRelease(cmd_wait_list->arena);
 }
 static void
 AssetStoreCmdListAdd(AssetStoreCmdList* cmd_list, CmdQueueItem item)

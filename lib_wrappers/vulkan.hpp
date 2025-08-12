@@ -255,7 +255,7 @@ static AssetStore*
 AssetStoreCreate(VkDevice device, U32 queue_family_index, async::Threads* threads,
                  U64 texture_map_size, U64 total_size_in_bytes);
 static void
-AssetStoreDestroy(VkDevice device, AssetStore* asset_stream);
+AssetStoreDestroy(VulkanContext* vk_ctx, AssetStore* asset_stream);
 static void
 AssetStoreTextureThreadMain(async::ThreadInfo thread_info, void* data);
 static AssetStoreTexture*
@@ -270,7 +270,7 @@ BeginCommand(VkDevice device, AssetStoreCommandPool threaded_cmd_pool);
 static AssetStoreCmdList*
 AssetStoreCmdListCreate();
 static void
-AssetStoreCmdListDestroy(AssetStoreCmdList* cmd_list);
+AssetStoreCmdListDestroy(VulkanContext* vk_ctx, AssetStore* cmd_list);
 static void
 AssetStoreCmdListAdd(AssetStoreCmdList* cmd_list, CmdQueueItem item);
 static void
