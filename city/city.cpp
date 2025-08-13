@@ -186,13 +186,6 @@ RoadsBuild(Road* road)
     char zone_high[265];
     UTM::LLtoUTM(lat_high, lon_high, out_easting_high, out_northing_high, zone_high);
 
-    F64 meter_diff_x = out_easting_high - out_easting_low;
-    F64 meter_diff_y = out_northing_high - out_northing_low;
-    F64 lon_diff = lon_high - lon_low;
-    F64 lat_diff = lat_high - lat_low;
-    F64 x_scale = meter_diff_x / lon_diff;
-    F64 y_scale = meter_diff_y / lat_diff;
-
     HTTP_RequestParams params = {};
     params.method = HTTP_Method_Post;
     params.content_type = S("text/html");
@@ -210,7 +203,7 @@ RoadsBuild(Road* road)
         PushStr8F(scratch.arena, (char*)query, lat_low, lon_low, lat_high, lon_high);
 
     B32 read_from_cache = 0;
-    String8 content;
+    String8 content = {0};
     if (OS_FilePathExists(road->openapi_data_cache_path))
     {
         OS_Handle file_handle = OS_FileOpen(OS_AccessFlag_Read, road->openapi_data_cache_path);
@@ -338,9 +331,6 @@ RoadsBuild(Road* road)
                                            center_transform_x, center_transform_y, road_half_width);
             }
 
-            F32 y_len = road_quad_coords.pos[1].y - road_quad_coords.pos[0].y;
-            F32 x_len = road_quad_coords.pos[2].x - road_quad_coords.pos[0].x;
-
             // +1 due to duplicate of first and last way node to seperate roadways in triangle strip
             // topology
             road->vertex_buffer.data[current_vertex_index++].pos = road_quad_coords.pos[0];
@@ -353,8 +343,6 @@ RoadsBuild(Road* road)
                 road_quad_coords_next =
                     RoadSegmentFromNodeIds(road, way, node_index, node_index + 1,
                                            center_transform_x, center_transform_y, road_half_width);
-
-                F32 x_len_conn = road_quad_coords_next.pos[2].x - road_quad_coords.pos[0].x;
 
                 road->vertex_buffer.data[current_vertex_index++].pos = road_quad_coords_next.pos[1];
                 road->vertex_buffer.data[current_vertex_index++].pos = road_quad_coords.pos[2];

@@ -67,16 +67,16 @@ QueueTryRead(Queue<T>* queue, T* item)
 static void
 ThreadWorker(void* data)
 {
+    ScratchScope scratch = ScratchScope(0, 0);
     ThreadInput* input = (ThreadInput*)data;
     Queue<QueueItem>* queue = input->queue;
-    U32 thread_count = input->thread_count;
     U32 thread_id = input->thread_id;
 
+    OS_SetThreadName(PushStr8F(scratch.arena, "ThreadWorker: %zu", thread_id));
     ThreadInfo thread_info;
     thread_info.thread_id = thread_id;
     thread_info.queue = queue;
 
-    QueueItem item;
     U32 cur_index;
     B32 is_waiting = 0;
     while (!(*input->kill_switch))

@@ -6,9 +6,9 @@
 
 ////////////////////////////////
 //~ rjf: Third Party Includes
-
+DISABLE_WARNINGS_PUSH
 #include "third_party/stb_sprintf.h"
-
+DISABLE_WARNINGS_POP
 ////////////////////////////////
 //~ rjf: String Types
 
@@ -565,9 +565,9 @@ str8_deserial_read_block(String8 string, U64 off, U64 size, String8* block_out);
 static String8
 PushStr8Copy(Arena* arena, String8 string);
 static String8
-PushStr8FV(Arena* arena, char* fmt, va_list args);
+PushStr8FV(Arena* arena, const char* fmt, va_list args);
 static String8
-PushStr8F(Arena* arena, char* fmt, ...);
+PushStr8F(Arena* arena, const char* fmt, ...);
 static String8
 PushStr8FillByte(Arena* arena, U64 size, U8 byte);
 

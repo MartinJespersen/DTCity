@@ -272,7 +272,7 @@ OS_SetThreadName(String8 name)
     if (w32_SetThreadDescription_func)
     {
         String16 name16 = Str16From8(scratch.arena, name);
-        HRESULT hr = w32_SetThreadDescription_func(GetCurrentThread(), (WCHAR*)name16.str);
+        w32_SetThreadDescription_func(GetCurrentThread(), (WCHAR*)name16.str);
     }
 
     // rjf: raise-exception style
@@ -629,7 +629,7 @@ os_properties_from_file_path(String8 path)
     }
     else
     {
-        Temp scratch = ScratchBegin(0, 0);
+        scratch = ScratchBegin(0, 0);
         WCHAR buffer[512] = {0};
         DWORD length = GetLogicalDriveStringsW(sizeof(buffer), buffer);
         U64 last_slash_pos = 0;
@@ -1982,9 +1982,6 @@ HotReload(Context* ctx)
 
     dll_info->dll_path = S("entrypoint.dll");
     dll_info->dll_temp_path = S("entrypoint_temp.dll");
-
-    FILETIME last_modified;
-    HMODULE handle;
 
     HANDLE file = CreateFile((char*)dll_info->dll_temp_path.str, GENERIC_READ, FILE_SHARE_READ,
                              NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);

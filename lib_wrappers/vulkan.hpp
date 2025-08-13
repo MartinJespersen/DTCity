@@ -288,7 +288,6 @@ VK_Cleanup(VulkanContext* vk_ctx);
         if (res != VK_SUCCESS)                                                                     \
         {                                                                                          \
             fprintf(stderr, "Fatal : VkResult is %d in %s at line %d\n", res, __FILE__, __LINE__); \
-            Trap(res == VK_SUCCESS);                                                               \
             exit(EXIT_FAILURE);                                                                    \
         }                                                                                          \
     }

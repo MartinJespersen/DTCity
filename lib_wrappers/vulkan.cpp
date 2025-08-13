@@ -39,7 +39,7 @@ RoadTextureCreate(U32 thread_id, AssetStoreCommandPool threaded_cmd_pool,
     VmaAllocationCreateInfo vma_staging_info = {0};
     vma_staging_info.usage = VMA_MEMORY_USAGE_AUTO;
     vma_staging_info.flags =
-        VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
+        VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT | VMA_ALLOCATION_CREATE_MAPPED_BIT;
     vma_staging_info.requiredFlags = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT;
 
     texture->staging_buffer = BufferAllocationCreate(
@@ -271,8 +271,6 @@ RoadDestroy(city::Road* road, VulkanContext* vk_ctx)
     AssetStoreTexture* texture_state =
         AssetStoreTextureGetSlot(vk_ctx->asset_store, w_road->texture_id);
 
-    Texture* texture = &texture_state->asset;
-
     if (texture_state->is_loaded)
     {
         TextureDestroy(vk_ctx, &texture_state->asset);
@@ -328,7 +326,6 @@ ImageFromKtx2file(VkCommandBuffer cmd, BufferAllocation staging_buffer, VulkanCo
     U32 img_width = ktx_texture->baseWidth;
     U32 img_height = ktx_texture->baseHeight;
     VkDeviceSize img_size = ktx_texture->dataSize;
-    VkFormat vk_format = (VkFormat)ktx_texture->vkFormat;
     U32 mip_levels = ktx_texture->numLevels;
 
     vmaCopyMemoryToAllocation(vk_ctx->allocator, ktx_texture->pData, staging_buffer.allocation, 0,
@@ -435,7 +432,7 @@ CarCreate(VulkanContext* vk_ctx, CgltfSampler sampler, Buffer<city::CarVertex> v
 
     VkSamplerCreateInfo sampler_create_info = wrapper::VkSamplerFromCgltfSampler(sampler);
     sampler_create_info.anisotropyEnable = VK_TRUE;
-    sampler_create_info.maxAnisotropy = vk_ctx->msaa_samples;
+    sampler_create_info.maxAnisotropy = (F32)vk_ctx->msaa_samples;
     VkSampler vk_sampler = SamplerCreate(vk_ctx->device, &sampler_create_info);
 
     // upload vertex, index and image data to GPU
@@ -456,7 +453,6 @@ CarCreate(VulkanContext* vk_ctx, CgltfSampler sampler, Buffer<city::CarVertex> v
     U32 vertex_buffer_byte_size = vertex_buffer.size * sizeof(city::CarVertex);
     BufferAllocation vertex_staging_buffer = StagingBufferCreate(
         vk_ctx->allocator, vertex_buffer_byte_size, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT);
-    U32 index_buffer_byte_size = index_buffer.size * sizeof(U32);
     BufferAllocation index_staging_buffer = StagingBufferCreate(
         vk_ctx->allocator, vertex_buffer_byte_size, VK_BUFFER_USAGE_INDEX_BUFFER_BIT);
 
@@ -612,8 +608,8 @@ CarPipelineCreate(VulkanContext* vk_ctx, VkDescriptorSetLayout car_layout)
     VkViewport viewport{};
     viewport.x = 0.0f;
     viewport.y = 0.0f;
-    viewport.width = vk_ctx->swapchain_resources->swapchain_extent.width;
-    viewport.height = vk_ctx->swapchain_resources->swapchain_extent.height;
+    viewport.width = (F32)vk_ctx->swapchain_resources->swapchain_extent.width;
+    viewport.height = (F32)vk_ctx->swapchain_resources->swapchain_extent.height;
     viewport.minDepth = 0.0f;
     viewport.maxDepth = 1.0f;
 
@@ -965,8 +961,8 @@ RoadPipelineCreate(Road* road, String8 shader_path)
     VkViewport viewport{};
     viewport.x = 0.0f;
     viewport.y = 0.0f;
-    viewport.width = vk_ctx->swapchain_resources->swapchain_extent.width;
-    viewport.height = vk_ctx->swapchain_resources->swapchain_extent.height;
+    viewport.width = (F32)vk_ctx->swapchain_resources->swapchain_extent.width;
+    viewport.height = (F32)vk_ctx->swapchain_resources->swapchain_extent.height;
     viewport.minDepth = 0.0f;
     viewport.maxDepth = 1.0f;
 
@@ -1288,7 +1284,6 @@ AssetStoreDestroy(VulkanContext* vk_ctx, AssetStore* asset_store)
 static void
 AssetStoreExecuteCmds(wrapper::VulkanContext* vk_ctx, AssetStore* asset_store)
 {
-    B32 empty = 0;
     for (U32 i = 0; i < vk_ctx->cmd_queue->queue_size; i++)
     {
         wrapper::CmdQueueItem item;

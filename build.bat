@@ -15,7 +15,7 @@ set "vulkan_path=C:\\VulkanSDK\\"
 set "glfw_lib_dir=%lib_dir%glfw\\lib\\"
 set "ktx_lib_dir=%lib_dir%ktx"
 :: Compiler and linker flags
-set "cxxflags=/W0 /std:c++20 /wd4201 /EHsc /Z7"
+set "cxxflags=/W4 /std:c++20 /wd4201 /wd4505 /wd4005 /wd4838 /wd4244 /wd4996 /wd4310 /wd4245 /wd4100 /EHsc /Z7"
 set "include_dirs=/I. /I%vulkan_path%Include /I%lib_dir%glfw\\include /I%lib_dir% /I%lib_dir%ktx\\include"
 :: free typed is the debug lib
 

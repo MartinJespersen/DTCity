@@ -4,12 +4,13 @@
 ////////////////////////////////
 //~ rjf: Third Party Includes
 
+DISABLE_WARNINGS_PUSH
 #if !BUILD_SUPPLEMENTARY_UNIT
 #define STB_SPRINTF_IMPLEMENTATION
 #define STB_SPRINTF_STATIC
 #include "third_party/stb_sprintf.h"
 #endif
-
+DISABLE_WARNINGS_POP
 ////////////////////////////////
 //~ NOTE(allen): String <-> Integer Tables
 
@@ -1167,10 +1168,10 @@ str8_split(Arena* arena, String8 string, U8* split_chars, U64 split_char_count,
             }
         }
 
-        String8 string = str8_range(first, ptr);
-        if (keep_empties || string.size > 0)
+        String8 string_local = str8_range(first, ptr);
+        if (keep_empties || string_local.size > 0)
         {
-            Str8ListPush(arena, &list, string);
+            Str8ListPush(arena, &list, string_local);
         }
         ptr += 1;
     }
@@ -2728,7 +2729,7 @@ PushStr8Copy(Arena* arena, String8 string)
 }
 
 static String8
-PushStr8FV(Arena* arena, char* fmt, va_list args)
+PushStr8FV(Arena* arena, const char* fmt, va_list args)
 {
     String8 result = {0};
     va_list args2;
@@ -2741,7 +2742,7 @@ PushStr8FV(Arena* arena, char* fmt, va_list args)
 }
 
 static String8
-PushStr8F(Arena* arena, char* fmt, ...)
+PushStr8F(Arena* arena, const char* fmt, ...)
 {
     String8 result = {0};
     va_list args;

@@ -51,8 +51,8 @@ IO_InputStateUpdate(IO* input)
     S32 window_size_x;
     S32 window_size_y;
     glfwGetWindowSize(input->window, &window_size_x, &window_size_y);
-    input->window_size.x = window_size_x;
-    input->window_size.y = window_size_y;
+    input->window_size.x = window_size_x ? window_size_x : input->window_size.x;
+    input->window_size.y = window_size_y ? window_size_y : input->window_size.y;
 
     // Mouse updates
     F64 mouse_x;

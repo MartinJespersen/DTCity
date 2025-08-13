@@ -1,5 +1,3 @@
-#define CGLTF_IMPLEMENTATION
-#include "third_party/cgltf.h"
 
 namespace wrapper
 {
@@ -148,8 +146,8 @@ CgltfParse(Arena* arena, String8 gltf_path)
     cgltf_accessor* accessor_position = NULL;
     cgltf_accessor* accessor_uv = NULL;
 
-    Buffer<city::CarVertex> vertex_buffer;
-    Buffer<U32> index_buffer;
+    Buffer<city::CarVertex> vertex_buffer = {0};
+    Buffer<U32> index_buffer = {0};
 
     cgltf_result result = cgltf_parse_file(&options, (char*)gltf_path.str, &data);
     Assert(result == cgltf_result_success);
@@ -161,17 +159,10 @@ CgltfParse(Arena* arena, String8 gltf_path)
     {
         cgltf_primitive* primitive = &mesh->primitives[prim_idx];
 
-        U32 expected_count = primitive->attributes[0].data->count;
+        U32 expected_count = (U32)primitive->attributes[0].data->count;
         for (size_t i = 1; i < primitive->attributes_count; ++i)
         {
-            if (primitive->attributes[i].data->count != expected_count)
-            {
-                fprintf(stderr,
-                        "Non-shared indexing detected: attribute %zu has %zu entries (expected "
-                        "%zu)\n",
-                        i, primitive->attributes[i].data->count, expected_count);
-                exit(1); // or handle with deduplication logic
-            }
+            Assert(primitive->attributes[i].data->count == expected_count);
         }
 
         for (size_t i = 0; i < primitive->attributes_count; ++i)
@@ -196,7 +187,7 @@ CgltfParse(Arena* arena, String8 gltf_path)
         index_buffer = BufferAlloc<U32>(arena, accessor_indices->count);
         for (U32 indice_idx = 0; indice_idx < accessor_indices->count; indice_idx++)
         {
-            U32 index = cgltf_accessor_read_index(accessor_indices, indice_idx);
+            U32 index = (U32)cgltf_accessor_read_index(accessor_indices, indice_idx);
             index_buffer.data[indice_idx] = index;
         }
 

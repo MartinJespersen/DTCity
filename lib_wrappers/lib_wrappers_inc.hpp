@@ -1,5 +1,7 @@
 #pragma once
 // ~mgj: third party libs
+
+DISABLE_WARNINGS_PUSH
 #include <vulkan/vulkan_core.h>
 #include "third_party/simdjson/simdjson.h"
 
@@ -16,6 +18,7 @@
 #define GLM_FORCE_DEFAULT_ALIGNED_GENTYPES
 #include "glm/glm.hpp"
 #include "glm/gtc/matrix_transform.hpp"
+DISABLE_WARNINGS_POP
 
 // ~mgj: user defined
 #include "lib_wrappers/json.hpp"

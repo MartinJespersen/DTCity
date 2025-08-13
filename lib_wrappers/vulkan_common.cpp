@@ -36,8 +36,8 @@ ImageLayoutTransition(VkCommandBuffer command_buffer, VkImage image, VkFormat fo
     barrier.subresourceRange.baseArrayLayer = 0;
     barrier.subresourceRange.layerCount = 1;
 
-    VkPipelineStageFlags source_stage;
-    VkPipelineStageFlags destination_stage;
+    VkPipelineStageFlags source_stage = VK_PIPELINE_STAGE_NONE;
+    VkPipelineStageFlags destination_stage = VK_PIPELINE_STAGE_NONE;
     if (oldLayout == VK_IMAGE_LAYOUT_UNDEFINED && newLayout == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL)
     {
         barrier.srcAccessMask = 0;
@@ -264,9 +264,6 @@ VK_DepthResourcesCreate(VulkanContext* vk_ctx, SwapchainResources* swapchain_res
                            VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT);
     swapchain_resources->depth_format = depth_format;
 
-    B32 has_stencil_component =
-        depth_format == VK_FORMAT_D32_SFLOAT_S8_UINT || depth_format == VK_FORMAT_D24_UNORM_S8_UINT;
-
     VmaAllocationCreateInfo vma_info = {
         .usage = VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE,
     };
@@ -298,7 +295,10 @@ static void
 VK_SurfaceCreate(VulkanContext* vk_ctx, IO* io)
 {
     int supported = glfwVulkanSupported();
-    B32 enabled = supported == GLFW_TRUE;
+    if (supported != GLFW_TRUE)
+    {
+        exitWithError("Vulkan loader or ICD loading failed!");
+    }
 
     VkResult result =
         glfwCreateWindowSurface(vk_ctx->instance, io->window, nullptr, &vk_ctx->surface);
@@ -1109,7 +1109,7 @@ BufferMappedCreate(VmaAllocator allocator, VkDeviceSize size, VkBufferUsageFlags
     {
         mapped_buffer.mapped_ptr = (void*)PushArray(mapped_buffer.arena, U8, size);
 
-        VmaAllocationCreateInfo vma_info = {0};
+        vma_info = {0};
         vma_info.usage = VMA_MEMORY_USAGE_CPU_ONLY;
         vma_info.flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT |
                          VMA_ALLOCATION_CREATE_MAPPED_BIT;

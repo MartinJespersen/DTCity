@@ -155,6 +155,7 @@ MainLoop(void* ptr)
     Context* ctx = (Context*)ptr;
     wrapper::VulkanContext* vk_ctx = ctx->vk_ctx;
     DT_Time* time = ctx->time;
+    IO* io_ctx = ctx->io;
     OS_SetThreadName(Str8CString("Entrypoint thread"));
 
     TimeInit(time);
@@ -165,8 +166,6 @@ MainLoop(void* ptr)
         wrapper::AssetStoreCmdDoneCheck(vk_ctx, vk_ctx->asset_store);
 
         ZoneScoped;
-        wrapper::VulkanContext* vk_ctx = ctx->vk_ctx;
-        IO* io_ctx = ctx->io;
 
         {
             ZoneScopedN("Wait for frame");

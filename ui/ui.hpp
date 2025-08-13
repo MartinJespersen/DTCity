@@ -1,8 +1,10 @@
 #pragma once
 // third party libs
 
+DISABLE_WARNINGS_PUSH
 #define STB_IMAGE_STATIC
 #include "third_party/stb_image.h"
+DISABLE_WARNINGS_POP
 
 #include <vulkan/vulkan_core.h>
 #define GLFW_INCLUDE_VULKAN
