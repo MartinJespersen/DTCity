@@ -10,13 +10,7 @@
 #include "profiler/tracy/TracyVulkan.hpp"
 
 // user defined: [hpp]
-#include "base/base_inc.hpp"
-#include "os_core/os_core_inc.hpp"
-#include "http/http_inc.hpp"
-#include "async/async.hpp"
-#include "lib_wrappers/lib_wrappers_inc.hpp"
-#include "ui/ui.hpp"
-#include "city/city_inc.hpp"
+#include "entrypoint.hpp"
 
 // domain: cpp
 #include "base/base_inc.cpp"
@@ -95,13 +89,13 @@ ContextDestroy(Context* ctx)
 
     glfwDestroyWindow(ctx->io->window);
     glfwTerminate();
+    ArenaRelease(ctx->arena_permanent);
 }
 
 void
 App(HotReloadFunc HotReload)
 {
     Context* ctx = ContextCreate();
-
     while (!glfwWindowShouldClose(ctx->io->window))
     {
         HotReload(ctx);

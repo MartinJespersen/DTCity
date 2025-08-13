@@ -149,9 +149,9 @@ os_w32_thread_entry_point(void* ptr)
     OS_ThreadFunctionType* func = entity->thread.func;
     void* thread_ptr = entity->thread.ptr;
     TCTX tctx_;
-    tctx_init_and_equip(&tctx_);
+    TCTX_InitAndEquip(&tctx_);
     func(thread_ptr);
-    tctx_release();
+    TCTX_Release();
     return 0;
 }
 
@@ -1834,7 +1834,7 @@ w32_entry_point_caller(int argc, WCHAR** wargv)
 
     //- rjf: set up thread context
     local_persist TCTX tctx;
-    tctx_init_and_equip(&tctx);
+    TCTX_InitAndEquip(&tctx);
 
     //- rjf: set up dynamically-alloc'd state
     Arena* arena = ArenaAlloc();

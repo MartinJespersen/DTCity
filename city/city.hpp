@@ -56,10 +56,16 @@ struct RoadVertex
     glm::vec2 uv;
 };
 
+struct RoadWayListElement
+{
+    RoadWayListElement* next;
+    RoadWay* road_way;
+};
+
 struct RoadWayQueue
 {
-    RoadWay* first;
-    RoadWay* last;
+    RoadWayListElement* first;
+    RoadWayListElement* last;
 };
 
 struct NodeUtm
@@ -122,8 +128,9 @@ struct CarVertex
 
 struct Car
 {
-    glm::vec3 pos;
-    glm::vec3 dest;
+    glm::vec3 cur_pos;
+    NodeUtm* source;
+    NodeUtm* target;
     glm::vec3 dir;
     F32 speed; //
 };
@@ -169,5 +176,5 @@ CarSimCreate(wrapper::VulkanContext* vk_ctx, U32 car_count, Road* road);
 static void
 CarSimDestroy(wrapper::VulkanContext* vk_ctx, CarSim* car_sim);
 static Buffer<CarInstance>
-CarUpdate(Arena* arena, CarSim* car, F32 time_delta);
+CarUpdate(Arena* arena, CarSim* car, Road* road, F32 time_delta);
 } // namespace city

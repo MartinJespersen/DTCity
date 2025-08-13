@@ -20,7 +20,6 @@
 // #include "base_command_line.h"
 // #include "base_markup.h"
 // #include "base_meta.h"
-// #include "base_log.h"
 // #include "base_entry_point.h"
 #include "container.hpp"
 #include "os_core/os_core_inc.hpp"

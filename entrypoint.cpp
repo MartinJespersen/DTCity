@@ -96,7 +96,7 @@ CommandBufferRecord(U32 image_index, U32 current_frame)
     wrapper::RoadUpdate(ctx->road, vk_ctx, image_index, vk_ctx->shader_path);
 
     Buffer<city::CarInstance> instance_buffer =
-        city::CarUpdate(scratch.arena, ctx->car_sim, ctx->time->delta_time_sec);
+        city::CarUpdate(scratch.arena, ctx->car_sim, ctx->road, ctx->time->delta_time_sec);
     wrapper::CarUpdate(vk_ctx, ctx->car_sim->car, instance_buffer);
     CarRendering(vk_ctx, ctx->car_sim, image_index, ctx->car_sim->cars.size);
     // ~mgj: transition swapchain image layout from VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL to

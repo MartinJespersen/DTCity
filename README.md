@@ -8,6 +8,7 @@
 
 * Asset Store is currently not thread safe for eviction cases and memory needs to be managed properly.
   * When asset getting evicted we have to make sure no other threads are using the resource.
+* Find way to flush logs so the memory does not build up forever
 
 * Linux support:
   * entrypoint caller currently implemented for windows should change to linux.
@@ -20,6 +21,7 @@
 * remove snake case naming to pascal case for function along the way
 * Reconsider global state for http, tctx, etc.
 * Create hot reload enable/disable switch
+
 
 # On Linux
 * For Khronos validation layer support (enabled by default when NDEBUG is not defined) remember to install it:

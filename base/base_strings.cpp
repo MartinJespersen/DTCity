@@ -942,7 +942,7 @@ str8_from_s64(Arena* arena, S64 s64, U32 radix, U8 min_digits, U8 digit_group_se
         Temp scratch = ScratchBegin(&arena, 1);
         String8 numeric_part =
             str8_from_u64(scratch.arena, (U64)(-s64), radix, min_digits, digit_group_separator);
-        result = push_str8f(arena, "-%S", numeric_part);
+        result = push_str8f(arena, "-%s", numeric_part.str);
         ScratchEnd(scratch);
     }
     else
@@ -2127,8 +2127,8 @@ indented_from_string(Arena* arena, String8 string)
                 str8_skip_chop_whitespace(str8_substr(string, r1u64(line_begin_off, off)));
             if (line.size != 0)
             {
-                Str8ListPushF(scratch.arena, &indented_strings, "%.*s%S\n", (int)depth * 2,
-                              indentation_bytes, line);
+                Str8ListPushF(scratch.arena, &indented_strings, "%.*s%s\n", (int)depth * 2,
+                              indentation_bytes, (char*)line.str);
             }
             if (line.size == 0 && indented_strings.node_count != 0 && off < string.size)
             {
@@ -2353,7 +2353,7 @@ wrapped_lines_from_string(Arena* arena, String8 string, U64 first_line_max_width
                 String8 line = str8_substr(string, line_range);
                 if (wrapped_indent_level > 0)
                 {
-                    line = push_str8f(arena, "%.*s%S", wrapped_indent_level, spaces, line);
+                    line = push_str8f(arena, "%.*s%s", wrapped_indent_level, spaces, line.str);
                 }
                 Str8ListPush(arena, &list, line);
                 line_range = r1u64(line_range.max + 1, candidate_line_range.max);
@@ -2370,7 +2370,7 @@ wrapped_lines_from_string(Arena* arena, String8 string, U64 first_line_max_width
         String8 line = str8_substr(string, line_range);
         if (wrapped_indent_level > 0)
         {
-            line = push_str8f(arena, "%.*s%S", wrapped_indent_level, spaces, line);
+            line = push_str8f(arena, "%.*s%s", wrapped_indent_level, spaces, line.str);
         }
         Str8ListPush(arena, &list, line);
     }

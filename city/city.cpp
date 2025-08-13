@@ -130,7 +130,10 @@ UniqueNodeAndWayInsert(Arena* arena, U64 node_id, RoadWay* road_way, Buffer<Node
         node_inserted = 1;
     }
 
-    SLLQueuePush(node->roadway_queue.first, node->roadway_queue.last, road_way);
+    RoadWayListElement* road_way_element = PushStruct(arena, RoadWayListElement);
+    road_way_element->road_way = road_way;
+
+    SLLQueuePush(node->roadway_queue.first, node->roadway_queue.last, road_way_element);
 
     *out = node;
     return node_inserted;
@@ -417,9 +420,27 @@ FindUtmNode(Road* road, U64 node_id)
 static NodeUtm*
 NeighbourNodeChoose(NodeUtm* node, Road* road)
 {
-    RoadWay* way = node->roadway_queue.first;
+    // Calculate roadway count for the node
+    U32 roadway_count = 0;
+    for (RoadWayListElement* way_element = node->roadway_queue.first; way_element;
+         way_element = way_element->next)
+    {
+        roadway_count++;
+    }
+    RoadWayListElement* way_element = node->roadway_queue.first;
+
+    // Find random roadway
+    U32 rand_num = RandomU32();
+    U32 rand_roadway_idx = rand_num % roadway_count;
+    for (U32 i = 0; i < rand_roadway_idx; ++i)
+    {
+        way_element = way_element->next;
+    }
+    Assert(way_element);
+
+    RoadWay* way = way_element->road_way;
     U32 node_idx = 0;
-    for (; node_idx < way->node_count; ++node_idx)
+    for (; node_idx < way->node_count; node_idx++)
     {
         if (way->node_ids[node_idx] == node->id)
         {
@@ -481,15 +502,17 @@ CarSimCreate(wrapper::VulkanContext* vk_ctx, U32 car_count, Road* road)
 
     for (U32 i = 0; i < car_count; ++i)
     {
-        NodeUtm* node = RoadRandomNodeUtmFind(road);
-        NodeUtm* next_node = NeighbourNodeChoose(node, road);
+        NodeUtm* source_node = RoadRandomNodeUtmFind(road);
+        NodeUtm* target_node = NeighbourNodeChoose(source_node, road);
         city::Car* car = &car_sim->cars.data[i];
-        car->pos =
-            glm::vec3(node->x_utm, road->road_height - car_sim->car_center_offset.min, node->y_utm);
-        car->dest = glm::vec3(next_node->x_utm, road->road_height - car_sim->car_center_offset.min,
-                              next_node->y_utm);
+        car->source = source_node;
+        car->target = target_node;
         car->speed = 10.0f;
-        car->dir = glm::normalize(car->dest - car->pos);
+        car->cur_pos =
+            glm::vec3(source_node->x_utm, road->road_height - car_sim->car_center_offset.min,
+                      source_node->y_utm);
+        car->dir = glm::normalize(glm::vec3(target_node->x_utm - source_node->x_utm, 0,
+                                            target_node->y_utm - source_node->y_utm));
     }
 
     return car_sim;
@@ -503,21 +526,40 @@ CarSimDestroy(wrapper::VulkanContext* vk_ctx, CarSim* car_sim)
 }
 
 static Buffer<CarInstance>
-CarUpdate(Arena* arena, CarSim* car, F32 time_delta)
+CarUpdate(Arena* arena, CarSim* car, Road* road, F32 time_delta)
 {
     Buffer<CarInstance> instance_buffer = BufferAlloc<CarInstance>(arena, car->cars.size);
     CarInstance* instance;
     city::Car* car_info;
 
-    F32 car_speed_default = 1; // m/s
+    F32 car_speed_default = 5.0f; // m/s
     for (U32 car_idx = 0; car_idx < car->cars.size; car_idx++)
     {
         instance = &instance_buffer.data[car_idx];
         car_info = &car->cars.data[car_idx];
 
-        // glm::vec3 dir = glm::normalize(car_info->dest - car_info->pos);
+        glm::vec3 target_pos =
+            glm::vec3(car_info->target->x_utm, car_info->cur_pos.y, car_info->target->y_utm);
+        glm::vec3 new_pos = car_info->cur_pos + car_info->dir * car_speed_default * time_delta;
 
-        glm::vec3 new_pos = car_info->pos + car_info->dir * car_speed_default * time_delta;
+        // Is the destination point in between new and old pos?
+        F32 min_x = Min(car_info->cur_pos.x, new_pos.x);
+        F32 max_x = Max(car_info->cur_pos.x, new_pos.x);
+        F32 min_y = Min(car_info->cur_pos.y, new_pos.y);
+        F32 max_y = Max(car_info->cur_pos.y, new_pos.y);
+
+        // Check if the car has reached its destination. If so, find new destination and direction.
+        if ((target_pos.x >= min_x && target_pos.x <= max_x) &&
+            (target_pos.y >= min_y && target_pos.y <= max_y))
+        {
+            NodeUtm* new_target = NeighbourNodeChoose(car_info->target, road);
+            glm::vec3 new_target_pos =
+                glm::vec3(new_target->x_utm, car_info->cur_pos.y, new_target->y_utm);
+            glm::vec3 new_dir = glm::normalize(new_target_pos - new_pos);
+            car_info->dir = new_dir;
+            car_info->source = car_info->target;
+            car_info->target = new_target;
+        }
 
         glm::vec3 y_basis = car_info->dir;
         y_basis *= -1; // In model space, the front of the car points in the negative y direction
@@ -529,7 +571,7 @@ CarUpdate(Arena* arena, CarSim* car, F32 time_delta)
         instance->z_basis = glm::vec4(z_basis, 0);
         instance->w_basis = {new_pos, 1};
 
-        car_info->pos = new_pos;
+        car_info->cur_pos = new_pos;
     }
     return instance_buffer;
 }

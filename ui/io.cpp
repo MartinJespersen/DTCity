@@ -48,13 +48,13 @@ IO_InputStateUpdate(IO* input)
 {
     glfwPollEvents();
 
-    // Mouse updates
     S32 window_size_x;
     S32 window_size_y;
     glfwGetWindowSize(input->window, &window_size_x, &window_size_y);
     input->window_size.x = window_size_x;
     input->window_size.y = window_size_y;
 
+    // Mouse updates
     F64 mouse_x;
     F64 mouse_y;
     glfwGetCursorPos(input->window, &mouse_x, &mouse_y);

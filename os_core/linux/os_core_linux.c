@@ -100,9 +100,9 @@ static void *os_lnx_thread_entry_point(void *ptr) {
   OS_ThreadFunctionType *func = entity->thread.func;
   void *thread_ptr = entity->thread.ptr;
   TCTX tctx_;
-  tctx_init_and_equip(&tctx_);
+  TCTX_InitAndEquip(&tctx_);
   func(thread_ptr);
-  tctx_release();
+  TCTX_Release();
   return 0;
 }
 
@@ -485,7 +485,7 @@ static B32 os_file_iter_next(Arena *arena, OS_FileIter *iter,
     int stat_result = 0;
     if (good) {
       Temp scratch = ScratchBegin(&arena, 1);
-      String8 full_path = push_str8f(scratch.arena, "%S/%s", lnx_iter->path,
+      String8 full_path = push_str8f(scratch.arena, "%s/%s", lnx_iter->path.str,
                                      lnx_iter->dp->d_name);
       stat_result = stat((char *)full_path.str, &st);
       ScratchEnd(scratch);
@@ -1223,7 +1223,7 @@ int main(int argc, char **argv) {
 
     //- rjf: set up thread context
     local_persist TCTX tctx;
-    tctx_init_and_equip(&tctx);
+    TCTX_InitAndEquip(&tctx);
 
     //- rjf: set up dynamically allocated state
     os_lnx_state.arena = ArenaAlloc();
