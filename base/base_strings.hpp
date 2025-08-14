@@ -575,6 +575,10 @@ PushStr8FillByte(Arena* arena, U64 size, U8 byte);
 B32
 F32FromStr8(String8 string, F32* out);
 
+// ~mgj: String hashes
+static U128
+HashU128FromStr8(String8 str);
+
 // string manipulation helpers
 #define CStrEqual(a, b) (!strcmp((a), (b)))
 // ~mgj: String Macros

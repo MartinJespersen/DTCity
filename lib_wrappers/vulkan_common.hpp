@@ -354,6 +354,11 @@ VK_BeginSingleTimeCommands(VkDevice device, VkCommandPool cmd_pool);
 static void
 VK_EndSingleTimeCommands(VulkanContext* vk_ctx, VkCommandPool cmd_pool,
                          VkCommandBuffer command_buffer);
+
+static void
+ClearDepthAndColorImage(VkCommandBuffer cmd_buf, VkImage image_color, VkImage image_depth,
+                        VkClearColorValue clear_color,
+                        VkClearDepthStencilValue depth_stencil_clear_value);
 //
 // ~mgj: texture functions
 static void

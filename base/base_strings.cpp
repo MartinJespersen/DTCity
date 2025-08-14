@@ -5,11 +5,10 @@
 //~ rjf: Third Party Includes
 
 DISABLE_WARNINGS_PUSH
-#if !BUILD_SUPPLEMENTARY_UNIT
 #define STB_SPRINTF_IMPLEMENTATION
 #define STB_SPRINTF_STATIC
 #include "third_party/stb_sprintf.h"
-#endif
+#include "third_party/meow_hash_x64_aesni.h"
 DISABLE_WARNINGS_POP
 ////////////////////////////////
 //~ NOTE(allen): String <-> Integer Tables
@@ -2770,4 +2769,20 @@ F32FromStr8(String8 string, F32* result)
     *result = strtof((char*)string.str, &is_not_success);
     B32 ret = !(*is_not_success);
     return ret;
+}
+
+// ~mgj: String hashes
+static U128
+HashU128FromStr8(String8 str)
+{
+    ScratchScope scratch = ScratchScope(0, 0);
+
+    U64 align = 16;
+    U64 size_to_alignment = str.size + (align - (str.size % align));
+    U8* buffer = PushArrayAligned(scratch.arena, U8, size_to_alignment, align);
+    MemoryCopy(buffer, str.str, str.size);
+    meow_u128 hash = MeowHash(MeowDefaultSeed, str.size, buffer);
+    U128 result;
+    MemoryCopy(&result, &hash, sizeof(result));
+    return result;
 }

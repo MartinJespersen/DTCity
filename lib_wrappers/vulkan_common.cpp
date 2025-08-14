@@ -271,7 +271,8 @@ VK_DepthResourcesCreate(VulkanContext* vk_ctx, SwapchainResources* swapchain_res
     ImageAllocation image_alloc = ImageAllocationCreate(
         vk_ctx->allocator, swapchain_resources->swapchain_extent.width,
         swapchain_resources->swapchain_extent.height, vk_ctx->msaa_samples, depth_format,
-        VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT, 1, vma_info);
+        VK_IMAGE_TILING_OPTIMAL,
+        VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT, 1, vma_info);
 
     ImageViewResource image_view_resource = ImageViewResourceCreate(
         vk_ctx->device, image_alloc.image, depth_format, VK_IMAGE_ASPECT_DEPTH_BIT, 1);
@@ -392,9 +393,15 @@ VK_LogicalDeviceCreate(Arena* arena, VulkanContext* vk_ctx)
     deviceFeatures.geometryShader = VK_TRUE;
     deviceFeatures.fillModeNonSolid = VK_TRUE;
 
+    // setup linked list of device features
+    VkPhysicalDeviceSynchronization2Features sync2_features{};
+    sync2_features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SYNCHRONIZATION_2_FEATURES;
+    sync2_features.synchronization2 = VK_TRUE;
+
     VkPhysicalDeviceDynamicRenderingFeatures dynamic_rendering_features{};
     dynamic_rendering_features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DYNAMIC_RENDERING_FEATURES;
     dynamic_rendering_features.dynamicRendering = VK_TRUE;
+    dynamic_rendering_features.pNext = &sync2_features;
 
     VkDeviceCreateInfo createInfo{};
     createInfo.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
@@ -1279,7 +1286,8 @@ VK_ColorResourcesCreate(VulkanContext* vk_ctx, SwapchainResources* swapchain_res
     ImageAllocation image_alloc = ImageAllocationCreate(
         vk_ctx->allocator, swapchain_resources->swapchain_extent.width,
         swapchain_resources->swapchain_extent.height, vk_ctx->msaa_samples, colorFormat,
-        VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT, 1, vma_info);
+        VK_IMAGE_TILING_OPTIMAL,
+        VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT, 1, vma_info);
 
     ImageViewResource color_image_view = ImageViewResourceCreate(
         vk_ctx->device, image_alloc.image, colorFormat, VK_IMAGE_ASPECT_COLOR_BIT, 1);
@@ -1646,6 +1654,82 @@ DescriptorSetCreate(Arena* arena, VkDevice device, VkDescriptorPool desc_pool,
     }
 
     return desc_sets;
+}
+static void
+ClearDepthAndColorImage(VkCommandBuffer cmd_buf, VkImage image_color, VkImage image_depth,
+                        VkClearColorValue clear_color,
+                        VkClearDepthStencilValue depth_stencil_clear_value)
+{
+    VkImageSubresourceRange color_range = {.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+                                           .baseMipLevel = 0,
+                                           .levelCount = 1,
+                                           .baseArrayLayer = 0,
+                                           .layerCount = 1};
+
+    VkImageSubresourceRange depth_range = {.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT,
+                                           .baseMipLevel = 0,
+                                           .levelCount = 1,
+                                           .baseArrayLayer = 0,
+                                           .layerCount = 1};
+
+    VkImageMemoryBarrier2 barriers[2] = {{// Color image barrier
+                                          .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
+                                          .srcStageMask = VK_PIPELINE_STAGE_2_NONE,
+                                          .srcAccessMask = VK_ACCESS_2_NONE,
+                                          .dstStageMask = VK_PIPELINE_STAGE_2_TRANSFER_BIT,
+                                          .dstAccessMask = VK_ACCESS_2_TRANSFER_WRITE_BIT,
+                                          .oldLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+                                          .newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                                          .image = image_color,
+                                          .subresourceRange = color_range},
+                                         {// Depth image barrier
+                                          .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
+                                          .srcStageMask = VK_PIPELINE_STAGE_2_NONE,
+                                          .srcAccessMask = VK_ACCESS_2_NONE,
+                                          .dstStageMask = VK_PIPELINE_STAGE_2_TRANSFER_BIT,
+                                          .dstAccessMask = VK_ACCESS_2_TRANSFER_WRITE_BIT,
+                                          .oldLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+                                          .newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                                          .image = image_depth,
+                                          .subresourceRange = depth_range}};
+
+    VkDependencyInfo info = {.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
+                             .imageMemoryBarrierCount = 2,
+                             .pImageMemoryBarriers = barriers};
+    vkCmdPipelineBarrier2(cmd_buf, &info);
+
+    vkCmdClearColorImage(cmd_buf, image_color, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, &clear_color,
+                         1, &color_range);
+
+    vkCmdClearDepthStencilImage(cmd_buf, image_depth, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                                &depth_stencil_clear_value, 1, &depth_range);
+
+    VkImageMemoryBarrier2 renderBarriers[2] = {
+        {// Color
+         .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
+         .srcStageMask = VK_PIPELINE_STAGE_2_TRANSFER_BIT,
+         .srcAccessMask = VK_ACCESS_2_TRANSFER_WRITE_BIT,
+         .dstStageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
+         .dstAccessMask = VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT,
+         .oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+         .newLayout = VK_IMAGE_LAYOUT_ATTACHMENT_OPTIMAL_KHR,
+         .image = image_color,
+         .subresourceRange = color_range},
+        {// Depth
+         .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
+         .srcStageMask = VK_PIPELINE_STAGE_2_TRANSFER_BIT,
+         .srcAccessMask = VK_ACCESS_2_TRANSFER_WRITE_BIT,
+         .dstStageMask = VK_PIPELINE_STAGE_2_EARLY_FRAGMENT_TESTS_BIT,
+         .dstAccessMask = VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT,
+         .oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+         .newLayout = VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL_KHR,
+         .image = image_depth,
+         .subresourceRange = depth_range}};
+
+    VkDependencyInfo render_info = {.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
+                                    .imageMemoryBarrierCount = 2,
+                                    .pImageMemoryBarriers = renderBarriers};
+    vkCmdPipelineBarrier2(cmd_buf, &render_info);
 }
 
 } // namespace wrapper

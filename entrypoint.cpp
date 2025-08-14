@@ -58,33 +58,49 @@ CommandBufferRecord(U32 image_index, U32 current_frame)
     beginInfo.flags = 0;                  // Optional
     beginInfo.pInheritanceInfo = nullptr; // Optional
 
-    if (vkBeginCommandBuffer(vk_ctx->command_buffers.data[current_frame], &beginInfo) != VK_SUCCESS)
+    VkCommandBuffer current_cmd_buf = vk_ctx->command_buffers.data[current_frame];
+    if (vkBeginCommandBuffer(current_cmd_buf, &beginInfo) != VK_SUCCESS)
     {
         exitWithError("failed to begin recording command buffer!");
     }
 
-    TracyVkCollect(profilingContext->tracyContexts.data[current_frame],
-                   vk_ctx->command_buffers.data[current_frame]);
+    TracyVkCollect(profilingContext->tracyContexts.data[current_frame], current_cmd_buf);
 
+    wrapper::SwapchainResources* swapchain_resource = vk_ctx->swapchain_resources;
+    VkImage color_image = swapchain_resource->color_image_resource.image_alloc.image;
+    VkImage depth_image = swapchain_resource->depth_image_resource.image_alloc.image;
+    VkImage swapchain_image = swapchain_resource->image_resources.data[image_index].image;
+    VkClearColorValue clear_color = {0.0f, 0.0f, 0.0f, 1.0f};
+    VkClearDepthStencilValue clear_depth = {1.0f, 0};
+    VkImageSubresourceRange image_range = {.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+                                           .baseMipLevel = 0,
+                                           .levelCount = 1,
+                                           .baseArrayLayer = 0,
+                                           .layerCount = 1};
+
+    wrapper::ClearDepthAndColorImage(current_cmd_buf, color_image, depth_image, clear_color,
+                                     clear_depth);
     // ~ transition swapchain image from undefined to color attachment optimal
-    VkImageMemoryBarrier barrier{};
-    barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
-    barrier.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-    barrier.newLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-    barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-    barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-    barrier.image = vk_ctx->swapchain_resources->image_resources.data[image_index].image;
-    barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-    barrier.subresourceRange.baseMipLevel = 0;
-    barrier.subresourceRange.levelCount = 1;
-    barrier.subresourceRange.baseArrayLayer = 0;
-    barrier.subresourceRange.layerCount = 1;
-    barrier.srcAccessMask = 0;
-    barrier.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+    VkImageMemoryBarrier2 barrier_before{};
+    barrier_before.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2;
+    barrier_before.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+    barrier_before.newLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+    barrier_before.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    barrier_before.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    barrier_before.image = swapchain_image;
+    barrier_before.srcAccessMask = VK_ACCESS_2_NONE;
+    barrier_before.dstAccessMask = VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT;
+    barrier_before.srcStageMask = VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT;
+    barrier_before.dstStageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT;
+    barrier_before.subresourceRange = image_range;
 
-    vkCmdPipelineBarrier(
-        vk_ctx->command_buffers.data[current_frame], VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
-        VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, 0, 0, nullptr, 0, nullptr, 1, &barrier);
+    VkDependencyInfo render_to_info = {
+        .sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
+        .imageMemoryBarrierCount = 1,
+        .pImageMemoryBarriers = &barrier_before,
+    };
+
+    vkCmdPipelineBarrier2(current_cmd_buf, &render_to_info);
 
     UpdateTime(time);
     CameraUpdate(camera, ctx->io, ctx->time, vk_ctx->swapchain_resources->swapchain_extent);
@@ -97,28 +113,29 @@ CommandBufferRecord(U32 image_index, U32 current_frame)
 
     Buffer<city::CarInstance> instance_buffer =
         city::CarUpdate(scratch.arena, ctx->car_sim, ctx->road, ctx->time->delta_time_sec);
-    wrapper::CarUpdate(vk_ctx, ctx->car_sim->car, instance_buffer);
-    CarRendering(vk_ctx, ctx->car_sim, image_index, ctx->car_sim->cars.size);
-    // ~mgj: transition swapchain image layout from VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL to
-    // VK_IMAGE_LAYOUT_PRESENT_SRC_KHR
-    barrier = {};
-    barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
-    barrier.oldLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-    barrier.newLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
-    barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-    barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-    barrier.image = vk_ctx->swapchain_resources->image_resources.data[image_index].image;
-    barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-    barrier.subresourceRange.baseMipLevel = 0;
-    barrier.subresourceRange.levelCount = 1;
-    barrier.subresourceRange.baseArrayLayer = 0;
-    barrier.subresourceRange.layerCount = 1;
-    barrier.srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
-    barrier.dstAccessMask = VK_ACCESS_MEMORY_READ_BIT;
+    wrapper::CarUpdate(ctx->car_sim, instance_buffer, image_index);
 
-    vkCmdPipelineBarrier(
-        vk_ctx->command_buffers.data[current_frame], VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
-        VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, 0, 0, nullptr, 0, nullptr, 1, &barrier);
+    // ~mgj: transition swapchain image for presentation
+    VkImageMemoryBarrier2 barrier_after = {};
+    barrier_after.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2;
+    barrier_after.oldLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+    barrier_after.newLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+    barrier_after.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    barrier_after.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    barrier_after.image = vk_ctx->swapchain_resources->image_resources.data[image_index].image;
+    barrier_after.subresourceRange = image_range;
+    barrier_after.srcAccessMask = VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT;
+    barrier_after.dstAccessMask = VK_ACCESS_2_MEMORY_READ_BIT;
+    barrier_after.srcStageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT;
+    barrier_after.dstStageMask = VK_PIPELINE_STAGE_2_BOTTOM_OF_PIPE_BIT;
+
+    VkDependencyInfo render_after_info = {
+        .sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
+        .imageMemoryBarrierCount = 1,
+        .pImageMemoryBarriers = &barrier_after,
+    };
+
+    vkCmdPipelineBarrier2(current_cmd_buf, &render_after_info);
 
     IO_InputReset(ctx->io);
 
@@ -133,7 +150,7 @@ shared_function OS_Handle
 Entrypoint(void* ptr)
 {
     Context* ctx = (Context*)ptr;
-    GlobalContextSet(ctx);
+    ThreadCtxSet(ctx);
     OS_GlobalStateSetFromPtr(ctx->os_state);
 
     return OS_ThreadLaunch(MainLoop, ptr, NULL);
@@ -162,8 +179,8 @@ MainLoop(void* ptr)
 
     while (ctx->running)
     {
-        wrapper::AssetStoreExecuteCmds(vk_ctx, vk_ctx->asset_store);
-        wrapper::AssetStoreCmdDoneCheck(vk_ctx, vk_ctx->asset_store);
+        wrapper::AssetStoreExecuteCmds();
+        wrapper::AssetStoreCmdDoneCheck();
 
         ZoneScoped;
 

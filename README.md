@@ -9,7 +9,7 @@
 * Asset Store is currently not thread safe for eviction cases and memory needs to be managed properly.
   * When asset getting evicted we have to make sure no other threads are using the resource.
 * Find way to flush logs so the memory does not build up forever
-
+* Threads in asset store should manage have more than one available command buffer in the thread command pool.
 * Linux support:
   * entrypoint caller currently implemented for windows should change to linux.
   * HTTP client implementation improvements on linux (move away from httplib)

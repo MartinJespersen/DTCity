@@ -25,24 +25,38 @@ struct CameraUniformBuffer
     Frustum frustum;
     glm::vec2 viewport_dim;
 };
+struct ImageKtx2
+{
+    ImageResource image_resource;
+    S32 width;
+    S32 height;
+    U32 mip_level_count;
+};
+
+struct CarThreadInput
+{
+    String8 texture_id;
+    CgltfSampler sampler;
+};
 
 struct Car
 {
     Arena* arena;
+    String8 texture_id;
+    B32 is_pipeline_created;
 
     BufferAllocation vertex_buffer_alloc;
     BufferAllocation index_buffer_alloc;
 
     PipelineInfo pipeline_info;
     BufferContext instance_buffer_mapped;
-    Texture* texture;
     VkDescriptorSetLayout descriptor_set_layout;
     Buffer<VkDescriptorSet> descriptor_sets;
 };
 struct Road
 {
     Arena* arena;
-    U64 texture_id;
+    String8 texture_id;
     BufferContext vertex_buffer;
     VkPipelineLayout pipeline_layout;
     VkPipeline pipeline;
@@ -78,17 +92,17 @@ struct RoadPushConstants
     F32 texture_scale;
 };
 
-struct AssetStoreTexture
+struct AssetStoreItem
 {
-    AssetStoreTexture* next;
-    U64 id;
+    AssetStoreItem* next;
+    String8 id;
     B32 is_loaded;
     Texture asset;
 };
 
 struct RoadThreadInput
 {
-    AssetStoreTexture* asset_store_texture;
+    AssetStoreItem* asset_store_texture;
 
     TextureCreateFunc* texture_func;
     RoadTextureCreateInput* texture_input;
@@ -98,15 +112,15 @@ struct RoadThreadInput
 
 struct AssetStoreItemStateList
 {
-    AssetStoreTexture* first;
-    AssetStoreTexture* last;
+    AssetStoreItem* first;
+    AssetStoreItem* last;
 };
 
 struct CmdQueueItem
 {
     CmdQueueItem* next;
     CmdQueueItem* prev;
-    U64 asset_id;
+    String8 asset_id;
     U32 thread_id;
     VkCommandBuffer cmd_buffer;
     VkFence fence;
@@ -124,10 +138,11 @@ struct AssetStoreCmdList
 struct AssetStore
 {
     Arena* arena;
+    async::Queue<CmdQueueItem>* cmd_queue;
     async::Queue<async::QueueItem>* work_queue;
     Buffer<AssetStoreItemStateList> hashmap;
     Buffer<AssetStoreCommandPool> threaded_cmd_pools;
-    AssetStoreTexture* free_list;
+    AssetStoreItem* free_list;
     U64 total_size;
     U64 used_size;
     AssetStoreCmdList* cmd_wait_list;
@@ -162,7 +177,6 @@ struct VulkanContext
     VkFormat blit_format;
 
     // VkQueue graphics_queue;
-    async::Queue<CmdQueueItem>* cmd_queue;
     VkQueue graphics_queue;
     VkSurfaceKHR surface;
     VkQueue present_queue;
@@ -194,15 +208,26 @@ struct VulkanContext
 
 // ~mgj: Car functions
 static Car*
-CarCreate(VulkanContext* vk_ctx, CgltfSampler sampler, Buffer<city::CarVertex> vertex_buffer,
+CarCreate(String8 texture_id, CgltfSampler sampler, Buffer<city::CarVertex> vertex_buffer,
           Buffer<U32> index_buffer);
 static void
 CarDestroy(wrapper::VulkanContext* vk_ctx, wrapper::Car* car);
 static void
-CarUpdate(VulkanContext* vk_ctx, Car* w_car, Buffer<city::CarInstance> instance_buffer);
-static PipelineInfo
-CarPipelineCreate(VulkanContext* vk_ctx, VkDescriptorSetLayout layout);
+CarUpdate(city::CarSim* car_sim, Buffer<city::CarInstance> instance_buffer, U32 image_idx);
+static void
+CarTextureCreate(String8 texture_id, CgltfSampler sampler);
 
+static void
+CarTextureThreadSetup(async::ThreadInfo thread_info, void* input);
+static void
+CarTextureCreateWorker(U32 thread_id, AssetStoreCommandPool cmd_pool, String8 texture_id,
+                       CgltfSampler sampler);
+
+static PipelineInfo
+CarPipelineInfoCreate(VulkanContext* vk_ctx, VkDescriptorSetLayout layout);
+
+static void
+CarCreateDescriptorSetLayout();
 static void
 CarRendering(VulkanContext* vk_ctx, city::CarSim* car, U32 image_idx, U32 instance_count);
 
@@ -247,7 +272,7 @@ RoadBindingDescriptionGet();
 static Buffer<VkVertexInputAttributeDescription>
 RoadAttributeDescriptionGet(Arena* arena);
 static void
-AssetStoreRoadResourceLoadAsync(AssetStore* asset_store, AssetStoreTexture* texture,
+AssetStoreRoadResourceLoadAsync(AssetStore* asset_store, AssetStoreItem* texture,
                                 VulkanContext* vk_ctx, String8 shader_path, Road* w_road,
                                 city::Road* road);
 //~mgj: Asset Store
@@ -258,29 +283,33 @@ static void
 AssetStoreDestroy(VulkanContext* vk_ctx, AssetStore* asset_stream);
 static void
 AssetStoreTextureThreadMain(async::ThreadInfo thread_info, void* data);
-static AssetStoreTexture*
-AssetStoreTextureGetSlot(AssetStore* asset_store, U64 texture_id);
+static AssetStoreItem*
+AssetStoreTextureGetSlot(String8 asset_id);
 static void
-AssetStoreExecuteCmds(wrapper::VulkanContext* vk_ctx, AssetStore* asset_store);
+AssetStoreExecuteCmds();
 static void
-AssetStoreCmdDoneCheck(VulkanContext* vk_ctx, AssetStore* asset_store);
+AssetStoreCmdDoneCheck();
 static VkCommandBuffer
 BeginCommand(VkDevice device, AssetStoreCommandPool threaded_cmd_pool);
-
 static AssetStoreCmdList*
 AssetStoreCmdListCreate();
 static void
-AssetStoreCmdListDestroy(VulkanContext* vk_ctx, AssetStore* cmd_list);
+AssetStoreCmdListDestroy(AssetStoreCmdList* cmd_wait_list);
 static void
 AssetStoreCmdListAdd(AssetStoreCmdList* cmd_list, CmdQueueItem item);
 static void
 AssetStoreCmdListRemove(AssetStoreCmdList* cmd_list, CmdQueueItem* item);
-
+static U64
+AssetStoreHash(String8 str);
 // ~mgj: Vulkan Lifetime
 static VulkanContext*
 VK_VulkanInit(Context* ctx);
 static void
 VK_Cleanup(VulkanContext* vk_ctx);
+static void
+VulkanCtxSet(VulkanContext* vk_ctx);
+static VulkanContext*
+VulkanCtxGet();
 
 #define VK_CHECK_RESULT(f)                                                                         \
     {                                                                                              \
