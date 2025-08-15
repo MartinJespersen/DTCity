@@ -480,9 +480,10 @@ CarSimCreate(wrapper::VulkanContext* vk_ctx, U32 car_count, Road* road)
     car_sim->vertex_buffer = parsed_result.vertex_buffer;
     car_sim->index_buffer = parsed_result.index_buffer;
 
-    car_sim->car_texture_id = PushStr8Copy(arena, S("../../../textures/car_collection.ktx"));
+    String8 car_texture_path = PushStr8Copy(arena, S("../../../textures/car_collection.ktx"));
+    wrapper::AssetId car_texture_id = wrapper::AssetIdFromStr8(car_texture_path);
 
-    car_sim->car = wrapper::CarCreate(car_sim->car_texture_id, parsed_result.sampler,
+    car_sim->car = wrapper::CarCreate(car_texture_id, car_texture_path, parsed_result.sampler,
                                       car_sim->vertex_buffer, car_sim->index_buffer);
     car_sim->car_center_offset = CarCenterHeightOffset(car_sim->vertex_buffer);
 

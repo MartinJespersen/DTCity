@@ -17,7 +17,10 @@ struct CarInstance;
 
 namespace wrapper
 {
-
+struct AssetId
+{
+    U64 id;
+};
 struct CameraUniformBuffer
 {
     glm::mat4 view;
@@ -35,14 +38,17 @@ struct ImageKtx2
 
 struct CarThreadInput
 {
-    String8 texture_id;
+    AssetId texture_id;
+    String8 texture_path;
     CgltfSampler sampler;
 };
 
 struct Car
 {
     Arena* arena;
-    String8 texture_id;
+    AssetId texture_id;
+    String8 texture_path;
+
     B32 is_pipeline_created;
 
     BufferAllocation vertex_buffer_alloc;
@@ -56,7 +62,6 @@ struct Car
 struct Road
 {
     Arena* arena;
-    String8 texture_id;
     BufferContext vertex_buffer;
     VkPipelineLayout pipeline_layout;
     VkPipeline pipeline;
@@ -64,6 +69,7 @@ struct Road
     Buffer<VkDescriptorSet> descriptor_sets;
     B32 descriptors_are_created;
     String8 road_texture_path;
+    AssetId texture_id;
 };
 struct RoadTextureCreateInput
 {
@@ -92,17 +98,17 @@ struct RoadPushConstants
     F32 texture_scale;
 };
 
-struct AssetManagerItem
+struct AssetItemTexture
 {
-    AssetManagerItem* next;
-    String8 id;
+    AssetItemTexture* next;
+    AssetId id;
     B32 is_loaded;
     Texture asset;
 };
 
 struct RoadThreadInput
 {
-    AssetManagerItem* asset_store_texture;
+    AssetItemTexture* asset_store_texture;
 
     TextureCreateFunc* texture_func;
     RoadTextureCreateInput* texture_input;
@@ -110,26 +116,41 @@ struct RoadThreadInput
     Buffer<AssetManagerCommandPool> threaded_cmd_pools;
 };
 
-struct AssetManagerItemStateList
+struct AssetItemTextureList
 {
-    AssetManagerItem* first;
-    AssetManagerItem* last;
+    AssetItemTexture* first;
+    AssetItemTexture* last;
+};
+
+enum AssetItemType
+{
+    AssetItemType_Texture,
+    AssetItemType_Buffer
 };
 
 struct CmdQueueItem
 {
     CmdQueueItem* next;
     CmdQueueItem* prev;
-    String8 asset_id;
+    AssetId asset_id;
+    AssetItemType asset_type;
     U32 thread_id;
     VkCommandBuffer cmd_buffer;
     VkFence fence;
 };
 
-struct AssetManagerShaderItem
+struct AssetItemBuffer
 {
     U128 id; // create from shader path
-    ShaderModuleInfo shader_info;
+    B32 is_loaded;
+    BufferAllocation buffer_alloc;
+    BufferAllocation staging_buffer;
+};
+
+struct AssetItemBufferList
+{
+    AssetItemBuffer* first;
+    AssetItemBuffer* last;
 };
 
 struct AssetManagerCmdList
@@ -144,13 +165,20 @@ struct AssetManagerCmdList
 struct AssetManager
 {
     Arena* arena;
+
+    // ~mgj: Textures
+    Buffer<AssetItemTextureList> hashmap;
+    AssetItemTexture* free_list;
+
+    // ~mgj: Buffers
+    AssetItemBufferList buffer_list;
+    AssetItemTexture buffer_free_list;
+
+    // ~mgj: Threading related functionality
+    Buffer<AssetManagerCommandPool> threaded_cmd_pools;
+    U64 total_size;
     async::Queue<CmdQueueItem>* cmd_queue;
     async::Queue<async::QueueItem>* work_queue;
-    Buffer<AssetManagerItemStateList> hashmap;
-    Buffer<AssetManagerCommandPool> threaded_cmd_pools;
-    AssetManagerItem* free_list;
-    U64 total_size;
-    U64 used_size;
     AssetManagerCmdList* cmd_wait_list;
 };
 
@@ -214,20 +242,20 @@ struct VulkanContext
 
 // ~mgj: Car functions
 static Car*
-CarCreate(String8 texture_id, CgltfSampler sampler, Buffer<city::CarVertex> vertex_buffer,
-          Buffer<U32> index_buffer);
+CarCreate(AssetId texture_id, String8 texture_path, CgltfSampler sampler,
+          Buffer<city::CarVertex> vertex_buffer, Buffer<U32> index_buffer);
 static void
 CarDestroy(wrapper::VulkanContext* vk_ctx, wrapper::Car* car);
 static void
 CarUpdate(city::CarSim* car_sim, Buffer<city::CarInstance> instance_buffer, U32 image_idx);
 static void
-CarTextureCreate(String8 texture_id, CgltfSampler sampler);
+CarTextureCreate(AssetId texture_id, String8 texture_path, CgltfSampler sampler);
 
 static void
 CarTextureThreadSetup(async::ThreadInfo thread_info, void* input);
 static void
-CarTextureCreateWorker(U32 thread_id, AssetManagerCommandPool cmd_pool, String8 texture_id,
-                       CgltfSampler sampler);
+CarTextureCreateWorker(U32 thread_id, AssetManagerCommandPool cmd_pool, AssetId texture_id,
+                       String8 texture_path, CgltfSampler sampler);
 
 static PipelineInfo
 CarPipelineInfoCreate(VulkanContext* vk_ctx, VkDescriptorSetLayout layout);
@@ -278,7 +306,7 @@ RoadBindingDescriptionGet();
 static Buffer<VkVertexInputAttributeDescription>
 RoadAttributeDescriptionGet(Arena* arena);
 static void
-AssetManagerRoadResourceLoadAsync(AssetManager* asset_store, AssetManagerItem* texture,
+AssetManagerRoadResourceLoadAsync(AssetManager* asset_store, AssetItemTexture* texture,
                                   VulkanContext* vk_ctx, String8 shader_path, Road* w_road,
                                   city::Road* road);
 //~mgj: Asset Store
@@ -289,8 +317,8 @@ static void
 AssetManagerDestroy(VulkanContext* vk_ctx, AssetManager* asset_stream);
 static void
 AssetManagerTextureThreadMain(async::ThreadInfo thread_info, void* data);
-static AssetManagerItem*
-AssetManagerTextureGetSlot(String8 asset_id);
+static AssetItemTexture*
+AssetManagerTextureGetSlot(AssetId asset_id);
 static void
 AssetManagerExecuteCmds();
 static void
@@ -305,8 +333,14 @@ static void
 AssetManagerCmdListAdd(AssetManagerCmdList* cmd_list, CmdQueueItem item);
 static void
 AssetManagerCmdListRemove(AssetManagerCmdList* cmd_list, CmdQueueItem* item);
-static U64
-AssetManagerHash(String8 str);
+static AssetId
+AssetIdFromStr8(String8 str);
+force_inline static U64
+HashIndexFromAssetId(AssetId id, U64 hashmap_size);
+force_inline static B32
+AssetIdCmp(AssetId a, AssetId b);
+static void
+AssetManagerBufferItemGet();
 // ~mgj: Vulkan Lifetime
 static VulkanContext*
 VK_VulkanInit(Context* ctx);

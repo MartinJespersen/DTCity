@@ -139,7 +139,6 @@ struct CarSim
 {
     Arena* arena;
 
-    String8 car_texture_id;
     Buffer<Car> cars;
 
     Buffer<city::CarVertex> vertex_buffer;
