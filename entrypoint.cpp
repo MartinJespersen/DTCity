@@ -179,8 +179,8 @@ MainLoop(void* ptr)
 
     while (ctx->running)
     {
-        wrapper::AssetStoreExecuteCmds();
-        wrapper::AssetStoreCmdDoneCheck();
+        wrapper::AssetManagerExecuteCmds();
+        wrapper::AssetManagerCmdDoneCheck();
 
         ZoneScoped;
 
