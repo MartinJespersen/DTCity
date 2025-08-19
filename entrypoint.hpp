@@ -11,11 +11,11 @@
 
 const U32 MAX_FONTS_IN_USE = 10;
 
-shared_function OS_Handle
+static OS_Handle
 Entrypoint(void* ptr);
 
-shared_function void
-Cleanup(void* ptr);
+static void
+Cleanup(OS_Handle thread_handle, void* ptr);
 
 static void
 MainLoop(void* ptr);

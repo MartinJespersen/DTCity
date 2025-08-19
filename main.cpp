@@ -16,6 +16,7 @@
 #include "lib_wrappers/lib_wrappers_inc.cpp"
 #include "ui/ui.cpp"
 #include "city/city_inc.cpp"
+#include "entrypoint.cpp"
 
 static Context*
 ContextCreate()
@@ -30,7 +31,6 @@ ContextCreate()
     ctx->io = PushStruct(app_arena, IO);
     ctx->camera = PushStruct(app_arena, ui::Camera);
     ctx->time = PushStruct(app_arena, DT_Time);
-    ctx->dll_info = PushStruct(app_arena, DllInfo);
 
     ctx->cwd = Str8PathFromStr8List(app_arena,
                                     {OS_GetCurrentPath(scratch.arena), S(".."), S(".."), S("..")});
@@ -57,11 +57,6 @@ ContextCreate()
 static void
 ContextDestroy(Context* ctx)
 {
-    if (ctx->dll_info->entrypoint_thread_handle.u64[0])
-    {
-        ctx->dll_info->cleanup_func(ctx);
-    }
-
     city::RoadDestroy(ctx->vk_ctx, ctx->road);
     city::CarSimDestroy(ctx->vk_ctx, ctx->car_sim);
     wrapper::VK_Cleanup(ctx, ctx->vk_ctx);
@@ -72,13 +67,14 @@ ContextDestroy(Context* ctx)
 }
 
 void
-App(HotReloadFunc HotReload)
+App()
 {
     Context* ctx = ContextCreate();
+    OS_Handle thread_handle = Entrypoint(ctx);
     while (!glfwWindowShouldClose(ctx->io->window))
     {
-        HotReload(ctx);
         IO_InputStateUpdate(ctx->io);
     }
+    Cleanup(thread_handle, ctx);
     ContextDestroy(ctx);
 }

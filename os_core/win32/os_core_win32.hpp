@@ -122,15 +122,6 @@ os_w32_entity_alloc(OS_W32_EntityKind kind);
 static void
 os_w32_entity_release(OS_W32_Entity* entity);
 
-////////////////////////////////
-//~ mgj: HotReload
-
-static int
-LoadDLL(DllInfo* dll_info);
-static void
-HotReload(Context* ctx);
-
-////////////////////////////////
 //~ rjf: Thread Entry Point
 
 static DWORD

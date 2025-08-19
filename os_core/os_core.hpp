@@ -432,17 +432,9 @@ OS_SystemTimerRead();
 force_inline static U64
 OS_SystemTimerFreqGet();
 
-//~mgj: HotReload
-// TODO: remove these forward declarations
-struct DllInfo;
-struct Context;
-
-typedef void (*HotReloadFunc)(Context*);
 //~ mgj: Entrypoint to the application from os layer
-void App(HotReloadFunc);
-
-static void
-OS_GlobalStateSetFromPtr(void* ptr);
+void
+App();
 
 ////////////////////////////////
 //~ rjf: @os_hooks Entry Points (Implemented Per-OS)

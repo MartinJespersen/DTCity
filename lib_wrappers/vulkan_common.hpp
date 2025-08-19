@@ -157,9 +157,9 @@ BufferMappedUpdate(VkCommandBuffer cmd_buffer, VmaAllocator allocator,
 static BufferAllocationMapped
 BufferMappedCreate(VmaAllocator allocator, VkDeviceSize size, VkBufferUsageFlags buffer_usage);
 static void
-BufferDestroy(VmaAllocator allocator, BufferAllocation buffer_allocation);
+BufferDestroy(VmaAllocator allocator, BufferAllocation* buffer_allocation);
 static void
-BufferMappedDestroy(VmaAllocator allocator, BufferAllocationMapped mapped_buffer);
+BufferMappedDestroy(VmaAllocator allocator, BufferAllocationMapped* mapped_buffer);
 
 static BufferAllocation
 StagingBufferCreate(VmaAllocator allocator, VkDeviceSize size, VkBufferUsageFlags buffer_usage);

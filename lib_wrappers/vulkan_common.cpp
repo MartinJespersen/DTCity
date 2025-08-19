@@ -737,17 +737,18 @@ ShaderModuleCreate(VkDevice device, Buffer<U8> buffer)
     return shaderModule;
 }
 static void
-BufferDestroy(VmaAllocator allocator, BufferAllocation buffer_allocation)
+BufferDestroy(VmaAllocator allocator, BufferAllocation* buffer_allocation)
 {
-    vmaDestroyBuffer(allocator, buffer_allocation.buffer, buffer_allocation.allocation);
+    vmaDestroyBuffer(allocator, buffer_allocation->buffer, buffer_allocation->allocation);
+    buffer_allocation->buffer = VK_NULL_HANDLE;
 }
 
 static void
-BufferMappedDestroy(VmaAllocator allocator, BufferAllocationMapped mapped_buffer)
+BufferMappedDestroy(VmaAllocator allocator, BufferAllocationMapped* mapped_buffer)
 {
-    BufferDestroy(allocator, mapped_buffer.buffer_alloc);
-    BufferDestroy(allocator, mapped_buffer.staging_buffer_alloc);
-    ArenaRelease(mapped_buffer.arena);
+    BufferDestroy(allocator, &mapped_buffer->buffer_alloc);
+    BufferDestroy(allocator, &mapped_buffer->staging_buffer_alloc);
+    ArenaRelease(mapped_buffer->arena);
 }
 
 static void
@@ -775,7 +776,7 @@ VkBufferFromBuffers(VulkanContext* vk_ctx, BufferContext* vk_buffer_ctx, Buffer<
         VkDeviceSize buffer_byte_size = sizeof(T) * total_buffer_size;
         if (total_buffer_size > vk_buffer_ctx->capacity)
         {
-            BufferDestroy(vk_ctx->allocator, vk_buffer_ctx->buffer_alloc);
+            BufferDestroy(vk_ctx->allocator, &vk_buffer_ctx->buffer_alloc);
 
             VmaAllocationCreateInfo vma_info = {0};
             vma_info.usage = VMA_MEMORY_USAGE_AUTO;

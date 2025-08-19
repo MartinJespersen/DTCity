@@ -45,10 +45,7 @@ set glfw_dll_path_single_quote=%glfw_dll_path:\\=\%
 copy %glfw_dll_path_single_quote% %debug_dir_single_quote%
 :: Compile main executable
 
-set ENTRYPOINT=cl /MD /fsanitize=address /D_USRDLL /D_WINDLL %tracy_src% /DPROFILE_ENABLE /DTRACY_ENABLE %entrypoint_file_name% %cxxflags%  %include_dirs% /nologo /link /DLL /OUT:%dll_full_path% %link_dirs% %link_libs% %link_flags% /INCREMENTAL:NO /noexp
-set MAIN=cl /MD /fsanitize=address %main_file_name% %tracy_src% /Fe%exec_full_path% /DPROFILE_ENABLE %cxxflags%  %include_dirs% /DBUILD_CONSOLE_INTERFACE /nologo /link %link_dirs% %link_libs% %link_flags% /INCREMENTAL:NO /noexp
+set MAIN=cl /MD /fsanitize=address %main_file_name% %tracy_src% /Fe%exec_full_path% /DTRACY_ENABLE /DPROFILE_ENABLE %cxxflags%  %include_dirs% /DBUILD_CONSOLE_INTERFACE /nologo /link %link_dirs% %link_libs% %link_flags% /INCREMENTAL:NO /noexp
 
-call %ENTRYPOINT%
 call %MAIN%
-echo %ENTRYPOINT%
 echo %MAIN%

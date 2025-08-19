@@ -1919,129 +1919,12 @@ w32_entry_point_caller(int argc, WCHAR** wargv)
     // main_thread_base_entry_point(argc, argv);
 }
 
-/////////////////////////////////////
-//~mgj: HotReload
-static FILETIME hotreload_last_modified = {0};
-static void
-OS_GlobalStateSetFromPtr(void* ptr)
-{
-    os_w32_state = *(OS_W32_State*)ptr;
-}
-
-static int
-LoadDLL(DllInfo* dll_info)
-{
-    Temp scratch = ScratchBegin(0, 0);
-    // Free the previous DLL if loaded
-    if (dll_info->dll_handle)
-    {
-        FreeLibrary((HMODULE)dll_info->dll_handle);
-    }
-
-    if (!CopyFileA((char*)dll_info->dll_temp_path.str, (char*)dll_info->dll_path.str, FALSE))
-    {
-        printf("Error: renaming DLL failed. Hotreload fail");
-        return 0;
-    };
-    // Load the DLL
-    dll_info->dll_handle = LoadLibrary((char*)dll_info->dll_path.str);
-    if (!dll_info->dll_handle)
-    {
-        printf("Error loading DLL: %lu\n", GetLastError());
-        return 0;
-    }
-
-    // Load the update function
-    dll_info->func =
-        (OS_Handle (*)(void*))GetProcAddress((HMODULE)dll_info->dll_handle, dll_info->func_name);
-    if (!dll_info->func)
-    {
-        printf("Error loading update function: %lu\n", GetLastError());
-        FreeLibrary((HMODULE)dll_info->dll_handle);
-        dll_info->dll_handle = NULL;
-        return 0;
-    }
-
-    // Load the update function
-    dll_info->cleanup_func =
-        (void (*)(void*))GetProcAddress((HMODULE)dll_info->dll_handle, dll_info->cleanup_func_name);
-    if (!dll_info->func)
-    {
-        printf("Error loading update function: %lu\n", GetLastError());
-        FreeLibrary((HMODULE)dll_info->dll_handle);
-        dll_info->dll_handle = NULL;
-        return 0;
-    }
-
-    // Get the DLL's last modified time
-    HANDLE file = CreateFile((char*)dll_info->dll_path.str, GENERIC_READ, FILE_SHARE_READ, NULL,
-                             OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
-    if (file == INVALID_HANDLE_VALUE)
-    {
-        printf("Error opening DLL file: %lu\n", GetLastError());
-        FreeLibrary((HMODULE)dll_info->dll_handle);
-        dll_info->dll_handle = NULL;
-        return 0;
-    }
-    GetFileTime(file, NULL, NULL, &hotreload_last_modified);
-    CloseHandle(file);
-
-    ScratchEnd(scratch);
-    return 1;
-}
-
-void
-HotReload(Context* ctx)
-{
-    DllInfo* dll_info = ctx->dll_info;
-    dll_info->func_name = "Entrypoint";
-    dll_info->cleanup_func_name = "Cleanup";
-
-    dll_info->dll_path = S("entrypoint.dll");
-    dll_info->dll_temp_path = S("entrypoint_temp.dll");
-
-    HANDLE file = CreateFile((char*)dll_info->dll_temp_path.str, GENERIC_READ, FILE_SHARE_READ,
-                             NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
-    if (file != INVALID_HANDLE_VALUE)
-    {
-        FILETIME current_modified;
-        GetFileTime(file, NULL, NULL, &current_modified);
-        CloseHandle(file);
-
-        if (CompareFileTime(&current_modified, &hotreload_last_modified) > 0)
-        {
-            printf("DLL modified, reloading...\n");
-            if (dll_info->entrypoint_thread_handle.u64[0])
-            {
-                dll_info->cleanup_func(ctx);
-            }
-
-            if (LoadDLL(dll_info))
-            {
-                ctx->running = 1;
-                ctx->os_state = &os_w32_state;
-                dll_info->entrypoint_thread_handle = dll_info->func((void*)ctx);
-                hotreload_last_modified = current_modified;
-            }
-            else
-            {
-                printf("Failed to reload DLL\n");
-                Trap();
-            }
-        }
-    }
-}
-
-// NOTE: Tracy profiler has a dlclose function and it takes precedence over the
-// one in the standard library
-//  This is only the case when -DTRACY_ENABLE is defined
-
 #if BUILD_CONSOLE_INTERFACE
 int
 wmain(int argc, WCHAR** argv)
 {
     w32_entry_point_caller(argc, argv);
-    App(HotReload);
+    App();
     return 0;
 }
 #else
@@ -2050,7 +1933,7 @@ wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPWSTR lpCmdLine, int nSh
 {
     w32_entry_point_caller(__argc, __wargv);
 
-    App(HotReload);
+    App();
     return 0;
 }
 #endif

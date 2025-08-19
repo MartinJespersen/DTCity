@@ -1,28 +1,4 @@
 
-#include <cstdlib>
-#include <cstring>
-
-#define GLFW_INCLUDE_VULKAN
-#include <GLFW/glfw3.h>
-#include <vulkan/vulkan_core.h>
-
-// domain: hpp
-#include "entrypoint.hpp"
-
-// // domain: cpp
-#include "base/base_inc.cpp"
-#include "os_core/os_core_inc.cpp"
-#include "async/async.cpp"
-#include "http/http_inc.cpp"
-#include "lib_wrappers/lib_wrappers_inc.cpp"
-#include "ui/ui.cpp"
-#include "city/city_inc.cpp"
-
-//~ mgj: Entrypoint Stub for application. Necessary as this layer includes the os layer but does not
-// contain the entrypoint in a hot reloading scenario.
-// TODO: Find a better way maybe.
-void App(HotReloadFunc){};
-
 static void
 ProfileBuffersCreate(wrapper::VulkanContext* vk_ctx)
 {
@@ -177,24 +153,18 @@ CommandBufferRecord(U32 image_index, U32 current_frame)
     ScratchEnd(scratch);
 }
 
-shared_function OS_Handle
-Entrypoint(void* ptr)
+static OS_Handle
+Entrypoint(Context* ctx)
 {
-    Context* ctx = (Context*)ptr;
-    ThreadCtxSet(ctx);
-    OS_GlobalStateSetFromPtr(ctx->os_state);
-
-    return OS_ThreadLaunch(MainLoop, ptr, NULL);
+    ctx->running = 1;
+    return OS_ThreadLaunch(MainLoop, ctx, NULL);
 }
 
-shared_function void
-Cleanup(void* ptr)
+static void
+Cleanup(OS_Handle thread_handle, Context* ctx)
 {
-    Context* ctx = (Context*)ptr;
-
     ctx->running = false;
-    OS_ThreadJoin(ctx->dll_info->entrypoint_thread_handle, max_U64);
-    ctx->dll_info->entrypoint_thread_handle.u64[0] = 0;
+    OS_ThreadJoin(thread_handle, max_U64);
 }
 
 static void

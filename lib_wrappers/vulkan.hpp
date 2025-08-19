@@ -1,5 +1,6 @@
 #pragma once
 
+struct Context;
 namespace wrapper
 {
 struct VulkanContext;

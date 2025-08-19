@@ -683,9 +683,9 @@ AssetItemBufferDestroy(VmaAllocator allocator, AssetItem<AssetItemBuffer>* asset
         AssetItemBuffer* buffer = &asset_buffer->item;
         if (buffer->staging_buffer.buffer != VK_NULL_HANDLE)
         {
-            BufferDestroy(allocator, buffer->staging_buffer);
+            BufferDestroy(allocator, &buffer->staging_buffer);
         }
-        BufferDestroy(allocator, buffer->buffer_alloc);
+        BufferDestroy(allocator, &buffer->buffer_alloc);
     }
 }
 
@@ -1304,7 +1304,7 @@ CameraCleanup(VulkanContext* vk_ctx)
 {
     for (size_t i = 0; i < VulkanContext::MAX_FRAMES_IN_FLIGHT; i++)
     {
-        BufferMappedDestroy(vk_ctx->allocator, vk_ctx->camera_buffer_alloc_mapped[i]);
+        BufferMappedDestroy(vk_ctx->allocator, &vk_ctx->camera_buffer_alloc_mapped[i]);
     }
 
     vkDestroyDescriptorSetLayout(vk_ctx->device, vk_ctx->camera_descriptor_set_layout, NULL);
@@ -1561,14 +1561,14 @@ AssetManagerCmdDoneCheck()
                 {
                     wrapper::AssetItem<Texture>* asset =
                         wrapper::AssetManagerTextureGetSlot(asset_info->id);
-                    BufferDestroy(vk_ctx->allocator, asset->item.staging_buffer);
+                    BufferDestroy(vk_ctx->allocator, &asset->item.staging_buffer);
                     asset->is_loaded = 1;
                 }
                 else if (asset_info->type == AssetItemType_Buffer)
                 {
                     wrapper::AssetItem<AssetItemBuffer>* asset =
                         wrapper::AssetManagerBufferItemGet(asset_info->id);
-                    BufferDestroy(vk_ctx->allocator, asset->item.staging_buffer);
+                    BufferDestroy(vk_ctx->allocator, &asset->item.staging_buffer);
                     asset->is_loaded = 1;
                 }
             }

@@ -5,17 +5,6 @@ namespace ui
 struct Camera;
 }
 
-struct DllInfo
-{
-    const char* func_name;
-    const char* cleanup_func_name;
-    String8 dll_path;
-    String8 dll_temp_path;
-    void* dll_handle;
-    OS_Handle entrypoint_thread_handle;
-    OS_Handle (*func)(void*);
-    void (*cleanup_func)(void*);
-};
 struct DT_Time
 {
     F32 delta_time_sec;
@@ -27,8 +16,6 @@ struct Context
     B32 running;
     String8 cwd;
     String8 cache_path;
-
-    DllInfo* dll_info;
 
     Arena* arena_permanent;
 
