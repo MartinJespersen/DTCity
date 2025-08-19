@@ -5,10 +5,6 @@
 #include <GLFW/glfw3.h>
 #include <vulkan/vulkan_core.h>
 
-// profiler
-#include "profiler/tracy/Tracy.hpp"
-#include "profiler/tracy/TracyVulkan.hpp"
-
 // user defined: [hpp]
 #include "entrypoint.hpp"
 
@@ -20,22 +16,6 @@
 #include "lib_wrappers/lib_wrappers_inc.cpp"
 #include "ui/ui.cpp"
 #include "city/city_inc.cpp"
-
-static void
-ProfileBuffersCreate(wrapper::VulkanContext* vk_ctx, ProfilingContext* prof_ctx);
-static void
-ProfileBuffersCreate(wrapper::VulkanContext* vk_ctx, ProfilingContext* prof_ctx)
-{
-#ifdef TRACY_ENABLE
-    prof_ctx->tracyContexts = BufferAlloc<TracyVkCtx>(vk_ctx->arena, vk_ctx->MAX_FRAMES_IN_FLIGHT);
-    for (U32 i = 0; i < vk_ctx->command_buffers.size; i++)
-    {
-        prof_ctx->tracyContexts.data[i] =
-            TracyVkContext(vk_ctx->physical_device, vk_ctx->device, vk_ctx->graphics_queue,
-                           vk_ctx->command_buffers.data[i]);
-    }
-#endif
-}
 
 static Context*
 ContextCreate()
@@ -50,7 +30,6 @@ ContextCreate()
     ctx->io = PushStruct(app_arena, IO);
     ctx->camera = PushStruct(app_arena, ui::Camera);
     ctx->time = PushStruct(app_arena, DT_Time);
-    ctx->profilingContext = PushStruct(app_arena, ProfilingContext);
     ctx->dll_info = PushStruct(app_arena, DllInfo);
 
     ctx->cwd = Str8PathFromStr8List(app_arena,
@@ -67,9 +46,9 @@ ContextCreate()
 
     ctx->vk_ctx = wrapper::VK_VulkanInit(ctx);
     ctx->road = city::RoadCreate(ctx->vk_ctx, ctx->cache_path);
+
     city::RoadsBuild(ctx->road);
     CameraInit(ctx->camera);
-    ProfileBuffersCreate(ctx->vk_ctx, ctx->profilingContext);
     ctx->car_sim = city::CarSimCreate(ctx->vk_ctx, 100, ctx->road);
 
     return ctx;
@@ -85,7 +64,7 @@ ContextDestroy(Context* ctx)
 
     city::RoadDestroy(ctx->vk_ctx, ctx->road);
     city::CarSimDestroy(ctx->vk_ctx, ctx->car_sim);
-    wrapper::VK_Cleanup(ctx->vk_ctx);
+    wrapper::VK_Cleanup(ctx, ctx->vk_ctx);
 
     glfwDestroyWindow(ctx->io->window);
     glfwTerminate();

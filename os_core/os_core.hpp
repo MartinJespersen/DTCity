@@ -424,6 +424,14 @@ os_safe_call(OS_ThreadFunctionType* func, OS_ThreadFunctionType* fail_handler, v
 static Guid
 os_make_guid(void);
 
+// ~mgj: OS Timer
+force_inline static U64
+OS_CpuTimerRead();
+force_inline static U64
+OS_SystemTimerRead();
+force_inline static U64
+OS_SystemTimerFreqGet();
+
 //~mgj: HotReload
 // TODO: remove these forward declarations
 struct DllInfo;

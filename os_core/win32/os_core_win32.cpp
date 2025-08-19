@@ -1496,6 +1496,23 @@ os_make_guid(void)
     return result;
 }
 
+// ~mgj: Timer Reads
+force_inline static U64
+OS_SystemTimerFreqGet()
+{
+    LARGE_INTEGER Freq;
+    QueryPerformanceFrequency(&Freq);
+    return Freq.QuadPart;
+}
+
+force_inline static U64
+OS_SystemTimerRead()
+{
+    LARGE_INTEGER Value;
+    QueryPerformanceCounter(&Value);
+    return Value.QuadPart;
+}
+
 ////////////////////////////////
 //~ rjf: @os_hooks Entry Points (Implemented Per-OS)
 

@@ -50,7 +50,7 @@ static B32
 QueueTryRead(Queue<T>* queue, T* item);
 template <typename T>
 static void
-QueuePush(Queue<T>* queue, T data);
+QueuePush(Queue<T>* queue, T* data);
 static void
 ThreadWorker(void* data);
 static Threads*

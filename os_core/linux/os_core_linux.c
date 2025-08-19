@@ -995,6 +995,14 @@ static void OS_SemaphoreDrop(OS_Handle semaphore) {
   }
 }
 
+force_inline static U64 OS_SystemTimerFreqGet() { return 1000000; }
+force_inline static U64 OS_SystemTimerRead() {
+  struct timeval Value;
+  gettimeofday(&Value, 0);
+
+  u64 Result = GetOSTimerFreq() * (u64)Value.tv_sec + (u64)Value.tv_usec;
+  return Result;
+}
 ////////////////////////////////
 //~ rjf: @os_hooks Dynamically-Loaded Libraries (Implemented Per-OS)
 

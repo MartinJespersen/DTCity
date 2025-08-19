@@ -160,6 +160,13 @@ os_string_from_file_range(Arena* arena, OS_Handle file, Rng1U64 range)
     return result;
 }
 
+// ~mgj: Timers
+force_inline static U64
+OS_CpuTimerRead()
+{
+    return __rdtsc();
+}
+
 ////////////////////////////////
 //~ rjf: Process Launcher Helpers
 

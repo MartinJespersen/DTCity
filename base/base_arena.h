@@ -76,7 +76,7 @@ ArenaRelease(Arena* arena);
 
 //- rjf: arena push/pop/pos core functions
 static void*
-arena_push(Arena* arena, U64 size, U64 align);
+ArenaPush(Arena* arena, U64 size, U64 align);
 static U64
 arena_pos(Arena* arena);
 static void
@@ -95,7 +95,7 @@ static void
 temp_end(Temp temp);
 
 //- rjf: push helper macros
-#define PushArrayNoZeroAligned(a, T, c, align) (T*)arena_push((a), sizeof(T) * (c), (align))
+#define PushArrayNoZeroAligned(a, T, c, align) (T*)ArenaPush((a), sizeof(T) * (c), (align))
 #define PushArrayAligned(a, T, c, align)                                                           \
     (T*)MemoryZero(PushArrayNoZeroAligned(a, T, c, align), sizeof(T) * (c))
 #define PushArrayNoZero(a, T, c) PushArrayNoZeroAligned(a, T, c, Max(8, AlignOf(T)))

@@ -5,14 +5,6 @@ namespace ui
 struct Camera;
 }
 
-struct ProfilingContext
-{
-#ifdef TRACY_ENABLE
-    // tracy profiling context
-    Buffer<TracyVkCtx> tracyContexts;
-#endif
-};
-
 struct DllInfo
 {
     const char* func_name;
@@ -41,7 +33,6 @@ struct Context
     Arena* arena_permanent;
 
     wrapper::VulkanContext* vk_ctx;
-    ProfilingContext* profilingContext;
     IO* io;
     ui::Camera* camera;
     DT_Time* time;

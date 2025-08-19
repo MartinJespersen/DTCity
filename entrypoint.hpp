@@ -19,6 +19,9 @@ Cleanup(void* ptr);
 
 static void
 MainLoop(void* ptr);
-
 static void
 CommandBufferRecord(U32 imageIndex, U32 currentFrame);
+static void
+ProfileBuffersCreate(wrapper::VulkanContext* vk_ctx);
+static void
+ProfileBuffersDestroy(wrapper::VulkanContext* vk_ctx);

@@ -28,7 +28,7 @@ QueueDestroy(Queue<T>* queue)
 
 template <typename T>
 static void
-QueuePush(Queue<T>* queue, T data)
+QueuePush(Queue<T>* queue, T* data)
 {
     T* item;
     U32 fill_index;
@@ -41,7 +41,7 @@ QueuePush(Queue<T>* queue, T data)
     }
     OS_SemaphoreDrop(queue->semaphore_empty);
     item = &queue->items[fill_index];
-    *item = data;
+    *item = *data;
 }
 
 template <typename T>

@@ -75,7 +75,7 @@ static void ArenaRelease(Arena *arena) {
 
 //- rjf: arena push/pop core functions
 
-static void *arena_push(Arena *arena, U64 size, U64 align) {
+static void *ArenaPush(Arena *arena, U64 size, U64 align) {
   Arena *current = arena->current;
   U64 pos_pre = AlignPow2(current->pos, align);
   U64 pos_pst = pos_pre + size;

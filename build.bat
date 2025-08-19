@@ -9,13 +9,16 @@ set "main_file_name=main.cpp"
 set "exec_full_path=%debug_dir%%exec_name%"
 set "dll_full_path=%debug_dir%%dll_name%"
 set "shader_path=%cwd%shaders\\"
-set "tracy_src=%cwd%profiler\\TracyClient.cpp"
 set "lib_dir=%cwd%third_party\\"
 set "vulkan_path=C:\\VulkanSDK\\"
+set "tracy_src=%lib_dir%tracy/TracyClient.cpp"
 set "glfw_lib_dir=%lib_dir%glfw\\lib\\"
 set "ktx_lib_dir=%lib_dir%ktx"
 :: Compiler and linker flags
 set "cxxflags=/W4 /std:c++20 /wd4201 /wd4505 /wd4005 /wd4838 /wd4244 /wd4996 /wd4310 /wd4245 /wd4100 /EHsc /Z7"
+if not "%~1"=="" (
+    set "cxxflags=%cxxflags% %~1"
+)
 set "include_dirs=/I. /I%vulkan_path%Include /I%lib_dir%glfw\\include /I%lib_dir% /I%lib_dir%ktx\\include"
 :: free typed is the debug lib
 
@@ -42,8 +45,8 @@ set glfw_dll_path_single_quote=%glfw_dll_path:\\=\%
 copy %glfw_dll_path_single_quote% %debug_dir_single_quote%
 :: Compile main executable
 
-set ENTRYPOINT=cl /MD /fsanitize=address /D_USRDLL /D_WINDLL %entrypoint_file_name% %cxxflags%  %include_dirs% /nologo /link /DLL /OUT:%dll_full_path% %link_dirs% %link_libs% %link_flags% /INCREMENTAL:NO /noexp
-set MAIN=cl /MD /fsanitize=address %main_file_name% %tracy_src% /Fe%exec_full_path%  %cxxflags%  %include_dirs% /DBUILD_CONSOLE_INTERFACE /nologo /link %link_dirs% %link_libs% %link_flags% /INCREMENTAL:NO /noexp
+set ENTRYPOINT=cl /MD /fsanitize=address /D_USRDLL /D_WINDLL %tracy_src% /DPROFILE_ENABLE /DTRACY_ENABLE %entrypoint_file_name% %cxxflags%  %include_dirs% /nologo /link /DLL /OUT:%dll_full_path% %link_dirs% %link_libs% %link_flags% /INCREMENTAL:NO /noexp
+set MAIN=cl /MD /fsanitize=address %main_file_name% %tracy_src% /Fe%exec_full_path% /DPROFILE_ENABLE %cxxflags%  %include_dirs% /DBUILD_CONSOLE_INTERFACE /nologo /link %link_dirs% %link_libs% %link_flags% /INCREMENTAL:NO /noexp
 
 call %ENTRYPOINT%
 call %MAIN%

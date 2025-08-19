@@ -8,7 +8,7 @@
 #define MARKUP_LAYER_COLOR 0.20f, 0.60f, 0.80f
 
 #include "base_core.cpp"
-// #include "base_profile.c"
+#include "base_profile.cpp"
 #include "base_arena.c"
 #include "base_math.c"
 #include "base_random.cpp"

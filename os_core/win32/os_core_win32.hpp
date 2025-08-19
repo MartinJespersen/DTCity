@@ -6,7 +6,6 @@
 
 ////////////////////////////////
 //~ rjf: Includes / Libraries
-
 #include <windows.h>
 #include <windowsx.h>
 #include <timeapi.h>

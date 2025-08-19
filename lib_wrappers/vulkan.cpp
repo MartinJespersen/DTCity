@@ -7,7 +7,7 @@ static VulkanContext* g_vk_ctx = 0;
 
 // ~mgj: vulkan context
 static void
-VK_Cleanup(VulkanContext* vk_ctx)
+VK_Cleanup(Context* ctx, VulkanContext* vk_ctx)
 {
     vkDeviceWaitIdle(vk_ctx->device);
 
@@ -20,12 +20,6 @@ VK_Cleanup(VulkanContext* vk_ctx)
 
     VK_SwapChainCleanup(vk_ctx->device, vk_ctx->allocator, vk_ctx->swapchain_resources);
 
-#ifdef TRACY_ENABLE
-    for (U32 i = 0; i < ctx->profilingContext->tracyContexts.size; i++)
-    {
-        TracyVkDestroy(ctx->profilingContext->tracyContexts.data[i]);
-    }
-#endif
     vkDestroyCommandPool(vk_ctx->device, vk_ctx->command_pool, nullptr);
 
     vkDestroySurfaceKHR(vk_ctx->instance, vk_ctx->surface, nullptr);
@@ -162,7 +156,6 @@ RoadTextureCreate(U32 thread_id, AssetManagerCommandPool threaded_cmd_pool,
 {
     ScratchScope scratch = ScratchScope(0, 0);
     VulkanContext* vk_ctx = input->vk_ctx;
-    AssetManager* asset_store = vk_ctx->asset_store;
     Road* w_road = input->w_road;
     String8 texture_path = w_road->road_texture_path;
 
@@ -229,11 +222,11 @@ RoadTextureCreate(U32 thread_id, AssetManagerCommandPool threaded_cmd_pool,
     texture->height = tex_height;
     texture->mip_level_count = mip_level;
 
-    CmdQueueItem cmd_input = {.asset_id = w_road->texture_id,
-                              .asset_type = AssetItemType_Texture,
-                              .thread_id = thread_id,
-                              .cmd_buffer = command_buffer};
-    async::QueuePush(asset_store->cmd_queue, cmd_input);
+    AssetInfo assets[] = {{
+        .id = w_road->texture_id,
+        .type = AssetItemType_Texture,
+    }};
+    AssetCmdQueueItemEnqueue(assets, ArrayCount(assets), thread_id, command_buffer);
 }
 
 static void
@@ -397,7 +390,7 @@ RoadCreate(VulkanContext* vk_ctx, city::Road* road)
         Str8PathFromStr8List(road->arena, {vk_ctx->texture_path, S("road_texture.jpg")});
 
     w_road->texture_id = AssetIdFromStr8(w_road->road_texture_path);
-    AssetItemTexture* asset_item_state = AssetManagerTextureGetSlot(w_road->texture_id);
+    AssetItem<Texture>* asset_item_state = AssetManagerTextureGetSlot(w_road->texture_id);
 
     AssetManagerRoadResourceLoadAsync(vk_ctx->asset_store, asset_item_state, vk_ctx,
                                       vk_ctx->shader_path, w_road, road);
@@ -409,11 +402,11 @@ static void
 RoadDestroy(city::Road* road, VulkanContext* vk_ctx)
 {
     wrapper::Road* w_road = road->w_road;
-    AssetItemTexture* texture_state = AssetManagerTextureGetSlot(w_road->texture_id);
+    AssetItem<Texture>* texture_state = AssetManagerTextureGetSlot(w_road->texture_id);
 
     if (texture_state->is_loaded)
     {
-        TextureDestroy(vk_ctx, &texture_state->asset);
+        TextureDestroy(vk_ctx, &texture_state->item);
     }
     BufferContextDestroy(vk_ctx->allocator, &w_road->vertex_buffer);
     vkDestroyDescriptorSetLayout(vk_ctx->device, w_road->descriptor_set_layout, 0);
@@ -427,12 +420,12 @@ static void
 RoadUpdate(city::Road* road, VulkanContext* vk_ctx, U32 image_index, String8 shader_path)
 {
     wrapper::Road* w_road = road->w_road;
-    AssetItemTexture* texture_state = AssetManagerTextureGetSlot(w_road->texture_id);
+    AssetItem<Texture>* texture_state = AssetManagerTextureGetSlot(w_road->texture_id);
 
     if (texture_state->is_loaded && !w_road->descriptors_are_created)
     {
         RoadDescriptorCreateInfo desc_info = {.vk_ctx = vk_ctx, .road = road, .w_road = w_road};
-        RoadDescriptorCreate(vk_ctx->descriptor_pool, &desc_info, &texture_state->asset);
+        RoadDescriptorCreate(vk_ctx->descriptor_pool, &desc_info, &texture_state->item);
         w_road->descriptors_are_created = 1;
     }
 
@@ -554,49 +547,70 @@ ImageFromKtx2file(VkCommandBuffer cmd, BufferAllocation staging_buffer, VulkanCo
 }
 
 static void
-CarTextureCreate(AssetId texture_id, String8 texture_path, CgltfSampler sampler)
+CarCreateAsync(AssetId texture_id, AssetId vertex_buffer_id, AssetId index_buffer_id,
+               String8 texture_path, CgltfSampler sampler, Buffer<city::CarVertex> vertex_buffer,
+               Buffer<U32> index_buffer)
 {
     VulkanContext* vk_ctx = wrapper::VulkanCtxGet();
     AssetManager* asset_store = vk_ctx->asset_store;
 
     CarThreadInput* input = PushStruct(asset_store->arena, CarThreadInput);
     input->texture_id = texture_id;
+    input->vertex_buffer_id = vertex_buffer_id;
+    input->index_buffer_id = index_buffer_id;
     input->sampler = sampler;
     input->texture_path = texture_path;
+    input->vertex_buffer = vertex_buffer;
+    input->index_buffer = index_buffer;
 
-    async::QueueItem item = {.data = input, .worker_func = CarTextureThreadSetup};
-    async::QueuePush(asset_store->work_queue, item);
+    async::QueueItem item = {.data = input, .worker_func = CarThreadSetup};
+    async::QueuePush(asset_store->work_queue, &item);
 }
 
 static void
-CarTextureThreadSetup(async::ThreadInfo thread_info, void* input)
+CarThreadSetup(async::ThreadInfo thread_info, void* input)
 {
     CarThreadInput* input_cast = (CarThreadInput*)input;
 
     VulkanContext* vk_ctx = wrapper::VulkanCtxGet();
     AssetManager* asset_store = vk_ctx->asset_store;
+    Buffer<city::CarVertex> vertex_buffer = input_cast->vertex_buffer;
+    Buffer<U32> index_buffer = input_cast->index_buffer;
+    AssetId texture_id = input_cast->texture_id;
+    AssetId vertex_buffer_id = input_cast->vertex_buffer_id;
+    AssetId index_buffer_id = input_cast->index_buffer_id;
 
-    CarTextureCreateWorker(thread_info.thread_id,
-                           asset_store->threaded_cmd_pools.data[thread_info.thread_id],
-                           input_cast->texture_id, input_cast->texture_path, input_cast->sampler);
+    // ~mgj: Record the command buffer
+    VkCommandBuffer cmd = BeginCommand(
+        vk_ctx->device, asset_store->threaded_cmd_pools.data[thread_info.thread_id]); // Your helper
+
+    AssetInfo texture_info =
+        TextureCreate(cmd, input_cast->texture_id, input_cast->texture_path, input_cast->sampler);
+    AssetInfo vertex_buffer_info =
+        AssetInfoBufferCmd(cmd, vertex_buffer_id, vertex_buffer, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT);
+    AssetInfo index_buffer_info =
+        AssetInfoBufferCmd(cmd, index_buffer_id, index_buffer, VK_BUFFER_USAGE_INDEX_BUFFER_BIT);
+
+    VK_CHECK_RESULT(vkEndCommandBuffer(cmd));
+
+    // ~mgj: Enqueue the command buffer
+    AssetInfo asset_info_arr[] = {texture_info, vertex_buffer_info, index_buffer_info};
+    AssetCmdQueueItemEnqueue(asset_info_arr, ArrayCount(asset_info_arr), thread_info.thread_id,
+                             cmd);
 }
 
-static void
-CarTextureCreateWorker(U32 thread_id, AssetManagerCommandPool cmd_pool, AssetId texture_id,
-                       String8 texture_path, CgltfSampler sampler)
+static AssetInfo
+TextureCreate(VkCommandBuffer cmd_buffer, AssetId texture_id, String8 texture_path,
+              CgltfSampler sampler)
 {
-    // String8 texture_path = S("../../../textures/car_collection.ktx");
     VulkanContext* vk_ctx = wrapper::VulkanCtxGet();
-    AssetManager* asset_store = vk_ctx->asset_store;
-    AssetItemTexture* asset_store_texture = AssetManagerTextureGetSlot(texture_id);
-    Texture* texture = &asset_store_texture->asset;
+    AssetItem<Texture>* asset_store_texture = AssetManagerTextureGetSlot(texture_id);
+    Texture* texture = &asset_store_texture->item;
 
     VkSamplerCreateInfo sampler_create_info = wrapper::VkSamplerFromCgltfSampler(sampler);
     sampler_create_info.anisotropyEnable = VK_TRUE;
     sampler_create_info.maxAnisotropy = (F32)vk_ctx->msaa_samples;
     VkSampler vk_sampler = SamplerCreate(vk_ctx->device, &sampler_create_info);
-
-    VkCommandBuffer cmd = BeginCommand(vk_ctx->device, cmd_pool); // Your helper
 
     // Get texture
     ktxTexture2* ktx_texture;
@@ -607,7 +621,8 @@ CarTextureCreateWorker(U32 thread_id, AssetManagerCommandPool cmd_pool, AssetId 
     BufferAllocation texture_staging_buffer = StagingBufferCreate(
         vk_ctx->allocator, ktx_texture->dataSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT);
 
-    ImageKtx2* image_ktx = ImageFromKtx2file(cmd, texture_staging_buffer, vk_ctx, ktx_texture);
+    ImageKtx2* image_ktx =
+        ImageFromKtx2file(cmd_buffer, texture_staging_buffer, vk_ctx, ktx_texture);
 
     texture->image_resource = image_ktx->image_resource;
     texture->sampler = vk_sampler;
@@ -616,10 +631,7 @@ CarTextureCreateWorker(U32 thread_id, AssetManagerCommandPool cmd_pool, AssetId 
     texture->mip_level_count = image_ktx->mip_level_count;
     texture->staging_buffer = texture_staging_buffer;
 
-    VK_CHECK_RESULT(vkEndCommandBuffer(cmd));
-
-    CmdQueueItem item = {.asset_id = texture_id, .thread_id = thread_id, .cmd_buffer = cmd};
-    async::QueuePush(asset_store->cmd_queue, item);
+    return {.id = texture_id, .type = AssetItemType_Texture};
 }
 
 static void
@@ -647,61 +659,55 @@ static Car*
 CarCreate(AssetId texture_id, String8 texture_path, CgltfSampler sampler,
           Buffer<city::CarVertex> vertex_buffer, Buffer<U32> index_buffer)
 {
-    VulkanContext* vk_ctx = VulkanCtxGet();
     Arena* arena = ArenaAlloc();
     Car* car = PushStruct(arena, Car);
     car->arena = arena;
     car->texture_path = PushStr8Copy(arena, texture_path);
     car->texture_id = texture_id;
+    AssetId vertex_buffer_id = AssetIdFromStr8(S("car_vertex_buffer"));
+    AssetId index_buffer_id = AssetIdFromStr8(S("car_index_buffer"));
+    car->vertex_buffer_id = vertex_buffer_id;
+    car->index_buffer_id = index_buffer_id;
 
     // upload texture to GPU
-    wrapper::CarTextureCreate(texture_id, texture_path, sampler);
-
-    // upload vertex and index to GPU
-    VkCommandPoolCreateInfo cmd_pool_info = {
-        .sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
-        .flags = VK_COMMAND_POOL_CREATE_TRANSIENT_BIT,
-        .queueFamilyIndex = vk_ctx->queue_family_indices.graphicsFamilyIndex,
-    };
-    VkCommandPool cmd_pool;
-    vkCreateCommandPool(vk_ctx->device, &cmd_pool_info, nullptr, &cmd_pool);
-
-    VkCommandBuffer cmd = VK_BeginSingleTimeCommands(vk_ctx->device, cmd_pool); // Your helper
-
-    U32 vertex_buffer_byte_size = vertex_buffer.size * sizeof(city::CarVertex);
-    BufferAllocation vertex_staging_buffer = StagingBufferCreate(
-        vk_ctx->allocator, vertex_buffer_byte_size, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT);
-    BufferAllocation index_staging_buffer = StagingBufferCreate(
-        vk_ctx->allocator, vertex_buffer_byte_size, VK_BUFFER_USAGE_INDEX_BUFFER_BIT);
-    BufferAllocation vertex_buffer_allocation = BufferUploadDevice(
-        cmd, vertex_staging_buffer, vk_ctx, vertex_buffer, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT);
-    BufferAllocation index_buffer_allocation = BufferUploadDevice(
-        cmd, index_staging_buffer, vk_ctx, index_buffer, VK_BUFFER_USAGE_INDEX_BUFFER_BIT);
-    VK_EndSingleTimeCommands(vk_ctx, cmd_pool, cmd);
-    BufferDestroy(vk_ctx->allocator, vertex_staging_buffer);
-    BufferDestroy(vk_ctx->allocator, index_staging_buffer);
-    vkDestroyCommandPool(vk_ctx->device, cmd_pool, 0);
-
-    car->index_buffer_alloc = index_buffer_allocation;
-    car->vertex_buffer_alloc = vertex_buffer_allocation;
+    CarCreateAsync(texture_id, vertex_buffer_id, index_buffer_id, texture_path, sampler,
+                   vertex_buffer, index_buffer);
 
     return car;
 }
 static void
+AssetItemBufferDestroy(VmaAllocator allocator, AssetItem<AssetItemBuffer>* asset_buffer)
+{
+    if (asset_buffer->is_loaded)
+    {
+        AssetItemBuffer* buffer = &asset_buffer->item;
+        if (buffer->staging_buffer.buffer != VK_NULL_HANDLE)
+        {
+            BufferDestroy(allocator, buffer->staging_buffer);
+        }
+        BufferDestroy(allocator, buffer->buffer_alloc);
+    }
+}
+
+static void
 CarDestroy(VulkanContext* vk_ctx, Car* car)
 {
-    BufferDestroy(vk_ctx->allocator, car->vertex_buffer_alloc);
-    BufferDestroy(vk_ctx->allocator, car->index_buffer_alloc);
     BufferContextDestroy(vk_ctx->allocator, &car->instance_buffer_mapped);
     vkDestroyDescriptorSetLayout(vk_ctx->device, car->descriptor_set_layout, 0);
 
-    AssetItemTexture* asset_item = AssetManagerTextureGetSlot(car->texture_id);
+    AssetItem<Texture>* asset_item = AssetManagerTextureGetSlot(car->texture_id);
     if (asset_item->is_loaded)
     {
         asset_item->is_loaded = 0;
-        TextureDestroy(vk_ctx, &asset_item->asset);
+        TextureDestroy(vk_ctx, &asset_item->item);
     }
     PipelineInfoDestroy(vk_ctx->device, car->pipeline_info);
+    AssetItem<AssetItemBuffer>* asset_index_buffer =
+        AssetManagerBufferItemGet(car->index_buffer_id);
+    AssetItemBufferDestroy(vk_ctx->allocator, asset_index_buffer);
+    AssetItem<AssetItemBuffer>* asset_vertex_buffer =
+        AssetManagerBufferItemGet(car->vertex_buffer_id);
+    AssetItemBufferDestroy(vk_ctx->allocator, asset_vertex_buffer);
 
     ArenaRelease(car->arena);
 }
@@ -711,18 +717,24 @@ CarUpdate(city::CarSim* car_sim, Buffer<city::CarInstance> instance_buffer, U32 
 {
     VulkanContext* vk_ctx = VulkanCtxGet();
     Car* w_car = car_sim->car;
-    AssetItemTexture* asset_item = AssetManagerTextureGetSlot(w_car->texture_id);
+    AssetItem<Texture>* texture_asset = AssetManagerTextureGetSlot(w_car->texture_id);
+    AssetItem<AssetItemBuffer>* vertex_buffer_asset =
+        AssetManagerBufferItemGet(w_car->vertex_buffer_id);
+    AssetItem<AssetItemBuffer>* index_buffer_asset =
+        AssetManagerBufferItemGet(w_car->index_buffer_id);
 
-    if (!w_car->is_pipeline_created && asset_item->is_loaded)
+    if (!w_car->is_pipeline_created && texture_asset->is_loaded && vertex_buffer_asset->is_loaded &&
+        index_buffer_asset->is_loaded)
     {
-        CarPipelineCreate(&asset_item->asset, w_car);
+        CarPipelineCreate(&texture_asset->item, w_car);
         w_car->is_pipeline_created = 1;
     }
     if (w_car->is_pipeline_created)
     {
         VkBufferFromBufferMapping(vk_ctx->allocator, &w_car->instance_buffer_mapped,
                                   instance_buffer, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT);
-        CarRendering(vk_ctx, car_sim, image_idx, car_sim->cars.size);
+        CarRendering(vk_ctx, car_sim, image_idx, car_sim->cars.size,
+                     vertex_buffer_asset->item.buffer_alloc, index_buffer_asset->item.buffer_alloc);
     }
 }
 static PipelineInfo
@@ -887,7 +899,8 @@ CarPipelineInfoCreate(VulkanContext* vk_ctx, VkDescriptorSetLayout car_layout)
 }
 
 static void
-CarRendering(VulkanContext* vk_ctx, city::CarSim* car, U32 image_idx, U32 instance_count)
+CarRendering(VulkanContext* vk_ctx, city::CarSim* car, U32 image_idx, U32 instance_count,
+             BufferAllocation vertex_buffer_alloc, BufferAllocation index_buffer_alloc)
 {
     Car* w_car = car->car;
     SwapchainResources* swapchain_resources = vk_ctx->swapchain_resources;
@@ -954,7 +967,7 @@ CarRendering(VulkanContext* vk_ctx, city::CarSim* car, U32 image_idx, U32 instan
 
     vkCmdBindPipeline(cmd_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline_info.pipeline);
 
-    VkBuffer vertex_buffers[] = {w_car->vertex_buffer_alloc.buffer,
+    VkBuffer vertex_buffers[] = {vertex_buffer_alloc.buffer,
                                  w_car->instance_buffer_mapped.buffer_alloc.buffer};
     VkDeviceSize offsets[] = {0, 0};
 
@@ -964,7 +977,7 @@ CarRendering(VulkanContext* vk_ctx, city::CarSim* car, U32 image_idx, U32 instan
                             pipeline_info.pipeline_layout, 0, ArrayCount(descriptor_sets),
                             descriptor_sets, 0, NULL);
     vkCmdBindVertexBuffers(cmd_buffer, 0, 2, vertex_buffers, offsets);
-    vkCmdBindIndexBuffer(cmd_buffer, w_car->index_buffer_alloc.buffer, 0, VK_INDEX_TYPE_UINT32);
+    vkCmdBindIndexBuffer(cmd_buffer, index_buffer_alloc.buffer, 0, VK_INDEX_TYPE_UINT32);
 
     vkCmdDrawIndexed(cmd_buffer, vertex_buffer_size, instance_count, 0, 0, 0);
 
@@ -1306,12 +1319,12 @@ AssetManagerCreate(VkDevice device, U32 queue_family_index, async::Threads* thre
     Arena* arena = ArenaAlloc();
     AssetManager* asset_store = PushStruct(arena, AssetManager);
     asset_store->arena = arena;
-    asset_store->hashmap = BufferAlloc<AssetItemTextureList>(arena, texture_map_size);
+    asset_store->texture_hashmap = BufferAlloc<AssetItemList<Texture>>(arena, texture_map_size);
     asset_store->total_size = total_size_in_bytes;
     asset_store->work_queue = threads->msg_queue;
     asset_store->threaded_cmd_pools =
         BufferAlloc<AssetManagerCommandPool>(arena, threads->thread_handles.size);
-    asset_store->free_list = nullptr;
+    asset_store->texture_free_list = nullptr;
 
     VkFenceCreateInfo fence_info{};
     fence_info.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
@@ -1332,6 +1345,13 @@ AssetManagerCreate(VkDevice device, U32 queue_family_index, async::Threads* thre
     U32 cmd_queue_size = 10;
     asset_store->cmd_queue = async::QueueInit<CmdQueueItem>(
         arena, cmd_queue_size, vk_ctx->queue_family_indices.graphicsFamilyIndex);
+
+    // ~mgj: asset info
+    asset_store->asset_arena = ArenaAlloc();
+    // ~mgj: textures
+    asset_store->texture_arena = ArenaAlloc();
+    // ~ mgj: buffers
+    asset_store->buffer_arena = ArenaAlloc();
     return asset_store;
 }
 static void
@@ -1345,7 +1365,61 @@ AssetManagerDestroy(VulkanContext* vk_ctx, AssetManager* asset_store)
     AssetManagerExecuteCmds(); // finish executing commands already in the queue
     async::QueueDestroy(asset_store->cmd_queue);
     AssetManagerCmdListDestroy(asset_store->cmd_wait_list);
+    // ~mgj: asset info
+    ArenaRelease(asset_store->asset_arena);
+    // ~mgj: textures
+    ArenaRelease(asset_store->texture_arena);
+    // ~ mgj: buffers
+    ArenaRelease(asset_store->buffer_arena);
+
     ArenaRelease(asset_store->arena);
+}
+
+static AssetInfoList
+AssetManagerAssetInfoAdd(AssetInfo* asset, U64 asset_count)
+{
+    AssetManager* asset_manager = VulkanCtxGet()->asset_store;
+    AssetInfoList asset_list = {0};
+
+    for (U32 i = 0; i < asset_count; i++)
+    {
+        AssetInfo* item;
+        if (asset_manager->asset_free_list)
+        {
+            item = asset_manager->asset_free_list;
+            SLLStackPop(asset_manager->asset_free_list);
+        }
+        else
+        {
+            item = PushStruct(asset_manager->asset_arena, AssetInfo);
+        }
+        *item = asset[i];
+        SLLQueuePush(asset_list.first, asset_list.last, item);
+    }
+
+    return asset_list;
+}
+
+static void
+AssetManagerAssetInfoRemove(AssetInfoList asset_list)
+{
+    AssetManager* asset_manager = VulkanCtxGet()->asset_store;
+
+    for (AssetInfo* asset = asset_list.first; asset;)
+    {
+        AssetInfo* asset_next = asset->next;
+        SLLStackPush(asset_manager->asset_free_list, asset);
+        asset = asset_next;
+    }
+}
+static void
+AssetCmdQueueItemEnqueue(AssetInfo* assets, U64 asset_count, U32 thread_id, VkCommandBuffer cmd)
+{
+    AssetManager* asset_manager = VulkanCtxGet()->asset_store;
+
+    AssetInfoList asset_list = AssetManagerAssetInfoAdd(assets, asset_count);
+    CmdQueueItem item = {.asset_list = asset_list, .thread_id = thread_id, .cmd_buffer = cmd};
+    async::QueuePush(asset_manager->cmd_queue, &item);
 }
 
 static void
@@ -1387,41 +1461,78 @@ AssetIdCmp(AssetId a, AssetId b)
     return a.id == b.id;
 }
 
-static AssetItemTexture*
+static AssetItem<Texture>*
 AssetManagerTextureGetSlot(AssetId asset_id)
 {
     ScratchScope scratch = ScratchScope(0, 0);
     VulkanContext* vk_ctx = VulkanCtxGet();
     AssetManager* asset_store = vk_ctx->asset_store;
 
-    AssetItemTextureList* texture_list =
-        &asset_store->hashmap.data[HashIndexFromAssetId(asset_id, asset_store->hashmap.size)];
-    for (AssetItemTexture* texture_result = texture_list->first; texture_result;
-         texture_result = texture_result->next)
+    AssetItemList<Texture>* texture_list =
+        &asset_store->texture_hashmap
+             .data[HashIndexFromAssetId(asset_id, asset_store->texture_hashmap.size)];
+
+    return AssetManagerItemGet(asset_store->texture_arena, texture_list,
+                               &asset_store->texture_free_list, asset_id);
+}
+
+static AssetItem<AssetItemBuffer>*
+AssetManagerBufferItemGet(AssetId asset_id)
+{
+    VulkanContext* vk_ctx = VulkanCtxGet();
+    AssetManager* asset_store = vk_ctx->asset_store;
+
+    return AssetManagerItemGet(asset_store->buffer_arena, &asset_store->buffer_list,
+                               &asset_store->buffer_free_list, asset_id);
+}
+
+template <typename T>
+static AssetItem<T>*
+AssetManagerItemGet(Arena* arena, AssetItemList<T>* list, AssetItem<T>** free_list, AssetId id)
+{
+    for (AssetItem<T>* buffer_result = list->first; buffer_result;
+         buffer_result = buffer_result->next)
     {
-        if (AssetIdCmp(texture_result->id, asset_id))
+        if (AssetIdCmp(buffer_result->id, id))
         {
-            return texture_result;
+            return buffer_result;
         }
     }
-    AssetItemTexture* asset_item = {0};
-    if (asset_store->free_list)
+    AssetItem<T>* asset_item = {0};
+    if (*free_list)
     {
-        asset_item = asset_store->free_list;
+        asset_item = *free_list;
         SLLStackPop(asset_item);
     }
     else
     {
-        asset_item = PushStruct(asset_store->arena, AssetItemTexture);
-        asset_item->id = asset_id;
-        SLLQueuePushFront(texture_list->first, texture_list->last, asset_item);
+        asset_item = PushStruct(arena, AssetItem<T>);
+        asset_item->id = id;
+        SLLQueuePushFront(list->first, list->last, asset_item);
     }
     return asset_item;
 }
 
-static void
-AssetManagerBufferItemGet()
+template <typename T>
+static AssetInfo
+AssetInfoBufferCmd(VkCommandBuffer cmd, AssetId id, Buffer<T> buffer,
+                   VkBufferUsageFlagBits usage_flags)
 {
+    VulkanContext* vk_ctx = VulkanCtxGet();
+    U32 buffer_byte_size = buffer.size * sizeof(T);
+    BufferAllocation vertex_staging_buffer_alloc =
+        StagingBufferCreate(vk_ctx->allocator, buffer_byte_size, usage_flags);
+
+    BufferAllocation vertex_buffer_alloc =
+        BufferUploadDevice(cmd, vertex_staging_buffer_alloc, vk_ctx, buffer, usage_flags);
+
+    AssetItem<AssetItemBuffer>* asset_vertex_buffer = AssetManagerBufferItemGet(id);
+    asset_vertex_buffer->item.buffer_alloc = vertex_buffer_alloc;
+    asset_vertex_buffer->item.staging_buffer = vertex_staging_buffer_alloc;
+
+    AssetInfo info = {.id = id, .type = AssetItemType_Buffer};
+
+    return info;
 }
 
 static void
@@ -1443,12 +1554,23 @@ AssetManagerCmdDoneCheck()
                     &cmd_queue_item->cmd_buffer);
             }
 
-            if (cmd_queue_item->asset_type == AssetItemType_Texture)
+            for (AssetInfo* asset_info = cmd_queue_item->asset_list.first; asset_info;
+                 asset_info = asset_info->next)
             {
-                wrapper::AssetItemTexture* asset =
-                    wrapper::AssetManagerTextureGetSlot(cmd_queue_item->asset_id);
-                BufferDestroy(vk_ctx->allocator, asset->asset.staging_buffer);
-                asset->is_loaded = 1;
+                if (asset_info->type == AssetItemType_Texture)
+                {
+                    wrapper::AssetItem<Texture>* asset =
+                        wrapper::AssetManagerTextureGetSlot(asset_info->id);
+                    BufferDestroy(vk_ctx->allocator, asset->item.staging_buffer);
+                    asset->is_loaded = 1;
+                }
+                else if (asset_info->type == AssetItemType_Buffer)
+                {
+                    wrapper::AssetItem<AssetItemBuffer>* asset =
+                        wrapper::AssetManagerBufferItemGet(asset_info->id);
+                    BufferDestroy(vk_ctx->allocator, asset->item.staging_buffer);
+                    asset->is_loaded = 1;
+                }
             }
             vkDestroyFence(vk_ctx->device, cmd_queue_item->fence, 0);
             AssetManagerCmdListRemove(asset_store->cmd_wait_list, cmd_queue_item);
@@ -1461,7 +1583,7 @@ AssetManagerCmdDoneCheck()
 }
 
 static void
-AssetManagerRoadResourceLoadAsync(AssetManager* asset_store, AssetItemTexture* texture,
+AssetManagerRoadResourceLoadAsync(AssetManager* asset_store, AssetItem<Texture>* texture,
                                   VulkanContext* vk_ctx, String8 shader_path, Road* w_road,
                                   city::Road* road)
 {
@@ -1477,18 +1599,18 @@ AssetManagerRoadResourceLoadAsync(AssetManager* asset_store, AssetItemTexture* t
 
     async::QueueItem queue_input = {.data = thread_input,
                                     .worker_func = AssetManagerTextureThreadMain};
-    async::QueuePush(asset_store->work_queue, queue_input);
+    async::QueuePush(asset_store->work_queue, &queue_input);
 }
 
 static void
 AssetManagerTextureThreadMain(async::ThreadInfo thread_info, void* data)
 {
     RoadThreadInput* input = (RoadThreadInput*)data;
-    AssetItemTexture* item = input->asset_store_texture;
-    item->is_loaded = 0;
+    AssetItem<Texture>* asset = input->asset_store_texture;
+    asset->is_loaded = 0;
     input->texture_func(thread_info.thread_id,
                         input->threaded_cmd_pools.data[thread_info.thread_id], input->texture_input,
-                        &item->asset);
+                        &asset->item);
 }
 static VkCommandBuffer
 BeginCommand(VkDevice device, AssetManagerCommandPool threaded_cmd_pool)
@@ -1551,6 +1673,7 @@ AssetManagerCmdListAdd(AssetManagerCmdList* cmd_list, CmdQueueItem item)
 static void
 AssetManagerCmdListRemove(AssetManagerCmdList* cmd_list, CmdQueueItem* item)
 {
+    AssetManagerAssetInfoRemove(item->asset_list);
     DLLRemove(cmd_list->list_first, cmd_list->list_last, item);
     MemoryZeroStruct(item);
     SLLStackPush(cmd_list->free_list, item);
