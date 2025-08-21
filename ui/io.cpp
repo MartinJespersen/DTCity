@@ -1,38 +1,43 @@
-// check for mouse inside context area of window
-// if (glfwGetWindowAttrib(window, GLFW_HOVERED))
-// {
-//     highlight_interface();
-// }
-
 static void
 VK_FramebufferResizeCallback(GLFWwindow* window, int width, int height)
 {
     (void)width;
     (void)height;
 
-    auto context = reinterpret_cast<Context*>(glfwGetWindowUserPointer(window));
-    context->vk_ctx->framebuffer_resized = 1;
+    IO* io_ctx = reinterpret_cast<IO*>(glfwGetWindowUserPointer(window));
+    io_ctx->framebuffer_resized = 1;
 }
 
-static void
-InitWindow(Context* ctx)
+static IO*
+WindowCreate(U32 window_width, U32 window_height)
 {
-    IO* io_ctx = ctx->io;
+    Arena* arena = ArenaAlloc();
+    IO* io_ctx = PushStruct(arena, IO);
+    io_ctx->arena = arena;
+
     glfwInit();
     glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
     glfwWindowHint(GLFW_RESIZABLE, GLFW_TRUE);
     io_ctx->window = glfwCreateWindow(800, 600, "Vulkan", nullptr, nullptr);
-    glfwSetWindowUserPointer(io_ctx->window, ctx);
+    glfwSetWindowUserPointer(io_ctx->window, io_ctx);
     glfwSetFramebufferSizeCallback(io_ctx->window, VK_FramebufferResizeCallback);
     glfwSetScrollCallback(io_ctx->window, IO_ScrollCallback);
+
+    return io_ctx;
 }
 
-struct Context;
-void
+static void
+WindowDestroy(IO* io_ctx)
+{
+    glfwDestroyWindow(io_ctx->window);
+    glfwTerminate();
+    ArenaRelease(io_ctx->arena);
+}
+
+static void
 IO_ScrollCallback(GLFWwindow* window, double xoffset, double yoffset)
 {
-    Context* ctx = (Context*)glfwGetWindowUserPointer(window);
-    IO* io_ctx = ctx->io;
+    IO* io_ctx = (IO*)glfwGetWindowUserPointer(window);
     io_ctx->scroll_x = xoffset;
     io_ctx->scroll_y = yoffset;
 }

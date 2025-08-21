@@ -9,7 +9,7 @@
 #include "base_context_cracking.h"
 
 #include "base_core.hpp"
-#include "error.hpp"
+#include "base_diagnostics.hpp"
 #include "base_profile.hpp"
 #include "base_arena.h"
 #include "base_math.h"

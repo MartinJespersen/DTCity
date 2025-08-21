@@ -369,8 +369,7 @@ TextureDestroy(VulkanContext* vk_ctx, Texture* texture);
         VkResult res = (f);                                                                        \
         if (res != VK_SUCCESS)                                                                     \
         {                                                                                          \
-            fprintf(stderr, "Fatal : VkResult is %d in %s at line %d\n", res, __FILE__, __LINE__); \
-            Trap(res == VK_SUCCESS);                                                               \
+            ERROR_LOG("Fatal : VkResult is %d in %s at line %d\n", res, __FILE__, __LINE__);       \
             exit(EXIT_FAILURE);                                                                    \
         }                                                                                          \
     }

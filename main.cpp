@@ -19,7 +19,7 @@
 #include "entrypoint.cpp"
 
 static Context*
-ContextCreate()
+ContextCreate(IO* io_ctx)
 {
     HTTP_Init();
 
@@ -31,25 +31,18 @@ ContextCreate()
     ctx->io = PushStruct(app_arena, IO);
     ctx->camera = PushStruct(app_arena, ui::Camera);
     ctx->time = PushStruct(app_arena, DT_Time);
+    ctx->io = io_ctx;
 
     ctx->cwd = Str8PathFromStr8List(app_arena,
                                     {OS_GetCurrentPath(scratch.arena), S(".."), S(".."), S("..")});
     ctx->cache_path = Str8PathFromStr8List(app_arena, {ctx->cwd, S("cache")});
 
     GlobalContextSet(ctx);
-    InitWindow(ctx);
 
     // ~mgj: -2 as 2 are used for Main thread and IO thread
     U32 thread_count = OS_GetSystemInfo()->logical_processor_count - 2;
     U32 queue_size = 10; // TODO: should be increased
     ctx->thread_info = async::WorkerThreadsCreate(app_arena, thread_count, queue_size);
-
-    ctx->vk_ctx = wrapper::VK_VulkanInit(ctx);
-    ctx->road = city::RoadCreate(ctx->vk_ctx, ctx->cache_path);
-
-    city::RoadsBuild(ctx->road);
-    CameraInit(ctx->camera);
-    ctx->car_sim = city::CarSimCreate(ctx->vk_ctx, 100, ctx->road);
 
     return ctx;
 }
@@ -57,19 +50,16 @@ ContextCreate()
 static void
 ContextDestroy(Context* ctx)
 {
-    city::RoadDestroy(ctx->vk_ctx, ctx->road);
-    city::CarSimDestroy(ctx->vk_ctx, ctx->car_sim);
-    wrapper::VK_Cleanup(ctx, ctx->vk_ctx);
-
-    glfwDestroyWindow(ctx->io->window);
-    glfwTerminate();
     ArenaRelease(ctx->arena_permanent);
 }
 
 void
 App()
 {
-    Context* ctx = ContextCreate();
+    IO* io_ctx = WindowCreate(wrapper::VulkanContext::WIDTH, wrapper::VulkanContext::HEIGHT);
+    IO_InputStateUpdate(io_ctx);
+    Context* ctx = ContextCreate(io_ctx);
+    TimeInit(ctx->time);
     OS_Handle thread_handle = Entrypoint(ctx);
     while (!glfwWindowShouldClose(ctx->io->window))
     {
@@ -77,4 +67,5 @@ App()
     }
     Cleanup(thread_handle, ctx);
     ContextDestroy(ctx);
+    WindowDestroy(io_ctx);
 }

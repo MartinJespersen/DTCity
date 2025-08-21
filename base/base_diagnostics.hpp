@@ -9,6 +9,14 @@ exitWithError(const char* message)
     exit(EXIT_FAILURE);
 }
 
+#if defined(DEBUG_BUILD)
+#define DEBUG_LOG(message, ...) printf(message, __VA_ARGS__)
+#else
+#define DEBUG_LOG(message, ...)
+#endif
+
+#define ERROR_LOG(message, ...) fprintf(stderr, message, __VA_ARGS__)
+
 // Push: disable all warnings
 #if COMPILER_MSVC
 #define DISABLE_WARNINGS_PUSH __pragma(warning(push, 0))

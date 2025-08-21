@@ -24,7 +24,7 @@
 
 
 # On Linux
-* For Khronos validation layer support (enabled by default when NDEBUG is not defined) remember to install it:
+* For Khronos validation layer support (enabled if DEBUG_BUILD macro is defined) remember to install it:
   * sudo apt install vulkan-validationlayers (Ubuntu)
 * Compiling (incl. linking) takes a very long time at the moment.
 * hotreloading does not work at the moment, due to the entrypoint library not being unloaded using dlclose

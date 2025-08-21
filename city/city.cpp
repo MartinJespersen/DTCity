@@ -215,7 +215,7 @@ RoadsBuild(Road* road)
             OS_FileRead(file_handle, {.min = 0, .max = file_props.size}, content.str);
         if (total_read_size != file_props.size)
         {
-            printf("RoadsBuild: Could not read everything from cache");
+            DEBUG_LOG("RoadsBuild: Could not read everything from cache");
         }
         else
         {
@@ -479,6 +479,7 @@ CarSimCreate(wrapper::VulkanContext* vk_ctx, U32 car_count, Road* road)
     wrapper::CgltfResult parsed_result = wrapper::CgltfParse(arena, gltf_path);
     car_sim->vertex_buffer = parsed_result.vertex_buffer;
     car_sim->index_buffer = parsed_result.index_buffer;
+    car_sim->sampler = parsed_result.sampler;
 
     String8 car_texture_path = PushStr8Copy(arena, S("../../../textures/car_collection.ktx"));
     wrapper::AssetId car_texture_id = wrapper::AssetIdFromStr8(car_texture_path);

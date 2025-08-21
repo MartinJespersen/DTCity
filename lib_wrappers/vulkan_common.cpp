@@ -466,8 +466,8 @@ VK_PhysicalDevicePick(VulkanContext* vk_ctx)
             VkPhysicalDeviceProperties properties{};
             vkGetPhysicalDeviceProperties(devices[i], &properties);
 
-            printf("Name of device: %s\nDevice Type: %d\n", properties.deviceName,
-                   properties.deviceType);
+            DEBUG_LOG("Name of device: %s\nDevice Type: %d\n", properties.deviceName,
+                      properties.deviceType);
             vk_ctx->physical_device = devices[i];
             vk_ctx->physical_device_properties = properties;
             vk_ctx->msaa_samples = VK_MaxUsableSampleCountGet(devices[i]);
@@ -555,7 +555,7 @@ VK_DebugCallback(VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity,
     (void)pUserData;
     (void)messageType;
     (void)messageSeverity;
-    printf("validation layer: %s\n", pCallbackData->pMessage);
+    DEBUG_LOG("validation layer: %s\n", pCallbackData->pMessage);
 
     return VK_FALSE;
 }
@@ -647,12 +647,12 @@ VK_SyncObjectsCreate(VulkanContext* vk_ctx)
 
     for (U32 i = 0; i < (U32)vk_ctx->MAX_FRAMES_IN_FLIGHT; i++)
     {
-        if (vkCreateSemaphore(vk_ctx->device, &semaphoreInfo, nullptr,
-                              &vk_ctx->image_available_semaphores.data[i]) != VK_SUCCESS ||
-            vkCreateSemaphore(vk_ctx->device, &semaphoreInfo, nullptr,
-                              &vk_ctx->render_finished_semaphores.data[i]) != VK_SUCCESS ||
-            vkCreateFence(vk_ctx->device, &fenceInfo, nullptr, &vk_ctx->in_flight_fences.data[i]) !=
-                VK_SUCCESS)
+        if ((vkCreateSemaphore(vk_ctx->device, &semaphoreInfo, nullptr,
+                               &vk_ctx->image_available_semaphores.data[i]) != VK_SUCCESS) ||
+            (vkCreateSemaphore(vk_ctx->device, &semaphoreInfo, nullptr,
+                               &vk_ctx->render_finished_semaphores.data[i]) != VK_SUCCESS) ||
+            (vkCreateFence(vk_ctx->device, &fenceInfo, nullptr,
+                           &vk_ctx->in_flight_fences.data[i]) != VK_SUCCESS))
         {
             exitWithError("failed to create synchronization objects for a frame!");
         }

@@ -58,7 +58,8 @@ VK_VulkanInit(Context* ctx)
 
     static const U32 MAX_FRAMES_IN_FLIGHT = 2;
 
-    const char* validation_layers[] = {"VK_LAYER_KHRONOS_validation"};
+    const char* validation_layers[] = {"VK_LAYER_KHRONOS_validation",
+                                       "VK_LAYER_KHRONOS_synchronization2"};
     vk_ctx->validation_layers = BufferAlloc<String8>(vk_ctx->arena, ArrayCount(validation_layers));
     for (U32 i = 0; i < ArrayCount(validation_layers); i++)
     {
@@ -152,163 +153,84 @@ RoadDescriptorCreate(VkDescriptorPool desc_pool, RoadDescriptorCreateInfo* info,
 
 static void
 RoadTextureCreate(U32 thread_id, AssetManagerCommandPool threaded_cmd_pool,
-                  RoadTextureCreateInput* input, Texture* texture)
+                  RoadTextureCreateInput* input)
 {
-    ScratchScope scratch = ScratchScope(0, 0);
-    VulkanContext* vk_ctx = input->vk_ctx;
-    Road* w_road = input->w_road;
-    String8 texture_path = w_road->road_texture_path;
+    VulkanContext* vk_ctx = wrapper::VulkanCtxGet();
+    AssetId texture_id = input->texture_id;
+    AssetItem<Texture>* asset_store_texture = AssetManagerTextureGetSlot(texture_id);
+    Texture* texture = &asset_store_texture->item;
+    String8 texture_path = input->texture_path;
 
-    S32 tex_width, tex_height, tex_channels;
-    stbi_uc* pixels =
-        stbi_load((char*)texture_path.str, &tex_width, &tex_height, &tex_channels, STBI_rgb_alpha);
-    VkDeviceSize image_size = tex_width * tex_height * 4;
-    U32 mip_level = (U32)(floor(log2(Max(tex_width, tex_height)))) + 1;
+    VkCommandBuffer cmd = BeginCommand(vk_ctx->device, threaded_cmd_pool);
+    // Get texture
+    ktxTexture2* ktx_texture;
+    ktx_error_code_e ktxresult = ktxTexture2_CreateFromNamedFile(
+        (char*)texture_path.str, KTX_TEXTURE_CREATE_LOAD_IMAGE_DATA_BIT, &ktx_texture);
+    Assert(ktxresult == KTX_SUCCESS);
 
-    if (!pixels)
-    {
-        exitWithError("TextureCreate: failed to load texture image!");
-    }
+    VkSampler vk_sampler = SamplerCreate(
+        vk_ctx->device, VK_FILTER_LINEAR, VK_SAMPLER_MIPMAP_MODE_LINEAR, ktx_texture->numLevels,
+        vk_ctx->physical_device_properties.limits.maxSamplerAnisotropy);
 
-    VmaAllocationCreateInfo vma_staging_info = {0};
-    vma_staging_info.usage = VMA_MEMORY_USAGE_AUTO;
-    vma_staging_info.flags =
-        VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT | VMA_ALLOCATION_CREATE_MAPPED_BIT;
-    vma_staging_info.requiredFlags = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT;
+    BufferAllocation texture_staging_buffer = StagingBufferCreate(
+        vk_ctx->allocator, ktx_texture->dataSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT);
 
-    texture->staging_buffer = BufferAllocationCreate(
-        vk_ctx->allocator, image_size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, vma_staging_info);
+    ImageKtx2* image_ktx = ImageFromKtx2file(cmd, texture_staging_buffer, vk_ctx, ktx_texture);
 
-    vmaCopyMemoryToAllocation(vk_ctx->allocator, pixels, texture->staging_buffer.allocation, 0,
-                              image_size);
+    VK_CHECK_RESULT(vkEndCommandBuffer(cmd));
 
-    stbi_image_free(pixels);
-
-    VmaAllocationCreateInfo vma_info = {.usage = VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE};
-
-    ImageAllocation image_alloc =
-        ImageAllocationCreate(vk_ctx->allocator, tex_width, tex_height, VK_SAMPLE_COUNT_1_BIT,
-                              VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_TILING_OPTIMAL,
-                              VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT |
-                                  VK_IMAGE_USAGE_SAMPLED_BIT,
-                              mip_level, vma_info);
-
-    VkCommandBuffer command_buffer = BeginCommand(vk_ctx->device, threaded_cmd_pool);
-    ImageLayoutTransition(command_buffer, image_alloc.image, VK_FORMAT_R8G8B8A8_SRGB,
-                          VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-                          mip_level);
-    ImageFromBufferCopy(command_buffer, texture->staging_buffer.buffer, image_alloc.image,
-                        tex_width, tex_height);
-    VK_GenerateMipmaps(command_buffer, image_alloc.image, tex_width, tex_height,
-                       mip_level); // TODO: mip maps are usually not generated at
-                                   // runtime.
-    // They are usually stored in the texture file
-    VK_CHECK_RESULT(vkEndCommandBuffer(command_buffer));
-
-    ImageViewResource image_view_resource =
-        ImageViewResourceCreate(vk_ctx->device, image_alloc.image, VK_FORMAT_R8G8B8A8_SRGB,
-                                VK_IMAGE_ASPECT_COLOR_BIT, mip_level);
-
-    VkSampler sampler =
-        SamplerCreate(vk_ctx->device, VK_FILTER_LINEAR, VK_SAMPLER_MIPMAP_MODE_LINEAR, mip_level,
-                      vk_ctx->physical_device_properties.limits.maxSamplerAnisotropy);
-
-    ImageResource image_resource = {.image_alloc = image_alloc,
-                                    .image_view_resource = image_view_resource};
-
-    texture->image_resource = image_resource;
-    texture->sampler = sampler;
-    texture->width = tex_width;
-    texture->height = tex_height;
-    texture->mip_level_count = mip_level;
+    texture->image_resource = image_ktx->image_resource;
+    texture->sampler = vk_sampler;
+    texture->height = image_ktx->height;
+    texture->width = image_ktx->width;
+    texture->mip_level_count = image_ktx->mip_level_count;
+    texture->staging_buffer = texture_staging_buffer;
 
     AssetInfo assets[] = {{
-        .id = w_road->texture_id,
+        .id = texture_id,
         .type = AssetItemType_Texture,
     }};
-    AssetCmdQueueItemEnqueue(assets, ArrayCount(assets), thread_id, command_buffer);
+    AssetCmdQueueItemEnqueue(assets, ArrayCount(assets), thread_id, cmd);
 }
 
 static void
-RoadRenderPass(VulkanContext* vk_ctx, Road* w_road, city::Road* road, U32 image_index)
+RoadRenderPass(VulkanContext* vk_ctx, Road* w_road, city::Road* road)
 {
-    VkExtent2D swap_chain_extent = vk_ctx->swapchain_resources->swapchain_extent;
-    VkCommandBuffer command_buffer = vk_ctx->command_buffers.data[vk_ctx->current_frame];
+    SwapchainResources* swapchain_resources = vk_ctx->swapchain_resources;
+    VkExtent2D swapchain_extent = swapchain_resources->swapchain_extent;
+    VkCommandBuffer cmd_buffer = vk_ctx->command_buffers.data[vk_ctx->current_frame];
 
-    // Color attachment
-    VkRenderingAttachmentInfo color_attachment{};
-    color_attachment.sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO;
-    color_attachment.imageView =
-        vk_ctx->swapchain_resources->color_image_resource.image_view_resource.image_view;
-    color_attachment.imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-    color_attachment.loadOp = VK_ATTACHMENT_LOAD_OP_LOAD;
-    color_attachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
-
-    // Depth attachment
-    VkRenderingAttachmentInfo depth_attachment{};
-    depth_attachment.sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO;
-    depth_attachment.imageView =
-        vk_ctx->swapchain_resources->depth_image_resource.image_view_resource.image_view;
-    depth_attachment.imageLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
-    depth_attachment.loadOp = VK_ATTACHMENT_LOAD_OP_LOAD;
-    depth_attachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
-
-    // Set up MSAA resolve if needed
-    if (vk_ctx->msaa_samples != VK_SAMPLE_COUNT_1_BIT)
-    {
-        color_attachment.resolveMode = VK_RESOLVE_MODE_AVERAGE_BIT;
-        color_attachment.resolveImageView =
-            vk_ctx->swapchain_resources->image_resources.data[image_index]
-                .image_view_resource.image_view;
-        color_attachment.resolveImageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-    }
-
-    // Rendering info
-    VkRenderingInfo rendering_info{};
-    rendering_info.sType = VK_STRUCTURE_TYPE_RENDERING_INFO;
-    rendering_info.renderArea.offset = {0, 0};
-    rendering_info.renderArea.extent = vk_ctx->swapchain_resources->swapchain_extent;
-    rendering_info.layerCount = 1;
-    rendering_info.colorAttachmentCount = 1;
-    rendering_info.pColorAttachments = &color_attachment;
-    rendering_info.pDepthAttachment = &depth_attachment;
-
-    vkCmdBeginRendering(command_buffer, &rendering_info);
-
-    vkCmdBindPipeline(command_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, w_road->pipeline);
+    vkCmdBindPipeline(cmd_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, w_road->pipeline);
 
     VkViewport viewport{};
     viewport.x = 0.0f;
     viewport.y = 0.0f;
-    viewport.width = static_cast<float>(swap_chain_extent.width);
-    viewport.height = static_cast<float>(swap_chain_extent.height);
+    viewport.width = (F32)(swapchain_extent.width);
+    viewport.height = (F32)(swapchain_extent.height);
     viewport.minDepth = 0.0f;
     viewport.maxDepth = 1.0f;
-    vkCmdSetViewport(command_buffer, 0, 1, &viewport);
+    vkCmdSetViewport(cmd_buffer, 0, 1, &viewport);
 
     VkRect2D scissor{};
     scissor.offset = {0, 0};
-    scissor.extent = swap_chain_extent;
-    vkCmdSetScissor(command_buffer, 0, 1, &scissor);
+    scissor.extent = swapchain_extent;
+    vkCmdSetScissor(cmd_buffer, 0, 1, &scissor);
 
     VkBuffer vertex_buffers[] = {w_road->vertex_buffer.buffer_alloc.buffer};
     VkDeviceSize offsets[] = {0};
 
     RoadPushConstants road_push_constant = {.road_height = road->road_height,
                                             .texture_scale = road->texture_scale};
-    vkCmdPushConstants(command_buffer, w_road->pipeline_layout,
+    vkCmdPushConstants(cmd_buffer, w_road->pipeline_layout,
                        VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 0,
                        sizeof(RoadPushConstants), &road_push_constant);
     VkDescriptorSet descriptor_sets[] = {vk_ctx->camera_descriptor_sets[vk_ctx->current_frame],
                                          w_road->descriptor_sets.data[vk_ctx->current_frame]};
-    vkCmdBindDescriptorSets(command_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS,
-                            w_road->pipeline_layout, 0, ArrayCount(descriptor_sets),
-                            descriptor_sets, 0, NULL);
-    vkCmdBindVertexBuffers(command_buffer, 0, 1, vertex_buffers, offsets);
+    vkCmdBindDescriptorSets(cmd_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, w_road->pipeline_layout, 0,
+                            ArrayCount(descriptor_sets), descriptor_sets, 0, NULL);
+    vkCmdBindVertexBuffers(cmd_buffer, 0, 1, vertex_buffers, offsets);
 
-    vkCmdDraw(command_buffer, w_road->vertex_buffer.size, 1, 0, 0);
-
-    vkCmdEndRendering(command_buffer);
+    vkCmdDraw(cmd_buffer, w_road->vertex_buffer.size, 1, 0, 0);
 }
 
 static VkDescriptorSetLayout
@@ -387,13 +309,9 @@ RoadCreate(VulkanContext* vk_ctx, city::Road* road)
         BufferAlloc<VkDescriptorSet>(w_road->arena, vk_ctx->MAX_FRAMES_IN_FLIGHT);
 
     w_road->road_texture_path =
-        Str8PathFromStr8List(road->arena, {vk_ctx->texture_path, S("road_texture.jpg")});
+        Str8PathFromStr8List(road->arena, {vk_ctx->texture_path, S("road_texture.ktx2")});
 
     w_road->texture_id = AssetIdFromStr8(w_road->road_texture_path);
-    AssetItem<Texture>* asset_item_state = AssetManagerTextureGetSlot(w_road->texture_id);
-
-    AssetManagerRoadResourceLoadAsync(vk_ctx->asset_store, asset_item_state, vk_ctx,
-                                      vk_ctx->shader_path, w_road, road);
 
     return w_road;
 }
@@ -435,7 +353,7 @@ RoadUpdate(city::Road* road, VulkanContext* vk_ctx, U32 image_index, String8 sha
         VkBufferFromBufferMapping<city::RoadVertex>(vk_ctx->allocator, &w_road->vertex_buffer,
                                                     road->vertex_buffer,
                                                     VK_BUFFER_USAGE_VERTEX_BUFFER_BIT);
-        RoadRenderPass(vk_ctx, w_road, road, image_index);
+        RoadRenderPass(vk_ctx, w_road, road);
     }
 }
 
@@ -669,10 +587,6 @@ CarCreate(AssetId texture_id, String8 texture_path, CgltfSampler sampler,
     car->vertex_buffer_id = vertex_buffer_id;
     car->index_buffer_id = index_buffer_id;
 
-    // upload texture to GPU
-    CarCreateAsync(texture_id, vertex_buffer_id, index_buffer_id, texture_path, sampler,
-                   vertex_buffer, index_buffer);
-
     return car;
 }
 static void
@@ -733,8 +647,8 @@ CarUpdate(city::CarSim* car_sim, Buffer<city::CarInstance> instance_buffer, U32 
     {
         VkBufferFromBufferMapping(vk_ctx->allocator, &w_car->instance_buffer_mapped,
                                   instance_buffer, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT);
-        CarRendering(vk_ctx, car_sim, image_idx, car_sim->cars.size,
-                     vertex_buffer_asset->item.buffer_alloc, index_buffer_asset->item.buffer_alloc);
+        CarRendering(vk_ctx, car_sim, car_sim->cars.size, vertex_buffer_asset->item.buffer_alloc,
+                     index_buffer_asset->item.buffer_alloc);
     }
 }
 static PipelineInfo
@@ -899,57 +813,15 @@ CarPipelineInfoCreate(VulkanContext* vk_ctx, VkDescriptorSetLayout car_layout)
 }
 
 static void
-CarRendering(VulkanContext* vk_ctx, city::CarSim* car, U32 image_idx, U32 instance_count,
+CarRendering(VulkanContext* vk_ctx, city::CarSim* car, U32 instance_count,
              BufferAllocation vertex_buffer_alloc, BufferAllocation index_buffer_alloc)
 {
     Car* w_car = car->car;
     SwapchainResources* swapchain_resources = vk_ctx->swapchain_resources;
     VkExtent2D swapchain_extent = swapchain_resources->swapchain_extent;
-    VkImageView color_image_view =
-        swapchain_resources->color_image_resource.image_view_resource.image_view;
-    VkImageView depth_image_view =
-        swapchain_resources->depth_image_resource.image_view_resource.image_view;
-    VkImageView swapchain_image_view =
-        swapchain_resources->image_resources.data[image_idx].image_view_resource.image_view;
     VkCommandBuffer cmd_buffer = vk_ctx->command_buffers.data[vk_ctx->current_frame];
     PipelineInfo pipeline_info = w_car->pipeline_info;
     U64 vertex_buffer_size = car->vertex_buffer.size;
-
-    // Color attachment (assuming you want to render to the same targets)
-    VkRenderingAttachmentInfo color_attachment{};
-    color_attachment.sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO;
-    color_attachment.imageView = color_image_view;
-    color_attachment.imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-    color_attachment.loadOp = VK_ATTACHMENT_LOAD_OP_LOAD; // Load existing content
-    color_attachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
-
-    // Depth attachment
-    VkRenderingAttachmentInfo depth_attachment{};
-    depth_attachment.sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO;
-    depth_attachment.imageView = depth_image_view;
-    depth_attachment.imageLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
-    depth_attachment.loadOp = VK_ATTACHMENT_LOAD_OP_LOAD; // Load existing depth
-    depth_attachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
-
-    // Set up MSAA resolve if needed
-    if (vk_ctx->msaa_samples != VK_SAMPLE_COUNT_1_BIT)
-    {
-        color_attachment.resolveMode = VK_RESOLVE_MODE_AVERAGE_BIT;
-        color_attachment.resolveImageView = swapchain_image_view;
-        color_attachment.resolveImageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-    }
-
-    // Rendering info
-    VkRenderingInfo rendering_info{};
-    rendering_info.sType = VK_STRUCTURE_TYPE_RENDERING_INFO;
-    rendering_info.renderArea.offset = {0, 0};
-    rendering_info.renderArea.extent = swapchain_extent;
-    rendering_info.layerCount = 1;
-    rendering_info.colorAttachmentCount = 1;
-    rendering_info.pColorAttachments = &color_attachment;
-    rendering_info.pDepthAttachment = &depth_attachment;
-
-    vkCmdBeginRendering(cmd_buffer, &rendering_info);
 
     VkViewport viewport{};
     viewport.x = 0.0f;
@@ -980,8 +852,6 @@ CarRendering(VulkanContext* vk_ctx, city::CarSim* car, U32 image_idx, U32 instan
     vkCmdBindIndexBuffer(cmd_buffer, index_buffer_alloc.buffer, 0, VK_INDEX_TYPE_UINT32);
 
     vkCmdDrawIndexed(cmd_buffer, vertex_buffer_size, instance_count, 0, 0, 0);
-
-    vkCmdEndRendering(cmd_buffer);
 }
 
 static void
@@ -1362,7 +1232,6 @@ AssetManagerDestroy(VulkanContext* vk_ctx, AssetManager* asset_store)
         vkDestroyCommandPool(vk_ctx->device, asset_store->threaded_cmd_pools.data[i].cmd_pool, 0);
         OS_MutexRelease(asset_store->threaded_cmd_pools.data[i].mutex);
     }
-    AssetManagerExecuteCmds(); // finish executing commands already in the queue
     async::QueueDestroy(asset_store->cmd_queue);
     AssetManagerCmdListDestroy(asset_store->cmd_wait_list);
     // ~mgj: asset info
@@ -1401,16 +1270,19 @@ AssetManagerAssetInfoAdd(AssetInfo* asset, U64 asset_count)
 }
 
 static void
-AssetManagerAssetInfoRemove(AssetInfoList asset_list)
+AssetManagerAssetInfoRemove(AssetInfoList* asset_list)
 {
     AssetManager* asset_manager = VulkanCtxGet()->asset_store;
 
-    for (AssetInfo* asset = asset_list.first; asset;)
+    for (AssetInfo* asset = asset_list->first; asset;)
     {
         AssetInfo* asset_next = asset->next;
+        MemoryZeroStruct(asset);
         SLLStackPush(asset_manager->asset_free_list, asset);
         asset = asset_next;
     }
+    asset_list->first = 0;
+    asset_list->last = 0;
 }
 static void
 AssetCmdQueueItemEnqueue(AssetInfo* assets, U64 asset_count, U32 thread_id, VkCommandBuffer cmd)
@@ -1419,6 +1291,10 @@ AssetCmdQueueItemEnqueue(AssetInfo* assets, U64 asset_count, U32 thread_id, VkCo
 
     AssetInfoList asset_list = AssetManagerAssetInfoAdd(assets, asset_count);
     CmdQueueItem item = {.asset_list = asset_list, .thread_id = thread_id, .cmd_buffer = cmd};
+    for (U32 i = 0; i < asset_count; ++i)
+    {
+        DEBUG_LOG("Asset ID: %llu - Cmd Getting Queued\n", assets[i].id.id);
+    }
     async::QueuePush(asset_manager->cmd_queue, &item);
 }
 
@@ -1440,10 +1316,14 @@ AssetManagerExecuteCmds()
 
             VkFenceCreateInfo fence_info{};
             fence_info.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
-            vkCreateFence(vk_ctx->device, &fence_info, nullptr, &item.fence);
+            VK_CHECK_RESULT(vkCreateFence(vk_ctx->device, &fence_info, nullptr, &item.fence));
 
-            vkQueueSubmit(vk_ctx->graphics_queue, 1, &submit_info, item.fence);
+            VK_CHECK_RESULT(vkQueueSubmit(vk_ctx->graphics_queue, 1, &submit_info, item.fence));
 
+            for (AssetInfo* asset = item.asset_list.first; asset; asset = asset->next)
+            {
+                DEBUG_LOG("Asset ID: %llu - Submitted Command Buffer\n", asset->id.id);
+            }
             AssetManagerCmdListAdd(asset_store->cmd_wait_list, item);
         }
     }
@@ -1540,9 +1420,9 @@ AssetManagerCmdDoneCheck()
 {
     VulkanContext* vk_ctx = VulkanCtxGet();
     AssetManager* asset_store = vk_ctx->asset_store;
-    for (CmdQueueItem* cmd_queue_item = asset_store->cmd_wait_list->list_first; cmd_queue_item;
-         cmd_queue_item = cmd_queue_item->next)
+    for (CmdQueueItem* cmd_queue_item = asset_store->cmd_wait_list->list_first; cmd_queue_item;)
     {
+        CmdQueueItem* next = cmd_queue_item->next;
         VkResult result = vkGetFenceStatus(vk_ctx->device, cmd_queue_item->fence);
         if (result == VK_SUCCESS)
         {
@@ -1571,28 +1451,31 @@ AssetManagerCmdDoneCheck()
                     BufferDestroy(vk_ctx->allocator, &asset->item.staging_buffer);
                     asset->is_loaded = 1;
                 }
+                DEBUG_LOG("Asset: %llu - Finished loading\n", asset_info->id.id);
             }
             vkDestroyFence(vk_ctx->device, cmd_queue_item->fence, 0);
-            AssetManagerCmdListRemove(asset_store->cmd_wait_list, cmd_queue_item);
+            AssetManagerCmdListItemRemove(asset_store->cmd_wait_list, cmd_queue_item);
         }
         else if (result != VK_NOT_READY)
         {
             VK_CHECK_RESULT(result);
         }
+        cmd_queue_item = next;
     }
 }
 
 static void
-AssetManagerRoadResourceLoadAsync(AssetManager* asset_store, AssetItem<Texture>* texture,
+AssetManagerRoadResourceLoadAsync(AssetManager* asset_store, AssetId texture_id,
                                   VulkanContext* vk_ctx, String8 shader_path, Road* w_road,
                                   city::Road* road)
 {
     RoadTextureCreateInput* input = PushStruct(asset_store->arena, RoadTextureCreateInput);
     input->vk_ctx = vk_ctx;
     input->w_road = w_road;
+    input->texture_id = texture_id;
+    input->texture_path = shader_path;
 
     RoadThreadInput* thread_input = PushStruct(asset_store->arena, RoadThreadInput);
-    thread_input->asset_store_texture = texture;
     thread_input->texture_input = input;
     thread_input->texture_func = RoadTextureCreate;
     thread_input->threaded_cmd_pools = asset_store->threaded_cmd_pools;
@@ -1605,12 +1488,11 @@ AssetManagerRoadResourceLoadAsync(AssetManager* asset_store, AssetItem<Texture>*
 static void
 AssetManagerTextureThreadMain(async::ThreadInfo thread_info, void* data)
 {
+    DEBUG_LOG("Thread ID: %d\n", thread_info.thread_id);
     RoadThreadInput* input = (RoadThreadInput*)data;
-    AssetItem<Texture>* asset = input->asset_store_texture;
-    asset->is_loaded = 0;
     input->texture_func(thread_info.thread_id,
-                        input->threaded_cmd_pools.data[thread_info.thread_id], input->texture_input,
-                        &asset->item);
+                        input->threaded_cmd_pools.data[thread_info.thread_id],
+                        input->texture_input);
 }
 static VkCommandBuffer
 BeginCommand(VkDevice device, AssetManagerCommandPool threaded_cmd_pool)
@@ -1671,13 +1553,14 @@ AssetManagerCmdListAdd(AssetManagerCmdList* cmd_list, CmdQueueItem item)
     DLLPushBack(cmd_list->list_first, cmd_list->list_last, item_copy);
 }
 static void
-AssetManagerCmdListRemove(AssetManagerCmdList* cmd_list, CmdQueueItem* item)
+AssetManagerCmdListItemRemove(AssetManagerCmdList* cmd_list, CmdQueueItem* item)
 {
-    AssetManagerAssetInfoRemove(item->asset_list);
+    AssetManagerAssetInfoRemove(&item->asset_list);
     DLLRemove(cmd_list->list_first, cmd_list->list_last, item);
     MemoryZeroStruct(item);
     SLLStackPush(cmd_list->free_list, item);
 }
+
 static AssetId
 AssetIdFromStr8(String8 str)
 {

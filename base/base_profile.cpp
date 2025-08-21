@@ -37,5 +37,5 @@ Profiler::~Profiler()
     U64 cpu_freq = CpuTimerFreqEstimate();
     U64 micro = 1'000;
     F64 time_elapsed_us = (F64)(diff * micro) / (F64)cpu_freq;
-    printf("Duration (us): %f\n", time_elapsed_us);
+    DEBUG_LOG("Duration (us): %f\n", time_elapsed_us);
 }

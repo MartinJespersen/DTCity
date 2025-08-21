@@ -32,7 +32,7 @@ HTTP_Request(Arena* arena, String8 host, String8 path, String8 body, HTTP_Reques
     response.good = res.error() == httplib::Error::Success ? 1 : 0;
     if (!response.good)
     {
-        printf("error from httplib: %s\n", httplib::to_string(res.error()).c_str());
+        ERROR_LOG("error from httplib: %s\n", httplib::to_string(res.error()).c_str());
     }
     else
     {

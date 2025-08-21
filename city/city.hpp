@@ -143,6 +143,7 @@ struct CarSim
 
     Buffer<city::CarVertex> vertex_buffer;
     Buffer<U32> index_buffer;
+    wrapper::CgltfSampler sampler;
     Rng1F32 car_center_offset;
     // Graphics API
     wrapper::Car* car;

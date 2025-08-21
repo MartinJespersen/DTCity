@@ -1,6 +1,8 @@
 struct Context;
 struct IO
 {
+    Arena* arena;
+
     Vec2F64 mouse_pos_cur;
     B32 mouse_left_clicked;
     F32 mouse_sensitivity;
@@ -20,6 +22,7 @@ struct IO
     B32 is_window_focused;
     // GLFW types
     GLFWwindow* window;
+    B32 framebuffer_resized;
 };
 
 static void
@@ -28,10 +31,11 @@ IO_InputStateUpdate(IO* io);
 static void
 VK_FramebufferResizeCallback(GLFWwindow* window, int width, int height);
 
+static IO*
+WindowCreate(U32 window_width, U32 window_height);
 static void
-InitWindow(Context* ctx);
-
-void
+WindowDestroy(IO* io_ctx);
+static void
 IO_ScrollCallback(GLFWwindow* window, double xoffset, double yoffset);
 
 static void

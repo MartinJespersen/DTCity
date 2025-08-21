@@ -79,6 +79,8 @@ struct RoadTextureCreateInput
 {
     VulkanContext* vk_ctx;
     Road* w_road;
+    AssetId texture_id;
+    String8 texture_path;
 };
 
 struct AssetManagerCommandPool
@@ -88,7 +90,7 @@ struct AssetManagerCommandPool
 };
 
 typedef void(TextureCreateFunc)(U32 thread_id, AssetManagerCommandPool thread_cmd_pool,
-                                RoadTextureCreateInput* input, Texture* texture);
+                                RoadTextureCreateInput* input);
 struct RoadDescriptorCreateInfo
 {
     VulkanContext* vk_ctx;
@@ -112,8 +114,6 @@ template <typename T> struct AssetItem
 
 struct RoadThreadInput
 {
-    AssetItem<Texture>* asset_store_texture;
-
     TextureCreateFunc* texture_func;
     RoadTextureCreateInput* texture_input;
 
@@ -200,10 +200,10 @@ struct VulkanContext
     static const U32 WIDTH = 800;
     static const U32 HEIGHT = 600;
     static const U32 MAX_FRAMES_IN_FLIGHT = 2;
-#ifdef NDEBUG
-    static const U8 enable_validation_layers = 0;
-#else
+#ifdef DEBUG_BUILD
     static const U8 enable_validation_layers = 1;
+#else
+    static const U8 enable_validation_layers = 0;
 #endif
     Arena* arena;
 
@@ -212,8 +212,6 @@ struct VulkanContext
 
     Buffer<String8> validation_layers;
     Buffer<String8> device_extensions;
-
-    U8 framebuffer_resized;
 
     VmaAllocator allocator;
     VkInstance instance;
@@ -281,7 +279,7 @@ CarPipelineInfoCreate(VulkanContext* vk_ctx, VkDescriptorSetLayout layout);
 static void
 CarCreateDescriptorSetLayout();
 static void
-CarRendering(VulkanContext* vk_ctx, city::CarSim* car, U32 image_idx, U32 instance_count,
+CarRendering(VulkanContext* vk_ctx, city::CarSim* car, U32 instance_count,
              BufferAllocation vertex_buffer_alloc, BufferAllocation index_buffer_alloc);
 
 //~mgj: camera functions
@@ -325,7 +323,7 @@ RoadBindingDescriptionGet();
 static Buffer<VkVertexInputAttributeDescription>
 RoadAttributeDescriptionGet(Arena* arena);
 static void
-AssetManagerRoadResourceLoadAsync(AssetManager* asset_store, AssetItem<Texture>* texture,
+AssetManagerRoadResourceLoadAsync(AssetManager* asset_store, AssetId texture_id,
                                   VulkanContext* vk_ctx, String8 shader_path, Road* w_road,
                                   city::Road* road);
 //~mgj: Asset Store
@@ -354,7 +352,7 @@ AssetManagerCmdListDestroy(AssetManagerCmdList* cmd_wait_list);
 static void
 AssetManagerCmdListAdd(AssetManagerCmdList* cmd_list, CmdQueueItem item);
 static void
-AssetManagerCmdListRemove(AssetManagerCmdList* cmd_list, CmdQueueItem* item);
+AssetManagerCmdListItemRemove(AssetManagerCmdList* cmd_list, CmdQueueItem* item);
 static AssetId
 AssetIdFromStr8(String8 str);
 force_inline static U64
@@ -366,7 +364,7 @@ AssetManagerBufferItemGet(AssetId id);
 static AssetInfoList
 AssetManagerAssetInfoAdd(AssetInfo* asset, U64 asset_count);
 static void
-AssetManagerAssetInfoRemove(AssetInfoList asset_list);
+AssetManagerAssetInfoRemove(AssetInfoList* asset_list);
 static void
 AssetCmdQueueItemEnqueue(AssetInfo* assets, U64 asset_count, U32 thread_id, VkCommandBuffer cmd);
 static void
@@ -375,7 +373,9 @@ template <typename T>
 static AssetInfo
 AssetInfoBufferCmd(VkCommandBuffer cmd, AssetId id, Buffer<T> vertex_buffer,
                    VkBufferUsageFlagBits usage_flags);
-
+static ImageKtx2*
+ImageFromKtx2file(VkCommandBuffer cmd, BufferAllocation staging_buffer, VulkanContext* vk_ctx,
+                  ktxTexture2* ktx_texture);
 // ~mgj: Vulkan Lifetime
 static VulkanContext*
 VK_VulkanInit(Context* ctx);
@@ -391,7 +391,7 @@ VulkanCtxGet();
         VkResult res = (f);                                                                        \
         if (res != VK_SUCCESS)                                                                     \
         {                                                                                          \
-            fprintf(stderr, "Fatal : VkResult is %d in %s at line %d\n", res, __FILE__, __LINE__); \
+            ERROR_LOG("Fatal : VkResult is %d in %s at line %d\n", res, __FILE__, __LINE__);       \
             exit(EXIT_FAILURE);                                                                    \
         }                                                                                          \
     }
