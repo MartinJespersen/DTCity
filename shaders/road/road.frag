@@ -13,5 +13,5 @@ layout(push_constant) uniform constants
 } PushConstants;
 
 void main() {
-    out_color = texture(texture_sampler, in_uv * PushConstants.texture_scale);
+    out_color = texture(texture_sampler, in_uv);
 }

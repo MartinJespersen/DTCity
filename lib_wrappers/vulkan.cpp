@@ -1051,11 +1051,16 @@ static Buffer<VkVertexInputAttributeDescription>
 RoadAttributeDescriptionGet(Arena* arena)
 {
     Buffer<VkVertexInputAttributeDescription> attribute_descriptions =
-        BufferAlloc<VkVertexInputAttributeDescription>(arena, 1);
+        BufferAlloc<VkVertexInputAttributeDescription>(arena, 2);
     attribute_descriptions.data[0].binding = 0;
     attribute_descriptions.data[0].location = 0;
     attribute_descriptions.data[0].format = VK_FORMAT_R32G32_SFLOAT;
     attribute_descriptions.data[0].offset = offsetof(city::RoadVertex, pos);
+
+    attribute_descriptions.data[1].binding = 0;
+    attribute_descriptions.data[1].location = 1;
+    attribute_descriptions.data[1].format = VK_FORMAT_R32G32_SFLOAT;
+    attribute_descriptions.data[1].offset = offsetof(city::RoadVertex, uv);
 
     return attribute_descriptions;
 }

@@ -261,6 +261,9 @@ RoadsBuild(Road* road)
     F64 center_transform_y = -(lat_low_utm + lat_high_utm) / 2.0;
     road->utm_center_offset = {center_transform_x, center_transform_y};
 
+    // ~mgj: Road Decision tree create
+    road->node_hashmap = RoadNodeStructureCreate(road);
+
     // road->way_count = 2;
     U64 node_count = 0;
     for (U32 way_index = 0; way_index < road->way_count; way_index++)
@@ -333,10 +336,22 @@ RoadsBuild(Road* road)
 
             // +1 due to duplicate of first and last way node to seperate roadways in triangle strip
             // topology
-            road->vertex_buffer.data[current_vertex_index++].pos = road_quad_coords.pos[0];
-            road->vertex_buffer.data[current_vertex_index++].pos = road_quad_coords.pos[1];
-            road->vertex_buffer.data[current_vertex_index++].pos = road_quad_coords.pos[2];
-            road->vertex_buffer.data[current_vertex_index++].pos = road_quad_coords.pos[3];
+            F32 road_segment_length =
+                glm::distance(road_quad_coords.pos[0], road_quad_coords.pos[2]) / 2;
+
+            F32 half_road_segment_length = road_segment_length / (2 * road_width);
+            road->vertex_buffer.data[current_vertex_index].pos = road_quad_coords.pos[0];
+            road->vertex_buffer.data[current_vertex_index++].uv = {1,
+                                                                   0.5 + half_road_segment_length};
+            road->vertex_buffer.data[current_vertex_index].pos = road_quad_coords.pos[1];
+            road->vertex_buffer.data[current_vertex_index++].uv = {0,
+                                                                   0.5 + half_road_segment_length};
+            road->vertex_buffer.data[current_vertex_index].pos = road_quad_coords.pos[2];
+            road->vertex_buffer.data[current_vertex_index++].uv = {1,
+                                                                   0.5 - half_road_segment_length};
+            road->vertex_buffer.data[current_vertex_index].pos = road_quad_coords.pos[3];
+            road->vertex_buffer.data[current_vertex_index++].uv = {0,
+                                                                   0.5 - half_road_segment_length};
 
             if (node_index < way->node_count - 1)
             {
@@ -344,9 +359,10 @@ RoadsBuild(Road* road)
                     RoadSegmentFromNodeIds(road, way, node_index, node_index + 1,
                                            center_transform_x, center_transform_y, road_half_width);
 
-                road->vertex_buffer.data[current_vertex_index++].pos = road_quad_coords_next.pos[1];
-                road->vertex_buffer.data[current_vertex_index++].pos = road_quad_coords.pos[2];
-                road->vertex_buffer.data[current_vertex_index++].pos = road_quad_coords.pos[3];
+                // road->vertex_buffer.data[current_vertex_index++].pos =
+                // road_quad_coords_next.pos[1];
+                // road->vertex_buffer.data[current_vertex_index++].pos = road_quad_coords.pos[2];
+                // road->vertex_buffer.data[current_vertex_index++].pos = road_quad_coords.pos[3];
 
                 road_quad_coords = road_quad_coords_next;
             }
@@ -354,9 +370,6 @@ RoadsBuild(Road* road)
         road->vertex_buffer.data[current_vertex_index++].pos = road_quad_coords_last.pos[3];
         road_segment_count += way->node_count - 1;
     }
-
-    // ~mgj: Road Decision tree create
-    road->node_hashmap = RoadNodeStructureCreate(road);
 }
 
 static NodeUtm*

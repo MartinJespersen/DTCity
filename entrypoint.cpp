@@ -241,10 +241,8 @@ MainLoop(void* ptr)
                                       road->w_road->road_texture_path, road->w_road, road);
 
     ProfileBuffersCreate(vk_ctx);
-    U64 frame_count = 0;
     while (ctx->running)
     {
-        DEBUG_LOG("Frame count: %llu\n", frame_count++);
         wrapper::AssetManagerExecuteCmds();
         wrapper::AssetManagerCmdDoneCheck();
         VkSemaphore image_available_semaphore =

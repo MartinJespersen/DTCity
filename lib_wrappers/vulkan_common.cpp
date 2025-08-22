@@ -1544,7 +1544,7 @@ SamplerCreate(VkDevice device, VkFilter filter, VkSamplerMipmapMode mipmap_mode,
     samplerInfo.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
     samplerInfo.magFilter = filter;
     samplerInfo.minFilter = filter;
-    samplerInfo.addressModeU = VK_SAMPLER_ADDRESS_MODE_MIRRORED_REPEAT;
+    samplerInfo.addressModeU = VK_SAMPLER_ADDRESS_MODE_REPEAT;
     samplerInfo.addressModeV = samplerInfo.addressModeU;
     samplerInfo.addressModeW = samplerInfo.addressModeU;
     samplerInfo.compareOp = VK_COMPARE_OP_NEVER;
