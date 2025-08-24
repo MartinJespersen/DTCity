@@ -115,9 +115,43 @@ struct Road
     /////////////////////////
 };
 
-struct RoadQuadCoord
+struct RoadBox
 {
-    glm::vec2 pos[4];
+    struct
+    {
+        glm::vec2 top;
+        glm::vec2 btm;
+    } left;
+
+    struct
+    {
+        glm::vec2 top;
+        glm::vec2 btm;
+    } right;
+};
+
+struct RoadSegment
+{
+    RoadBox box;
+    struct
+    {
+        glm::vec2 left;
+        glm::vec2 right;
+    } center;
+};
+
+struct RoadCrossSection
+{
+    glm::vec2 top;
+    glm::vec2 center;
+    glm::vec2 btm;
+};
+
+struct RoadSegmentConnection
+{
+    RoadCrossSection start;
+    RoadCrossSection middle;
+    RoadCrossSection end;
 };
 
 struct CarVertex
@@ -170,7 +204,8 @@ static RoadTagResult
 RoadTagFind(Arena* arena, Buffer<RoadTag> tags, String8 tag_to_find);
 static inline RoadNode*
 NodeFind(Road* road, U64 node_id);
-
+static NodeUtm*
+NodeUtmFind(Road* road, U64 node_id);
 // ~mgj: Cars
 static CarSim*
 CarSimCreate(wrapper::VulkanContext* vk_ctx, U32 car_count, Road* road);

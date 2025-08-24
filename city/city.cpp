@@ -13,7 +13,7 @@ RoadCreate(wrapper::VulkanContext* vk_ctx, String8 cache_path)
     road->node_slot_count = 100;
     road->w_road = wrapper::RoadCreate(vk_ctx, road);
     road->road_height = 10.0f;
-    road->default_road_width = 3.0f;
+    road->default_road_width = 2.0f;
     road->node_hashmap_size = 100;
 
     return road;
@@ -42,52 +42,59 @@ NodeFind(Road* road, U64 node_id)
     return node;
 }
 
-static RoadQuadCoord
-RoadQuadUtmFromQgisRoadSegment(F64 lat_bot, F64 lon_bot, F64 lat_top, F64 lon_top,
-                               F64 center_transform_x, F64 center_transform_y, F32 road_half_width)
+static void
+RoadSegmentFromTwoRoadNodes(RoadSegment* out_road_segment, NodeUtm* node_0, NodeUtm* node_1,
+                            F32 road_width)
 {
-    F64 road_node_0_x;
-    F64 road_node_0_y;
-    F64 road_node_1_x;
-    F64 road_node_1_y;
+    glm::vec2 road_0_pos = glm::vec2(node_0->x_utm, node_0->y_utm);
+    glm::vec2 road_1_pos = glm::vec2(node_1->x_utm, node_1->y_utm);
 
-    char UTMZone[10];
-    UTM::LLtoUTM(lat_bot, lon_bot, road_node_0_y, road_node_0_x, UTMZone);
-    UTM::LLtoUTM(lat_top, lon_top, road_node_1_y, road_node_1_x, UTMZone);
-
-    glm::vec2 road_0_pos =
-        glm::vec2(road_node_0_x + center_transform_x, road_node_0_y + center_transform_y);
-    glm::vec2 road_1_pos =
-        glm::vec2(road_node_1_x + center_transform_x, road_node_1_y + center_transform_y);
-
-    glm::vec2 road_dir = road_0_pos - road_1_pos;
+    glm::vec2 road_dir = road_1_pos - road_0_pos;
     glm::vec2 orthogonal_vec = {road_dir.y, -road_dir.x};
     glm::vec2 normal = glm::normalize(orthogonal_vec);
-    glm::vec2 normal_scaled = normal * road_half_width;
+    glm::vec2 normal_scaled = normal * (road_width / 2.0f);
 
-    RoadQuadCoord road_quad_coord;
-    road_quad_coord.pos[0] = road_0_pos + normal_scaled;
-    road_quad_coord.pos[1] = road_0_pos + (-normal_scaled);
-    road_quad_coord.pos[2] = road_1_pos + normal_scaled;
-    road_quad_coord.pos[3] = road_1_pos + (-normal_scaled);
-    return road_quad_coord;
+    out_road_segment->box.left.top = road_0_pos + normal_scaled;
+    out_road_segment->box.left.btm = road_0_pos + (-normal_scaled);
+    out_road_segment->box.right.top = road_1_pos + normal_scaled;
+    out_road_segment->box.right.btm = road_1_pos + (-normal_scaled);
+
+    out_road_segment->center.left = road_0_pos;
+    out_road_segment->center.right = road_1_pos;
 }
 
-static RoadQuadCoord
-RoadSegmentFromNodeIds(Road* road, RoadWay* way, U32 index_0, U32 index_1, F64 center_transform_x,
-                       F64 center_transform_y, F32 road_half_width)
+// find the two nodes connecting two road segments
+// source: https://opensage.github.io/blog/roads-how-boring-part-5-connecting-the-road-segments
+static void
+RoadSegmentConnectionFromTwoRoadSegments(RoadSegmentConnection* out_connection,
+                                         RoadSegment* road_segment_0, RoadSegment* road_segment_1,
+                                         F32 road_width)
 {
-    Assert(index_0 < way->node_count);
-    Assert(index_1 < way->node_count);
+    // find a single node connecting two road segments for both the top and bottom of the road
+    // segments
+    glm::vec2 road0_top = road_segment_0->box.right.top;
+    glm::vec2 road1_top = road_segment_1->box.left.top;
+    glm::vec2 shared_center = road_segment_0->center.right;
 
-    U64 roadseg0_node_id_0 = way->node_ids[index_0];
-    U64 roadseg0_node_id_1 = way->node_ids[index_1];
-    RoadNode* road_node_0 = NodeFind(road, roadseg0_node_id_0);
-    RoadNode* road_node_1 = NodeFind(road, roadseg0_node_id_1);
-    RoadQuadCoord road_quad_coords = RoadQuadUtmFromQgisRoadSegment(
-        road_node_0->lat, road_node_0->lon, road_node_1->lat, road_node_1->lon, center_transform_x,
-        center_transform_y, road_half_width);
-    return road_quad_coords;
+    glm::vec2 road0_top_dir_norm = glm::normalize(road0_top - shared_center);
+    glm::vec2 road1_top_dir_norm = glm::normalize(road1_top - shared_center);
+    // take average of the two directions and normalize it
+    glm::vec2 shared_top_normal = glm::normalize((road0_top_dir_norm + road1_top_dir_norm) / 2.0f);
+    F32 cos_angle = glm::dot(shared_top_normal, road1_top_dir_norm);
+    F32 shared_top_len = (road_width / 2.0f) / cos_angle;
+
+    glm::vec2 shared_top_dir = shared_top_len * shared_top_normal;
+    glm::vec2 shared_top = shared_center + shared_top_dir;
+    glm::vec2 shared_btm = shared_center - shared_top_dir;
+
+    out_connection->start = {.top = road_segment_0->box.left.top,
+                             .center = road_segment_0->center.left,
+                             .btm = road_segment_0->box.left.btm};
+
+    out_connection->middle = {.top = shared_top, .center = shared_center, .btm = shared_btm};
+    out_connection->end = {.top = road_segment_1->box.right.top,
+                           .center = road_segment_1->center.right,
+                           .btm = road_segment_1->box.right.btm};
 }
 
 static RoadTagResult
@@ -265,24 +272,24 @@ RoadsBuild(Road* road)
     road->node_hashmap = RoadNodeStructureCreate(road);
 
     // road->way_count = 2;
-    U64 node_count = 0;
+    U64 total_road_segment_count = 0;
     for (U32 way_index = 0; way_index < road->way_count; way_index++)
     {
         RoadWay* way = &road->ways[way_index];
         // + 1 is the result of adding two number:
         // -1 get the number of road segments (because the first and last vertices are shared
         // between segments)
-        node_count += way->node_count - 1;
+        total_road_segment_count += way->node_count - 1;
     }
     // the addition of road->way_count * 2 is due to the triangle strip topology used to render the
     // road segments
-    U64 total_vert_count = node_count * 7 + road->way_count * 2;
+    U64 total_vert_count = total_road_segment_count * 4 + road->way_count * 2;
 
     road->vertex_buffer =
         BufferAlloc<RoadVertex>(road->arena, total_vert_count); // 4 vertices per line segment
 
-    U32 road_segment_count = 0;
     U32 current_vertex_index = 0;
+    // for (U32 way_index = 1; way_index < road->way_count; way_index++)
     for (U32 way_index = 0; way_index < road->way_count; way_index++)
     {
         RoadWay* way = &road->ways[way_index];
@@ -301,21 +308,7 @@ RoadsBuild(Road* road)
                 }
             }
         }
-        F32 road_half_width = road_width / 2.0f;
 
-        // TODO: what if way has less than two nodes?
-        //
-        // first road segment
-        RoadQuadCoord road_quad_coords_first = RoadSegmentFromNodeIds(
-            road, way, 0, 1, center_transform_x, center_transform_y, road_half_width);
-        // last road segment
-        U32 second_to_last_node_index = way->node_count - 2;
-        U32 last_node_index = way->node_count - 1;
-        RoadQuadCoord road_quad_coords_last =
-            RoadSegmentFromNodeIds(road, way, second_to_last_node_index, last_node_index,
-                                   center_transform_x, center_transform_y, road_half_width);
-
-        road->vertex_buffer.data[current_vertex_index++].pos = road_quad_coords_first.pos[0];
         // for each road segment (road segment = two connected nodes)
 
         if (way->node_count < 2)
@@ -323,52 +316,117 @@ RoadsBuild(Road* road)
             exitWithError("expected at least one road segment comprising of two nodes");
         }
 
-        RoadQuadCoord road_quad_coords;
-        RoadQuadCoord road_quad_coords_next;
-        for (U32 node_index = 1; node_index < way->node_count; node_index++)
+        if (way->node_count == 2)
         {
-            if (node_index == 1)
+            U64 node0_id = way->node_ids[0];
+            U64 node1_id = way->node_ids[1];
+
+            NodeUtm* node0 = NodeUtmFind(road, node0_id);
+            NodeUtm* node1 = NodeUtmFind(road, node1_id);
+
+            RoadSegment road_segment_0;
+            RoadSegmentFromTwoRoadNodes(&road_segment_0, node0, node1, road_width);
+
+            F32 half_road_segment_len_tex_scaled =
+                glm::distance(road_segment_0.center.left, road_segment_0.center.right) /
+                (road_width * 2);
+
+            // Duplicate of first way node to seperate roadways in triangle strip topology
+            for (U32 i = 0; i < 2; i++)
             {
-                road_quad_coords =
-                    RoadSegmentFromNodeIds(road, way, node_index - 1, node_index,
-                                           center_transform_x, center_transform_y, road_half_width);
+                road->vertex_buffer.data[current_vertex_index++] = {
+                    .pos = road_segment_0.box.left.top,
+                    .uv = {1, 0.5 + half_road_segment_len_tex_scaled}};
             }
+            road->vertex_buffer.data[current_vertex_index++] = {
+                .pos = road_segment_0.box.left.btm,
+                .uv = {0, 0.5 + half_road_segment_len_tex_scaled}};
 
-            // +1 due to duplicate of first and last way node to seperate roadways in triangle strip
-            // topology
-            F32 road_segment_length =
-                glm::distance(road_quad_coords.pos[0], road_quad_coords.pos[2]) / 2;
-
-            F32 half_road_segment_length = road_segment_length / (2 * road_width);
-            road->vertex_buffer.data[current_vertex_index].pos = road_quad_coords.pos[0];
-            road->vertex_buffer.data[current_vertex_index++].uv = {1,
-                                                                   0.5 + half_road_segment_length};
-            road->vertex_buffer.data[current_vertex_index].pos = road_quad_coords.pos[1];
-            road->vertex_buffer.data[current_vertex_index++].uv = {0,
-                                                                   0.5 + half_road_segment_length};
-            road->vertex_buffer.data[current_vertex_index].pos = road_quad_coords.pos[2];
-            road->vertex_buffer.data[current_vertex_index++].uv = {1,
-                                                                   0.5 - half_road_segment_length};
-            road->vertex_buffer.data[current_vertex_index].pos = road_quad_coords.pos[3];
-            road->vertex_buffer.data[current_vertex_index++].uv = {0,
-                                                                   0.5 - half_road_segment_length};
-
-            if (node_index < way->node_count - 1)
+            road->vertex_buffer.data[current_vertex_index++] = {
+                .pos = road_segment_0.box.right.top,
+                .uv = {1, 0.5 - half_road_segment_len_tex_scaled}};
+            // Duplicate of lasts way node to seperate roadways in triangle strip topology
+            for (U32 i = 0; i < 2; i++)
             {
-                road_quad_coords_next =
-                    RoadSegmentFromNodeIds(road, way, node_index, node_index + 1,
-                                           center_transform_x, center_transform_y, road_half_width);
-
-                // road->vertex_buffer.data[current_vertex_index++].pos =
-                // road_quad_coords_next.pos[1];
-                // road->vertex_buffer.data[current_vertex_index++].pos = road_quad_coords.pos[2];
-                // road->vertex_buffer.data[current_vertex_index++].pos = road_quad_coords.pos[3];
-
-                road_quad_coords = road_quad_coords_next;
+                road->vertex_buffer.data[current_vertex_index++] = {
+                    .pos = road_segment_0.box.right.btm,
+                    .uv = {0, 0.5 - half_road_segment_len_tex_scaled}};
             }
         }
-        road->vertex_buffer.data[current_vertex_index++].pos = road_quad_coords_last.pos[3];
-        road_segment_count += way->node_count - 1;
+        else
+        {
+            // TODO: what if road segment is consist of only one or two nodes
+            for (U32 node_idx = 1; node_idx < way->node_count - 1; node_idx++)
+            {
+                U64 node0_id = way->node_ids[node_idx - 1];
+                U64 node1_id = way->node_ids[node_idx];
+                U64 node2_id = way->node_ids[node_idx + 1];
+
+                NodeUtm* node0 = NodeUtmFind(road, node0_id);
+                NodeUtm* node1 = NodeUtmFind(road, node1_id);
+                NodeUtm* node2 = NodeUtmFind(road, node2_id);
+
+                RoadSegment road_segment_0;
+                RoadSegmentFromTwoRoadNodes(&road_segment_0, node0, node1, road_width);
+
+                RoadSegment road_segment_1;
+                RoadSegmentFromTwoRoadNodes(&road_segment_1, node1, node2, road_width);
+
+                RoadSegmentConnection road_segment_connection;
+                RoadSegmentConnectionFromTwoRoadSegments(&road_segment_connection, &road_segment_0,
+                                                         &road_segment_1, road_width);
+
+                F32 half_road_segment_0_len_tex_scaled =
+                    glm::distance(road_segment_0.center.left, road_segment_0.center.right) /
+                    (road_width * 2);
+                F32 half_road_segment_1_len_tex_scaled =
+                    glm::distance(road_segment_1.center.left, road_segment_1.center.right) /
+                    (road_width * 2);
+
+                if (node_idx == 1)
+                {
+                    // Duplicate of first way node to seperate roadways in triangle strip topology
+                    for (U32 i = 0; i < 2; i++)
+                    {
+                        road->vertex_buffer.data[current_vertex_index++] = {
+                            .pos = road_segment_connection.start.top,
+                            .uv = {1, 0.5 + half_road_segment_0_len_tex_scaled}};
+                    }
+                    road->vertex_buffer.data[current_vertex_index++] = {
+                        .pos = road_segment_connection.start.btm,
+                        .uv = {0, 0.5 + half_road_segment_0_len_tex_scaled}};
+                }
+
+                road->vertex_buffer.data[current_vertex_index++] = {
+                    .pos = road_segment_connection.middle.top,
+                    .uv = {1, 0.5 - half_road_segment_0_len_tex_scaled}};
+                road->vertex_buffer.data[current_vertex_index++] = {
+                    .pos = road_segment_connection.middle.btm,
+                    .uv = {0, 0.5 - half_road_segment_0_len_tex_scaled}};
+
+                // start of texture
+                road->vertex_buffer.data[current_vertex_index++] = {
+                    .pos = road_segment_connection.middle.top,
+                    .uv = {1, 0.5 + half_road_segment_1_len_tex_scaled}};
+                road->vertex_buffer.data[current_vertex_index++] = {
+                    .pos = road_segment_connection.middle.btm,
+                    .uv = {0, 0.5 + half_road_segment_1_len_tex_scaled}};
+
+                if (node_idx == way->node_count - 2)
+                {
+                    road->vertex_buffer.data[current_vertex_index++] = {
+                        .pos = road_segment_connection.end.top,
+                        .uv = {1, 0.5 - half_road_segment_1_len_tex_scaled}};
+                    // Duplicate of lasts way node to seperate roadways in triangle strip topology
+                    for (U32 i = 0; i < 2; i++)
+                    {
+                        road->vertex_buffer.data[current_vertex_index++] = {
+                            .pos = road_segment_connection.end.btm,
+                            .uv = {0, 0.5 - half_road_segment_1_len_tex_scaled}};
+                    }
+                }
+            }
+        }
     }
 }
 
