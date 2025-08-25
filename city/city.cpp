@@ -316,116 +316,117 @@ RoadsBuild(Road* road)
             exitWithError("expected at least one road segment comprising of two nodes");
         }
 
-        if (way->node_count == 2)
+        U64 node_first_id = way->node_ids[0];
+        U64 node_second_id = way->node_ids[1];
+        U64 node_second_to_last_id = way->node_ids[way->node_count - 2];
+        U64 node_last_id = way->node_ids[way->node_count - 1];
+
+        NodeUtm* node_first = NodeUtmFind(road, node_first_id);
+        NodeUtm* node_second = NodeUtmFind(road, node_second_id);
+        NodeUtm* node_second_to_last = NodeUtmFind(road, node_second_to_last_id);
+        NodeUtm* node_last = NodeUtmFind(road, node_last_id);
+
+        RoadSegment road_segment_first;
+        RoadSegmentFromTwoRoadNodes(&road_segment_first, node_first, node_second, road_width);
+
+        RoadSegment road_segment_last;
+        RoadSegmentFromTwoRoadNodes(&road_segment_last, node_second_to_last, node_last, road_width);
+
+        F32 tex_half_road_len_first =
+            glm::distance(road_segment_first.center.left, road_segment_first.center.right) /
+            (road_width * 2);
+
+        // Duplicate of first way node to seperate roadways in triangle strip topology
+        for (U32 i = 0; i < 2; i++)
         {
-            U64 node0_id = way->node_ids[0];
-            U64 node1_id = way->node_ids[1];
+            road->vertex_buffer.data[current_vertex_index++] = {
+                .pos = road_segment_first.box.left.top, .uv = {1, 0.5 + tex_half_road_len_first}};
+        }
+        road->vertex_buffer.data[current_vertex_index++] = {
+            .pos = road_segment_first.box.left.btm, .uv = {0, 0.5 + tex_half_road_len_first}};
+
+        // TODO: what if road segment is consist of only one or two nodes
+
+        for (U32 node_idx = 1; node_idx < way->node_count - 1; node_idx++)
+        {
+            U64 node0_id = way->node_ids[node_idx - 1];
+            U64 node1_id = way->node_ids[node_idx];
+            U64 node2_id = way->node_ids[node_idx + 1];
 
             NodeUtm* node0 = NodeUtmFind(road, node0_id);
             NodeUtm* node1 = NodeUtmFind(road, node1_id);
+            NodeUtm* node2 = NodeUtmFind(road, node2_id);
 
             RoadSegment road_segment_0;
             RoadSegmentFromTwoRoadNodes(&road_segment_0, node0, node1, road_width);
 
-            F32 half_road_segment_len_tex_scaled =
+            RoadSegment road_segment_1;
+            RoadSegmentFromTwoRoadNodes(&road_segment_1, node1, node2, road_width);
+
+            RoadSegmentConnection road_segment_connection;
+            RoadSegmentConnectionFromTwoRoadSegments(&road_segment_connection, &road_segment_0,
+                                                     &road_segment_1, road_width);
+
+            F32 half_road_segment_0_len_tex_scaled =
                 glm::distance(road_segment_0.center.left, road_segment_0.center.right) /
                 (road_width * 2);
+            F32 half_road_segment_1_len_tex_scaled =
+                glm::distance(road_segment_1.center.left, road_segment_1.center.right) /
+                (road_width * 2);
 
-            // Duplicate of first way node to seperate roadways in triangle strip topology
-            for (U32 i = 0; i < 2; i++)
-            {
-                road->vertex_buffer.data[current_vertex_index++] = {
-                    .pos = road_segment_0.box.left.top,
-                    .uv = {1, 0.5 + half_road_segment_len_tex_scaled}};
-            }
-            road->vertex_buffer.data[current_vertex_index++] = {
-                .pos = road_segment_0.box.left.btm,
-                .uv = {0, 0.5 + half_road_segment_len_tex_scaled}};
+            // if (node_idx == 1)
+            // {
+            //     // Duplicate of first way node to seperate roadways in triangle strip topology
+            //     for (U32 i = 0; i < 2; i++)
+            //     {
+            //         road->vertex_buffer.data[current_vertex_index++] = {
+            //             .pos = road_segment_connection.start.top,
+            //             .uv = {1, 0.5 + half_road_segment_0_len_tex_scaled}};
+            //     }
+            //     road->vertex_buffer.data[current_vertex_index++] = {
+            //         .pos = road_segment_connection.start.btm,
+            //         .uv = {0, 0.5 + half_road_segment_0_len_tex_scaled}};
+            // }
 
             road->vertex_buffer.data[current_vertex_index++] = {
-                .pos = road_segment_0.box.right.top,
-                .uv = {1, 0.5 - half_road_segment_len_tex_scaled}};
-            // Duplicate of lasts way node to seperate roadways in triangle strip topology
-            for (U32 i = 0; i < 2; i++)
-            {
-                road->vertex_buffer.data[current_vertex_index++] = {
-                    .pos = road_segment_0.box.right.btm,
-                    .uv = {0, 0.5 - half_road_segment_len_tex_scaled}};
-            }
+                .pos = road_segment_connection.middle.top,
+                .uv = {1, 0.5 - half_road_segment_0_len_tex_scaled}};
+            road->vertex_buffer.data[current_vertex_index++] = {
+                .pos = road_segment_connection.middle.btm,
+                .uv = {0, 0.5 - half_road_segment_0_len_tex_scaled}};
+
+            // start of texture
+            road->vertex_buffer.data[current_vertex_index++] = {
+                .pos = road_segment_connection.middle.top,
+                .uv = {1, 0.5 + half_road_segment_1_len_tex_scaled}};
+            road->vertex_buffer.data[current_vertex_index++] = {
+                .pos = road_segment_connection.middle.btm,
+                .uv = {0, 0.5 + half_road_segment_1_len_tex_scaled}};
+
+            // if (node_idx == way->node_count - 2)
+            // {
+            //     road->vertex_buffer.data[current_vertex_index++] = {
+            //         .pos = road_segment_connection.end.top,
+            //         .uv = {1, 0.5 - half_road_segment_1_len_tex_scaled}};
+            //     // Duplicate of lasts way node to seperate roadways in triangle strip topology
+            //     for (U32 i = 0; i < 2; i++)
+            //     {
+            //         road->vertex_buffer.data[current_vertex_index++] = {
+            //             .pos = road_segment_connection.end.btm,
+            //             .uv = {0, 0.5 - half_road_segment_1_len_tex_scaled}};
+            //     }
+            // }
         }
-        else
+        F32 tex_half_road_len_last =
+            glm::distance(road_segment_last.center.left, road_segment_last.center.right) /
+            (road_width * 2);
+        road->vertex_buffer.data[current_vertex_index++] = {
+            .pos = road_segment_last.box.right.top, .uv = {1, 0.5 - tex_half_road_len_last}};
+        // Duplicate of lasts way node to seperate roadways in triangle strip topology
+        for (U32 i = 0; i < 2; i++)
         {
-            // TODO: what if road segment is consist of only one or two nodes
-            for (U32 node_idx = 1; node_idx < way->node_count - 1; node_idx++)
-            {
-                U64 node0_id = way->node_ids[node_idx - 1];
-                U64 node1_id = way->node_ids[node_idx];
-                U64 node2_id = way->node_ids[node_idx + 1];
-
-                NodeUtm* node0 = NodeUtmFind(road, node0_id);
-                NodeUtm* node1 = NodeUtmFind(road, node1_id);
-                NodeUtm* node2 = NodeUtmFind(road, node2_id);
-
-                RoadSegment road_segment_0;
-                RoadSegmentFromTwoRoadNodes(&road_segment_0, node0, node1, road_width);
-
-                RoadSegment road_segment_1;
-                RoadSegmentFromTwoRoadNodes(&road_segment_1, node1, node2, road_width);
-
-                RoadSegmentConnection road_segment_connection;
-                RoadSegmentConnectionFromTwoRoadSegments(&road_segment_connection, &road_segment_0,
-                                                         &road_segment_1, road_width);
-
-                F32 half_road_segment_0_len_tex_scaled =
-                    glm::distance(road_segment_0.center.left, road_segment_0.center.right) /
-                    (road_width * 2);
-                F32 half_road_segment_1_len_tex_scaled =
-                    glm::distance(road_segment_1.center.left, road_segment_1.center.right) /
-                    (road_width * 2);
-
-                if (node_idx == 1)
-                {
-                    // Duplicate of first way node to seperate roadways in triangle strip topology
-                    for (U32 i = 0; i < 2; i++)
-                    {
-                        road->vertex_buffer.data[current_vertex_index++] = {
-                            .pos = road_segment_connection.start.top,
-                            .uv = {1, 0.5 + half_road_segment_0_len_tex_scaled}};
-                    }
-                    road->vertex_buffer.data[current_vertex_index++] = {
-                        .pos = road_segment_connection.start.btm,
-                        .uv = {0, 0.5 + half_road_segment_0_len_tex_scaled}};
-                }
-
-                road->vertex_buffer.data[current_vertex_index++] = {
-                    .pos = road_segment_connection.middle.top,
-                    .uv = {1, 0.5 - half_road_segment_0_len_tex_scaled}};
-                road->vertex_buffer.data[current_vertex_index++] = {
-                    .pos = road_segment_connection.middle.btm,
-                    .uv = {0, 0.5 - half_road_segment_0_len_tex_scaled}};
-
-                // start of texture
-                road->vertex_buffer.data[current_vertex_index++] = {
-                    .pos = road_segment_connection.middle.top,
-                    .uv = {1, 0.5 + half_road_segment_1_len_tex_scaled}};
-                road->vertex_buffer.data[current_vertex_index++] = {
-                    .pos = road_segment_connection.middle.btm,
-                    .uv = {0, 0.5 + half_road_segment_1_len_tex_scaled}};
-
-                if (node_idx == way->node_count - 2)
-                {
-                    road->vertex_buffer.data[current_vertex_index++] = {
-                        .pos = road_segment_connection.end.top,
-                        .uv = {1, 0.5 - half_road_segment_1_len_tex_scaled}};
-                    // Duplicate of lasts way node to seperate roadways in triangle strip topology
-                    for (U32 i = 0; i < 2; i++)
-                    {
-                        road->vertex_buffer.data[current_vertex_index++] = {
-                            .pos = road_segment_connection.end.btm,
-                            .uv = {0, 0.5 - half_road_segment_1_len_tex_scaled}};
-                    }
-                }
-            }
+            road->vertex_buffer.data[current_vertex_index++] = {
+                .pos = road_segment_last.box.right.btm, .uv = {0, 0.5 - tex_half_road_len_last}};
         }
     }
 }
@@ -611,7 +612,8 @@ CarUpdate(Arena* arena, CarSim* car, Road* road, F32 time_delta)
         F32 min_y = Min(car_info->cur_pos.y, new_pos.y);
         F32 max_y = Max(car_info->cur_pos.y, new_pos.y);
 
-        // Check if the car has reached its destination. If so, find new destination and direction.
+        // Check if the car has reached its destination. If so, find new destination and
+        // direction.
         if ((target_pos.x >= min_x && target_pos.x <= max_x) &&
             (target_pos.y >= min_y && target_pos.y <= max_y))
         {
