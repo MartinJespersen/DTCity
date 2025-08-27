@@ -3,6 +3,8 @@ build
 *.o
 *.obj
 *.exe
+*.exe.manifest
+*.ilk
 *.rdi
 *.pdb
 */BROWSE.VC.DB*

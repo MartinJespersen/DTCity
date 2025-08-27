@@ -387,16 +387,16 @@ struct Rng1S64Array
 ////////////////////////////////
 //~ rjf: Scalar Ops
 
-#define abs_s64(v) (S64) llabs(v)
+#define AbsS64(v) (S64) llabs(v)
 
-#define sqrt_f32(v) sqrtf(v)
+#define SqrtF32(v) sqrtf(v)
 #define cbrt_f32(v) cbrtf(v)
 #define mod_f32(a, b) fmodf((a), (b))
 #define pow_f32(b, e) powf((b), (e))
 #define ceil_f32(v) ceilf(v)
 #define floor_f32(v) floorf(v)
 #define round_f32(v) roundf(v)
-#define abs_f32(v) fabsf(v)
+#define AbsF32(v) fabsf(v)
 #define radians_from_turns_f32(v) ((v) * 2 * 3.1415926535897f)
 #define turns_from_radians_f32(v) ((v) / 2 * 3.1415926535897f)
 #define degrees_from_turns_f32(v) ((v) * 360.f)
@@ -414,7 +414,7 @@ struct Rng1S64Array
 #define ceil_f64(v) ceil(v)
 #define floor_f64(v) floor(v)
 #define round_f64(v) round(v)
-#define abs_f64(v) fabs(v)
+#define AbsF64(v) fabs(v)
 #define radians_from_turns_f64(v) ((v) * 2 * 3.1415926535897)
 #define turns_from_radians_f64(v) ((v) / 2 * 3.1415926535897)
 #define degrees_from_turns_f64(v) ((v) * 360.0)
@@ -433,7 +433,7 @@ mix_1f64(F64 a, F64 b, F64 t);
 ////////////////////////////////
 //~ rjf: Vector Ops
 
-#define v2f32(x, y) vec_2f32((x), (y))
+#define V2F32(x, y) vec_2f32((x), (y))
 static Vec2F32
 vec_2f32(F32 x, F32 y);
 static Vec2F32
@@ -443,19 +443,23 @@ Sub2F32(Vec2F32 a, Vec2F32 b);
 static Vec2F32
 Mul2F32(Vec2F32 a, Vec2F32 b);
 static Vec2F32
-div_2f32(Vec2F32 a, Vec2F32 b);
+Div2F32(Vec2F32 a, Vec2F32 b);
+static Vec2F32
+Div2F32(Vec2F32 a, F32 x);
 static Vec2F32
 Scale2F32(Vec2F32 v, F32 s);
 static F32
-dot_2f32(Vec2F32 a, Vec2F32 b);
+Dot2F32(Vec2F32 a, Vec2F32 b);
 static F32
 length_squared_2f32(Vec2F32 v);
 static F32
-length_2f32(Vec2F32 v);
+Length2F32(Vec2F32 v);
 static Vec2F32
 Normalize2F32(Vec2F32 v);
 static Vec2F32
 mix_2f32(Vec2F32 a, Vec2F32 b, F32 t);
+static F32
+Dist2F32(Vec2F32 a, Vec2F32 b);
 
 #define v2s64(x, y) vec_2s64((x), (y))
 static Vec2S64
@@ -831,7 +835,7 @@ static Vec2S64
 clamp_2s64(Rng2S64 r, Vec2S64 v);
 
 #define r2f32(min, max) rng_2f32((min), (max))
-#define r2f32p(x, y, z, w) r2f32(v2f32((x), (y)), v2f32((z), (w)))
+#define r2f32p(x, y, z, w) r2f32(V2F32((x), (y)), V2F32((z), (w)))
 static Rng2F32
 rng_2f32(Vec2F32 min, Vec2F32 max);
 static Rng2F32

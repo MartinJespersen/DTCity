@@ -30,3 +30,6 @@
 * hotreloading does not work at the moment, due to the entrypoint library not being unloaded using dlclose
   * This has been a problem defining TRACY_ENABLE in the past as the library overwrites dlclose. This is however not the current problem
 * remember to link crypto and ssl libraries when using https and define the macro CPPHTTPLIB_OPENSSL_SUPPORT in httplib
+
+# Mule Test Program
+cl /W4 /std:c++20 /wd4201 /wd4505 /wd4005 /wd4838 /wd4244 /wd4996 /wd4310 /wd4245 /wd4100 /EHsc /Z7 mule.cpp /DBUILD_CONSOLE_INTERFACE

@@ -48,12 +48,15 @@ struct RoadWay
 
     RoadTag* tags; // linked list
     U64 tag_count;
+
+    // tag info
+    F32 road_width;
 };
 
 struct RoadVertex
 {
-    glm::vec2 pos;
-    glm::vec2 uv;
+    Vec2F32 pos;
+    Vec2F32 uv;
 };
 
 struct RoadWayListElement
@@ -72,8 +75,11 @@ struct NodeUtm
 {
     NodeUtm* next;
     U64 id;
-    F32 x_utm;
-    F32 y_utm;
+    union
+    {
+        Vec2F32 pos;
+        glm::vec2 vec;
+    };
     String8 utm_zone;
 
     RoadWayQueue roadway_queue; // Linked list of RoadWays sharing this node
@@ -115,42 +121,28 @@ struct Road
     /////////////////////////
 };
 
-struct RoadBox
+enum RoadDirection
 {
-    struct
-    {
-        glm::vec2 top;
-        glm::vec2 btm;
-    } left;
-
-    struct
-    {
-        glm::vec2 top;
-        glm::vec2 btm;
-    } right;
+    RoadDirection_From,
+    RoadDirection_To,
+    RoadDirection_Count
 };
 
-struct RoadSegment
+struct AdjacentNodeLL
 {
-    RoadBox box;
-    struct
-    {
-        glm::vec2 left;
-        glm::vec2 right;
-    } center;
+    AdjacentNodeLL* next;
+    NodeUtm* node;
 };
 
 struct RoadCrossSection
 {
-    glm::vec2 top;
-    glm::vec2 center;
-    glm::vec2 btm;
+    Vec2F32 top;
+    Vec2F32 btm;
+    NodeUtm* node;
 };
-
-struct RoadSegmentConnection
+struct RoadSegment
 {
     RoadCrossSection start;
-    RoadCrossSection middle;
     RoadCrossSection end;
 };
 
@@ -206,6 +198,10 @@ static inline RoadNode*
 NodeFind(Road* road, U64 node_id);
 static NodeUtm*
 NodeUtmFind(Road* road, U64 node_id);
+static void
+QuadToBufferAdd(RoadSegment* road_segment, Buffer<RoadVertex> buffer, U32* cur_idx);
+static void
+RoadIntersectionPointsFind(Road* road, RoadSegment* in_out_segment, RoadWay* current_road_way);
 // ~mgj: Cars
 static CarSim*
 CarSimCreate(wrapper::VulkanContext* vk_ctx, U32 car_count, Road* road);

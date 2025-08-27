@@ -46,55 +46,52 @@ static void
 RoadSegmentFromTwoRoadNodes(RoadSegment* out_road_segment, NodeUtm* node_0, NodeUtm* node_1,
                             F32 road_width)
 {
-    glm::vec2 road_0_pos = glm::vec2(node_0->x_utm, node_0->y_utm);
-    glm::vec2 road_1_pos = glm::vec2(node_1->x_utm, node_1->y_utm);
+    Vec2F32 road_0_pos = node_0->pos;
+    Vec2F32 road_1_pos = node_1->pos;
 
-    glm::vec2 road_dir = road_1_pos - road_0_pos;
-    glm::vec2 orthogonal_vec = {road_dir.y, -road_dir.x};
-    glm::vec2 normal = glm::normalize(orthogonal_vec);
-    glm::vec2 normal_scaled = normal * (road_width / 2.0f);
+    Vec2F32 road_dir = Sub2F32(road_1_pos, road_0_pos);
+    Vec2F32 orthogonal_vec = {road_dir.y, -road_dir.x};
+    Vec2F32 normal = Normalize2F32(orthogonal_vec);
+    Vec2F32 normal_scaled = Scale2F32(normal, road_width / 2.0f);
 
-    out_road_segment->box.left.top = road_0_pos + normal_scaled;
-    out_road_segment->box.left.btm = road_0_pos + (-normal_scaled);
-    out_road_segment->box.right.top = road_1_pos + normal_scaled;
-    out_road_segment->box.right.btm = road_1_pos + (-normal_scaled);
+    out_road_segment->start.top = Add2F32(road_0_pos, normal_scaled);
+    out_road_segment->start.btm = Sub2F32(road_0_pos, normal_scaled);
+    out_road_segment->end.top = Add2F32(road_1_pos, normal_scaled);
+    out_road_segment->end.btm = Sub2F32(road_1_pos, normal_scaled);
 
-    out_road_segment->center.left = road_0_pos;
-    out_road_segment->center.right = road_1_pos;
+    out_road_segment->start.node = node_0;
+    out_road_segment->end.node = node_1;
 }
 
 // find the two nodes connecting two road segments
 // source: https://opensage.github.io/blog/roads-how-boring-part-5-connecting-the-road-segments
 static void
-RoadSegmentConnectionFromTwoRoadSegments(RoadSegmentConnection* out_connection,
-                                         RoadSegment* road_segment_0, RoadSegment* road_segment_1,
-                                         F32 road_width)
+RoadSegmentConnectionFromTwoRoadSegments(RoadSegment* in_out_road_segment_0,
+                                         RoadSegment* in_out_road_segment_1, F32 road_width)
 {
     // find a single node connecting two road segments for both the top and bottom of the road
     // segments
-    glm::vec2 road0_top = road_segment_0->box.right.top;
-    glm::vec2 road1_top = road_segment_1->box.left.top;
-    glm::vec2 shared_center = road_segment_0->center.right;
+    Vec2F32 road0_top = in_out_road_segment_0->end.top;
+    Vec2F32 road1_top = in_out_road_segment_1->start.top;
+    Vec2F32 shared_center = in_out_road_segment_0->end.node->pos;
 
-    glm::vec2 road0_top_dir_norm = glm::normalize(road0_top - shared_center);
-    glm::vec2 road1_top_dir_norm = glm::normalize(road1_top - shared_center);
+    Vec2F32 road0_top_dir_norm = Normalize2F32(Sub2F32(road0_top, shared_center));
+    Vec2F32 road1_top_dir_norm = Normalize2F32(Sub2F32(road1_top, shared_center));
     // take average of the two directions and normalize it
-    glm::vec2 shared_top_normal = glm::normalize((road0_top_dir_norm + road1_top_dir_norm) / 2.0f);
-    F32 cos_angle = glm::dot(shared_top_normal, road1_top_dir_norm);
+    Vec2F32 shared_top_normal =
+        Normalize2F32(Div2F32(Add2F32(road0_top_dir_norm, road1_top_dir_norm), 2.0f));
+    F32 cos_angle = Dot2F32(shared_top_normal, road1_top_dir_norm);
     F32 shared_top_len = (road_width / 2.0f) / cos_angle;
 
-    glm::vec2 shared_top_dir = shared_top_len * shared_top_normal;
-    glm::vec2 shared_top = shared_center + shared_top_dir;
-    glm::vec2 shared_btm = shared_center - shared_top_dir;
+    Vec2F32 shared_top_dir = Scale2F32(shared_top_normal, shared_top_len);
+    Vec2F32 shared_top = Add2F32(shared_center, shared_top_dir);
+    Vec2F32 shared_btm = Sub2F32(shared_center, shared_top_dir);
 
-    out_connection->start = {.top = road_segment_0->box.left.top,
-                             .center = road_segment_0->center.left,
-                             .btm = road_segment_0->box.left.btm};
+    in_out_road_segment_0->end.btm = shared_btm;
+    in_out_road_segment_0->end.top = shared_top;
 
-    out_connection->middle = {.top = shared_top, .center = shared_center, .btm = shared_btm};
-    out_connection->end = {.top = road_segment_1->box.right.top,
-                           .center = road_segment_1->center.right,
-                           .btm = road_segment_1->box.right.btm};
+    in_out_road_segment_1->start.btm = shared_btm;
+    in_out_road_segment_1->start.top = shared_top;
 }
 
 static RoadTagResult
@@ -165,8 +162,8 @@ RoadNodeStructureCreate(Road* road)
 
             String8 utm_zone_str = Str8CString(utm_zone);
             node_utm->utm_zone = PushStr8Copy(road->arena, utm_zone_str);
-            node_utm->x_utm = x + road->utm_center_offset.x;
-            node_utm->y_utm = y + road->utm_center_offset.y;
+            node_utm->pos.x = x + road->utm_center_offset.x;
+            node_utm->pos.y = y + road->utm_center_offset.y;
         }
     }
 
@@ -280,19 +277,6 @@ RoadsBuild(Road* road)
         // -1 get the number of road segments (because the first and last vertices are shared
         // between segments)
         total_road_segment_count += way->node_count - 1;
-    }
-    // the addition of road->way_count * 2 is due to the triangle strip topology used to render the
-    // road segments
-    U64 total_vert_count = total_road_segment_count * 4 + road->way_count * 2;
-
-    road->vertex_buffer =
-        BufferAlloc<RoadVertex>(road->arena, total_vert_count); // 4 vertices per line segment
-
-    U32 current_vertex_index = 0;
-    // for (U32 way_index = 1; way_index < road->way_count; way_index++)
-    for (U32 way_index = 0; way_index < road->way_count; way_index++)
-    {
-        RoadWay* way = &road->ways[way_index];
 
         // ~mgj: road width calculation
         F32 road_width = road->default_road_width; // Example value, adjust as needed
@@ -308,7 +292,21 @@ RoadsBuild(Road* road)
                 }
             }
         }
+        way->road_width = road_width;
+        Assert(road_width > 0.0f);
+    }
 
+    // the addition of road->way_count * 2 is due to the triangle strip topology used to render the
+    // road segments
+    U64 total_vert_count = total_road_segment_count * 12;
+
+    road->vertex_buffer =
+        BufferAlloc<RoadVertex>(road->arena, total_vert_count); // 4 vertices per line segment
+
+    U32 current_vertex_index = 0;
+    for (U32 way_index = 0; way_index < road->way_count; way_index++)
+    {
+        RoadWay* way = &road->ways[way_index];
         // for each road segment (road segment = two connected nodes)
 
         if (way->node_count < 2)
@@ -318,117 +316,86 @@ RoadsBuild(Road* road)
 
         U64 node_first_id = way->node_ids[0];
         U64 node_second_id = way->node_ids[1];
-        U64 node_second_to_last_id = way->node_ids[way->node_count - 2];
-        U64 node_last_id = way->node_ids[way->node_count - 1];
 
         NodeUtm* node_first = NodeUtmFind(road, node_first_id);
         NodeUtm* node_second = NodeUtmFind(road, node_second_id);
-        NodeUtm* node_second_to_last = NodeUtmFind(road, node_second_to_last_id);
-        NodeUtm* node_last = NodeUtmFind(road, node_last_id);
 
-        RoadSegment road_segment_first;
-        RoadSegmentFromTwoRoadNodes(&road_segment_first, node_first, node_second, road_width);
+        RoadSegment road_segment_prev;
+        RoadSegmentFromTwoRoadNodes(&road_segment_prev, node_first, node_second, way->road_width);
 
-        RoadSegment road_segment_last;
-        RoadSegmentFromTwoRoadNodes(&road_segment_last, node_second_to_last, node_last, road_width);
-
-        F32 tex_half_road_len_first =
-            glm::distance(road_segment_first.center.left, road_segment_first.center.right) /
-            (road_width * 2);
-
-        // Duplicate of first way node to seperate roadways in triangle strip topology
-        for (U32 i = 0; i < 2; i++)
+        if (way->node_count == 2)
         {
-            road->vertex_buffer.data[current_vertex_index++] = {
-                .pos = road_segment_first.box.left.top, .uv = {1, 0.5 + tex_half_road_len_first}};
+            RoadIntersectionPointsFind(road, &road_segment_prev, way);
+            QuadToBufferAdd(&road_segment_prev, road->vertex_buffer, &current_vertex_index);
         }
-        road->vertex_buffer.data[current_vertex_index++] = {
-            .pos = road_segment_first.box.left.btm, .uv = {0, 0.5 + tex_half_road_len_first}};
-
-        // TODO: what if road segment is consist of only one or two nodes
-
-        for (U32 node_idx = 1; node_idx < way->node_count - 1; node_idx++)
+        else
         {
-            U64 node0_id = way->node_ids[node_idx - 1];
-            U64 node1_id = way->node_ids[node_idx];
-            U64 node2_id = way->node_ids[node_idx + 1];
+            for (U32 node_idx = 1; node_idx < way->node_count - 1; node_idx++)
+            {
+                U64 node1_id = way->node_ids[node_idx];
+                U64 node2_id = way->node_ids[node_idx + 1];
 
-            NodeUtm* node0 = NodeUtmFind(road, node0_id);
-            NodeUtm* node1 = NodeUtmFind(road, node1_id);
-            NodeUtm* node2 = NodeUtmFind(road, node2_id);
+                NodeUtm* node1 = NodeUtmFind(road, node1_id);
+                NodeUtm* node2 = NodeUtmFind(road, node2_id);
 
-            RoadSegment road_segment_0;
-            RoadSegmentFromTwoRoadNodes(&road_segment_0, node0, node1, road_width);
+                RoadSegment road_segment_cur;
+                RoadSegmentFromTwoRoadNodes(&road_segment_cur, node1, node2, way->road_width);
 
-            RoadSegment road_segment_1;
-            RoadSegmentFromTwoRoadNodes(&road_segment_1, node1, node2, road_width);
+                RoadSegmentConnectionFromTwoRoadSegments(&road_segment_prev, &road_segment_cur,
+                                                         way->road_width);
 
-            RoadSegmentConnection road_segment_connection;
-            RoadSegmentConnectionFromTwoRoadSegments(&road_segment_connection, &road_segment_0,
-                                                     &road_segment_1, road_width);
+                RoadIntersectionPointsFind(road, &road_segment_prev, way);
+                QuadToBufferAdd(&road_segment_prev, road->vertex_buffer, &current_vertex_index);
+                if (node_idx == way->node_count - 2)
+                {
+                    RoadIntersectionPointsFind(road, &road_segment_cur, way);
+                    QuadToBufferAdd(&road_segment_cur, road->vertex_buffer, &current_vertex_index);
+                }
 
-            F32 half_road_segment_0_len_tex_scaled =
-                glm::distance(road_segment_0.center.left, road_segment_0.center.right) /
-                (road_width * 2);
-            F32 half_road_segment_1_len_tex_scaled =
-                glm::distance(road_segment_1.center.left, road_segment_1.center.right) /
-                (road_width * 2);
-
-            // if (node_idx == 1)
-            // {
-            //     // Duplicate of first way node to seperate roadways in triangle strip topology
-            //     for (U32 i = 0; i < 2; i++)
-            //     {
-            //         road->vertex_buffer.data[current_vertex_index++] = {
-            //             .pos = road_segment_connection.start.top,
-            //             .uv = {1, 0.5 + half_road_segment_0_len_tex_scaled}};
-            //     }
-            //     road->vertex_buffer.data[current_vertex_index++] = {
-            //         .pos = road_segment_connection.start.btm,
-            //         .uv = {0, 0.5 + half_road_segment_0_len_tex_scaled}};
-            // }
-
-            road->vertex_buffer.data[current_vertex_index++] = {
-                .pos = road_segment_connection.middle.top,
-                .uv = {1, 0.5 - half_road_segment_0_len_tex_scaled}};
-            road->vertex_buffer.data[current_vertex_index++] = {
-                .pos = road_segment_connection.middle.btm,
-                .uv = {0, 0.5 - half_road_segment_0_len_tex_scaled}};
-
-            // start of texture
-            road->vertex_buffer.data[current_vertex_index++] = {
-                .pos = road_segment_connection.middle.top,
-                .uv = {1, 0.5 + half_road_segment_1_len_tex_scaled}};
-            road->vertex_buffer.data[current_vertex_index++] = {
-                .pos = road_segment_connection.middle.btm,
-                .uv = {0, 0.5 + half_road_segment_1_len_tex_scaled}};
-
-            // if (node_idx == way->node_count - 2)
-            // {
-            //     road->vertex_buffer.data[current_vertex_index++] = {
-            //         .pos = road_segment_connection.end.top,
-            //         .uv = {1, 0.5 - half_road_segment_1_len_tex_scaled}};
-            //     // Duplicate of lasts way node to seperate roadways in triangle strip topology
-            //     for (U32 i = 0; i < 2; i++)
-            //     {
-            //         road->vertex_buffer.data[current_vertex_index++] = {
-            //             .pos = road_segment_connection.end.btm,
-            //             .uv = {0, 0.5 - half_road_segment_1_len_tex_scaled}};
-            //     }
-            // }
-        }
-        F32 tex_half_road_len_last =
-            glm::distance(road_segment_last.center.left, road_segment_last.center.right) /
-            (road_width * 2);
-        road->vertex_buffer.data[current_vertex_index++] = {
-            .pos = road_segment_last.box.right.top, .uv = {1, 0.5 - tex_half_road_len_last}};
-        // Duplicate of lasts way node to seperate roadways in triangle strip topology
-        for (U32 i = 0; i < 2; i++)
-        {
-            road->vertex_buffer.data[current_vertex_index++] = {
-                .pos = road_segment_last.box.right.btm, .uv = {0, 0.5 - tex_half_road_len_last}};
+                road_segment_prev = road_segment_cur;
+                // TODO: what if road segment is consist of only one or two nodes
+            }
         }
     }
+}
+
+static void
+QuadToBufferAdd(RoadSegment* road_segment, Buffer<RoadVertex> buffer, U32* cur_idx)
+{
+    F32 road_width = Dist2F32(road_segment->start.top, road_segment->start.btm);
+    F32 top_tex_scaled = Dist2F32(road_segment->start.top, road_segment->end.top) / road_width;
+    F32 btm_tex_scaled = Dist2F32(road_segment->start.btm, road_segment->end.btm) / road_width;
+
+    const F32 uv_x_top = 1;
+    const F32 uv_x_btm = 0;
+    const F32 uv_y_start = 0.5f - (F32)btm_tex_scaled;
+    const F32 uv_y_end = 0.5f + (F32)top_tex_scaled;
+
+    // first triangle
+    buffer.data[(*cur_idx)++] = {.pos = road_segment->start.top, .uv = {uv_x_top, uv_y_start}};
+    buffer.data[(*cur_idx)++] = {.pos = road_segment->start.btm, .uv = {uv_x_btm, uv_y_start}};
+    buffer.data[(*cur_idx)++] = {.pos = road_segment->end.top, .uv = {uv_x_top, uv_y_end}};
+
+    // second triangle
+    buffer.data[(*cur_idx)++] = {.pos = road_segment->start.btm, .uv = {uv_x_btm, uv_y_start}};
+    buffer.data[(*cur_idx)++] = {.pos = road_segment->end.top, .uv = {uv_x_top, uv_y_end}};
+    buffer.data[(*cur_idx)++] = {.pos = road_segment->end.btm, .uv = {uv_x_btm, uv_y_end}};
+}
+
+static B32
+RoadNodeIsCrossing(NodeUtm* node)
+{
+    U32 way_count = 0;
+    U32 is_part_of_crossing = 0;
+    for (RoadWay* way = 0; node->roadway_queue.first; way = way->next)
+    {
+        way_count++;
+    }
+    if (way_count > 1)
+    {
+        is_part_of_crossing = 1;
+    }
+    return is_part_of_crossing;
 }
 
 static NodeUtm*
@@ -443,6 +410,167 @@ NodeUtmFind(Road* road, U64 node_id)
             return node;
     }
     return &g_road_node_utm;
+}
+
+static void
+RoadIntersectionPointsFind(Road* road, RoadSegment* in_out_segment, RoadWay* current_road_way)
+{
+    ScratchScope scratch = ScratchScope(0, 0);
+    // for each end of segment find whether it there is a road crossing. If there is, change the
+    // location of the segment based on roads that intersect with it
+    const U32 number_of_cross_sections = 2;
+    RoadCrossSection* road_cross_sections[number_of_cross_sections] = {&in_out_segment->start,
+                                                                       &in_out_segment->end};
+
+    for (U32 i = 0; i < number_of_cross_sections; i++)
+    {
+        RoadCrossSection* road_cross_section = road_cross_sections[i];
+        NodeUtm* node = road_cross_section->node;
+        RoadCrossSection* opposite_cross_section =
+            road_cross_sections[(i + 1) % number_of_cross_sections];
+
+        Rng2F32 top_of_road_line_segment = {
+            opposite_cross_section->top.x,
+            opposite_cross_section->top.y,
+            road_cross_section->top.x,
+            road_cross_section->top.y,
+        };
+        Rng2F32 btm_of_road_line_segment = {
+            opposite_cross_section->btm.x,
+            opposite_cross_section->btm.y,
+            road_cross_section->btm.x,
+            road_cross_section->btm.y,
+        };
+
+        // iterate crossing roads
+        F32 shortest_distance_top =
+            Dist2F32(top_of_road_line_segment.p0, top_of_road_line_segment.p1);
+        Vec2F32 shortest_distance_pt_top = road_cross_section->top;
+        F32 shortest_distance_btm =
+            Dist2F32(btm_of_road_line_segment.p0, btm_of_road_line_segment.p1);
+        Vec2F32 shortest_distance_pt_btm = road_cross_section->btm;
+
+        for (RoadWayListElement* road_way_list = node->roadway_queue.first; road_way_list;
+             road_way_list = road_way_list->next)
+        {
+            RoadWay* road_way = road_way_list->road_way;
+            if (road_way->id != current_road_way->id)
+            {
+                // find adjacent nodes on crossing road
+                AdjacentNodeLL* adj_node_ll = {};
+                for (U32 node_idx = 0; node_idx < road_way->node_count; node_idx++)
+                {
+                    U64 node_id = road_way->node_ids[node_idx];
+                    if (node_id == node->id)
+                    {
+                        if (node_idx > 0)
+                        {
+                            U32 prev_node_idx = node_idx - 1;
+                            AdjacentNodeLL* adj_node = PushStruct(scratch.arena, AdjacentNodeLL);
+                            U64 prev_node_id = road_way->node_ids[prev_node_idx];
+                            adj_node->node = NodeUtmFind(road, prev_node_id);
+                            SLLStackPush(adj_node_ll, adj_node);
+                        }
+
+                        if (node_idx < road_way->node_count - 1)
+                        {
+                            U32 next_node_idx = node_idx + 1;
+                            AdjacentNodeLL* adj_node = PushStruct(scratch.arena, AdjacentNodeLL);
+                            U64 next_node_id = road_way->node_ids[next_node_idx];
+                            adj_node->node = NodeUtmFind(road, next_node_id);
+                            SLLStackPush(adj_node_ll, adj_node);
+                        }
+                        break;
+                    }
+                }
+
+                //~ mgj: Create road segments from adjacent nodes and find the intersection
+                // points
+                // with current road. We need to find the intersection between both sides of the
+                // current
+                // road and where it intersects both sides of the crossing road
+                for (AdjacentNodeLL* adj_node_item = adj_node_ll; adj_node_item;
+                     adj_node_item = adj_node_item->next)
+                {
+                    Vec2F64 intersection_pt;
+                    RoadSegment crossing_road_segment = {};
+                    RoadSegmentFromTwoRoadNodes(&crossing_road_segment, adj_node_item->node, node,
+                                                road_way->road_width);
+                    // update closest point for the top road
+                    if (ui::LineIntersect(
+                            top_of_road_line_segment.p0.x, top_of_road_line_segment.p0.y,
+                            top_of_road_line_segment.p1.x, top_of_road_line_segment.p1.y,
+                            crossing_road_segment.start.top.x, crossing_road_segment.start.top.y,
+                            crossing_road_segment.end.top.x, crossing_road_segment.end.top.y,
+                            &intersection_pt.x, &intersection_pt.y))
+                    {
+                        Vec2F32 intersection_pt_f32 = {(F32)intersection_pt.x,
+                                                       (F32)intersection_pt.y};
+                        F32 dist = Dist2F32(top_of_road_line_segment.p0, intersection_pt_f32);
+                        if (dist < shortest_distance_top)
+                        {
+                            shortest_distance_top = dist;
+                            shortest_distance_pt_top = intersection_pt_f32;
+                        }
+                    };
+
+                    if (ui::LineIntersect(
+                            top_of_road_line_segment.p0.x, top_of_road_line_segment.p0.y,
+                            top_of_road_line_segment.p1.x, top_of_road_line_segment.p1.y,
+                            crossing_road_segment.start.btm.x, crossing_road_segment.start.btm.y,
+                            crossing_road_segment.end.btm.x, crossing_road_segment.end.btm.y,
+                            &intersection_pt.x, &intersection_pt.y))
+                    {
+                        Vec2F32 intersection_pt_f32 = {(F32)intersection_pt.x,
+                                                       (F32)intersection_pt.y};
+                        F32 dist = Dist2F32(top_of_road_line_segment.p0, intersection_pt_f32);
+                        if (dist < shortest_distance_top)
+                        {
+                            shortest_distance_top = dist;
+                            shortest_distance_pt_top = intersection_pt_f32;
+                        }
+                    };
+                    // update closest point for the btm
+                    if (ui::LineIntersect(
+                            btm_of_road_line_segment.p0.x, btm_of_road_line_segment.p0.y,
+                            btm_of_road_line_segment.p1.x, btm_of_road_line_segment.p1.y,
+                            crossing_road_segment.start.top.x, crossing_road_segment.start.top.y,
+                            crossing_road_segment.end.top.x, crossing_road_segment.end.top.y,
+                            &intersection_pt.x, &intersection_pt.y))
+                    {
+                        Vec2F32 intersection_pt_f32 = {(F32)intersection_pt.x,
+                                                       (F32)intersection_pt.y};
+                        F32 dist = Dist2F32(btm_of_road_line_segment.p0, intersection_pt_f32);
+                        if (dist < shortest_distance_btm)
+                        {
+                            shortest_distance_btm = dist;
+                            shortest_distance_pt_btm = intersection_pt_f32;
+                        }
+                    };
+
+                    if (ui::LineIntersect(
+                            btm_of_road_line_segment.p0.x, btm_of_road_line_segment.p0.y,
+                            btm_of_road_line_segment.p1.x, btm_of_road_line_segment.p1.y,
+                            crossing_road_segment.start.btm.x, crossing_road_segment.start.btm.y,
+                            crossing_road_segment.end.btm.x, crossing_road_segment.end.btm.y,
+                            &intersection_pt.x, &intersection_pt.y))
+                    {
+                        Vec2F32 intersection_pt_f32 = {(F32)intersection_pt.x,
+                                                       (F32)intersection_pt.y};
+                        F32 dist = Dist2F32(btm_of_road_line_segment.p0, intersection_pt_f32);
+                        if (dist < shortest_distance_btm)
+                        {
+                            shortest_distance_btm = dist;
+                            shortest_distance_pt_btm = intersection_pt_f32;
+                        }
+                    };
+                }
+            }
+        }
+
+        road_cross_section->btm = shortest_distance_pt_btm;
+        road_cross_section->top = shortest_distance_pt_top;
+    }
 }
 
 static NodeUtm*
@@ -538,6 +666,7 @@ CarCenterHeightOffset(Buffer<CarVertex> vertices)
 
     return {.min = lowest_value, .max = highest_value};
 }
+
 static CarSim*
 CarSimCreate(wrapper::VulkanContext* vk_ctx, U32 car_count, Road* road)
 {
@@ -573,10 +702,10 @@ CarSimCreate(wrapper::VulkanContext* vk_ctx, U32 car_count, Road* road)
         car->target = target_node;
         car->speed = 10.0f;
         car->cur_pos =
-            glm::vec3(source_node->x_utm, road->road_height - car_sim->car_center_offset.min,
-                      source_node->y_utm);
-        car->dir = glm::normalize(glm::vec3(target_node->x_utm - source_node->x_utm, 0,
-                                            target_node->y_utm - source_node->y_utm));
+            glm::vec3(source_node->pos.x, road->road_height - car_sim->car_center_offset.min,
+                      source_node->pos.y);
+        car->dir = glm::normalize(glm::vec3(target_node->pos.x - source_node->pos.x, 0,
+                                            target_node->pos.y - source_node->pos.y));
     }
 
     return car_sim;
@@ -603,7 +732,7 @@ CarUpdate(Arena* arena, CarSim* car, Road* road, F32 time_delta)
         car_info = &car->cars.data[car_idx];
 
         glm::vec3 target_pos =
-            glm::vec3(car_info->target->x_utm, car_info->cur_pos.y, car_info->target->y_utm);
+            glm::vec3(car_info->target->pos.x, car_info->cur_pos.y, car_info->target->pos.y);
         glm::vec3 new_pos = car_info->cur_pos + car_info->dir * car_speed_default * time_delta;
 
         // Is the destination point in between new and old pos?
@@ -619,7 +748,7 @@ CarUpdate(Arena* arena, CarSim* car, Road* road, F32 time_delta)
         {
             NodeUtm* new_target = NeighbourNodeChoose(car_info->target, road);
             glm::vec3 new_target_pos =
-                glm::vec3(new_target->x_utm, car_info->cur_pos.y, new_target->y_utm);
+                glm::vec3(new_target->pos.x, car_info->cur_pos.y, new_target->pos.y);
             glm::vec3 new_dir = glm::normalize(new_target_pos - new_pos);
             car_info->dir = new_dir;
             car_info->source = car_info->target;

@@ -1,4 +1,5 @@
 #pragma once
+#include <stdlib.h>
 
 #define ASSERT(condition, msg) assert(((void)msg, condition))
 

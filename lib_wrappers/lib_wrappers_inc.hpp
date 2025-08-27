@@ -20,6 +20,9 @@ DISABLE_WARNINGS_PUSH
 #include "glm/gtc/matrix_transform.hpp"
 DISABLE_WARNINGS_POP
 
+#include "third_party/tracy/tracy/TracyVulkan.hpp"
+#include "third_party/tracy/tracy/Tracy.hpp"
+
 // ~mgj: user defined
 #include "lib_wrappers/json.hpp"
 #include "lib_wrappers/cgltf.hpp"

@@ -33,15 +33,19 @@ static Vec2F32 mul_2f32(Vec2F32 a, Vec2F32 b) {
   Vec2F32 c = {a.x * b.x, a.y * b.y};
   return c;
 }
-static Vec2F32 div_2f32(Vec2F32 a, Vec2F32 b) {
+static Vec2F32 Div2F32(Vec2F32 a, Vec2F32 b) {
   Vec2F32 c = {a.x / b.x, a.y / b.y};
+  return c;
+}
+static Vec2F32 Div2F32(Vec2F32 a, F32 x) {
+  Vec2F32 c = {a.x / x, a.y / x};
   return c;
 }
 static Vec2F32 Scale2F32(Vec2F32 v, F32 s) {
   Vec2F32 c = {v.x * s, v.y * s};
   return c;
 }
-static F32 dot_2f32(Vec2F32 a, Vec2F32 b) {
+static F32 Dot2F32(Vec2F32 a, Vec2F32 b) {
   F32 c = a.x * b.x + a.y * b.y;
   return c;
 }
@@ -49,12 +53,12 @@ static F32 length_squared_2f32(Vec2F32 v) {
   F32 c = v.x * v.x + v.y * v.y;
   return c;
 }
-static F32 length_2f32(Vec2F32 v) {
-  F32 c = sqrt_f32(v.x * v.x + v.y * v.y);
+static F32 Length2F32(Vec2F32 v) {
+  F32 c = SqrtF32(v.x * v.x + v.y * v.y);
   return c;
 }
 static Vec2F32 Normalize2F32(Vec2F32 v) {
-  v = Scale2F32(v, 1.f / length_2f32(v));
+  v = Scale2F32(v, 1.f / Length2F32(v));
   return v;
 }
 static Vec2F32 mix_2f32(Vec2F32 a, Vec2F32 b, F32 t) {
@@ -141,7 +145,7 @@ static S32 length_squared_2s32(Vec2S32 v) {
   return c;
 }
 static S32 length_2s32(Vec2S32 v) {
-  S32 c = (S32)sqrt_f32((F32)v.x * (F32)v.x + (F32)v.y * (F32)v.y);
+  S32 c = (S32)SqrtF32((F32)v.x * (F32)v.x + (F32)v.y * (F32)v.y);
   return c;
 }
 static Vec2S32 normalize_2s32(Vec2S32 v) {
@@ -187,7 +191,7 @@ static S16 length_squared_2s16(Vec2S16 v) {
   return c;
 }
 static S16 length_2s16(Vec2S16 v) {
-  S16 c = (S16)sqrt_f32((F32)(v.x * v.x + v.y * v.y));
+  S16 c = (S16)SqrtF32((F32)(v.x * v.x + v.y * v.y));
   return c;
 }
 static Vec2S16 normalize_2s16(Vec2S16 v) {
@@ -233,7 +237,7 @@ static F32 length_squared_3f32(Vec3F32 v) {
   return c;
 }
 static F32 length_3f32(Vec3F32 v) {
-  F32 c = sqrt_f32(v.x * v.x + v.y * v.y + v.z * v.z);
+  F32 c = SqrtF32(v.x * v.x + v.y * v.y + v.z * v.z);
   return c;
 }
 static Vec3F32 normalize_3f32(Vec3F32 v) {
@@ -284,7 +288,7 @@ static S32 length_squared_3s32(Vec3S32 v) {
   return c;
 }
 static S32 length_3s32(Vec3S32 v) {
-  S32 c = (S32)sqrt_f32((F32)(v.x * v.x + v.y * v.y + v.z * v.z));
+  S32 c = (S32)SqrtF32((F32)(v.x * v.x + v.y * v.y + v.z * v.z));
   return c;
 }
 static Vec3S32 normalize_3s32(Vec3S32 v) {
@@ -336,7 +340,7 @@ static F32 length_squared_4f32(Vec4F32 v) {
   return c;
 }
 static F32 length_4f32(Vec4F32 v) {
-  F32 c = sqrt_f32(v.x * v.x + v.y * v.y + v.z * v.z + v.w * v.w);
+  F32 c = SqrtF32(v.x * v.x + v.y * v.y + v.z * v.z + v.w * v.w);
   return c;
 }
 static Vec4F32 normalize_4f32(Vec4F32 v) {
@@ -382,7 +386,7 @@ static S32 length_squared_4s32(Vec4S32 v) {
   return c;
 }
 static S32 length_4s32(Vec4S32 v) {
-  S32 c = (S32)sqrt_f32((F32)(v.x * v.x + v.y * v.y + v.z * v.z + v.w * v.w));
+  S32 c = (S32)SqrtF32((F32)(v.x * v.x + v.y * v.y + v.z * v.z + v.w * v.w));
   return c;
 }
 static Vec4S32 normalize_4s32(Vec4S32 v) {
@@ -394,6 +398,11 @@ static Vec4S32 mix_4s32(Vec4S32 a, Vec4S32 b, F32 t) {
                (S32)mix_1f32((F32)a.y, (F32)b.y, t),
                (S32)mix_1f32((F32)a.z, (F32)b.z, t),
                (S32)mix_1f32((F32)a.w, (F32)b.w, t)};
+  return c;
+}
+static F32 Dist2F32(Vec2F32 a, Vec2F32 b) {
+  Vec2F32 diff = {a.x - b.x, a.y - b.y};
+  F32 c = Length2F32(diff);
   return c;
 }
 
@@ -1069,7 +1078,7 @@ static Vec3F32 rgb_from_hsv(Vec3F32 hsv) {
   F32 v = hsv.z;
 
   F32 c = v * s;
-  F32 x = c * (1.f - abs_f32(mod_f32(h / 60.f, 2.f) - 1.f));
+  F32 x = c * (1.f - AbsF32(mod_f32(h / 60.f, 2.f) - 1.f));
   F32 m = v - c;
 
   F32 r = 0;
