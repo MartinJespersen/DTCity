@@ -298,7 +298,7 @@ RoadsBuild(Road* road)
 
     // the addition of road->way_count * 2 is due to the triangle strip topology used to render the
     // road segments
-    U64 total_vert_count = total_road_segment_count * 12;
+    U64 total_vert_count = total_road_segment_count * 6;
 
     road->vertex_buffer =
         BufferAlloc<RoadVertex>(road->arena, total_vert_count); // 4 vertices per line segment
