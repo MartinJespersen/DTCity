@@ -1,8 +1,8 @@
 {
   "version": 0.6,
-  "generator": "Overpass API 0.7.62.7 375dc00a",
+  "generator": "Overpass API 0.7.62.8 e802775f",
   "osm3s": {
-    "timestamp_osm_base": "2025-08-11T12:32:16Z",
+    "timestamp_osm_base": "2025-09-02T09:36:45Z",
     "copyright": "The data included in this document is from www.openstreetmap.org. The data is made available under ODbL."
   },
   "elements": [
@@ -101,6 +101,7 @@
     "lit": "yes",
     "maxspeed": "50",
     "name": "Hangøvej",
+    "name:etymology:wikidata": "Q216790",
     "sidewalk": "right",
     "source:maxspeed": "DK:urban",
     "surface": "asphalt"
@@ -2799,7 +2800,6 @@
   ],
   "tags": {
     "highway": "service",
-    "service": "parking_aisle",
     "surface": "asphalt"
   }
 },
@@ -4508,7 +4508,6 @@
   ],
   "tags": {
     "highway": "service",
-    "service": "parking_aisle",
     "surface": "asphalt"
   }
 },

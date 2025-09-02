@@ -11,22 +11,22 @@ struct RoadNode
     F32 lon;
 };
 
-struct RoadTag
+struct Tag
 {
-    RoadTag* next;
+    Tag* next;
     String8 key;
     String8 value;
 };
 
-enum RoadTagResultEnum
+enum TagResultEnum
 {
     ROAD_TAG_FOUND = 0,
     ROAD_TAG_NOT_FOUND = 1,
 };
 
-struct RoadTagResult
+struct TagResult
 {
-    RoadTagResultEnum result;
+    TagResultEnum result;
     String8 value;
 };
 
@@ -36,21 +36,16 @@ struct RoadNodeSlot
     RoadNode* last;
 };
 
-struct RoadWay
+struct Way
 {
-    RoadWay* next;
+    Way* next;
 
-    String8 type;
     U64 id;
 
     U64* node_ids; // fixed array with node_count lenght and node ids as index
     U64 node_count;
 
-    RoadTag* tags; // linked list
-    U64 tag_count;
-
-    // tag info
-    F32 road_width;
+    Buffer<Tag> tags;
 };
 
 struct RoadVertex
@@ -62,7 +57,7 @@ struct RoadVertex
 struct RoadWayListElement
 {
     RoadWayListElement* next;
-    RoadWay* road_way;
+    Way* road_way;
 };
 
 struct RoadWayQueue
@@ -91,6 +86,15 @@ struct NodeUtmSlot
     NodeUtm* last;
 };
 
+struct WayBuilding
+{
+    Buffer<Way> way_buffer;
+};
+
+struct NodeWays
+{
+};
+
 struct Road
 {
     Arena* arena;
@@ -107,7 +111,7 @@ struct Road
     U64 unique_node_count;
 
     U64 way_count;
-    RoadWay* ways;
+    Way* ways;
     ////////////////////////////////
     // UTM coordinates
     U64 node_hashmap_size;
@@ -192,8 +196,8 @@ static void
 RoadDestroy(wrapper::VulkanContext* vk_ctx, Road* road);
 static void
 RoadsBuild(Road* road);
-static RoadTagResult
-RoadTagFind(Arena* arena, Buffer<RoadTag> tags, String8 tag_to_find);
+static TagResult
+TagFind(Arena* arena, Buffer<Tag> tags, String8 tag_to_find);
 static inline RoadNode*
 NodeFind(Road* road, U64 node_id);
 static NodeUtm*
@@ -201,7 +205,7 @@ NodeUtmFind(Road* road, U64 node_id);
 static void
 QuadToBufferAdd(RoadSegment* road_segment, Buffer<RoadVertex> buffer, U32* cur_idx);
 static void
-RoadIntersectionPointsFind(Road* road, RoadSegment* in_out_segment, RoadWay* current_road_way);
+RoadIntersectionPointsFind(Road* road, RoadSegment* in_out_segment, Way* current_road_way);
 // ~mgj: Cars
 static CarSim*
 CarSimCreate(wrapper::VulkanContext* vk_ctx, U32 car_count, Road* road);

@@ -33,3 +33,15 @@
 
 # Mule Test Program
 cl /W4 /std:c++20 /wd4201 /wd4505 /wd4005 /wd4838 /wd4244 /wd4996 /wd4310 /wd4245 /wd4100 /EHsc /Z7 mule.cpp /DBUILD_CONSOLE_INTERFACE
+
+# Buidlings
+query:
+[out:json];
+way["building"](
+56.16923976826141,
+10.1852768812041,
+56.17371342689877,
+10.198376789774187);
+out body;
+>;
+out skel qt;

@@ -1,7 +1,7 @@
 namespace wrapper
 {
 static void
-OverpassHighways(city::Road* roads, String8 json)
+OverpassHighwayParse(city::Road* roads, String8 json)
 {
     simdjson::ondemand::parser parser;
     simdjson::padded_string json_padded((char*)json.str,
@@ -34,14 +34,14 @@ OverpassHighways(city::Road* roads, String8 json)
 
     roads->unique_node_count = node_count;
     roads->way_count = way_count;
-    roads->ways = PushArray(roads->arena, city::RoadWay, roads->way_count);
+    roads->ways = PushArray(roads->arena, city::Way, roads->way_count);
 
     U64 way_index = 0;
     for (auto element : doc["elements"])
     {
         if (element["type"] == "way")
         {
-            city::RoadWay* way = &roads->ways[way_index];
+            city::Way* way = &roads->ways[way_index];
             way->id = element["id"].get_uint64();
 
             // Get the nodes array and count elements
@@ -58,15 +58,15 @@ OverpassHighways(city::Road* roads, String8 json)
 
             // Count tags by iterating through the object
             auto tags_object = element["tags"].get_object();
-            way->tag_count = 0;
+            U64 tag_count = 0;
             for (auto tag : tags_object)
             {
-                way->tag_count++;
+                tag_count++;
             }
 
             // Reset and iterate again to store the tags
             tags_object = element["tags"].get_object();
-            way->tags = PushArray(roads->arena, city::RoadTag, way->tag_count);
+            way->tags = BufferAlloc<city::Tag>(roads->arena, tag_count);
             U64 tag_cur_index = 0;
             for (auto tag : tags_object)
             {
@@ -79,8 +79,8 @@ OverpassHighways(city::Road* roads, String8 json)
                 String8 temp_value = Str8((U8*)value_view.data(), value_view.size());
 
                 // Copy to arena
-                way->tags[tag_cur_index].key = PushStr8Copy(roads->arena, temp_key);
-                way->tags[tag_cur_index].value = PushStr8Copy(roads->arena, temp_value);
+                way->tags.data[tag_cur_index].key = PushStr8Copy(roads->arena, temp_key);
+                way->tags.data[tag_cur_index].value = PushStr8Copy(roads->arena, temp_value);
 
                 tag_cur_index++;
             }

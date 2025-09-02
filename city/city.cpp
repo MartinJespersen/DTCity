@@ -94,10 +94,10 @@ RoadSegmentConnectionFromTwoRoadSegments(RoadSegment* in_out_road_segment_0,
     in_out_road_segment_1->start.top = shared_top;
 }
 
-static RoadTagResult
-RoadTagFind(Arena* arena, Buffer<RoadTag> tags, String8 tag_to_find)
+static TagResult
+TagFind(Arena* arena, Buffer<Tag> tags, String8 tag_to_find)
 {
-    RoadTagResult result = {};
+    TagResult result = {};
     result.result = ROAD_TAG_NOT_FOUND;
     for (U32 i = 0; i < tags.size; i++)
     {
@@ -112,7 +112,7 @@ RoadTagFind(Arena* arena, Buffer<RoadTag> tags, String8 tag_to_find)
 }
 
 static B32
-UniqueNodeAndWayInsert(Arena* arena, U64 node_id, RoadWay* road_way, Buffer<NodeUtmSlot> hashmap,
+UniqueNodeAndWayInsert(Arena* arena, U64 node_id, Way* road_way, Buffer<NodeUtmSlot> hashmap,
                        NodeUtm** out)
 {
     U64 index = node_id % hashmap.size;
@@ -149,7 +149,7 @@ RoadNodeStructureCreate(Road* road)
     Buffer<NodeUtmSlot> nodes = BufferAlloc<NodeUtmSlot>(road->arena, road->node_hashmap_size);
     for (U32 way_index = 0; way_index < road->way_count; way_index++)
     {
-        RoadWay* way = &road->ways[way_index];
+        Way* way = &road->ways[way_index];
         for (U32 node_index = 0; node_index < way->node_count; node_index++)
         {
             U64 node_id = way->node_ids[node_index];
@@ -168,6 +168,24 @@ RoadNodeStructureCreate(Road* road)
     }
 
     return nodes;
+}
+
+static F32
+TagValueF32Get(Arena* arena, String8 key, F32 default_width, Buffer<Tag> tags)
+{
+    F32 road_width = default_width; // Example value, adjust as needed
+    {
+        TagResult result = TagFind(arena, tags, key);
+        if (result.result == TagResultEnum::ROAD_TAG_FOUND)
+        {
+            F32 float_result = {0};
+            if (F32FromStr8(result.value, &float_result))
+            {
+                road_width = float_result;
+            }
+        }
+    }
+    return road_width;
 }
 
 static void
@@ -252,7 +270,7 @@ RoadsBuild(Road* road)
         OS_FileClose(file_write_handle);
     }
 
-    wrapper::OverpassHighways(road, content);
+    wrapper::OverpassHighwayParse(road, content);
 
     F64 long_low_utm;
     F64 lat_low_utm;
@@ -272,42 +290,26 @@ RoadsBuild(Road* road)
     U64 total_road_segment_count = 0;
     for (U32 way_index = 0; way_index < road->way_count; way_index++)
     {
-        RoadWay* way = &road->ways[way_index];
-        // + 1 is the result of adding two number:
+        Way* way = &road->ways[way_index];
         // -1 get the number of road segments (because the first and last vertices are shared
         // between segments)
         total_road_segment_count += way->node_count - 1;
-
-        // ~mgj: road width calculation
-        F32 road_width = road->default_road_width; // Example value, adjust as needed
-        {
-            Buffer<RoadTag> tags = {.data = way->tags, .size = way->tag_count};
-            RoadTagResult result = RoadTagFind(scratch.arena, tags, S("width"));
-            if (result.result == RoadTagResultEnum::ROAD_TAG_FOUND)
-            {
-                F32 float_result = {0};
-                if (F32FromStr8(result.value, &float_result))
-                {
-                    road_width = float_result;
-                }
-            }
-        }
-        way->road_width = road_width;
-        Assert(road_width > 0.0f);
     }
 
-    // the addition of road->way_count * 2 is due to the triangle strip topology used to render the
-    // road segments
+    // 6 vertices per road segment quad
     U64 total_vert_count = total_road_segment_count * 6;
 
-    road->vertex_buffer =
-        BufferAlloc<RoadVertex>(road->arena, total_vert_count); // 4 vertices per line segment
+    road->vertex_buffer = BufferAlloc<RoadVertex>(road->arena, total_vert_count);
 
     U32 current_vertex_index = 0;
     for (U32 way_index = 0; way_index < road->way_count; way_index++)
     {
-        RoadWay* way = &road->ways[way_index];
-        // for each road segment (road segment = two connected nodes)
+        Way* way = &road->ways[way_index];
+        //
+        // ~mgj: road width calculation
+        F32 road_width =
+            TagValueF32Get(scratch.arena, S("width"), road->default_road_width, way->tags);
+        Assert(road_width > 0.0f);
 
         if (way->node_count < 2)
         {
@@ -321,7 +323,7 @@ RoadsBuild(Road* road)
         NodeUtm* node_second = NodeUtmFind(road, node_second_id);
 
         RoadSegment road_segment_prev;
-        RoadSegmentFromTwoRoadNodes(&road_segment_prev, node_first, node_second, way->road_width);
+        RoadSegmentFromTwoRoadNodes(&road_segment_prev, node_first, node_second, road_width);
 
         if (way->node_count == 2)
         {
@@ -339,10 +341,10 @@ RoadsBuild(Road* road)
                 NodeUtm* node2 = NodeUtmFind(road, node2_id);
 
                 RoadSegment road_segment_cur;
-                RoadSegmentFromTwoRoadNodes(&road_segment_cur, node1, node2, way->road_width);
+                RoadSegmentFromTwoRoadNodes(&road_segment_cur, node1, node2, road_width);
 
                 RoadSegmentConnectionFromTwoRoadSegments(&road_segment_prev, &road_segment_cur,
-                                                         way->road_width);
+                                                         road_width);
 
                 RoadIntersectionPointsFind(road, &road_segment_prev, way);
                 QuadToBufferAdd(&road_segment_prev, road->vertex_buffer, &current_vertex_index);
@@ -387,7 +389,7 @@ RoadNodeIsCrossing(NodeUtm* node)
 {
     U32 way_count = 0;
     U32 is_part_of_crossing = 0;
-    for (RoadWay* way = 0; node->roadway_queue.first; way = way->next)
+    for (Way* way = 0; node->roadway_queue.first; way = way->next)
     {
         way_count++;
     }
@@ -413,7 +415,7 @@ NodeUtmFind(Road* road, U64 node_id)
 }
 
 static void
-RoadIntersectionPointsFind(Road* road, RoadSegment* in_out_segment, RoadWay* current_road_way)
+RoadIntersectionPointsFind(Road* road, RoadSegment* in_out_segment, Way* current_road_way)
 {
     ScratchScope scratch = ScratchScope(0, 0);
     // for each end of segment find whether it there is a road crossing. If there is, change the
@@ -453,30 +455,32 @@ RoadIntersectionPointsFind(Road* road, RoadSegment* in_out_segment, RoadWay* cur
         for (RoadWayListElement* road_way_list = node->roadway_queue.first; road_way_list;
              road_way_list = road_way_list->next)
         {
-            RoadWay* road_way = road_way_list->road_way;
-            if (road_way->id != current_road_way->id)
+            Way* way = road_way_list->road_way;
+            F32 road_width =
+                TagValueF32Get(scratch.arena, S("width"), road->default_road_width, way->tags);
+            if (way->id != current_road_way->id)
             {
                 // find adjacent nodes on crossing road
                 AdjacentNodeLL* adj_node_ll = {};
-                for (U32 node_idx = 0; node_idx < road_way->node_count; node_idx++)
+                for (U32 node_idx = 0; node_idx < way->node_count; node_idx++)
                 {
-                    U64 node_id = road_way->node_ids[node_idx];
+                    U64 node_id = way->node_ids[node_idx];
                     if (node_id == node->id)
                     {
                         if (node_idx > 0)
                         {
                             U32 prev_node_idx = node_idx - 1;
                             AdjacentNodeLL* adj_node = PushStruct(scratch.arena, AdjacentNodeLL);
-                            U64 prev_node_id = road_way->node_ids[prev_node_idx];
+                            U64 prev_node_id = way->node_ids[prev_node_idx];
                             adj_node->node = NodeUtmFind(road, prev_node_id);
                             SLLStackPush(adj_node_ll, adj_node);
                         }
 
-                        if (node_idx < road_way->node_count - 1)
+                        if (node_idx < way->node_count - 1)
                         {
                             U32 next_node_idx = node_idx + 1;
                             AdjacentNodeLL* adj_node = PushStruct(scratch.arena, AdjacentNodeLL);
-                            U64 next_node_id = road_way->node_ids[next_node_idx];
+                            U64 next_node_id = way->node_ids[next_node_idx];
                             adj_node->node = NodeUtmFind(road, next_node_id);
                             SLLStackPush(adj_node_ll, adj_node);
                         }
@@ -495,7 +499,7 @@ RoadIntersectionPointsFind(Road* road, RoadSegment* in_out_segment, RoadWay* cur
                     Vec2F64 intersection_pt;
                     RoadSegment crossing_road_segment = {};
                     RoadSegmentFromTwoRoadNodes(&crossing_road_segment, adj_node_item->node, node,
-                                                road_way->road_width);
+                                                road_width);
                     // update closest point for the top road
                     if (ui::LineIntersect(
                             top_of_road_line_segment.p0.x, top_of_road_line_segment.p0.y,
@@ -626,7 +630,7 @@ NeighbourNodeChoose(NodeUtm* node, Road* road)
     }
     Assert(way_element);
 
-    RoadWay* way = way_element->road_way;
+    Way* way = way_element->road_way;
     U32 node_idx = 0;
     for (; node_idx < way->node_count; node_idx++)
     {
