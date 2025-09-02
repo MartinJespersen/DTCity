@@ -93,6 +93,34 @@ struct WayBuilding
 
 struct NodeWays
 {
+    RoadNodeSlot* nodes;
+    U64 node_slot_count;
+    U64 unique_node_count;
+
+    Buffer<Way> ways;
+};
+
+struct NodeUtmStructure
+{
+    U64 node_hashmap_size;
+    Buffer<NodeUtmSlot> node_hashmap; // key is the node id
+    Vec2F64 utm_center_offset;        // used for centering utm coordinate based on bounding box
+};
+
+union GCSBoundingBox
+{
+    struct
+    {
+        Vec2F64 btm_left;
+        Vec2F64 top_right;
+    };
+    struct
+    {
+        F64 lat_btm_left;
+        F64 lon_btm_left;
+        F64 lat_top_right;
+        F64 lon_top_right;
+    };
 };
 
 struct Road
@@ -106,17 +134,10 @@ struct Road
     F32 default_road_width;
     F32 texture_scale;
 
-    RoadNodeSlot* nodes; // hash map
-    U64 node_slot_count;
-    U64 unique_node_count;
-
-    U64 way_count;
-    Way* ways;
+    NodeWays node_ways;
     ////////////////////////////////
     // UTM coordinates
-    U64 node_hashmap_size;
-    Buffer<NodeUtmSlot> node_hashmap; // key is the node id
-    Vec2F64 utm_center_offset;        // used for centering utm coordinate based on bounding box
+    NodeUtmStructure node_utm_structure;
     ////////////////////////////////
     // Graphics API
     wrapper::Road* w_road;
@@ -194,14 +215,21 @@ static Road*
 RoadCreate(wrapper::VulkanContext* vk_ctx, String8 cache_path);
 static void
 RoadDestroy(wrapper::VulkanContext* vk_ctx, Road* road);
+static String8
+RoadDataFetch(Arena* arena, Road* road, GCSBoundingBox* gcs_bbox);
+static Buffer<RoadVertex>
+RoadVertexBufferCreate(Road* road);
 static void
-RoadsBuild(Road* road);
+RoadNodeStructureCreate(Arena* arena, NodeWays* node_ways, GCSBoundingBox* utm_bbox,
+                        U64 hashmap_slot_count, NodeUtmStructure* out_node_utm_structure);
 static TagResult
 TagFind(Arena* arena, Buffer<Tag> tags, String8 tag_to_find);
 static inline RoadNode*
-NodeFind(Road* road, U64 node_id);
+NodeFind(NodeWays* road, U64 node_id);
 static NodeUtm*
-NodeUtmFind(Road* road, U64 node_id);
+UtmNodeFind(NodeUtmStructure* road, U64 node_id);
+static NodeUtm*
+RandomUtmNodeFind(NodeUtmStructure* utm_node_structure);
 static void
 QuadToBufferAdd(RoadSegment* road_segment, Buffer<RoadVertex> buffer, U32* cur_idx);
 static void

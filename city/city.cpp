@@ -3,6 +3,7 @@ namespace city
 static Road*
 RoadCreate(wrapper::VulkanContext* vk_ctx, String8 cache_path)
 {
+    ScratchScope scratch = ScratchScope(0, 0);
     Arena* arena = ArenaAlloc();
 
     Road* road = PushStruct(arena, Road);
@@ -10,11 +11,37 @@ RoadCreate(wrapper::VulkanContext* vk_ctx, String8 cache_path)
     road->openapi_data_cache_path =
         Str8PathFromStr8List(arena, {cache_path, S("openapi_data.txt")});
     road->arena = arena;
-    road->node_slot_count = 100;
     road->w_road = wrapper::RoadCreate(vk_ctx, road);
     road->road_height = 10.0f;
     road->default_road_width = 2.0f;
-    road->node_hashmap_size = 100;
+
+    GCSBoundingBox gcs_bbox = {.lat_btm_left = 56.16923976826141,
+                               .lon_btm_left = 10.1852768812041,
+                               .lat_top_right = 56.17371342689877,
+                               .lon_top_right = 10.198376789774187};
+    // TODO: make this an input and check for input conditions
+
+    F64 out_northing_low = 0;
+    F64 out_easting_low = 0;
+    char zone_low[265];
+    UTM::LLtoUTM(gcs_bbox.lat_btm_left, gcs_bbox.lon_btm_left, out_easting_low, out_northing_low,
+                 zone_low);
+    F64 out_northing_high = 0;
+    F64 out_easting_high = 0;
+    char zone_high[265];
+    UTM::LLtoUTM(gcs_bbox.lat_top_right, gcs_bbox.lon_top_right, out_easting_high,
+                 out_northing_high, zone_high);
+
+    String8 content = RoadDataFetch(scratch.arena, road, &gcs_bbox);
+    wrapper::OverpassHighwayParse(road->arena, content, 100, &road->node_ways);
+    NodeWays* node_ways = &road->node_ways;
+
+    // ~mgj: Road Decision tree create
+    U64 hashmap_slot_count = 100;
+    RoadNodeStructureCreate(road->arena, node_ways, &gcs_bbox, hashmap_slot_count,
+                            &road->node_utm_structure);
+
+    road->vertex_buffer = RoadVertexBufferCreate(road);
 
     return road;
 }
@@ -27,9 +54,9 @@ RoadDestroy(wrapper::VulkanContext* vk_ctx, Road* road)
 }
 
 static inline RoadNode*
-NodeFind(Road* road, U64 node_id)
+NodeFind(NodeWays* node_ways, U64 node_id)
 {
-    RoadNodeSlot node_slot = road->nodes[node_id % road->node_slot_count];
+    RoadNodeSlot node_slot = node_ways->nodes[node_id % node_ways->node_slot_count];
 
     RoadNode* node = node_slot.first;
     for (; node <= node_slot.last; node = node->next)
@@ -143,31 +170,48 @@ UniqueNodeAndWayInsert(Arena* arena, U64 node_id, Way* road_way, Buffer<NodeUtmS
     return node_inserted;
 }
 
-static Buffer<NodeUtmSlot>
-RoadNodeStructureCreate(Road* road)
+static void
+RoadNodeStructureCreate(Arena* arena, NodeWays* node_ways, GCSBoundingBox* gcs_bbox,
+                        U64 hashmap_slot_count, NodeUtmStructure* out_node_utm_structure)
 {
-    Buffer<NodeUtmSlot> nodes = BufferAlloc<NodeUtmSlot>(road->arena, road->node_hashmap_size);
-    for (U32 way_index = 0; way_index < road->way_count; way_index++)
+    out_node_utm_structure->node_hashmap_size = hashmap_slot_count;
+
+    F64 long_low_utm;
+    F64 lat_low_utm;
+    F64 long_high_utm;
+    F64 lat_high_utm;
+    char utm_zone[10];
+    UTM::LLtoUTM(gcs_bbox->lat_btm_left, gcs_bbox->lon_btm_left, lat_low_utm, long_low_utm,
+                 utm_zone);
+    UTM::LLtoUTM(gcs_bbox->lat_top_right, gcs_bbox->lon_top_right, lat_high_utm, long_high_utm,
+                 utm_zone);
+    F64 center_transform_x = -(long_low_utm + long_high_utm) / 2.0;
+    F64 center_transform_y = -(lat_low_utm + lat_high_utm) / 2.0;
+    out_node_utm_structure->utm_center_offset = {center_transform_x, center_transform_y};
+
+    out_node_utm_structure->node_hashmap =
+        BufferAlloc<NodeUtmSlot>(arena, out_node_utm_structure->node_hashmap_size);
+    for (U32 way_index = 0; way_index < node_ways->ways.size; way_index++)
     {
-        Way* way = &road->ways[way_index];
+        Way* way = &node_ways->ways.data[way_index];
         for (U32 node_index = 0; node_index < way->node_count; node_index++)
         {
             U64 node_id = way->node_ids[node_index];
             NodeUtm* node_utm;
-            UniqueNodeAndWayInsert(road->arena, node_id, way, nodes, &node_utm);
-            RoadNode* node_coord = NodeFind(road, node_id);
-            char utm_zone[10];
+            UniqueNodeAndWayInsert(arena, node_id, way, out_node_utm_structure->node_hashmap,
+                                   &node_utm);
+            RoadNode* node_coord = NodeFind(node_ways, node_id);
             double x, y;
-            UTM::LLtoUTM(node_coord->lat, node_coord->lon, y, x, utm_zone);
 
-            String8 utm_zone_str = Str8CString(utm_zone);
-            node_utm->utm_zone = PushStr8Copy(road->arena, utm_zone_str);
-            node_utm->pos.x = x + road->utm_center_offset.x;
-            node_utm->pos.y = y + road->utm_center_offset.y;
+            char node_utm_zone[10];
+            UTM::LLtoUTM(node_coord->lat, node_coord->lon, y, x, node_utm_zone);
+
+            String8 utm_zone_str = Str8CString(node_utm_zone);
+            node_utm->utm_zone = PushStr8Copy(arena, utm_zone_str);
+            node_utm->pos.x = x + out_node_utm_structure->utm_center_offset.x;
+            node_utm->pos.y = y + out_node_utm_structure->utm_center_offset.y;
         }
     }
-
-    return nodes;
 }
 
 static F32
@@ -188,26 +232,90 @@ TagValueF32Get(Arena* arena, String8 key, F32 default_width, Buffer<Tag> tags)
     return road_width;
 }
 
-static void
-RoadsBuild(Road* road)
+static Buffer<RoadVertex>
+RoadVertexBufferCreate(Road* road)
 {
     ScratchScope scratch = ScratchScope(0, 0);
+    NodeWays* node_ways = &road->node_ways;
 
-    // TODO: make this an input and check for input conditions
-    F64 lat_low = 56.16923976826141;
-    F64 lon_low = 10.1852768812041;
-    F64 lat_high = 56.17371342689877;
-    F64 lon_high = 10.198376789774187;
+    // road->way_count = 2;
+    U64 total_road_segment_count = 0;
+    for (U32 way_index = 0; way_index < node_ways->ways.size; way_index++)
+    {
+        Way* way = &node_ways->ways.data[way_index];
+        // -1 get the number of road segments (because the first and last vertices are shared
+        // between segments)
+        total_road_segment_count += way->node_count - 1;
+    }
 
-    F64 out_northing_low = 0;
-    F64 out_easting_low = 0;
-    char zone_low[265];
-    UTM::LLtoUTM(lat_low, lon_low, out_easting_low, out_northing_low, zone_low);
-    F64 out_northing_high = 0;
-    F64 out_easting_high = 0;
-    char zone_high[265];
-    UTM::LLtoUTM(lat_high, lon_high, out_easting_high, out_northing_high, zone_high);
+    // 6 vertices per road segment quad
+    U64 total_vert_count = total_road_segment_count * 6;
 
+    Buffer<RoadVertex> vertex_buffer = BufferAlloc<RoadVertex>(road->arena, total_vert_count);
+
+    U32 current_vertex_index = 0;
+    for (U32 way_index = 0; way_index < road->node_ways.ways.size; way_index++)
+    {
+        Way* way = &road->node_ways.ways.data[way_index];
+        //
+        // ~mgj: road width calculation
+        F32 road_width =
+            TagValueF32Get(scratch.arena, S("width"), road->default_road_width, way->tags);
+        Assert(road_width > 0.0f);
+
+        if (way->node_count < 2)
+        {
+            exitWithError("expected at least one road segment comprising of two nodes");
+        }
+
+        U64 node_first_id = way->node_ids[0];
+        U64 node_second_id = way->node_ids[1];
+
+        NodeUtm* node_first = UtmNodeFind(&road->node_utm_structure, node_first_id);
+        NodeUtm* node_second = UtmNodeFind(&road->node_utm_structure, node_second_id);
+
+        RoadSegment road_segment_prev;
+        RoadSegmentFromTwoRoadNodes(&road_segment_prev, node_first, node_second, road_width);
+
+        if (way->node_count == 2)
+        {
+            RoadIntersectionPointsFind(road, &road_segment_prev, way);
+            QuadToBufferAdd(&road_segment_prev, vertex_buffer, &current_vertex_index);
+        }
+        else
+        {
+            for (U32 node_idx = 1; node_idx < way->node_count - 1; node_idx++)
+            {
+                U64 node1_id = way->node_ids[node_idx];
+                U64 node2_id = way->node_ids[node_idx + 1];
+
+                NodeUtm* node1 = UtmNodeFind(&road->node_utm_structure, node1_id);
+                NodeUtm* node2 = UtmNodeFind(&road->node_utm_structure, node2_id);
+
+                RoadSegment road_segment_cur;
+                RoadSegmentFromTwoRoadNodes(&road_segment_cur, node1, node2, road_width);
+
+                RoadSegmentConnectionFromTwoRoadSegments(&road_segment_prev, &road_segment_cur,
+                                                         road_width);
+
+                RoadIntersectionPointsFind(road, &road_segment_prev, way);
+                QuadToBufferAdd(&road_segment_prev, vertex_buffer, &current_vertex_index);
+                if (node_idx == way->node_count - 2)
+                {
+                    RoadIntersectionPointsFind(road, &road_segment_cur, way);
+                    QuadToBufferAdd(&road_segment_cur, vertex_buffer, &current_vertex_index);
+                }
+
+                road_segment_prev = road_segment_cur;
+                // TODO: what if road segment is consist of only one or two nodes
+            }
+        }
+    }
+    return vertex_buffer;
+}
+static String8
+RoadDataFetch(Arena* arena, Road* road, GCSBoundingBox* gcs_bbox)
+{
     HTTP_RequestParams params = {};
     params.method = HTTP_Method_Post;
     params.content_type = S("text/html");
@@ -222,7 +330,8 @@ RoadsBuild(Road* road)
         out skel qt;
     )";
     String8 query_str =
-        PushStr8F(scratch.arena, (char*)query, lat_low, lon_low, lat_high, lon_high);
+        PushStr8F(arena, (char*)query, gcs_bbox->lat_btm_left, gcs_bbox->lon_btm_left,
+                  gcs_bbox->lat_top_right, gcs_bbox->lon_top_right);
 
     B32 read_from_cache = 0;
     String8 content = {0};
@@ -231,7 +340,7 @@ RoadsBuild(Road* road)
         OS_Handle file_handle = OS_FileOpen(OS_AccessFlag_Read, road->openapi_data_cache_path);
         FileProperties file_props = OS_PropertiesFromFile(file_handle);
 
-        content.str = PushArray(scratch.arena, U8, file_props.size);
+        content.str = PushArray(arena, U8, file_props.size);
         content.size = file_props.size;
         U64 total_read_size =
             OS_FileRead(file_handle, {.min = 0, .max = file_props.size}, content.str);
@@ -250,7 +359,7 @@ RoadsBuild(Road* road)
     {
         String8 host = S("https://overpass-api.de");
         String8 path = S("/api/interpreter");
-        HTTP_Response response = HTTP_Request(scratch.arena, host, path, query_str, &params);
+        HTTP_Response response = HTTP_Request(arena, host, path, query_str, &params);
 
         if (!response.good)
         {
@@ -269,96 +378,7 @@ RoadsBuild(Road* road)
         }
         OS_FileClose(file_write_handle);
     }
-
-    wrapper::OverpassHighwayParse(road, content);
-
-    F64 long_low_utm;
-    F64 lat_low_utm;
-    F64 long_high_utm;
-    F64 lat_high_utm;
-    char utm_zone[10];
-    UTM::LLtoUTM(lat_low, lon_low, lat_low_utm, long_low_utm, utm_zone);
-    UTM::LLtoUTM(lat_high, lon_high, lat_high_utm, long_high_utm, utm_zone);
-    F64 center_transform_x = -(long_low_utm + long_high_utm) / 2.0;
-    F64 center_transform_y = -(lat_low_utm + lat_high_utm) / 2.0;
-    road->utm_center_offset = {center_transform_x, center_transform_y};
-
-    // ~mgj: Road Decision tree create
-    road->node_hashmap = RoadNodeStructureCreate(road);
-
-    // road->way_count = 2;
-    U64 total_road_segment_count = 0;
-    for (U32 way_index = 0; way_index < road->way_count; way_index++)
-    {
-        Way* way = &road->ways[way_index];
-        // -1 get the number of road segments (because the first and last vertices are shared
-        // between segments)
-        total_road_segment_count += way->node_count - 1;
-    }
-
-    // 6 vertices per road segment quad
-    U64 total_vert_count = total_road_segment_count * 6;
-
-    road->vertex_buffer = BufferAlloc<RoadVertex>(road->arena, total_vert_count);
-
-    U32 current_vertex_index = 0;
-    for (U32 way_index = 0; way_index < road->way_count; way_index++)
-    {
-        Way* way = &road->ways[way_index];
-        //
-        // ~mgj: road width calculation
-        F32 road_width =
-            TagValueF32Get(scratch.arena, S("width"), road->default_road_width, way->tags);
-        Assert(road_width > 0.0f);
-
-        if (way->node_count < 2)
-        {
-            exitWithError("expected at least one road segment comprising of two nodes");
-        }
-
-        U64 node_first_id = way->node_ids[0];
-        U64 node_second_id = way->node_ids[1];
-
-        NodeUtm* node_first = NodeUtmFind(road, node_first_id);
-        NodeUtm* node_second = NodeUtmFind(road, node_second_id);
-
-        RoadSegment road_segment_prev;
-        RoadSegmentFromTwoRoadNodes(&road_segment_prev, node_first, node_second, road_width);
-
-        if (way->node_count == 2)
-        {
-            RoadIntersectionPointsFind(road, &road_segment_prev, way);
-            QuadToBufferAdd(&road_segment_prev, road->vertex_buffer, &current_vertex_index);
-        }
-        else
-        {
-            for (U32 node_idx = 1; node_idx < way->node_count - 1; node_idx++)
-            {
-                U64 node1_id = way->node_ids[node_idx];
-                U64 node2_id = way->node_ids[node_idx + 1];
-
-                NodeUtm* node1 = NodeUtmFind(road, node1_id);
-                NodeUtm* node2 = NodeUtmFind(road, node2_id);
-
-                RoadSegment road_segment_cur;
-                RoadSegmentFromTwoRoadNodes(&road_segment_cur, node1, node2, road_width);
-
-                RoadSegmentConnectionFromTwoRoadSegments(&road_segment_prev, &road_segment_cur,
-                                                         road_width);
-
-                RoadIntersectionPointsFind(road, &road_segment_prev, way);
-                QuadToBufferAdd(&road_segment_prev, road->vertex_buffer, &current_vertex_index);
-                if (node_idx == way->node_count - 2)
-                {
-                    RoadIntersectionPointsFind(road, &road_segment_cur, way);
-                    QuadToBufferAdd(&road_segment_cur, road->vertex_buffer, &current_vertex_index);
-                }
-
-                road_segment_prev = road_segment_cur;
-                // TODO: what if road segment is consist of only one or two nodes
-            }
-        }
-    }
+    return content;
 }
 
 static void
@@ -401,10 +421,10 @@ RoadNodeIsCrossing(NodeUtm* node)
 }
 
 static NodeUtm*
-NodeUtmFind(Road* road, U64 node_id)
+NodeUtmFind(NodeUtmStructure* node_ways, U64 node_id)
 {
-    U64 node_index = node_id % road->node_hashmap.size;
-    NodeUtmSlot* slot = &road->node_hashmap.data[node_index];
+    U64 node_index = node_id % node_ways->node_hashmap.size;
+    NodeUtmSlot* slot = &node_ways->node_hashmap.data[node_index];
     NodeUtm* node = slot->first;
     for (; node; node = node->next)
     {
@@ -472,7 +492,7 @@ RoadIntersectionPointsFind(Road* road, RoadSegment* in_out_segment, Way* current
                             U32 prev_node_idx = node_idx - 1;
                             AdjacentNodeLL* adj_node = PushStruct(scratch.arena, AdjacentNodeLL);
                             U64 prev_node_id = way->node_ids[prev_node_idx];
-                            adj_node->node = NodeUtmFind(road, prev_node_id);
+                            adj_node->node = NodeUtmFind(&road->node_utm_structure, prev_node_id);
                             SLLStackPush(adj_node_ll, adj_node);
                         }
 
@@ -481,7 +501,7 @@ RoadIntersectionPointsFind(Road* road, RoadSegment* in_out_segment, Way* current
                             U32 next_node_idx = node_idx + 1;
                             AdjacentNodeLL* adj_node = PushStruct(scratch.arena, AdjacentNodeLL);
                             U64 next_node_id = way->node_ids[next_node_idx];
-                            adj_node->node = NodeUtmFind(road, next_node_id);
+                            adj_node->node = NodeUtmFind(&road->node_utm_structure, next_node_id);
                             SLLStackPush(adj_node_ll, adj_node);
                         }
                         break;
@@ -578,13 +598,13 @@ RoadIntersectionPointsFind(Road* road, RoadSegment* in_out_segment, Way* current
 }
 
 static NodeUtm*
-RoadRandomNodeUtmFind(Road* road)
+RandomUtmNodeFind(NodeUtmStructure* utm_node_structure)
 {
     U32 rand_num = RandomU32();
-    for (U32 i = 0; i < road->node_hashmap.size; ++i)
+    for (U32 i = 0; i < utm_node_structure->node_hashmap.size; ++i)
     {
-        U32 slot_index = rand_num % road->node_hashmap.size;
-        NodeUtmSlot* slot = &road->node_hashmap.data[slot_index];
+        U32 slot_index = rand_num % utm_node_structure->node_hashmap.size;
+        NodeUtmSlot* slot = &utm_node_structure->node_hashmap.data[slot_index];
         if (slot->first != NULL)
         {
             return slot->first;
@@ -595,10 +615,10 @@ RoadRandomNodeUtmFind(Road* road)
 }
 
 static NodeUtm*
-FindUtmNode(Road* road, U64 node_id)
+UtmNodeFind(NodeUtmStructure* utm_node_structure, U64 node_id)
 {
-    U32 slot_index = node_id % road->node_hashmap.size;
-    NodeUtmSlot* slot = &road->node_hashmap.data[slot_index];
+    U32 slot_index = node_id % utm_node_structure->node_hashmap.size;
+    NodeUtmSlot* slot = &utm_node_structure->node_hashmap.data[slot_index];
     for (NodeUtm* node = slot->first; node; node = node->next)
     {
         if (node->id == node_id)
@@ -647,7 +667,7 @@ NeighbourNodeChoose(NodeUtm* node, Road* road)
         next_node_idx = Max(0, (S32)node_idx - 1);
     }
     U64 next_node_id = way->node_ids[next_node_idx];
-    NodeUtm* next_node = FindUtmNode(road, next_node_id);
+    NodeUtm* next_node = UtmNodeFind(&road->node_utm_structure, next_node_id);
     return next_node;
 }
 
@@ -699,7 +719,7 @@ CarSimCreate(wrapper::VulkanContext* vk_ctx, U32 car_count, Road* road)
 
     for (U32 i = 0; i < car_count; ++i)
     {
-        NodeUtm* source_node = RoadRandomNodeUtmFind(road);
+        NodeUtm* source_node = RandomUtmNodeFind(&road->node_utm_structure);
         NodeUtm* target_node = NeighbourNodeChoose(source_node, road);
         city::Car* car = &car_sim->cars.data[i];
         car->source = source_node;

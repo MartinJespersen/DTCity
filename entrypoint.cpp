@@ -224,7 +224,6 @@ MainLoop(void* ptr)
 
     ctx->vk_ctx = wrapper::VK_VulkanInit(ctx);
     ctx->road = city::RoadCreate(ctx->vk_ctx, ctx->cache_path);
-    city::RoadsBuild(ctx->road);
     CameraInit(ctx->camera);
     ctx->car_sim = city::CarSimCreate(ctx->vk_ctx, 100, ctx->road);
 

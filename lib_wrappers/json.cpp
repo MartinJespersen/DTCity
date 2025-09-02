@@ -1,15 +1,18 @@
 namespace wrapper
 {
 static void
-OverpassHighwayParse(city::Road* roads, String8 json)
+OverpassHighwayParse(Arena* arena, String8 json, U64 hashmap_slot_count,
+                     city::NodeWays* out_node_ways)
 {
+    out_node_ways->node_slot_count = hashmap_slot_count;
+
     simdjson::ondemand::parser parser;
     simdjson::padded_string json_padded((char*)json.str,
                                         json.size); // load JSON file 'twitter.json'.
     simdjson::ondemand::document doc =
         parser.iterate(json_padded); // position a pointer at the beginning of the JSON data
 
-    roads->nodes = PushArray(roads->arena, city::RoadNodeSlot, roads->node_slot_count);
+    out_node_ways->nodes = PushArray(arena, city::RoadNodeSlot, out_node_ways->node_slot_count);
 
     U64 way_count = 0;
     U64 node_count = 0;
@@ -17,13 +20,14 @@ OverpassHighwayParse(city::Road* roads, String8 json)
     {
         if (item["type"] == "node")
         {
-            city::RoadNode* node = PushStruct(roads->arena, city::RoadNode);
+            city::RoadNode* node = PushStruct(arena, city::RoadNode);
             node->id = item["id"].get_uint64();
             node->lat = item["lat"].get_double();
             node->lon = item["lon"].get_double();
 
-            U64 map_location = node->id % roads->node_slot_count;
-            SLLQueuePush(roads->nodes[map_location].first, roads->nodes[map_location].last, node);
+            U64 map_location = node->id % out_node_ways->node_slot_count;
+            SLLQueuePush(out_node_ways->nodes[map_location].first,
+                         out_node_ways->nodes[map_location].last, node);
             node_count++;
         }
         else if (item["type"] == "way")
@@ -32,23 +36,22 @@ OverpassHighwayParse(city::Road* roads, String8 json)
         }
     }
 
-    roads->unique_node_count = node_count;
-    roads->way_count = way_count;
-    roads->ways = PushArray(roads->arena, city::Way, roads->way_count);
+    out_node_ways->unique_node_count = node_count;
+    out_node_ways->ways = BufferAlloc<city::Way>(arena, way_count);
 
     U64 way_index = 0;
     for (auto element : doc["elements"])
     {
         if (element["type"] == "way")
         {
-            city::Way* way = &roads->ways[way_index];
+            city::Way* way = &out_node_ways->ways.data[way_index];
             way->id = element["id"].get_uint64();
 
             // Get the nodes array and count elements
             auto nodes_array = element["nodes"].get_array();
             way->node_count = nodes_array.count_elements();
 
-            way->node_ids = PushArray(roads->arena, U64, way->node_count);
+            way->node_ids = PushArray(arena, U64, way->node_count);
             U32 node_index = 0;
             for (auto node_id : nodes_array)
             {
@@ -66,7 +69,7 @@ OverpassHighwayParse(city::Road* roads, String8 json)
 
             // Reset and iterate again to store the tags
             tags_object = element["tags"].get_object();
-            way->tags = BufferAlloc<city::Tag>(roads->arena, tag_count);
+            way->tags = BufferAlloc<city::Tag>(arena, tag_count);
             U64 tag_cur_index = 0;
             for (auto tag : tags_object)
             {
@@ -79,8 +82,8 @@ OverpassHighwayParse(city::Road* roads, String8 json)
                 String8 temp_value = Str8((U8*)value_view.data(), value_view.size());
 
                 // Copy to arena
-                way->tags.data[tag_cur_index].key = PushStr8Copy(roads->arena, temp_key);
-                way->tags.data[tag_cur_index].value = PushStr8Copy(roads->arena, temp_value);
+                way->tags.data[tag_cur_index].key = PushStr8Copy(arena, temp_key);
+                way->tags.data[tag_cur_index].value = PushStr8Copy(arena, temp_value);
 
                 tag_cur_index++;
             }
