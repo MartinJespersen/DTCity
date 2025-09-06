@@ -13,4 +13,8 @@ call glslc road.frag -o road_frag.spv
 call glslc road.vert -o road_vert.spv
 popd
 
+pushd building
+call glslc building.frag -o building_frag.spv
+call glslc building.vert -o building_vert.spv
+popd
 endlocal

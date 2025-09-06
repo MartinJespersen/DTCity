@@ -164,7 +164,7 @@ static U64 arena_pos(Arena *arena) {
   return pos;
 }
 
-static void arena_pop_to(Arena *arena, U64 pos) {
+static void ArenaPopTo(Arena *arena, U64 pos) {
   U64 big_pos = ClampBot(ARENA_HEADER_SIZE, pos);
   Arena *current = arena->current;
 
@@ -192,7 +192,7 @@ static void arena_pop_to(Arena *arena, U64 pos) {
 
 //- rjf: arena push/pop helpers
 
-static void arena_clear(Arena *arena) { arena_pop_to(arena, 0); }
+static void ArenaClear(Arena *arena) { ArenaPopTo(arena, 0); }
 
 static void arena_pop(Arena *arena, U64 amt) {
   U64 pos_old = arena_pos(arena);
@@ -200,7 +200,7 @@ static void arena_pop(Arena *arena, U64 amt) {
   if (amt < pos_old) {
     pos_new = pos_old - amt;
   }
-  arena_pop_to(arena, pos_new);
+  ArenaPopTo(arena, pos_new);
 }
 
 //- rjf: temporary arena scopes
@@ -211,4 +211,4 @@ static Temp temp_begin(Arena *arena) {
   return temp;
 }
 
-static void temp_end(Temp temp) { arena_pop_to(temp.arena, temp.pos); }
+static void temp_end(Temp temp) { ArenaPopTo(temp.arena, temp.pos); }

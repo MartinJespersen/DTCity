@@ -6,8 +6,8 @@
 #include "async/async.hpp"
 #include "http/http_inc.hpp"
 #include "lib_wrappers/lib_wrappers_inc.hpp"
-#include "ui/ui.hpp"
 #include "city/city_inc.hpp"
+#include "ui/ui.hpp"
 
 const U32 MAX_FONTS_IN_USE = 10;
 

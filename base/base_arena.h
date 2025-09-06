@@ -80,11 +80,11 @@ ArenaPush(Arena* arena, U64 size, U64 align);
 static U64
 arena_pos(Arena* arena);
 static void
-arena_pop_to(Arena* arena, U64 pos);
+ArenaPopTo(Arena* arena, U64 pos);
 
 //- rjf: arena push/pop helpers
 static void
-arena_clear(Arena* arena);
+ArenaClear(Arena* arena);
 static void
 arena_pop(Arena* arena, U64 amt);
 

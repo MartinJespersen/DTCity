@@ -1,57 +1,57 @@
 
 namespace wrapper
 {
-static VkSamplerCreateInfo
-VkSamplerFromCgltfSampler(CgltfSampler sampler)
+static SamplerInfo
+SamplerFromCgltfSampler(CgltfSampler sampler)
 {
-    VkFilter vk_min_filter = VK_FILTER_NEAREST;
-    VkFilter vk_mag_filter = VK_FILTER_NEAREST;
-    VkSamplerMipmapMode vk_mipmap_mode = VK_SAMPLER_MIPMAP_MODE_NEAREST;
-    VkSamplerAddressMode vk_address_mode_u = VK_SAMPLER_ADDRESS_MODE_REPEAT;
-    VkSamplerAddressMode vk_address_mode_v = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+    Filter min_filter = Filter_Nearest;
+    Filter mag_filter = Filter_Nearest;
+    MipMapMode mipmap_mode = MipMapMode_Nearest;
+    SamplerAddressMode address_mode_u = SamplerAddressMode_Repeat;
+    SamplerAddressMode address_mode_v = SamplerAddressMode_Repeat;
 
     switch (sampler.min_filter)
     {
     case cgltf_filter_type_nearest:
     {
-        vk_min_filter = VK_FILTER_NEAREST;
-        vk_mag_filter = VK_FILTER_NEAREST;
-        vk_mipmap_mode = VK_SAMPLER_MIPMAP_MODE_NEAREST;
+        min_filter = Filter_Nearest;
+        mag_filter = Filter_Nearest;
+        mipmap_mode = MipMapMode_Nearest;
     }
     break;
     case cgltf_filter_type_linear:
     {
-        vk_min_filter = VK_FILTER_LINEAR;
-        vk_mag_filter = VK_FILTER_LINEAR;
-        vk_mipmap_mode = VK_SAMPLER_MIPMAP_MODE_NEAREST;
+        min_filter = Filter_Linear;
+        mag_filter = Filter_Linear;
+        mipmap_mode = MipMapMode_Nearest;
     }
     break;
     case cgltf_filter_type_nearest_mipmap_nearest:
     {
-        vk_min_filter = VK_FILTER_NEAREST;
-        vk_mag_filter = VK_FILTER_NEAREST;
-        vk_mipmap_mode = VK_SAMPLER_MIPMAP_MODE_NEAREST;
+        min_filter = Filter_Nearest;
+        mag_filter = Filter_Nearest;
+        mipmap_mode = MipMapMode_Nearest;
     }
     break;
     case cgltf_filter_type_linear_mipmap_nearest:
     {
-        vk_min_filter = VK_FILTER_LINEAR;
-        vk_mag_filter = VK_FILTER_LINEAR;
-        vk_mipmap_mode = VK_SAMPLER_MIPMAP_MODE_NEAREST;
+        min_filter = Filter_Linear;
+        mag_filter = Filter_Linear;
+        mipmap_mode = MipMapMode_Nearest;
     }
     break;
     case cgltf_filter_type_nearest_mipmap_linear:
     {
-        vk_min_filter = VK_FILTER_NEAREST;
-        vk_mag_filter = VK_FILTER_NEAREST;
-        vk_mipmap_mode = VK_SAMPLER_MIPMAP_MODE_LINEAR;
+        min_filter = Filter_Nearest;
+        mag_filter = Filter_Nearest;
+        mipmap_mode = MipMapMode_Linear;
     }
     break;
     case cgltf_filter_type_linear_mipmap_linear:
     {
-        vk_min_filter = VK_FILTER_LINEAR;
-        vk_mag_filter = VK_FILTER_LINEAR;
-        vk_mipmap_mode = VK_SAMPLER_MIPMAP_MODE_NEAREST;
+        min_filter = Filter_Linear;
+        mag_filter = Filter_Linear;
+        mipmap_mode = MipMapMode_Nearest;
     }
     break;
     }
@@ -62,32 +62,32 @@ VkSamplerFromCgltfSampler(CgltfSampler sampler)
         {
         case cgltf_filter_type_nearest_mipmap_nearest:
         {
-            vk_mag_filter = VK_FILTER_NEAREST;
+            mag_filter = Filter_Nearest;
         }
         break;
         case cgltf_filter_type_linear_mipmap_nearest:
         {
-            vk_mag_filter = VK_FILTER_LINEAR;
+            mag_filter = Filter_Linear;
         }
         break;
         case cgltf_filter_type_nearest_mipmap_linear:
         {
-            vk_mag_filter = VK_FILTER_NEAREST;
+            mag_filter = Filter_Nearest;
         }
         break;
         case cgltf_filter_type_linear_mipmap_linear:
         {
-            vk_mag_filter = VK_FILTER_LINEAR;
+            mag_filter = Filter_Linear;
         }
         break;
         case cgltf_filter_type_nearest:
         {
-            vk_mag_filter = VK_FILTER_NEAREST;
+            mag_filter = Filter_Nearest;
         }
         break;
         case cgltf_filter_type_linear:
         {
-            vk_mag_filter = VK_FILTER_LINEAR;
+            mag_filter = Filter_Linear;
         }
         break;
 
@@ -98,43 +98,35 @@ VkSamplerFromCgltfSampler(CgltfSampler sampler)
     switch (sampler.wrap_s)
     {
     case cgltf_wrap_mode_clamp_to_edge:
-        vk_address_mode_u = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+        address_mode_u = SamplerAddressMode_ClampToEdge;
         break;
     case cgltf_wrap_mode_repeat:
-        vk_address_mode_u = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+        address_mode_u = SamplerAddressMode_Repeat;
         break;
     case cgltf_wrap_mode_mirrored_repeat:
-        vk_address_mode_u = VK_SAMPLER_ADDRESS_MODE_MIRRORED_REPEAT;
+        address_mode_u = SamplerAddressMode_MirroredRepeat;
         break;
     }
     switch (sampler.wrap_t)
     {
     case cgltf_wrap_mode_clamp_to_edge:
-        vk_address_mode_v = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+        address_mode_v = SamplerAddressMode_ClampToEdge;
         break;
     case cgltf_wrap_mode_repeat:
-        vk_address_mode_v = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+        address_mode_v = SamplerAddressMode_Repeat;
         break;
     case cgltf_wrap_mode_mirrored_repeat:
-        vk_address_mode_v = VK_SAMPLER_ADDRESS_MODE_MIRRORED_REPEAT;
+        address_mode_v = SamplerAddressMode_MirroredRepeat;
         break;
     }
-    VkSamplerCreateInfo samplerInfo{};
-    samplerInfo.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
-    samplerInfo.magFilter = vk_min_filter;
-    samplerInfo.minFilter = vk_mag_filter;
-    samplerInfo.addressModeU = vk_address_mode_u;
-    samplerInfo.addressModeV = vk_address_mode_v;
-    samplerInfo.addressModeW = samplerInfo.addressModeU;
-    samplerInfo.compareOp = VK_COMPARE_OP_NEVER;
-    samplerInfo.unnormalizedCoordinates = VK_FALSE;
-    samplerInfo.mipmapMode = vk_mipmap_mode;
-    samplerInfo.mipLodBias = 0.0f;
-    samplerInfo.minLod = 0.0f;
-    samplerInfo.maxLod = 0.0f;
-    samplerInfo.borderColor = VK_BORDER_COLOR_INT_OPAQUE_BLACK;
 
-    return samplerInfo;
+    SamplerInfo sampler_info = {.min_filter = min_filter,
+                                .mag_filter = mag_filter,
+                                .mip_map_mode = mipmap_mode,
+                                .address_mode_u = address_mode_u,
+                                .address_mode_v = address_mode_v};
+
+    return sampler_info;
 }
 
 static CgltfResult

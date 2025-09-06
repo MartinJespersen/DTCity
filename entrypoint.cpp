@@ -160,6 +160,7 @@ CommandBufferRecord(U32 image_index, U32 current_frame)
 
             wrapper::CarUpdate(ctx->car_sim, instance_buffer, image_index);
             wrapper::RoadUpdate(ctx->road, vk_ctx, image_index, vk_ctx->shader_path);
+            wrapper::BuildingRendering();
 
             IO_InputReset(ctx->io);
 
@@ -222,8 +223,15 @@ MainLoop(void* ptr)
     IO* io_ctx = ctx->io;
     OS_SetThreadName(Str8CString("Entrypoint thread"));
 
+    city::GCSBoundingBox gcs_bbox = {.lat_btm_left = 56.16923976826141,
+                                     .lon_btm_left = 10.1852768812041,
+                                     .lat_top_right = 56.17371342689877,
+                                     .lon_top_right = 10.198376789774187};
+
     ctx->vk_ctx = wrapper::VK_VulkanInit(ctx);
-    ctx->road = city::RoadCreate(ctx->vk_ctx, ctx->cache_path);
+    ctx->road = city::RoadCreate(ctx->vk_ctx, ctx->cache_path, &gcs_bbox);
+    ctx->buildings = city::BuildingsCreate(ctx->cache_path, ctx->road->road_height, &gcs_bbox);
+
     CameraInit(ctx->camera);
     ctx->car_sim = city::CarSimCreate(ctx->vk_ctx, 100, ctx->road);
 
@@ -233,15 +241,28 @@ MainLoop(void* ptr)
     city::CarSim* car_sim = ctx->car_sim;
     wrapper::Car* w_car = car_sim->car;
     CarCreateAsync(w_car->texture_id, w_car->vertex_buffer_id, w_car->index_buffer_id,
-                   w_car->texture_path, car_sim->sampler, car_sim->vertex_buffer,
+                   w_car->texture_path, &car_sim->sampler_info, car_sim->vertex_buffer,
                    car_sim->index_buffer);
-    city::Road* road = ctx->road;
-    AssetManagerRoadResourceLoadAsync(vk_ctx->asset_store, road->w_road->texture_id, vk_ctx,
-                                      road->w_road->road_texture_path, road->w_road, road);
+
+    SamplerInfo sampler_info = {
+        .min_filter = Filter_Linear,
+        .mag_filter = Filter_Linear,
+        .mip_map_mode = MipMapMode_Linear,
+        .address_mode_u = SamplerAddressMode_Repeat,
+        .address_mode_v = SamplerAddressMode_Repeat,
+    };
+    wrapper::Road* w_road = ctx->road->w_road;
+    AssetManagerRoadResourceLoadAsync(w_road->texture_id, w_road->road_texture_path, &sampler_info);
+    city::Buildings* buildings = ctx->buildings;
+
+    wrapper::BuildingCreateAsync(buildings->vertex_buffer_id, buildings->index_buffer_id,
+                                 buildings->vertex_buffer, buildings->index_buffer);
 
     ProfileBuffersCreate(vk_ctx);
     while (ctx->running)
     {
+        wrapper::DrawFrameReset();
+        wrapper::BuildingDraw(buildings->vertex_buffer_id, buildings->index_buffer_id);
         wrapper::AssetManagerExecuteCmds();
         wrapper::AssetManagerCmdDoneCheck();
         VkSemaphore image_available_semaphore =
@@ -265,7 +286,7 @@ MainLoop(void* ptr)
         {
             io_ctx->framebuffer_resized = false;
             VK_RecreateSwapChain(io_ctx, vk_ctx);
-            vk_ctx->current_frame = (vk_ctx->current_frame + 1) % vk_ctx->MAX_FRAMES_IN_FLIGHT;
+            vk_ctx->current_frame = (vk_ctx->current_frame + 1) % wrapper::MAX_FRAMES_IN_FLIGHT;
             continue;
         }
         else if (result != VK_SUCCESS)
@@ -329,11 +350,12 @@ MainLoop(void* ptr)
             exitWithError("failed to present swap chain image!");
         }
 
-        vk_ctx->current_frame = (vk_ctx->current_frame + 1) % vk_ctx->MAX_FRAMES_IN_FLIGHT;
+        vk_ctx->current_frame = (vk_ctx->current_frame + 1) % wrapper::MAX_FRAMES_IN_FLIGHT;
     }
     ProfileBuffersDestroy(ctx->vk_ctx);
     vkDeviceWaitIdle(ctx->vk_ctx->device);
     city::RoadDestroy(ctx->vk_ctx, ctx->road);
     city::CarSimDestroy(ctx->vk_ctx, ctx->car_sim);
+    city::BuildingDestroy(ctx->buildings);
     wrapper::VK_Cleanup(ctx, ctx->vk_ctx);
 }

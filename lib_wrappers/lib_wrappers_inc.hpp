@@ -24,6 +24,7 @@ DISABLE_WARNINGS_POP
 #include "third_party/tracy/tracy/Tracy.hpp"
 
 // ~mgj: user defined
+#include "lib_wrappers/render.hpp"
 #include "lib_wrappers/json.hpp"
 #include "lib_wrappers/cgltf.hpp"
 #include "lib_wrappers/vulkan_common.hpp"

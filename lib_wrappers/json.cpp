@@ -1,7 +1,7 @@
 namespace wrapper
 {
 static void
-OverpassHighwayParse(Arena* arena, String8 json, U64 hashmap_slot_count,
+OverpassNodeWayParse(Arena* arena, String8 json, U64 hashmap_slot_count,
                      city::NodeWays* out_node_ways)
 {
     out_node_ways->node_slot_count = hashmap_slot_count;

@@ -374,4 +374,8 @@ TextureDestroy(VulkanContext* vk_ctx, Texture* texture);
         }                                                                                          \
     }
 
+// ~mgj: sampler functions
+static void
+VkSamplerCreateInfoFromSamplerInfo(SamplerInfo* sampler, VkSamplerCreateInfo* out_sampler_info);
+
 } // namespace wrapper

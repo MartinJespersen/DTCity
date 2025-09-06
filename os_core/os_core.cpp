@@ -154,7 +154,7 @@ os_string_from_file_range(Arena* arena, OS_Handle file, Rng1U64 range)
     U64 actual_read_size = OS_FileRead(file, range, result.str);
     if (actual_read_size < result.size)
     {
-        arena_pop_to(arena, pre_pos + actual_read_size);
+        ArenaPopTo(arena, pre_pos + actual_read_size);
         result.size = actual_read_size;
     }
     return result;

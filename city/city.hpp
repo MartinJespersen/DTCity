@@ -3,6 +3,12 @@
 namespace city
 {
 
+struct BuildingVertex
+{
+    Vec3F32 pos;
+    Vec2F32 uv;
+};
+
 struct RoadNode
 {
     RoadNode* next;
@@ -54,16 +60,16 @@ struct RoadVertex
     Vec2F32 uv;
 };
 
-struct RoadWayListElement
+struct WayListElement
 {
-    RoadWayListElement* next;
+    WayListElement* next;
     Way* road_way;
 };
 
-struct RoadWayQueue
+struct WayQueue
 {
-    RoadWayListElement* first;
-    RoadWayListElement* last;
+    WayListElement* first;
+    WayListElement* last;
 };
 
 struct NodeUtm
@@ -77,7 +83,7 @@ struct NodeUtm
     };
     String8 utm_zone;
 
-    RoadWayQueue roadway_queue; // Linked list of RoadWays sharing this node
+    WayQueue way_queue; // Linked list of RoadWays sharing this node
 };
 
 struct NodeUtmSlot
@@ -194,10 +200,26 @@ struct CarSim
 
     Buffer<city::CarVertex> vertex_buffer;
     Buffer<U32> index_buffer;
-    wrapper::CgltfSampler sampler;
+    SamplerInfo sampler_info;
     Rng1F32 car_center_offset;
     // Graphics API
     wrapper::Car* car;
+};
+
+struct Buildings
+{
+    Arena* arena;
+    String8 data_cache_path;
+
+    NodeWays node_ways;
+    NodeUtmStructure node_utm_structure;
+
+    // wrapper::AssetId texture_asset_id;
+    wrapper::AssetId vertex_buffer_id;
+    wrapper::AssetId index_buffer_id;
+
+    Buffer<city::BuildingVertex> vertex_buffer;
+    Buffer<U32> index_buffer;
 };
 
 struct CarInstance
@@ -212,16 +234,16 @@ read_only static RoadNode g_road_node = {&g_road_node, 0, 0.0f, 0.0f};
 read_only static NodeUtm g_road_node_utm = {&g_road_node_utm, 0, 0.0f, 0.0f};
 ///////////////////////
 static Road*
-RoadCreate(wrapper::VulkanContext* vk_ctx, String8 cache_path);
+RoadCreate(wrapper::VulkanContext* vk_ctx, String8 cache_path, GCSBoundingBox* gcs_bbox);
 static void
 RoadDestroy(wrapper::VulkanContext* vk_ctx, Road* road);
 static String8
-RoadDataFetch(Arena* arena, Road* road, GCSBoundingBox* gcs_bbox);
+DataFetch(Arena* arena, String8 data_cache_path, String8 query, GCSBoundingBox* gcs_bbox);
 static Buffer<RoadVertex>
 RoadVertexBufferCreate(Road* road);
 static void
-RoadNodeStructureCreate(Arena* arena, NodeWays* node_ways, GCSBoundingBox* utm_bbox,
-                        U64 hashmap_slot_count, NodeUtmStructure* out_node_utm_structure);
+NodeStructureCreate(Arena* arena, NodeWays* node_ways, GCSBoundingBox* utm_bbox,
+                    U64 hashmap_slot_count, NodeUtmStructure* out_node_utm_structure);
 static TagResult
 TagFind(Arena* arena, Buffer<Tag> tags, String8 tag_to_find);
 static inline RoadNode*
@@ -241,4 +263,15 @@ static void
 CarSimDestroy(wrapper::VulkanContext* vk_ctx, CarSim* car_sim);
 static Buffer<CarInstance>
 CarUpdate(Arena* arena, CarSim* car, Road* road, F32 time_delta);
+
+// ~mgj: Buildings
+static Buildings*
+BuildingsCreate(String8 cache_path, F32 road_height, GCSBoundingBox* gcs_bbox);
+static void
+BuildingDestroy(Buildings* building);
+static void
+BuildingsBuffersCreate(Arena* arena, city::Buildings* buildings, F32 road_height,
+                       Buffer<city::BuildingVertex>* out_vertex_buffer,
+                       Buffer<U32>* out_index_buffer);
+
 } // namespace city

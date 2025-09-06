@@ -145,7 +145,7 @@ static LogScopeResult LogScopeEnd(Arena *arena) {
             ScratchEnd(scratch);
           }
       }
-      arena_pop_to(tctx_thread_local->log->arena, scope->pos);
+      ArenaPopTo(tctx_thread_local->log->arena, scope->pos);
     }
   }
   return result;

@@ -1,7 +1,7 @@
 namespace city
 {
 static Road*
-RoadCreate(wrapper::VulkanContext* vk_ctx, String8 cache_path)
+RoadCreate(wrapper::VulkanContext* vk_ctx, String8 cache_path, GCSBoundingBox* gcs_bbox)
 {
     ScratchScope scratch = ScratchScope(0, 0);
     Arena* arena = ArenaAlloc();
@@ -9,37 +9,30 @@ RoadCreate(wrapper::VulkanContext* vk_ctx, String8 cache_path)
     Road* road = PushStruct(arena, Road);
 
     road->openapi_data_cache_path =
-        Str8PathFromStr8List(arena, {cache_path, S("openapi_data.txt")});
+        Str8PathFromStr8List(arena, {cache_path, S("openapi_node_ways_highway.json")});
     road->arena = arena;
     road->w_road = wrapper::RoadCreate(vk_ctx, road);
     road->road_height = 10.0f;
     road->default_road_width = 2.0f;
 
-    GCSBoundingBox gcs_bbox = {.lat_btm_left = 56.16923976826141,
-                               .lon_btm_left = 10.1852768812041,
-                               .lat_top_right = 56.17371342689877,
-                               .lon_top_right = 10.198376789774187};
     // TODO: make this an input and check for input conditions
-
-    F64 out_northing_low = 0;
-    F64 out_easting_low = 0;
-    char zone_low[265];
-    UTM::LLtoUTM(gcs_bbox.lat_btm_left, gcs_bbox.lon_btm_left, out_easting_low, out_northing_low,
-                 zone_low);
-    F64 out_northing_high = 0;
-    F64 out_easting_high = 0;
-    char zone_high[265];
-    UTM::LLtoUTM(gcs_bbox.lat_top_right, gcs_bbox.lon_top_right, out_easting_high,
-                 out_northing_high, zone_high);
-
-    String8 content = RoadDataFetch(scratch.arena, road, &gcs_bbox);
-    wrapper::OverpassHighwayParse(road->arena, content, 100, &road->node_ways);
+    String8 query = S(R"(data=
+        [out:json] [timeout:25];
+        (
+          way["highway"](%f, %f, %f, %f);
+        );
+        out body;
+        >;
+        out skel qt;
+    )");
+    String8 content = DataFetch(scratch.arena, road->openapi_data_cache_path, query, gcs_bbox);
+    wrapper::OverpassNodeWayParse(road->arena, content, 100, &road->node_ways);
     NodeWays* node_ways = &road->node_ways;
 
     // ~mgj: Road Decision tree create
     U64 hashmap_slot_count = 100;
-    RoadNodeStructureCreate(road->arena, node_ways, &gcs_bbox, hashmap_slot_count,
-                            &road->node_utm_structure);
+    NodeStructureCreate(road->arena, node_ways, gcs_bbox, hashmap_slot_count,
+                        &road->node_utm_structure);
 
     road->vertex_buffer = RoadVertexBufferCreate(road);
 
@@ -161,18 +154,18 @@ UniqueNodeAndWayInsert(Arena* arena, U64 node_id, Way* road_way, Buffer<NodeUtmS
         node_inserted = 1;
     }
 
-    RoadWayListElement* road_way_element = PushStruct(arena, RoadWayListElement);
+    WayListElement* road_way_element = PushStruct(arena, WayListElement);
     road_way_element->road_way = road_way;
 
-    SLLQueuePush(node->roadway_queue.first, node->roadway_queue.last, road_way_element);
+    SLLQueuePush(node->way_queue.first, node->way_queue.last, road_way_element);
 
     *out = node;
     return node_inserted;
 }
 
 static void
-RoadNodeStructureCreate(Arena* arena, NodeWays* node_ways, GCSBoundingBox* gcs_bbox,
-                        U64 hashmap_slot_count, NodeUtmStructure* out_node_utm_structure)
+NodeStructureCreate(Arena* arena, NodeWays* node_ways, GCSBoundingBox* gcs_bbox,
+                    U64 hashmap_slot_count, NodeUtmStructure* out_node_utm_structure)
 {
     out_node_utm_structure->node_hashmap_size = hashmap_slot_count;
 
@@ -314,30 +307,21 @@ RoadVertexBufferCreate(Road* road)
     return vertex_buffer;
 }
 static String8
-RoadDataFetch(Arena* arena, Road* road, GCSBoundingBox* gcs_bbox)
+DataFetch(Arena* arena, String8 data_cache_path, String8 query, GCSBoundingBox* gcs_bbox)
 {
     HTTP_RequestParams params = {};
     params.method = HTTP_Method_Post;
     params.content_type = S("text/html");
 
-    const char* query = R"(data=
-        [out:json] [timeout:25];
-        (
-          way["highway"](%f, %f, %f, %f);
-        );
-        out body;
-        >;
-        out skel qt;
-    )";
     String8 query_str =
-        PushStr8F(arena, (char*)query, gcs_bbox->lat_btm_left, gcs_bbox->lon_btm_left,
+        PushStr8F(arena, (char*)query.str, gcs_bbox->lat_btm_left, gcs_bbox->lon_btm_left,
                   gcs_bbox->lat_top_right, gcs_bbox->lon_top_right);
 
     B32 read_from_cache = 0;
     String8 content = {0};
-    if (OS_FilePathExists(road->openapi_data_cache_path))
+    if (OS_FilePathExists(data_cache_path))
     {
-        OS_Handle file_handle = OS_FileOpen(OS_AccessFlag_Read, road->openapi_data_cache_path);
+        OS_Handle file_handle = OS_FileOpen(OS_AccessFlag_Read, data_cache_path);
         FileProperties file_props = OS_PropertiesFromFile(file_handle);
 
         content.str = PushArray(arena, U8, file_props.size);
@@ -368,8 +352,7 @@ RoadDataFetch(Arena* arena, Road* road, GCSBoundingBox* gcs_bbox)
         }
         content = Str8((U8*)response.body.str, response.body.size);
 
-        OS_Handle file_write_handle =
-            OS_FileOpen(OS_AccessFlag_Write, road->openapi_data_cache_path);
+        OS_Handle file_write_handle = OS_FileOpen(OS_AccessFlag_Write, data_cache_path);
         U64 bytes_written =
             OS_FileWrite(file_write_handle, {.min = 0, .max = content.size}, content.str);
         if (bytes_written != content.size)
@@ -409,7 +392,7 @@ RoadNodeIsCrossing(NodeUtm* node)
 {
     U32 way_count = 0;
     U32 is_part_of_crossing = 0;
-    for (Way* way = 0; node->roadway_queue.first; way = way->next)
+    for (Way* way = 0; node->way_queue.first; way = way->next)
     {
         way_count++;
     }
@@ -472,7 +455,7 @@ RoadIntersectionPointsFind(Road* road, RoadSegment* in_out_segment, Way* current
             Dist2F32(btm_of_road_line_segment.p0, btm_of_road_line_segment.p1);
         Vec2F32 shortest_distance_pt_btm = road_cross_section->btm;
 
-        for (RoadWayListElement* road_way_list = node->roadway_queue.first; road_way_list;
+        for (WayListElement* road_way_list = node->way_queue.first; road_way_list;
              road_way_list = road_way_list->next)
         {
             Way* way = road_way_list->road_way;
@@ -634,12 +617,12 @@ NeighbourNodeChoose(NodeUtm* node, Road* road)
 {
     // Calculate roadway count for the node
     U32 roadway_count = 0;
-    for (RoadWayListElement* way_element = node->roadway_queue.first; way_element;
+    for (WayListElement* way_element = node->way_queue.first; way_element;
          way_element = way_element->next)
     {
         roadway_count++;
     }
-    RoadWayListElement* way_element = node->roadway_queue.first;
+    WayListElement* way_element = node->way_queue.first;
 
     // Find random roadway
     U32 rand_num = RandomU32();
@@ -702,9 +685,10 @@ CarSimCreate(wrapper::VulkanContext* vk_ctx, U32 car_count, Road* road)
     // parse gltf file
     String8 gltf_path = S("../../../assets/cars/scene.gltf");
     wrapper::CgltfResult parsed_result = wrapper::CgltfParse(arena, gltf_path);
+    SamplerInfo sampler_info = wrapper::SamplerFromCgltfSampler(parsed_result.sampler);
     car_sim->vertex_buffer = parsed_result.vertex_buffer;
     car_sim->index_buffer = parsed_result.index_buffer;
-    car_sim->sampler = parsed_result.sampler;
+    car_sim->sampler_info = sampler_info;
 
     String8 car_texture_path = PushStr8Copy(arena, S("../../../textures/car_collection.ktx"));
     wrapper::AssetId car_texture_id = wrapper::AssetIdFromStr8(car_texture_path);
@@ -792,6 +776,122 @@ CarUpdate(Arena* arena, CarSim* car, Road* road, F32 time_delta)
         car_info->cur_pos = new_pos;
     }
     return instance_buffer;
+}
+// ~mgj: Buildings
+
+static Buildings*
+BuildingsCreate(String8 cache_path, F32 road_height, GCSBoundingBox* gcs_bbox)
+{
+    Arena* arena = ArenaAlloc();
+    Buildings* buildings = PushStruct(arena, Buildings);
+    buildings->arena = arena;
+    buildings->data_cache_path =
+        Str8PathFromStr8List(arena, {cache_path, S("openapi_node_ways_buildings.json")});
+
+    String8 query = S(R"(data=
+        [out:json] [timeout:25];
+        (
+          way["building"](%f, %f, %f, %f);
+        );
+        out body;
+        >;
+        out skel qt;
+    )");
+    String8 data = DataFetch(arena, buildings->data_cache_path, query, gcs_bbox);
+    wrapper::OverpassNodeWayParse(arena, data, 100, &buildings->node_ways);
+    U64 hashmap_slot_count = 100;
+    NodeStructureCreate(arena, &buildings->node_ways, gcs_bbox, hashmap_slot_count,
+                        &buildings->node_utm_structure);
+
+    buildings->vertex_buffer_id = wrapper::AssetIdFromStr8(S("buildings_vertex_buffer"));
+    buildings->index_buffer_id = wrapper::AssetIdFromStr8(S("buildings_index_buffer"));
+    city::BuildingsBuffersCreate(arena, buildings, road_height, &buildings->vertex_buffer,
+                                 &buildings->index_buffer);
+
+    return buildings;
+}
+
+static void
+BuildingDestroy(Buildings* building)
+{
+    wrapper::AssetManagerBufferFree(building->vertex_buffer_id);
+    wrapper::AssetManagerBufferFree(building->index_buffer_id);
+    ArenaRelease(building->arena);
+}
+
+static void
+BuildingsBuffersCreate(Arena* arena, Buildings* buildings, F32 road_height,
+                       Buffer<BuildingVertex>* out_vertex_buffer, Buffer<U32>* out_index_buffer)
+{
+    NodeWays* node_ways = &buildings->node_ways;
+    NodeUtmStructure* node_utm_structure = &buildings->node_utm_structure;
+    F32 building_height = 3;
+
+    // ~mgj: Calculate vertex buffer size based on node count
+    U32 vertex_count = 0;
+    U32 index_count = 0;
+    for (U32 i = 0; i < node_ways->ways.size; i++)
+    {
+        Way* way = &node_ways->ways.data[i];
+        // ~mgj: first and last node id should be the same
+        vertex_count += way->node_count * 2;
+        // ~mgj: count of index for Polyhedron (without ground floor) that makes up the building
+        // facade(roof+sides)
+        U64 roof_triangle_count = way->node_count - 2;
+        U64 sides_triangle_count = (way->node_count - 1) * 2;
+        U64 total_triangle_count = roof_triangle_count + sides_triangle_count;
+        index_count += total_triangle_count * 3;
+
+        Assert(way->node_ids[0] == way->node_ids[way->node_count - 1]);
+    }
+
+    Buffer<BuildingVertex> vertex_buffer = BufferAlloc<BuildingVertex>(arena, vertex_count);
+    Buffer<U32> index_buffer = BufferAlloc<U32>(arena, index_count);
+
+    U32 base_index_idx = 0;
+    U32 base_vertex_idx = 0;
+    for (U32 way_idx = 0; way_idx < node_ways->ways.size; way_idx++)
+    // for (U32 way_idx = 0; way_idx < 2; way_idx++)
+    {
+        Way* way = &node_ways->ways.data[way_idx];
+        // ~mgj: Create vertices
+        for (U32 node_idx = 0, vert_idx = base_vertex_idx; node_idx < way->node_count;
+             node_idx++, vert_idx += 2)
+        {
+            NodeUtm* utm_node = NodeUtmFind(node_utm_structure, way->node_ids[node_idx]);
+            vertex_buffer.data[vert_idx] = {.pos = {utm_node->pos.x, road_height, utm_node->pos.y}};
+            vertex_buffer.data[vert_idx + 1] = {
+                .pos = {utm_node->pos.x, road_height + building_height, utm_node->pos.y}};
+        }
+
+        // ~mgj Create sides
+        for (U32 node_idx = 0, vert_idx = base_vertex_idx, index_idx = base_index_idx;
+             node_idx < way->node_count - 1; node_idx++, vert_idx += 2, index_idx += 6)
+        {
+            index_buffer.data[index_idx] = vert_idx;
+            index_buffer.data[index_idx + 1] = vert_idx + 1;
+            index_buffer.data[index_idx + 2] = vert_idx + 2;
+            index_buffer.data[index_idx + 3] = vert_idx + 1;
+            index_buffer.data[index_idx + 4] = vert_idx + 3;
+            index_buffer.data[index_idx + 5] = vert_idx + 2;
+        }
+
+        base_index_idx += (way->node_count - 1) * 6;
+
+        // ~mgj: Create roof
+        for (U32 node_idx = 0, vert_idx = base_vertex_idx + 3, index_idx = base_index_idx;
+             node_idx < way->node_count - 2; node_idx += 1, vert_idx += 2, index_idx += 3)
+        {
+            index_buffer.data[index_idx] = base_vertex_idx + 1; // first node of the roof
+            index_buffer.data[index_idx + 1] = vert_idx;
+            index_buffer.data[index_idx + 2] = vert_idx + 2;
+        }
+
+        base_index_idx += (way->node_count - 2) * 3;
+        base_vertex_idx += (way->node_count) * 2;
+    }
+    *out_vertex_buffer = vertex_buffer;
+    *out_index_buffer = index_buffer;
 }
 
 } // namespace city

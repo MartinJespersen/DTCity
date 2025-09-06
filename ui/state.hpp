@@ -25,6 +25,7 @@ struct Context
     DT_Time* time;
     city::Road* road;
     city::CarSim* car_sim;
+    city::Buildings* buildings;
 
     async::Threads* thread_info;
     // TODO: change this. moves os global state for use in DLL

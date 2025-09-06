@@ -633,10 +633,10 @@ static void
 VK_SyncObjectsCreate(VulkanContext* vk_ctx)
 {
     vk_ctx->image_available_semaphores =
-        BufferAlloc<VkSemaphore>(vk_ctx->arena, vk_ctx->MAX_FRAMES_IN_FLIGHT);
+        BufferAlloc<VkSemaphore>(vk_ctx->arena, MAX_FRAMES_IN_FLIGHT);
     vk_ctx->render_finished_semaphores =
-        BufferAlloc<VkSemaphore>(vk_ctx->arena, vk_ctx->MAX_FRAMES_IN_FLIGHT);
-    vk_ctx->in_flight_fences = BufferAlloc<VkFence>(vk_ctx->arena, vk_ctx->MAX_FRAMES_IN_FLIGHT);
+        BufferAlloc<VkSemaphore>(vk_ctx->arena, MAX_FRAMES_IN_FLIGHT);
+    vk_ctx->in_flight_fences = BufferAlloc<VkFence>(vk_ctx->arena, MAX_FRAMES_IN_FLIGHT);
 
     VkSemaphoreCreateInfo semaphoreInfo{};
     semaphoreInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
@@ -645,7 +645,7 @@ VK_SyncObjectsCreate(VulkanContext* vk_ctx)
     fenceInfo.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
     fenceInfo.flags = VK_FENCE_CREATE_SIGNALED_BIT;
 
-    for (U32 i = 0; i < (U32)vk_ctx->MAX_FRAMES_IN_FLIGHT; i++)
+    for (U32 i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
     {
         if ((vkCreateSemaphore(vk_ctx->device, &semaphoreInfo, nullptr,
                                &vk_ctx->image_available_semaphores.data[i]) != VK_SUCCESS) ||
@@ -662,7 +662,7 @@ VK_SyncObjectsCreate(VulkanContext* vk_ctx)
 static void
 SyncObjectsDestroy(VulkanContext* vk_ctx)
 {
-    for (size_t i = 0; i < vk_ctx->MAX_FRAMES_IN_FLIGHT; i++)
+    for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
     {
         vkDestroySemaphore(vk_ctx->device, vk_ctx->image_available_semaphores.data[i], nullptr);
         vkDestroySemaphore(vk_ctx->device, vk_ctx->render_finished_semaphores.data[i], nullptr);
@@ -690,8 +690,7 @@ CommandBufferCreate(VkDevice device, VkCommandPool cmd_pool)
 static void
 VK_CommandBuffersCreate(VulkanContext* vk_ctx)
 {
-    vk_ctx->command_buffers =
-        BufferAlloc<VkCommandBuffer>(vk_ctx->arena, vk_ctx->MAX_FRAMES_IN_FLIGHT);
+    vk_ctx->command_buffers = BufferAlloc<VkCommandBuffer>(vk_ctx->arena, MAX_FRAMES_IN_FLIGHT);
     VkCommandBufferAllocateInfo allocInfo{};
     allocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
     allocInfo.commandPool = vk_ctx->command_pool;
@@ -1569,11 +1568,10 @@ SamplerCreate(VkDevice device, VkFilter filter, VkSamplerMipmapMode mipmap_mode,
 static void
 DescriptorPoolCreate(VulkanContext* vk_ctx)
 {
-    U32 max_frames_in_flight = vk_ctx->MAX_FRAMES_IN_FLIGHT;
     VkDescriptorPoolSize pool_sizes[] = {
         {VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
-         max_frames_in_flight * 2}, // 2 for both camera buffer and terrain buffer
-        {VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, max_frames_in_flight * 2},
+         MAX_FRAMES_IN_FLIGHT * 2}, // 2 for both camera buffer and terrain buffer
+        {VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, MAX_FRAMES_IN_FLIGHT * 2},
     };
     U32 pool_size_count = ArrayCount(pool_sizes);
 
@@ -1582,7 +1580,7 @@ DescriptorPoolCreate(VulkanContext* vk_ctx)
     poolInfo.poolSizeCount = pool_size_count;
     poolInfo.pPoolSizes = pool_sizes;
 
-    poolInfo.maxSets = max_frames_in_flight * 3;
+    poolInfo.maxSets = MAX_FRAMES_IN_FLIGHT * 3;
 
     if (vkCreateDescriptorPool(vk_ctx->device, &poolInfo, nullptr, &vk_ctx->descriptor_pool) !=
         VK_SUCCESS)
@@ -1733,4 +1731,70 @@ ClearDepthAndColorImage(VkCommandBuffer cmd_buf, VkImage image_color, VkImage im
     vkCmdPipelineBarrier2(cmd_buf, &render_info);
 }
 
+static VkFilter
+VkFilterFromFilter(Filter filter)
+{
+    switch (filter)
+    {
+    case Filter_Nearest:
+        return VK_FILTER_NEAREST;
+    case Filter_Linear:
+        return VK_FILTER_LINEAR;
+    default:
+        AssertAlways(1);
+    }
+    return VK_FILTER_NEAREST;
+}
+
+static VkSamplerMipmapMode
+VkSamplerMipmapModeFromMipMapMode(MipMapMode mip_map_mode)
+{
+    switch (mip_map_mode)
+    {
+    case MipMapMode_Nearest:
+        return VK_SAMPLER_MIPMAP_MODE_NEAREST;
+    case MipMapMode_Linear:
+        return VK_SAMPLER_MIPMAP_MODE_LINEAR;
+    default:
+        AssertAlways(1);
+    }
+    return VK_SAMPLER_MIPMAP_MODE_NEAREST;
+}
+
+static VkSamplerAddressMode
+VkSamplerAddressModeFromSamplerAddressMode(SamplerAddressMode address_mode)
+{
+    switch (address_mode)
+    {
+    case SamplerAddressMode_Repeat:
+        return VK_SAMPLER_ADDRESS_MODE_REPEAT;
+    case SamplerAddressMode_MirroredRepeat:
+        return VK_SAMPLER_ADDRESS_MODE_MIRRORED_REPEAT;
+    case SamplerAddressMode_ClampToEdge:
+        return VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+    default:
+        AssertAlways(1);
+    }
+    return VK_SAMPLER_ADDRESS_MODE_REPEAT;
+}
+// ~mgj: Sampler
+static void
+VkSamplerCreateInfoFromSamplerInfo(SamplerInfo* sampler, VkSamplerCreateInfo* out_sampler_info)
+{
+    out_sampler_info->sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
+    out_sampler_info->magFilter = VkFilterFromFilter(sampler->mag_filter);
+    out_sampler_info->minFilter = VkFilterFromFilter(sampler->min_filter);
+    out_sampler_info->addressModeU =
+        VkSamplerAddressModeFromSamplerAddressMode(sampler->address_mode_u);
+    out_sampler_info->addressModeV =
+        VkSamplerAddressModeFromSamplerAddressMode(sampler->address_mode_v);
+    out_sampler_info->addressModeW = out_sampler_info->addressModeU;
+    out_sampler_info->compareOp = VK_COMPARE_OP_NEVER;
+    out_sampler_info->unnormalizedCoordinates = VK_FALSE;
+    out_sampler_info->mipmapMode = VkSamplerMipmapModeFromMipMapMode(sampler->mip_map_mode);
+    out_sampler_info->mipLodBias = 0.0f;
+    out_sampler_info->minLod = 0.0f;
+    out_sampler_info->maxLod = 0.0f;
+    out_sampler_info->borderColor = VK_BORDER_COLOR_INT_OPAQUE_BLACK;
+}
 } // namespace wrapper
