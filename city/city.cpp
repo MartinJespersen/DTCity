@@ -1,7 +1,8 @@
 namespace city
 {
 static Road*
-RoadCreate(wrapper::VulkanContext* vk_ctx, String8 cache_path, GCSBoundingBox* gcs_bbox)
+RoadCreate(wrapper::VulkanContext* vk_ctx, String8 texture_path, String8 cache_path,
+           GCSBoundingBox* gcs_bbox)
 {
     ScratchScope scratch = ScratchScope(0, 0);
     Arena* arena = ArenaAlloc();
@@ -11,7 +12,6 @@ RoadCreate(wrapper::VulkanContext* vk_ctx, String8 cache_path, GCSBoundingBox* g
     road->openapi_data_cache_path =
         Str8PathFromStr8List(arena, {cache_path, S("openapi_node_ways_highway.json")});
     road->arena = arena;
-    road->w_road = wrapper::RoadCreate(vk_ctx, road);
     road->road_height = 10.0f;
     road->default_road_width = 2.0f;
 
@@ -34,7 +34,18 @@ RoadCreate(wrapper::VulkanContext* vk_ctx, String8 cache_path, GCSBoundingBox* g
     NodeStructureCreate(road->arena, node_ways, gcs_bbox, hashmap_slot_count,
                         &road->node_utm_structure);
 
-    road->vertex_buffer = RoadVertexBufferCreate(road);
+    road->asset_vertex_info =
+        render::AssetInfoCreate(S("road_vertex_buffer"), render::AssetItemType_Buffer,
+                                render::PipelineUsageType_VertexBuffer);
+    road->asset_index_info =
+        render::AssetInfoCreate(S("road_index_buffer"), render::AssetItemType_Buffer,
+                                render::PipelineUsageType_IndexBuffer);
+    road->asset_texture_info = render::AssetInfoCreate(
+        S("road_texture"), render::AssetItemType_Texture, render::PipelineUsageType_3D);
+
+    road->texture_path = Str8PathFromStr8List(road->arena, {texture_path, S("road_texture.ktx2")});
+
+    RoadVertexBufferCreate(road, &road->vertex_buffer, &road->index_buffer);
 
     return road;
 }
@@ -42,7 +53,10 @@ RoadCreate(wrapper::VulkanContext* vk_ctx, String8 cache_path, GCSBoundingBox* g
 static void
 RoadDestroy(wrapper::VulkanContext* vk_ctx, Road* road)
 {
-    wrapper::RoadDestroy(road, vk_ctx);
+    wrapper::AssetManagerBufferFree(road->asset_vertex_info.id);
+    wrapper::AssetManagerBufferFree(road->asset_index_info.id);
+    wrapper::AssetManagerTextureFree(road->asset_texture_info.id);
+
     ArenaRelease(road->arena);
 }
 
@@ -225,8 +239,9 @@ TagValueF32Get(Arena* arena, String8 key, F32 default_width, Buffer<Tag> tags)
     return road_width;
 }
 
-static Buffer<RoadVertex>
-RoadVertexBufferCreate(Road* road)
+static void
+RoadVertexBufferCreate(Road* road, Buffer<Vertex3D>* out_vertex_buffer,
+                       Buffer<U32>* out_index_buffer)
 {
     ScratchScope scratch = ScratchScope(0, 0);
     NodeWays* node_ways = &road->node_ways;
@@ -242,11 +257,14 @@ RoadVertexBufferCreate(Road* road)
     }
 
     // 6 vertices per road segment quad
-    U64 total_vert_count = total_road_segment_count * 6;
+    U64 total_vert_count = total_road_segment_count * 4;
+    U64 total_index_count = total_road_segment_count * 6;
 
-    Buffer<RoadVertex> vertex_buffer = BufferAlloc<RoadVertex>(road->arena, total_vert_count);
+    Buffer<Vertex3D> vertex_buffer = BufferAlloc<Vertex3D>(road->arena, total_vert_count);
+    Buffer<U32> index_buffer = BufferAlloc<U32>(road->arena, total_index_count);
 
-    U32 current_vertex_index = 0;
+    U32 current_vertex_idx = 0;
+    U32 current_index_idx = 0;
     for (U32 way_index = 0; way_index < road->node_ways.ways.size; way_index++)
     {
         Way* way = &road->node_ways.ways.data[way_index];
@@ -273,7 +291,8 @@ RoadVertexBufferCreate(Road* road)
         if (way->node_count == 2)
         {
             RoadIntersectionPointsFind(road, &road_segment_prev, way);
-            QuadToBufferAdd(&road_segment_prev, vertex_buffer, &current_vertex_index);
+            QuadToBufferAdd(&road_segment_prev, vertex_buffer, index_buffer, road->road_height,
+                            &current_vertex_idx, &current_index_idx);
         }
         else
         {
@@ -292,11 +311,13 @@ RoadVertexBufferCreate(Road* road)
                                                          road_width);
 
                 RoadIntersectionPointsFind(road, &road_segment_prev, way);
-                QuadToBufferAdd(&road_segment_prev, vertex_buffer, &current_vertex_index);
+                QuadToBufferAdd(&road_segment_prev, vertex_buffer, index_buffer, road->road_height,
+                                &current_vertex_idx, &current_index_idx);
                 if (node_idx == way->node_count - 2)
                 {
                     RoadIntersectionPointsFind(road, &road_segment_cur, way);
-                    QuadToBufferAdd(&road_segment_cur, vertex_buffer, &current_vertex_index);
+                    QuadToBufferAdd(&road_segment_cur, vertex_buffer, index_buffer,
+                                    road->road_height, &current_vertex_idx, &current_index_idx);
                 }
 
                 road_segment_prev = road_segment_cur;
@@ -304,7 +325,8 @@ RoadVertexBufferCreate(Road* road)
             }
         }
     }
-    return vertex_buffer;
+    *out_vertex_buffer = vertex_buffer;
+    *out_index_buffer = index_buffer;
 }
 static String8
 DataFetch(Arena* arena, String8 data_cache_path, String8 query, GCSBoundingBox* gcs_bbox)
@@ -364,8 +386,15 @@ DataFetch(Arena* arena, String8 data_cache_path, String8 query, GCSBoundingBox* 
     return content;
 }
 
+static Vec3F32
+HeightDimAdd(Vec2F32 pos, F32 height)
+{
+    return {pos.x, height, pos.y};
+}
+
 static void
-QuadToBufferAdd(RoadSegment* road_segment, Buffer<RoadVertex> buffer, U32* cur_idx)
+QuadToBufferAdd(RoadSegment* road_segment, Buffer<Vertex3D> buffer, Buffer<U32> indices,
+                F32 road_height, U32* cur_vertex_idx, U32* cur_index_idx)
 {
     F32 road_width = Dist2F32(road_segment->start.top, road_segment->start.btm);
     F32 top_tex_scaled = Dist2F32(road_segment->start.top, road_segment->end.top) / road_width;
@@ -376,15 +405,29 @@ QuadToBufferAdd(RoadSegment* road_segment, Buffer<RoadVertex> buffer, U32* cur_i
     const F32 uv_y_start = 0.5f - (F32)btm_tex_scaled;
     const F32 uv_y_end = 0.5f + (F32)top_tex_scaled;
 
-    // first triangle
-    buffer.data[(*cur_idx)++] = {.pos = road_segment->start.top, .uv = {uv_x_top, uv_y_start}};
-    buffer.data[(*cur_idx)++] = {.pos = road_segment->start.btm, .uv = {uv_x_btm, uv_y_start}};
-    buffer.data[(*cur_idx)++] = {.pos = road_segment->end.top, .uv = {uv_x_top, uv_y_end}};
+    U32 base_vertex_idx = *cur_vertex_idx;
+    U32 base_index_idx = *cur_index_idx;
 
-    // second triangle
-    buffer.data[(*cur_idx)++] = {.pos = road_segment->start.btm, .uv = {uv_x_btm, uv_y_start}};
-    buffer.data[(*cur_idx)++] = {.pos = road_segment->end.top, .uv = {uv_x_top, uv_y_end}};
-    buffer.data[(*cur_idx)++] = {.pos = road_segment->end.btm, .uv = {uv_x_btm, uv_y_end}};
+    // quad of vertices
+    buffer.data[base_vertex_idx] = {.pos = HeightDimAdd(road_segment->start.top, road_height),
+                                    .uv = {uv_x_top, uv_y_start}};
+    buffer.data[base_vertex_idx + 1] = {.pos = HeightDimAdd(road_segment->start.btm, road_height),
+                                        .uv = {uv_x_btm, uv_y_start}};
+    buffer.data[base_vertex_idx + 2] = {.pos = HeightDimAdd(road_segment->end.top, road_height),
+                                        .uv = {uv_x_top, uv_y_end}};
+    buffer.data[base_vertex_idx + 3] = {.pos = HeightDimAdd(road_segment->end.btm, road_height),
+                                        .uv = {uv_x_btm, uv_y_end}};
+
+    // creating quad from
+    indices.data[base_index_idx] = base_vertex_idx;
+    indices.data[base_index_idx + 1] = base_vertex_idx + 1;
+    indices.data[base_index_idx + 2] = base_vertex_idx + 2;
+    indices.data[base_index_idx + 3] = base_vertex_idx + 1;
+    indices.data[base_index_idx + 4] = base_vertex_idx + 2;
+    indices.data[base_index_idx + 5] = base_vertex_idx + 3;
+
+    *cur_vertex_idx += 4;
+    *cur_index_idx += 6;
 }
 
 static B32
@@ -685,13 +728,13 @@ CarSimCreate(wrapper::VulkanContext* vk_ctx, U32 car_count, Road* road)
     // parse gltf file
     String8 gltf_path = S("../../../assets/cars/scene.gltf");
     wrapper::CgltfResult parsed_result = wrapper::CgltfParse(arena, gltf_path);
-    SamplerInfo sampler_info = wrapper::SamplerFromCgltfSampler(parsed_result.sampler);
+    render::SamplerInfo sampler_info = wrapper::SamplerFromCgltfSampler(parsed_result.sampler);
     car_sim->vertex_buffer = parsed_result.vertex_buffer;
     car_sim->index_buffer = parsed_result.index_buffer;
     car_sim->sampler_info = sampler_info;
 
     String8 car_texture_path = PushStr8Copy(arena, S("../../../textures/car_collection.ktx"));
-    wrapper::AssetId car_texture_id = wrapper::AssetIdFromStr8(car_texture_path);
+    render::AssetId car_texture_id = render::AssetIdFromStr8(car_texture_path);
 
     car_sim->car = wrapper::CarCreate(car_texture_id, car_texture_path, parsed_result.sampler,
                                       car_sim->vertex_buffer, car_sim->index_buffer);
@@ -780,7 +823,7 @@ CarUpdate(Arena* arena, CarSim* car, Road* road, F32 time_delta)
 // ~mgj: Buildings
 
 static Buildings*
-BuildingsCreate(String8 cache_path, F32 road_height, GCSBoundingBox* gcs_bbox)
+BuildingsCreate(String8 cache_path, String8 texture_path, F32 road_height, GCSBoundingBox* gcs_bbox)
 {
     Arena* arena = ArenaAlloc();
     Buildings* buildings = PushStruct(arena, Buildings);
@@ -803,8 +846,16 @@ BuildingsCreate(String8 cache_path, F32 road_height, GCSBoundingBox* gcs_bbox)
     NodeStructureCreate(arena, &buildings->node_ways, gcs_bbox, hashmap_slot_count,
                         &buildings->node_utm_structure);
 
-    buildings->vertex_buffer_id = wrapper::AssetIdFromStr8(S("buildings_vertex_buffer"));
-    buildings->index_buffer_id = wrapper::AssetIdFromStr8(S("buildings_index_buffer"));
+    buildings->vertex_buffer_info =
+        render::AssetInfoCreate(S("buildings_vertex_buffer"), render::AssetItemType_Buffer,
+                                render::PipelineUsageType_VertexBuffer);
+    buildings->texture_info = render::AssetInfoCreate(
+        S("buildings_texture"), render::AssetItemType_Texture, render::PipelineUsageType_3D);
+    buildings->index_buffer_info =
+        render::AssetInfoCreate(S("buildings_index_buffer"), render::AssetItemType_Buffer,
+                                render::PipelineUsageType_IndexBuffer);
+    buildings->texture_path = Str8PathFromStr8List(arena, {texture_path, S("brick_wall.ktx2")});
+
     city::BuildingsBuffersCreate(arena, buildings, road_height, &buildings->vertex_buffer,
                                  &buildings->index_buffer);
 
@@ -814,14 +865,17 @@ BuildingsCreate(String8 cache_path, F32 road_height, GCSBoundingBox* gcs_bbox)
 static void
 BuildingDestroy(Buildings* building)
 {
-    wrapper::AssetManagerBufferFree(building->vertex_buffer_id);
-    wrapper::AssetManagerBufferFree(building->index_buffer_id);
+    wrapper::AssetManagerBufferFree(building->vertex_buffer_info.id);
+    wrapper::AssetManagerBufferFree(building->index_buffer_info.id);
+    wrapper::AssetManagerTextureFree(building->texture_info.id);
     ArenaRelease(building->arena);
 }
 
+// TODO: Built the roof, which requires a way to divide the concave polygons (that are the
+// buildings) and divide it into convex parts
 static void
 BuildingsBuffersCreate(Arena* arena, Buildings* buildings, F32 road_height,
-                       Buffer<BuildingVertex>* out_vertex_buffer, Buffer<U32>* out_index_buffer)
+                       Buffer<Vertex3D>* out_vertex_buffer, Buffer<U32>* out_index_buffer)
 {
     NodeWays* node_ways = &buildings->node_ways;
     NodeUtmStructure* node_utm_structure = &buildings->node_utm_structure;
@@ -834,61 +888,73 @@ BuildingsBuffersCreate(Arena* arena, Buildings* buildings, F32 road_height,
     {
         Way* way = &node_ways->ways.data[i];
         // ~mgj: first and last node id should be the same
-        vertex_count += way->node_count * 2;
+        vertex_count += (way->node_count - 1) * 4;
         // ~mgj: count of index for Polyhedron (without ground floor) that makes up the building
         // facade(roof+sides)
-        U64 roof_triangle_count = way->node_count - 2;
+        // U64 roof_triangle_count = way->node_count - 2;
         U64 sides_triangle_count = (way->node_count - 1) * 2;
-        U64 total_triangle_count = roof_triangle_count + sides_triangle_count;
+        // U64 total_triangle_count = roof_triangle_count + sides_triangle_count;
+        U64 total_triangle_count = sides_triangle_count;
         index_count += total_triangle_count * 3;
 
         Assert(way->node_ids[0] == way->node_ids[way->node_count - 1]);
     }
 
-    Buffer<BuildingVertex> vertex_buffer = BufferAlloc<BuildingVertex>(arena, vertex_count);
+    Buffer<Vertex3D> vertex_buffer = BufferAlloc<Vertex3D>(arena, vertex_count);
     Buffer<U32> index_buffer = BufferAlloc<U32>(arena, index_count);
 
     U32 base_index_idx = 0;
     U32 base_vertex_idx = 0;
     for (U32 way_idx = 0; way_idx < node_ways->ways.size; way_idx++)
-    // for (U32 way_idx = 0; way_idx < 2; way_idx++)
     {
         Way* way = &node_ways->ways.data[way_idx];
         // ~mgj: Create vertices
-        for (U32 node_idx = 0, vert_idx = base_vertex_idx; node_idx < way->node_count;
-             node_idx++, vert_idx += 2)
+        for (U32 node_idx = 0, vert_idx = base_vertex_idx; node_idx < way->node_count - 1;
+             node_idx++, vert_idx += 4)
         {
             NodeUtm* utm_node = NodeUtmFind(node_utm_structure, way->node_ids[node_idx]);
-            vertex_buffer.data[vert_idx] = {.pos = {utm_node->pos.x, road_height, utm_node->pos.y}};
+            NodeUtm* utm_node_next = NodeUtmFind(node_utm_structure, way->node_ids[node_idx + 1]);
+            F32 side_width = Length2F32(Sub2F32(utm_node->pos, utm_node_next->pos));
+
+            vertex_buffer.data[vert_idx] = {.pos = {utm_node->pos.x, road_height, utm_node->pos.y},
+                                            .uv = {0.0f, 0.0f}};
             vertex_buffer.data[vert_idx + 1] = {
-                .pos = {utm_node->pos.x, road_height + building_height, utm_node->pos.y}};
+                .pos = {utm_node->pos.x, road_height + building_height, utm_node->pos.y},
+                .uv = {0.0f, building_height}};
+
+            vertex_buffer.data[vert_idx + 2] = {
+                .pos = {utm_node_next->pos.x, road_height, utm_node_next->pos.y},
+                .uv = {side_width, 0.0f}};
+            vertex_buffer.data[vert_idx + 3] = {
+                .pos = {utm_node_next->pos.x, road_height + building_height, utm_node_next->pos.y},
+                .uv = {side_width, building_height}};
         }
 
         // ~mgj Create sides
         for (U32 node_idx = 0, vert_idx = base_vertex_idx, index_idx = base_index_idx;
-             node_idx < way->node_count - 1; node_idx++, vert_idx += 2, index_idx += 6)
+             node_idx < way->node_count - 1; node_idx++, vert_idx += 4, index_idx += 6)
         {
             index_buffer.data[index_idx] = vert_idx;
             index_buffer.data[index_idx + 1] = vert_idx + 1;
             index_buffer.data[index_idx + 2] = vert_idx + 2;
             index_buffer.data[index_idx + 3] = vert_idx + 1;
-            index_buffer.data[index_idx + 4] = vert_idx + 3;
-            index_buffer.data[index_idx + 5] = vert_idx + 2;
+            index_buffer.data[index_idx + 4] = vert_idx + 2;
+            index_buffer.data[index_idx + 5] = vert_idx + 3;
         }
 
         base_index_idx += (way->node_count - 1) * 6;
 
         // ~mgj: Create roof
-        for (U32 node_idx = 0, vert_idx = base_vertex_idx + 3, index_idx = base_index_idx;
-             node_idx < way->node_count - 2; node_idx += 1, vert_idx += 2, index_idx += 3)
-        {
-            index_buffer.data[index_idx] = base_vertex_idx + 1; // first node of the roof
-            index_buffer.data[index_idx + 1] = vert_idx;
-            index_buffer.data[index_idx + 2] = vert_idx + 2;
-        }
+        // for (U32 node_idx = 0, vert_idx = base_vertex_idx + 3, index_idx = base_index_idx;
+        //      node_idx < way->node_count - 2; node_idx += 1, vert_idx += 4, index_idx += 3)
+        // {
+        //     index_buffer.data[index_idx] = base_vertex_idx + 1; // first node of the roof
+        //     index_buffer.data[index_idx + 1] = vert_idx;
+        //     index_buffer.data[index_idx + 2] = vert_idx + 4;
+        // }
 
-        base_index_idx += (way->node_count - 2) * 3;
-        base_vertex_idx += (way->node_count) * 2;
+        // base_index_idx += (way->node_count - 2) * 3;
+        base_vertex_idx += (way->node_count - 1) * 4;
     }
     *out_vertex_buffer = vertex_buffer;
     *out_index_buffer = index_buffer;

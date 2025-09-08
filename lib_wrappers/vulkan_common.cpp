@@ -1607,8 +1607,9 @@ DescriptorSetLayoutCreate(VkDevice device, VkDescriptorSetLayoutBinding* binding
 }
 
 static Buffer<VkDescriptorSet>
-DescriptorSetCreate(Arena* arena, VkDevice device, VkDescriptorPool desc_pool,
-                    VkDescriptorSetLayout desc_set_layout, Texture* texture, U32 frames_in_flight)
+DescriptorSetBufferCreate(Arena* arena, VkDevice device, VkDescriptorPool desc_pool,
+                          VkDescriptorSetLayout desc_set_layout, Texture* texture,
+                          U32 frames_in_flight)
 {
     ScratchScope scratch = ScratchScope(&arena, 1);
     Buffer<VkDescriptorSetLayout> layouts =
@@ -1654,6 +1655,47 @@ DescriptorSetCreate(Arena* arena, VkDevice device, VkDescriptorPool desc_pool,
 
     return desc_sets;
 }
+
+static VkDescriptorSet
+DescriptorSetCreate(Arena* arena, VkDevice device, VkDescriptorPool desc_pool,
+                    VkDescriptorSetLayout desc_set_layout, Texture* texture, U32 frames_in_flight)
+{
+    ScratchScope scratch = ScratchScope(&arena, 1);
+
+    VkDescriptorSetLayout layouts[] = {desc_set_layout};
+    VkDescriptorSetAllocateInfo allocInfo{};
+    allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+    allocInfo.descriptorPool = desc_pool;
+    allocInfo.descriptorSetCount = ArrayCount(layouts);
+    allocInfo.pSetLayouts = layouts;
+
+    VkDescriptorSet desc_set;
+    if (vkAllocateDescriptorSets(device, &allocInfo, &desc_set) != VK_SUCCESS)
+    {
+        exitWithError("DescriptorSetCreate: failed to allocate descriptor sets!");
+    }
+
+    VkDescriptorImageInfo image_info{};
+    image_info.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+    image_info.imageView = texture->image_resource.image_view_resource.image_view;
+    image_info.sampler = texture->sampler;
+
+    VkWriteDescriptorSet texture_sampler_desc{};
+    texture_sampler_desc.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+    texture_sampler_desc.dstSet = desc_set;
+    texture_sampler_desc.dstBinding = 0;
+    texture_sampler_desc.dstArrayElement = 0;
+    texture_sampler_desc.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+    texture_sampler_desc.descriptorCount = 1;
+    texture_sampler_desc.pImageInfo = &image_info;
+
+    VkWriteDescriptorSet descriptors[] = {texture_sampler_desc};
+
+    vkUpdateDescriptorSets(device, ArrayCount(descriptors), descriptors, 0, nullptr);
+
+    return desc_set;
+}
+
 static void
 ClearDepthAndColorImage(VkCommandBuffer cmd_buf, VkImage image_color, VkImage image_depth,
                         VkClearColorValue clear_color,
@@ -1732,13 +1774,13 @@ ClearDepthAndColorImage(VkCommandBuffer cmd_buf, VkImage image_color, VkImage im
 }
 
 static VkFilter
-VkFilterFromFilter(Filter filter)
+VkFilterFromFilter(render::Filter filter)
 {
     switch (filter)
     {
-    case Filter_Nearest:
+    case render::Filter_Nearest:
         return VK_FILTER_NEAREST;
-    case Filter_Linear:
+    case render::Filter_Linear:
         return VK_FILTER_LINEAR;
     default:
         AssertAlways(1);
@@ -1747,13 +1789,13 @@ VkFilterFromFilter(Filter filter)
 }
 
 static VkSamplerMipmapMode
-VkSamplerMipmapModeFromMipMapMode(MipMapMode mip_map_mode)
+VkSamplerMipmapModeFromMipMapMode(render::MipMapMode mip_map_mode)
 {
     switch (mip_map_mode)
     {
-    case MipMapMode_Nearest:
+    case render::MipMapMode_Nearest:
         return VK_SAMPLER_MIPMAP_MODE_NEAREST;
-    case MipMapMode_Linear:
+    case render::MipMapMode_Linear:
         return VK_SAMPLER_MIPMAP_MODE_LINEAR;
     default:
         AssertAlways(1);
@@ -1762,15 +1804,15 @@ VkSamplerMipmapModeFromMipMapMode(MipMapMode mip_map_mode)
 }
 
 static VkSamplerAddressMode
-VkSamplerAddressModeFromSamplerAddressMode(SamplerAddressMode address_mode)
+VkSamplerAddressModeFromSamplerAddressMode(render::SamplerAddressMode address_mode)
 {
     switch (address_mode)
     {
-    case SamplerAddressMode_Repeat:
+    case render::SamplerAddressMode_Repeat:
         return VK_SAMPLER_ADDRESS_MODE_REPEAT;
-    case SamplerAddressMode_MirroredRepeat:
+    case render::SamplerAddressMode_MirroredRepeat:
         return VK_SAMPLER_ADDRESS_MODE_MIRRORED_REPEAT;
-    case SamplerAddressMode_ClampToEdge:
+    case render::SamplerAddressMode_ClampToEdge:
         return VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
     default:
         AssertAlways(1);
@@ -1779,7 +1821,8 @@ VkSamplerAddressModeFromSamplerAddressMode(SamplerAddressMode address_mode)
 }
 // ~mgj: Sampler
 static void
-VkSamplerCreateInfoFromSamplerInfo(SamplerInfo* sampler, VkSamplerCreateInfo* out_sampler_info)
+VkSamplerCreateInfoFromSamplerInfo(render::SamplerInfo* sampler,
+                                   VkSamplerCreateInfo* out_sampler_info)
 {
     out_sampler_info->sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
     out_sampler_info->magFilter = VkFilterFromFilter(sampler->mag_filter);

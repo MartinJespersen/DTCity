@@ -11,3 +11,4 @@ DISABLE_WARNINGS_POP
 #include "lib_wrappers/cgltf.cpp"
 #include "lib_wrappers/vulkan_common.cpp"
 #include "lib_wrappers/vulkan.cpp"
+#include "lib_wrappers/render.cpp"

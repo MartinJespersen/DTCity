@@ -135,6 +135,8 @@ struct Texture
     BufferAllocation staging_buffer;
     ImageResource image_resource;
     VkSampler sampler;
+    VkDescriptorSet descriptor_set;
+    render::PipelineUsageType pipeline_usage_type;
     S32 width;
     S32 height;
     U32 mip_level_count;
@@ -252,9 +254,13 @@ SamplerCreate(VkDevice device, VkFilter filter, VkSamplerMipmapMode mipmap_mode,
 // ~mgj: Descriptor Related Functions
 static void
 DescriptorPoolCreate(VulkanContext* vk_ctx);
-static Buffer<VkDescriptorSet>
+static VkDescriptorSet
 DescriptorSetCreate(Arena* arena, VkDevice device, VkDescriptorPool desc_pool,
                     VkDescriptorSetLayout desc_set_layout, Texture* texture, U32 frames_in_flight);
+static Buffer<VkDescriptorSet>
+DescriptorSetBufferCreate(Arena* arena, VkDevice device, VkDescriptorPool desc_pool,
+                          VkDescriptorSetLayout desc_set_layout, Texture* texture,
+                          U32 frames_in_flight);
 
 static VkDescriptorSetLayout
 DescriptorSetLayoutCreate(VkDevice device, VkDescriptorSetLayoutBinding* bindings,
@@ -376,6 +382,7 @@ TextureDestroy(VulkanContext* vk_ctx, Texture* texture);
 
 // ~mgj: sampler functions
 static void
-VkSamplerCreateInfoFromSamplerInfo(SamplerInfo* sampler, VkSamplerCreateInfo* out_sampler_info);
+VkSamplerCreateInfoFromSamplerInfo(render::SamplerInfo* sampler,
+                                   VkSamplerCreateInfo* out_sampler_info);
 
 } // namespace wrapper

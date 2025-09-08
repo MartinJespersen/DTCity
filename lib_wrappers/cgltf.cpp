@@ -1,57 +1,57 @@
 
 namespace wrapper
 {
-static SamplerInfo
+static render::SamplerInfo
 SamplerFromCgltfSampler(CgltfSampler sampler)
 {
-    Filter min_filter = Filter_Nearest;
-    Filter mag_filter = Filter_Nearest;
-    MipMapMode mipmap_mode = MipMapMode_Nearest;
-    SamplerAddressMode address_mode_u = SamplerAddressMode_Repeat;
-    SamplerAddressMode address_mode_v = SamplerAddressMode_Repeat;
+    render::Filter min_filter = render::Filter_Nearest;
+    render::Filter mag_filter = render::Filter_Nearest;
+    render::MipMapMode mipmap_mode = render::MipMapMode_Nearest;
+    render::SamplerAddressMode address_mode_u = render::SamplerAddressMode_Repeat;
+    render::SamplerAddressMode address_mode_v = render::SamplerAddressMode_Repeat;
 
     switch (sampler.min_filter)
     {
     case cgltf_filter_type_nearest:
     {
-        min_filter = Filter_Nearest;
-        mag_filter = Filter_Nearest;
-        mipmap_mode = MipMapMode_Nearest;
+        min_filter = render::Filter_Nearest;
+        mag_filter = render::Filter_Nearest;
+        mipmap_mode = render::MipMapMode_Nearest;
     }
     break;
     case cgltf_filter_type_linear:
     {
-        min_filter = Filter_Linear;
-        mag_filter = Filter_Linear;
-        mipmap_mode = MipMapMode_Nearest;
+        min_filter = render::Filter_Linear;
+        mag_filter = render::Filter_Linear;
+        mipmap_mode = render::MipMapMode_Nearest;
     }
     break;
     case cgltf_filter_type_nearest_mipmap_nearest:
     {
-        min_filter = Filter_Nearest;
-        mag_filter = Filter_Nearest;
-        mipmap_mode = MipMapMode_Nearest;
+        min_filter = render::Filter_Nearest;
+        mag_filter = render::Filter_Nearest;
+        mipmap_mode = render::MipMapMode_Nearest;
     }
     break;
     case cgltf_filter_type_linear_mipmap_nearest:
     {
-        min_filter = Filter_Linear;
-        mag_filter = Filter_Linear;
-        mipmap_mode = MipMapMode_Nearest;
+        min_filter = render::Filter_Linear;
+        mag_filter = render::Filter_Linear;
+        mipmap_mode = render::MipMapMode_Nearest;
     }
     break;
     case cgltf_filter_type_nearest_mipmap_linear:
     {
-        min_filter = Filter_Nearest;
-        mag_filter = Filter_Nearest;
-        mipmap_mode = MipMapMode_Linear;
+        min_filter = render::Filter_Nearest;
+        mag_filter = render::Filter_Nearest;
+        mipmap_mode = render::MipMapMode_Linear;
     }
     break;
     case cgltf_filter_type_linear_mipmap_linear:
     {
-        min_filter = Filter_Linear;
-        mag_filter = Filter_Linear;
-        mipmap_mode = MipMapMode_Nearest;
+        min_filter = render::Filter_Linear;
+        mag_filter = render::Filter_Linear;
+        mipmap_mode = render::MipMapMode_Nearest;
     }
     break;
     }
@@ -62,32 +62,32 @@ SamplerFromCgltfSampler(CgltfSampler sampler)
         {
         case cgltf_filter_type_nearest_mipmap_nearest:
         {
-            mag_filter = Filter_Nearest;
+            mag_filter = render::Filter_Nearest;
         }
         break;
         case cgltf_filter_type_linear_mipmap_nearest:
         {
-            mag_filter = Filter_Linear;
+            mag_filter = render::Filter_Linear;
         }
         break;
         case cgltf_filter_type_nearest_mipmap_linear:
         {
-            mag_filter = Filter_Nearest;
+            mag_filter = render::Filter_Nearest;
         }
         break;
         case cgltf_filter_type_linear_mipmap_linear:
         {
-            mag_filter = Filter_Linear;
+            mag_filter = render::Filter_Linear;
         }
         break;
         case cgltf_filter_type_nearest:
         {
-            mag_filter = Filter_Nearest;
+            mag_filter = render::Filter_Nearest;
         }
         break;
         case cgltf_filter_type_linear:
         {
-            mag_filter = Filter_Linear;
+            mag_filter = render::Filter_Linear;
         }
         break;
 
@@ -98,33 +98,33 @@ SamplerFromCgltfSampler(CgltfSampler sampler)
     switch (sampler.wrap_s)
     {
     case cgltf_wrap_mode_clamp_to_edge:
-        address_mode_u = SamplerAddressMode_ClampToEdge;
+        address_mode_u = render::SamplerAddressMode_ClampToEdge;
         break;
     case cgltf_wrap_mode_repeat:
-        address_mode_u = SamplerAddressMode_Repeat;
+        address_mode_u = render::SamplerAddressMode_Repeat;
         break;
     case cgltf_wrap_mode_mirrored_repeat:
-        address_mode_u = SamplerAddressMode_MirroredRepeat;
+        address_mode_u = render::SamplerAddressMode_MirroredRepeat;
         break;
     }
     switch (sampler.wrap_t)
     {
     case cgltf_wrap_mode_clamp_to_edge:
-        address_mode_v = SamplerAddressMode_ClampToEdge;
+        address_mode_v = render::SamplerAddressMode_ClampToEdge;
         break;
     case cgltf_wrap_mode_repeat:
-        address_mode_v = SamplerAddressMode_Repeat;
+        address_mode_v = render::SamplerAddressMode_Repeat;
         break;
     case cgltf_wrap_mode_mirrored_repeat:
-        address_mode_v = SamplerAddressMode_MirroredRepeat;
+        address_mode_v = render::SamplerAddressMode_MirroredRepeat;
         break;
     }
 
-    SamplerInfo sampler_info = {.min_filter = min_filter,
-                                .mag_filter = mag_filter,
-                                .mip_map_mode = mipmap_mode,
-                                .address_mode_u = address_mode_u,
-                                .address_mode_v = address_mode_v};
+    render::SamplerInfo sampler_info = {.min_filter = min_filter,
+                                        .mag_filter = mag_filter,
+                                        .mip_map_mode = mipmap_mode,
+                                        .address_mode_u = address_mode_u,
+                                        .address_mode_v = address_mode_v};
 
     return sampler_info;
 }

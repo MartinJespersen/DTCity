@@ -10,7 +10,7 @@ exitWithError(const char* message)
     exit(EXIT_FAILURE);
 }
 
-#if defined(DEBUG_BUILD)
+#if defined(BUILD_DEBUG)
 #define DEBUG_LOG(message, ...) printf(message, __VA_ARGS__)
 #else
 #define DEBUG_LOG(message, ...)

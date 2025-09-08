@@ -1,0 +1,28 @@
+
+namespace render
+{
+
+template <typename T>
+static BufferInfo
+BufferInfoFromTemplateBuffer(Buffer<T> buffer)
+{
+    U64 type_size = sizeof(T);
+    U64 byte_count = buffer.size * type_size;
+    Buffer<U8> general_buffer = {.data = (U8*)buffer.data, .size = byte_count};
+    return {.buffer = general_buffer, .type_size = type_size};
+}
+static AssetId
+AssetIdFromStr8(String8 str)
+{
+    return {.id = HashU128FromStr8(str).u64[0]};
+}
+static AssetInfo
+AssetInfoCreate(String8 name, AssetItemType type, PipelineUsageType pipeline_usage_type)
+{
+    AssetInfo asset_info = {};
+    asset_info.id = AssetIdFromStr8(name);
+    asset_info.type = type;
+    asset_info.pipeline_usage_type = pipeline_usage_type;
+    return asset_info;
+}
+} // namespace render

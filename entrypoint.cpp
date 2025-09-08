@@ -159,7 +159,6 @@ CommandBufferRecord(U32 image_index, U32 current_frame)
             vkCmdBeginRendering(current_cmd_buf, &rendering_info);
 
             wrapper::CarUpdate(ctx->car_sim, instance_buffer, image_index);
-            wrapper::RoadUpdate(ctx->road, vk_ctx, image_index, vk_ctx->shader_path);
             wrapper::BuildingRendering();
 
             IO_InputReset(ctx->io);
@@ -229,40 +228,57 @@ MainLoop(void* ptr)
                                      .lon_top_right = 10.198376789774187};
 
     ctx->vk_ctx = wrapper::VK_VulkanInit(ctx);
-    ctx->road = city::RoadCreate(ctx->vk_ctx, ctx->cache_path, &gcs_bbox);
-    ctx->buildings = city::BuildingsCreate(ctx->cache_path, ctx->road->road_height, &gcs_bbox);
+    wrapper::VulkanContext* vk_ctx = wrapper::VulkanCtxGet();
+
+    ctx->road = city::RoadCreate(ctx->vk_ctx, vk_ctx->texture_path, ctx->cache_path, &gcs_bbox);
+    city::Road* road = ctx->road;
+    ctx->buildings = city::BuildingsCreate(ctx->cache_path, ctx->vk_ctx->texture_path,
+                                           ctx->road->road_height, &gcs_bbox);
 
     CameraInit(ctx->camera);
     ctx->car_sim = city::CarSimCreate(ctx->vk_ctx, 100, ctx->road);
 
-    wrapper::VulkanContext* vk_ctx = wrapper::VulkanCtxGet();
-
     // upload assets to GPU
-    city::CarSim* car_sim = ctx->car_sim;
-    wrapper::Car* w_car = car_sim->car;
-    CarCreateAsync(w_car->texture_id, w_car->vertex_buffer_id, w_car->index_buffer_id,
-                   w_car->texture_path, &car_sim->sampler_info, car_sim->vertex_buffer,
-                   car_sim->index_buffer);
+    // city::CarSim* car_sim = ctx->car_sim;
+    // wrapper::Car* w_car = car_sim->car;
+    // CarCreateAsync(w_car->texture_id, w_car->vertex_buffer_id, w_car->index_buffer_id,
+    //                w_car->texture_path, &car_sim->sampler_info, car_sim->vertex_buffer,
+    //                car_sim->index_buffer);
 
-    SamplerInfo sampler_info = {
-        .min_filter = Filter_Linear,
-        .mag_filter = Filter_Linear,
-        .mip_map_mode = MipMapMode_Linear,
-        .address_mode_u = SamplerAddressMode_Repeat,
-        .address_mode_v = SamplerAddressMode_Repeat,
+    render::SamplerInfo sampler_info = {
+        .min_filter = render::Filter_Linear,
+        .mag_filter = render::Filter_Linear,
+        .mip_map_mode = render::MipMapMode_Linear,
+        .address_mode_u = render::SamplerAddressMode_Repeat,
+        .address_mode_v = render::SamplerAddressMode_Repeat,
     };
-    wrapper::Road* w_road = ctx->road->w_road;
-    AssetManagerRoadResourceLoadAsync(w_road->texture_id, w_road->road_texture_path, &sampler_info);
+    // wrapper::Road* w_road = ctx->road->w_road;
+    // AssetManagerRoadResourceLoadAsync(w_road->texture_id, w_road->road_texture_path,
+    // &sampler_info);
     city::Buildings* buildings = ctx->buildings;
+    render::BufferInfo building_vertex_buffer_info =
+        render::BufferInfoFromTemplateBuffer(buildings->vertex_buffer);
+    render::BufferInfo building_index_buffer_info =
+        render::BufferInfoFromTemplateBuffer(buildings->index_buffer);
 
-    wrapper::BuildingCreateAsync(buildings->vertex_buffer_id, buildings->index_buffer_id,
-                                 buildings->vertex_buffer, buildings->index_buffer);
+    render::BufferInfo road_vertex_buffer_info =
+        render::BufferInfoFromTemplateBuffer(road->vertex_buffer);
+    render::BufferInfo road_index_buffer_info =
+        render::BufferInfoFromTemplateBuffer(road->index_buffer);
+    // // wrapper::BuildingCreateAsync(buildings->vertex_buffer_id, buildings->index_buffer_id,
+    //                              buildings->vertex_buffer, buildings->index_buffer);
 
     ProfileBuffersCreate(vk_ctx);
     while (ctx->running)
     {
         wrapper::DrawFrameReset();
-        wrapper::BuildingDraw(buildings->vertex_buffer_id, buildings->index_buffer_id);
+        wrapper::BuildingDraw(&buildings->vertex_buffer_info, &buildings->index_buffer_info,
+                              &buildings->texture_info, buildings->texture_path, &sampler_info,
+                              &building_vertex_buffer_info, &building_index_buffer_info);
+        wrapper::BuildingDraw(&road->asset_vertex_info, &road->asset_index_info,
+                              &road->asset_texture_info, road->texture_path, &sampler_info,
+                              &road_vertex_buffer_info, &road_index_buffer_info);
+
         wrapper::AssetManagerExecuteCmds();
         wrapper::AssetManagerCmdDoneCheck();
         VkSemaphore image_available_semaphore =

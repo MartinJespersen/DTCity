@@ -21,7 +21,7 @@ struct CgltfResult
     Buffer<U32> index_buffer;
     CgltfSampler sampler;
 };
-static SamplerInfo
+static render::SamplerInfo
 SamplerFromCgltfSampler(CgltfSampler sampler);
 static CgltfResult
 CgltfParse(Arena* arena, String8 gltf_path);
