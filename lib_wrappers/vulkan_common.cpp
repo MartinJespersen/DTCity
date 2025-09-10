@@ -176,6 +176,7 @@ VK_CreateInstance(VulkanContext* vk_ctx)
     ScratchEnd(scratch);
 }
 
+PFN_vkCmdSetColorWriteEnableEXT vkCmdSetColorWriteEnableEXT = VK_NULL_HANDLE;
 static void
 VK_LogicalDeviceCreate(Arena* arena, VulkanContext* vk_ctx)
 {
@@ -210,10 +211,15 @@ VK_LogicalDeviceCreate(Arena* arena, VulkanContext* vk_ctx)
     deviceFeatures.geometryShader = VK_TRUE;
     deviceFeatures.fillModeNonSolid = VK_TRUE;
 
+    VkPhysicalDeviceColorWriteEnableFeaturesEXT colorWriteEnableFeatures = {
+        .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_COLOR_WRITE_ENABLE_FEATURES_EXT,
+        .colorWriteEnable = VK_TRUE};
+
     // setup linked list of device features
     VkPhysicalDeviceSynchronization2Features sync2_features{};
     sync2_features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SYNCHRONIZATION_2_FEATURES;
     sync2_features.synchronization2 = VK_TRUE;
+    sync2_features.pNext = &colorWriteEnableFeatures;
 
     VkPhysicalDeviceDynamicRenderingFeatures dynamic_rendering_features{};
     dynamic_rendering_features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DYNAMIC_RENDERING_FEATURES;
@@ -255,6 +261,12 @@ VK_LogicalDeviceCreate(Arena* arena, VulkanContext* vk_ctx)
                      &vk_ctx->graphics_queue);
     vkGetDeviceQueue(vk_ctx->device, queueFamilyIndicies.presentFamilyIndex, 0,
                      &vk_ctx->present_queue);
+    vkCmdSetColorWriteEnableEXT = (PFN_vkCmdSetColorWriteEnableEXT)vkGetDeviceProcAddr(
+        vk_ctx->device, "vkCmdSetColorWriteEnableEXT");
+    if (!vkCmdSetColorWriteEnableEXT)
+    {
+        exitWithError("Could not load vkCmdSetColorWriteEnableEXT");
+    }
 }
 
 static void

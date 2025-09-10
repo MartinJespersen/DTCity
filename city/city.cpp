@@ -245,7 +245,6 @@ RoadVertexBufferCreate(Road* road, Buffer<Vertex3D>* out_vertex_buffer,
     ScratchScope scratch = ScratchScope(0, 0);
     NodeWays* node_ways = &road->node_ways;
 
-    // road->way_count = 2;
     U64 total_road_segment_count = 0;
     for (U32 way_index = 0; way_index < node_ways->ways.size; way_index++)
     {
@@ -289,7 +288,7 @@ RoadVertexBufferCreate(Road* road, Buffer<Vertex3D>* out_vertex_buffer,
 
         if (way->node_count == 2)
         {
-            RoadIntersectionPointsFind(road, &road_segment_prev, way);
+            // RoadIntersectionPointsFind(road, &road_segment_prev, way);
             QuadToBufferAdd(&road_segment_prev, vertex_buffer, index_buffer, road->road_height,
                             &current_vertex_idx, &current_index_idx);
         }
@@ -309,12 +308,12 @@ RoadVertexBufferCreate(Road* road, Buffer<Vertex3D>* out_vertex_buffer,
                 RoadSegmentConnectionFromTwoRoadSegments(&road_segment_prev, &road_segment_cur,
                                                          road_width);
 
-                RoadIntersectionPointsFind(road, &road_segment_prev, way);
+                // RoadIntersectionPointsFind(road, &road_segment_prev, way);
                 QuadToBufferAdd(&road_segment_prev, vertex_buffer, index_buffer, road->road_height,
                                 &current_vertex_idx, &current_index_idx);
                 if (node_idx == way->node_count - 2)
                 {
-                    RoadIntersectionPointsFind(road, &road_segment_cur, way);
+                    // RoadIntersectionPointsFind(road, &road_segment_cur, way);
                     QuadToBufferAdd(&road_segment_cur, vertex_buffer, index_buffer,
                                     road->road_height, &current_vertex_idx, &current_index_idx);
                 }

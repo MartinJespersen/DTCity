@@ -232,13 +232,6 @@ MainLoop(void* ptr)
     ctx->car_sim = city::CarSimCreate(vk_ctx->texture_path, 100, ctx->road);
     city::CarSim* car_sim = ctx->car_sim;
 
-    // upload assets to GPU
-    // city::CarSim* car_sim = ctx->car_sim;
-    // wrapper::Car* w_car = car_sim->car;
-    // CarCreateAsync(w_car->texture_id, w_car->vertex_buffer_id, w_car->index_buffer_id,
-    //                w_car->texture_path, &car_sim->sampler_info, car_sim->vertex_buffer,
-    //                car_sim->index_buffer);
-
     render::SamplerInfo sampler_info = {
         .min_filter = render::Filter_Linear,
         .mag_filter = render::Filter_Linear,
@@ -279,12 +272,13 @@ MainLoop(void* ptr)
             vk_ctx->draw_frame_arena, car_sim, ctx->road, ctx->time->delta_time_sec);
         render::BufferInfo car_instance_buffer_info =
             render::BufferInfoFromTemplateBuffer(instance_buffer);
-        wrapper::Model3DDraw(&buildings->vertex_buffer_info, &buildings->index_buffer_info,
-                             &buildings->texture_info, buildings->texture_path, &sampler_info,
-                             &building_vertex_buffer_info, &building_index_buffer_info);
         wrapper::Model3DDraw(&road->asset_vertex_info, &road->asset_index_info,
                              &road->asset_texture_info, road->texture_path, &sampler_info,
-                             &road_vertex_buffer_info, &road_index_buffer_info);
+                             &road_vertex_buffer_info, &road_index_buffer_info, TRUE);
+
+        wrapper::Model3DDraw(&buildings->vertex_buffer_info, &buildings->index_buffer_info,
+                             &buildings->texture_info, buildings->texture_path, &sampler_info,
+                             &building_vertex_buffer_info, &building_index_buffer_info, FALSE);
         wrapper::Model3DInstanceDraw(&car_sim->vertex_buffer_info, &car_sim->index_buffer_info,
                                      &car_sim->texture_info, car_sim->texture_path, &sampler_info,
                                      &car_vertex_buffer_info, &car_index_buffer_info,

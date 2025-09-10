@@ -72,8 +72,9 @@ VK_VulkanInit(Context* ctx)
         vk_ctx->validation_layers.data[i] = {Str8CString(validation_layers[i])};
     }
 
-    const char* device_extensions[2] = {VK_KHR_SWAPCHAIN_EXTENSION_NAME,
-                                        VK_KHR_DYNAMIC_RENDERING_EXTENSION_NAME};
+    const char* device_extensions[3] = {VK_KHR_SWAPCHAIN_EXTENSION_NAME,
+                                        VK_KHR_DYNAMIC_RENDERING_EXTENSION_NAME,
+                                        VK_EXT_COLOR_WRITE_ENABLE_EXTENSION_NAME};
     vk_ctx->device_extensions = BufferAlloc<String8>(vk_ctx->arena, ArrayCount(device_extensions));
     for (U32 i = 0; i < ArrayCount(device_extensions); i++)
     {
@@ -610,7 +611,9 @@ Model3DPipelineCreate(VulkanContext* vk_ctx)
     VkPipelineShaderStageCreateInfo shader_stages[] = {vert_shader_stage_info.info,
                                                        frag_shader_stage_info.info};
 
-    VkDynamicState dynamicStates[] = {VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR};
+    VkDynamicState dynamicStates[] = {VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR,
+                                      VK_DYNAMIC_STATE_DEPTH_WRITE_ENABLE,
+                                      VK_DYNAMIC_STATE_COLOR_WRITE_ENABLE_EXT};
 
     VkPipelineDynamicStateCreateInfo dynamic_state{};
     dynamic_state.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
@@ -1302,7 +1305,8 @@ PipelineDestroy(Pipeline* pipeline)
 
 static void
 Model3DBucketAdd(BufferAllocation* vertex_buffer_allocation,
-                 BufferAllocation* index_buffer_allocation, VkDescriptorSet desc_set)
+                 BufferAllocation* index_buffer_allocation, VkDescriptorSet desc_set,
+                 B32 depth_test_enabled)
 {
     VulkanContext* vk_ctx = VulkanCtxGet();
     DrawFrame* draw_frame = vk_ctx->draw_frame;
@@ -1311,6 +1315,7 @@ Model3DBucketAdd(BufferAllocation* vertex_buffer_allocation,
     node->vertex_alloc = *vertex_buffer_allocation;
     node->index_alloc = *index_buffer_allocation;
     node->descriptor_set = desc_set;
+    node->depth_write_per_draw_enabled = depth_test_enabled;
     SLLQueuePush(draw_frame->model_3D_list.first, draw_frame->model_3D_list.last, node);
 }
 
@@ -1341,7 +1346,7 @@ static void
 Model3DDraw(render::AssetInfo* vertex_info, render::AssetInfo* index_info,
             render::AssetInfo* texture_info, String8 texture_path,
             render::SamplerInfo* sampler_info, render::BufferInfo* vertex_buffer_info,
-            render::BufferInfo* index_buffer_info)
+            render::BufferInfo* index_buffer_info, B32 depth_test_enable)
 {
     VulkanContext* vk_ctx = VulkanCtxGet();
     AssetManager* asset_manager = vk_ctx->asset_manager;
@@ -1355,8 +1360,8 @@ Model3DDraw(render::AssetInfo* vertex_info, render::AssetInfo* index_info,
     if (asset_index_buffer->is_loaded && asset_index_buffer->is_loaded && asset_texture->is_loaded)
     {
         Model3DBucketAdd(&asset_vertex_buffer->item.buffer_alloc,
-                         &asset_index_buffer->item.buffer_alloc,
-                         asset_texture->item.descriptor_set);
+                         &asset_index_buffer->item.buffer_alloc, asset_texture->item.descriptor_set,
+                         depth_test_enable);
     }
     else if (!IsAssetLoadedOrInProgress(asset_vertex_buffer) ||
              !IsAssetLoadedOrInProgress(asset_index_buffer) ||
@@ -1437,6 +1442,13 @@ Model3DInstanceDraw(render::AssetInfo* vertex_info, render::AssetInfo* index_inf
     }
 }
 
+enum WriteType
+{
+    WriteType_Color,
+    WriteType_Depth,
+    WriteType_Count
+};
+
 static void
 Model3DRendering()
 {
@@ -1464,6 +1476,9 @@ Model3DRendering()
     scissor.extent = swapchain_extent;
     vkCmdSetScissor(cmd_buffer, 0, 1, &scissor);
 
+    VkBool32 color_write_enabled[4] = {VK_TRUE, VK_TRUE, VK_TRUE, VK_TRUE};
+    VkBool32 color_write_disabled[4] = {};
+
     VkDescriptorSet descriptor_sets[2] = {vk_ctx->camera_descriptor_sets[vk_ctx->current_frame]};
 
     VkDeviceSize offsets[] = {0};
@@ -1475,7 +1490,35 @@ Model3DRendering()
                                 descriptor_sets, 0, NULL);
         vkCmdBindVertexBuffers(cmd_buffer, 0, 1, &node->vertex_alloc.buffer, offsets);
         vkCmdBindIndexBuffer(cmd_buffer, node->index_alloc.buffer, 0, VK_INDEX_TYPE_UINT32);
-        vkCmdDrawIndexed(cmd_buffer, U32(node->index_alloc.size / 4), 1, 0, 0, 0);
+
+        if (node->depth_write_per_draw_enabled)
+        {
+            for (WriteType write_type = (WriteType)0; write_type < WriteType_Count;
+                 write_type = (WriteType)(write_type + 1))
+            {
+                if (write_type == WriteType_Color)
+                {
+                    vkCmdSetDepthWriteEnable(cmd_buffer, VK_FALSE);
+                    vkCmdSetColorWriteEnableEXT(cmd_buffer, ArrayCount(color_write_enabled),
+                                                color_write_enabled);
+                }
+                else if (write_type == WriteType_Depth)
+                {
+                    vkCmdSetDepthWriteEnable(cmd_buffer, VK_TRUE);
+                    vkCmdSetColorWriteEnableEXT(cmd_buffer, ArrayCount(color_write_disabled),
+                                                color_write_disabled);
+                }
+
+                vkCmdDrawIndexed(cmd_buffer, U32(node->index_alloc.size / 4), 1, 0, 0, 0);
+            }
+        }
+        else
+        {
+            vkCmdSetDepthWriteEnable(cmd_buffer, VK_TRUE);
+            vkCmdSetColorWriteEnableEXT(cmd_buffer, ArrayCount(color_write_enabled),
+                                        color_write_enabled);
+            vkCmdDrawIndexed(cmd_buffer, U32(node->index_alloc.size / 4), 1, 0, 0, 0);
+        }
     }
 }
 
