@@ -13,7 +13,7 @@ namespace city
 {
 struct Road;
 struct CarSim;
-struct CarInstance;
+struct Model3DInstance;
 struct Vertex3D;
 } // namespace city
 
@@ -36,22 +36,6 @@ struct ImageKtx2
     U32 mip_level_count;
 };
 
-struct Car
-{
-    Arena* arena;
-    render::AssetId texture_id;
-    String8 texture_path;
-    render::AssetId vertex_buffer_id;
-    render::AssetId index_buffer_id;
-
-    B32 is_pipeline_created;
-
-    PipelineInfo pipeline_info;
-    BufferContext instance_buffer_mapped;
-    VkDescriptorSetLayout descriptor_set_layout;
-    Buffer<VkDescriptorSet> descriptor_sets;
-};
-
 struct AssetManagerCommandPool
 {
     OS_Handle mutex;
@@ -69,7 +53,6 @@ struct CmdQueueItem
     CmdQueueItem* next;
     CmdQueueItem* prev;
     render::ThreadInput* thread_input;
-    render::AssetInfoNodeList asset_list;
     U32 thread_id;
     VkCommandBuffer cmd_buffer;
     VkFence fence;
@@ -97,19 +80,16 @@ template <typename T> struct AssetList
     render::AssetItem<T>* free_list;
 };
 
-struct BuildingPipeline
+struct Pipeline
 {
-    PipelineInfo pipeline_info;
+    VkPipeline pipeline;
+    VkPipelineLayout pipeline_layout;
     VkDescriptorSetLayout descriptor_set_layout;
 };
 
 struct AssetManager
 {
     Arena* arena;
-
-    // ~mgj: asset info
-    Arena* asset_arena;
-    render::AssetInfoNode* asset_free_list;
 
     // ~mgj: Textures
     Arena* texture_arena;
@@ -129,23 +109,46 @@ struct AssetManager
     AssetManagerCmdList* cmd_wait_list;
 };
 
-struct BuildingNode
+struct Model3DNode
 {
-    BuildingNode* next;
+    Model3DNode* next;
     BufferAllocation index_alloc;
     BufferAllocation vertex_alloc;
     VkDescriptorSet descriptor_set;
 };
 
-struct BuildingNodeList
+struct Model3DInstanceNode
 {
-    BuildingNode* first;
-    BuildingNode* last;
+    Model3DInstanceNode* next;
+    BufferAllocation index_alloc;
+    BufferAllocation vertex_alloc;
+    render::BufferInfo instance_buffer_info;
+    U32 instance_buffer_offset;
+    VkDescriptorSet descriptor_set;
+};
+
+struct Model3DNodeList
+{
+    Model3DNode* first;
+    Model3DNode* last;
+};
+
+struct Model3DInstanceNodeList
+{
+    Model3DInstanceNode* first;
+    Model3DInstanceNode* last;
+};
+
+struct Model3DInstance
+{
+    Model3DInstanceNodeList list;
+    U32 total_instance_buffer_byte_count;
 };
 
 struct DrawFrame
 {
-    BuildingNodeList building_list;
+    Model3DNodeList model_3D_list;
+    Model3DInstance model_3D_instance_draw;
 };
 
 struct VulkanContext
@@ -209,21 +212,10 @@ struct VulkanContext
     // ~mgj: Rendering
     Arena* draw_frame_arena;
     DrawFrame* draw_frame;
-    BuildingPipeline building_pipeline;
+    Pipeline model_3D_pipeline;
+    Pipeline model_3D_instance_pipeline;
+    BufferAllocation model_3D_instance_buffer;
 };
-
-// ~mgj: Car functions
-static Car*
-CarCreate(render::AssetId texture_id, String8 texture_path, CgltfSampler sampler,
-          Buffer<city::CarVertex> vertex_buffer, Buffer<U32> index_buffer);
-static void
-CarDestroy(wrapper::VulkanContext* vk_ctx, wrapper::Car* car);
-static void
-CarUpdate(city::CarSim* car_sim, Buffer<city::CarInstance> instance_buffer, U32 image_idx);
-// static void
-// CarCreateAsync(AssetId texture_id, AssetId vertex_buffer_id, AssetId index_buffer_id,
-//                String8 texture_path, render::SamplerInfo* sampler,
-//                Buffer<city::CarVertex> vertex_buffer, Buffer<U32> index_buffer);
 
 static void
 ThreadSetup(async::ThreadInfo thread_info, void* input);
@@ -231,14 +223,10 @@ static void
 TextureCreate(VkCommandBuffer cmd_buffer, render::AssetInfo asset_info, String8 texture_path,
               render::SamplerInfo sampler_info);
 
-static PipelineInfo
-CarPipelineInfoCreate(VulkanContext* vk_ctx, VkDescriptorSetLayout layout);
-
 static void
 CarCreateDescriptorSetLayout();
 static void
-CarRendering(VulkanContext* vk_ctx, city::CarSim* car, U32 instance_count,
-             BufferAllocation vertex_buffer_alloc, BufferAllocation index_buffer_alloc);
+Model3DInstanceRendering();
 
 //~mgj: camera functions
 static void
@@ -290,25 +278,15 @@ force_inline static B32
 AssetIdCmp(render::AssetId a, render::AssetId b);
 static render::AssetItem<AssetItemBuffer>*
 AssetManagerBufferItemGet(render::AssetId id);
-static void
-AssetInfoNodeListAdd(Arena* arena, render::AssetInfoNodeList* node_list, render::AssetInfo info);
-static void
-AssetManagerAssetInfoAdd(render::AssetInfoNodeList* asset_list, render::AssetInfo asset_info);
-static void
-AssetManagerAssetInfoAddMany(render::AssetInfoNodeList* asset_list, render::AssetInfo* asset_arr,
-                             U32 count);
-static void
-AssetManagerAssetInfoRemove(render::AssetInfoNodeList* asset_list);
+
 static void
 AssetManagerBufferFree(render::AssetId asset_id);
 static void
 AssetManagerTextureFree(render::AssetId asset_id);
 
 static void
-AssetCmdQueueItemEnqueue(render::AssetInfoNodeList* asset_node_list, U32 thread_id,
-                         VkCommandBuffer cmd, render::ThreadInput* thread_input);
-static void
-AssetItemBufferDestroy(VmaAllocator allocator, render::AssetItem<AssetItemBuffer>* asset_buffer);
+AssetCmdQueueItemEnqueue(U32 thread_id, VkCommandBuffer cmd, render::ThreadInput* thread_input);
+
 template <typename T>
 static render::AssetInfo
 AssetInfoBufferCmd(VkCommandBuffer cmd, render::AssetId id, Buffer<T> vertex_buffer,
@@ -335,7 +313,7 @@ ImageFromKtx2file(VkCommandBuffer cmd, BufferAllocation staging_buffer, VulkanCo
 static VulkanContext*
 VK_VulkanInit(Context* ctx);
 static void
-VK_Cleanup(Context* ctx, VulkanContext* vk_ctx);
+VK_Cleanup(VulkanContext* vk_ctx);
 static void
 VulkanCtxSet(VulkanContext* vk_ctx);
 static VulkanContext*
@@ -346,24 +324,33 @@ static void
 BuildingCreateAsync(render::AssetId vertex_buffer_id, render::AssetId index_buffer_id,
                     Buffer<city::Vertex3D> vertex_buffer, Buffer<U32> index_buffer);
 static void
-BuildingBucketAdd(BufferAllocation* vertex_buffer_allocation,
-                  BufferAllocation* index_buffer_allocation, VkDescriptorSet desc_set);
-
+Model3DBucketAdd(BufferAllocation* vertex_buffer_allocation,
+                 BufferAllocation* index_buffer_allocation, VkDescriptorSet desc_set);
 static void
-BuildingDraw(render::AssetInfo* vertex_info, render::AssetInfo* index_info,
-             render::AssetInfo* texture_info, String8 texture_path,
-             render::SamplerInfo* sampler_info, render::BufferInfo* vertex_buffer_info,
-             render::BufferInfo* index_buffer_info);
+Model3DInstanceBucketAdd(BufferAllocation* vertex_buffer_allocation,
+                         BufferAllocation* index_buffer_allocation, VkDescriptorSet desc_set,
+                         render::BufferInfo* instance_buffer_info);
 static void
-BuildingPipelineCreate();
-static PipelineInfo
-BuildingPipelineInfoCreate(VulkanContext* vk_ctx, VkDescriptorSetLayout desc_set_layout);
+Model3DDraw(render::AssetInfo* vertex_info, render::AssetInfo* index_info,
+            render::AssetInfo* texture_info, String8 texture_path,
+            render::SamplerInfo* sampler_info, render::BufferInfo* vertex_buffer_info,
+            render::BufferInfo* index_buffer_info);
+static void
+Model3DInstanceDraw(render::AssetInfo* vertex_info, render::AssetInfo* index_info,
+                    render::AssetInfo* texture_info, String8 texture_path,
+                    render::SamplerInfo* sampler_info, render::BufferInfo* vertex_buffer_info,
+                    render::BufferInfo* index_buffer_info, render::BufferInfo* instance_buffer);
+static Pipeline
+Model3DInstancePipelineCreate(VulkanContext* vk_ctx);
+static Pipeline
+Model3DPipelineCreate(VulkanContext* vk_ctx);
 static void
 DrawFrameReset();
 static void
-BuildingRendering();
+Model3DRendering();
 static void
-BuildingPipelineDestroy(BuildingPipeline* draw_ctx);
+PipelineDestroy(Pipeline* draw_ctx);
+
 #define VK_CHECK_RESULT(f)                                                                         \
     {                                                                                              \
         VkResult res = (f);                                                                        \

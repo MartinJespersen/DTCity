@@ -138,7 +138,7 @@ CgltfParse(Arena* arena, String8 gltf_path)
     cgltf_accessor* accessor_position = NULL;
     cgltf_accessor* accessor_uv = NULL;
 
-    Buffer<city::CarVertex> vertex_buffer = {0};
+    Buffer<city::Vertex3D> vertex_buffer = {0};
     Buffer<U32> index_buffer = {0};
 
     cgltf_result result = cgltf_parse_file(&options, (char*)gltf_path.str, &data);
@@ -183,7 +183,7 @@ CgltfParse(Arena* arena, String8 gltf_path)
             index_buffer.data[indice_idx] = index;
         }
 
-        vertex_buffer = BufferAlloc<city::CarVertex>(arena, expected_count);
+        vertex_buffer = BufferAlloc<city::Vertex3D>(arena, expected_count);
         for (U32 vertex_idx = 0; vertex_idx < vertex_buffer.size; vertex_idx++)
         {
             if (accessor_position)
@@ -191,7 +191,7 @@ CgltfParse(Arena* arena, String8 gltf_path)
                                           vertex_buffer.data[vertex_idx].pos.v, 3);
             if (accessor_uv)
                 cgltf_accessor_read_float(accessor_uv, vertex_idx,
-                                          vertex_buffer.data[vertex_idx].uv, 2);
+                                          vertex_buffer.data[vertex_idx].uv.v, 2);
         }
     }
 

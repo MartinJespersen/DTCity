@@ -43,7 +43,7 @@ struct AssetId
 };
 enum AssetItemType
 {
-    AssetItemTyep_Undefined,
+    AssetItemType_Undefined,
     AssetItemType_Texture,
     AssetItemType_Buffer
 };
@@ -54,7 +54,7 @@ enum PipelineUsageType
     PipelineUsageType_VertexBuffer,
     PipelineUsageType_IndexBuffer,
     PipelineUsageType_3D,
-    PipelineUsageType_Road,
+    PipelineUsageType_3DInstanced,
 };
 
 template <typename T> struct AssetItem
@@ -79,19 +79,6 @@ struct AssetInfo
     PipelineUsageType pipeline_usage_type;
 };
 
-struct AssetInfoNode
-{
-    AssetInfoNode* next;
-    AssetInfo info;
-};
-
-struct AssetInfoNodeList
-{
-    AssetInfoNode* first;
-    AssetInfoNode* last;
-    U64 count;
-};
-
 struct TextureLoadingInfo
 {
     String8 texture_path;
@@ -101,6 +88,7 @@ struct TextureLoadingInfo
 struct AssetLoadingInfo
 {
     AssetInfo info;
+    B32 is_loaded;
     union
     {
         TextureLoadingInfo texture_info;

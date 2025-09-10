@@ -2,7 +2,7 @@
 // forward declaration
 namespace city
 {
-struct CarVertex;
+struct Vertex3D;
 }
 
 namespace wrapper
@@ -17,7 +17,7 @@ struct CgltfSampler
 
 struct CgltfResult
 {
-    Buffer<city::CarVertex> vertex_buffer;
+    Buffer<city::Vertex3D> vertex_buffer;
     Buffer<U32> index_buffer;
     CgltfSampler sampler;
 };

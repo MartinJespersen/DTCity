@@ -78,13 +78,6 @@ struct SwapchainResources
     Buffer<ImageSwapchainResource> image_resources;
 };
 
-struct BufferContext
-{
-    BufferAllocation buffer_alloc;
-    U32 size;
-    U32 capacity;
-};
-
 struct QueueFamilyIndices
 {
     U32 graphicsFamilyIndex;
@@ -124,12 +117,6 @@ struct Frustum
     glm::vec4 planes[PlaneType_Count];
 };
 
-struct PipelineInfo
-{
-    VkPipeline pipeline;
-    VkPipelineLayout pipeline_layout;
-};
-
 struct Texture
 {
     BufferAllocation staging_buffer;
@@ -141,9 +128,6 @@ struct Texture
     S32 height;
     U32 mip_level_count;
 };
-
-static void
-PipelineInfoDestroy(VkDevice device, PipelineInfo pipeline_info);
 
 // ~mgj: Buffers helpers
 //
@@ -164,7 +148,7 @@ static void
 BufferMappedDestroy(VmaAllocator allocator, BufferAllocationMapped* mapped_buffer);
 
 static BufferAllocation
-StagingBufferCreate(VmaAllocator allocator, VkDeviceSize size, VkBufferUsageFlags buffer_usage);
+StagingBufferCreate(VmaAllocator allocator, VkDeviceSize size);
 
 template <typename T>
 static BufferAllocation
@@ -185,14 +169,9 @@ static void
 ImageViewResourceDestroy(ImageViewResource image_view_resource);
 static void
 ImageAllocationDestroy(VmaAllocator allocator, ImageAllocation image_alloc);
-static ImageResource
-ImageResourceCreate(ImageViewResource image_view_resource, ImageAllocation image_alloc,
-                    VkImageView image_view);
+
 static void
 ImageResourceDestroy(VmaAllocator allocator, ImageResource image);
-static void
-ImageFromBufferCopy(VkCommandBuffer command_buffer, VkBuffer buffer, VkImage image, uint32_t width,
-                    uint32_t height);
 
 // ~mgj: Swapchain functions
 static U32
@@ -204,15 +183,10 @@ static ShaderModuleInfo
 ShaderStageFromSpirv(Arena* arena, VkDevice device, VkShaderStageFlagBits flag, String8 path);
 static VkShaderModule
 ShaderModuleCreate(VkDevice device, Buffer<U8> buffer);
-template <typename T>
-static void
-VkBufferFromBuffers(VulkanContext* vk_ctx, BufferContext* vk_buffer_ctx, Buffer<Buffer<T>> buffers,
-                    VkBufferUsageFlags usage);
 
-template <typename T>
 static void
-VkBufferFromBufferMapping(VmaAllocator allocator, BufferContext* vk_buffer_ctx, Buffer<T> buffer,
-                          VkBufferUsageFlags usage);
+BufferAllocCreateOrResize(VmaAllocator allocator, U32 total_buffer_byte_count,
+                          BufferAllocation* buffer_alloc, VkBufferUsageFlags usage);
 
 static QueueFamilyIndices
 VK_QueueFamilyIndicesFromBitFields(QueueFamilyIndexBits queueFamilyBits);
@@ -222,9 +196,6 @@ VK_QueueFamilyIsComplete(QueueFamilyIndexBits queueFamily);
 
 static QueueFamilyIndexBits
 VK_QueueFamiliesFind(VulkanContext* vk_ctx, VkPhysicalDevice device);
-
-static void
-BufferContextDestroy(VmaAllocator allocator, BufferContext* buffer_context);
 
 static bool
 VK_IsDeviceSuitable(VulkanContext* vk_ctx, VkPhysicalDevice device, QueueFamilyIndexBits indexBits);
@@ -248,19 +219,12 @@ VK_ColorResourcesCreate(VulkanContext* vk_ctx, SwapchainResources* swapchain_res
 static VkSampler
 SamplerCreate(VkDevice device, VkSamplerCreateInfo* sampler_info);
 
-static VkSampler
-SamplerCreate(VkDevice device, VkFilter filter, VkSamplerMipmapMode mipmap_mode,
-              U32 mip_level_count, F32 max_anisotrophy);
 // ~mgj: Descriptor Related Functions
 static void
 DescriptorPoolCreate(VulkanContext* vk_ctx);
 static VkDescriptorSet
 DescriptorSetCreate(Arena* arena, VkDevice device, VkDescriptorPool desc_pool,
-                    VkDescriptorSetLayout desc_set_layout, Texture* texture, U32 frames_in_flight);
-static Buffer<VkDescriptorSet>
-DescriptorSetBufferCreate(Arena* arena, VkDevice device, VkDescriptorPool desc_pool,
-                          VkDescriptorSetLayout desc_set_layout, Texture* texture,
-                          U32 frames_in_flight);
+                    VkDescriptorSetLayout desc_set_layout, Texture* texture);
 
 static VkDescriptorSetLayout
 DescriptorSetLayoutCreate(VkDevice device, VkDescriptorSetLayoutBinding* bindings,
@@ -273,14 +237,6 @@ struct Vulkan_PushConstantInfo
 };
 
 // image helpers
-
-static void
-ImageLayoutTransition(VkCommandBuffer command_buffer, VkImage image, VkFormat format,
-                      VkImageLayout oldLayout, VkImageLayout newLayout, U32 mipmap_level);
-
-static void
-VK_GenerateMipmaps(VkCommandBuffer command_buffer, VkImage image, int32_t tex_width,
-                   int32_t text_height, uint32_t mip_levels);
 
 // queue family
 
@@ -296,8 +252,6 @@ VK_SyncObjectsCreate(VulkanContext* vk_ctx);
 static void
 SyncObjectsDestroy(VulkanContext* vk_ctx);
 
-static VkCommandBuffer
-CommandBufferCreate(VkDevice device, VkCommandPool cmd_pool);
 static VkCommandPool
 VK_CommandPoolCreate(VkDevice device, VkCommandPoolCreateInfo* poolInfo);
 
@@ -354,17 +308,6 @@ static void
 DestroyDebugUtilsMessengerEXT(VkInstance instance, VkDebugUtilsMessengerEXT debugMessenger,
                               const VkAllocationCallbacks* pAllocator);
 
-static VkCommandBuffer
-VK_BeginSingleTimeCommands(VkDevice device, VkCommandPool cmd_pool);
-
-static void
-VK_EndSingleTimeCommands(VulkanContext* vk_ctx, VkCommandPool cmd_pool,
-                         VkCommandBuffer command_buffer);
-
-static void
-ClearDepthAndColorImage(VkCommandBuffer cmd_buf, VkImage image_color, VkImage image_depth,
-                        VkClearColorValue clear_color,
-                        VkClearDepthStencilValue depth_stencil_clear_value);
 //
 // ~mgj: texture functions
 static void

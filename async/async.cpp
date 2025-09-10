@@ -24,6 +24,7 @@ QueueDestroy(Queue<T>* queue)
 {
     OS_MutexRelease(queue->mutex);
     OS_SemaphoreRelease(queue->semaphore_empty);
+    OS_SemaphoreRelease(queue->semaphore_full);
 }
 
 template <typename T>
@@ -133,7 +134,8 @@ WorkerThreadDestroy(Threads* thread_info)
 {
     thread_info->kill_switch = 1;
     for (U32 i = 0; i < thread_info->thread_handles.size; i++)
-
+    {
         OS_ThreadJoin(thread_info->thread_handles.data[i], max_U32);
+    }
 }
 } // namespace async

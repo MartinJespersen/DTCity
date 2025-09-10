@@ -177,12 +177,6 @@ struct RoadSegment
     RoadCrossSection end;
 };
 
-struct CarVertex
-{
-    Vec3F32 pos;
-    F32 uv[2];
-};
-
 struct Car
 {
     glm::vec3 cur_pos;
@@ -198,12 +192,16 @@ struct CarSim
 
     Buffer<Car> cars;
 
-    Buffer<city::CarVertex> vertex_buffer;
+    Buffer<city::Vertex3D> vertex_buffer;
     Buffer<U32> index_buffer;
     render::SamplerInfo sampler_info;
     Rng1F32 car_center_offset;
-    // Graphics API
-    wrapper::Car* car;
+
+    render::AssetInfo vertex_buffer_info;
+    render::AssetInfo index_buffer_info;
+    render::AssetInfo texture_info;
+
+    String8 texture_path;
 };
 
 struct Buildings
@@ -223,7 +221,7 @@ struct Buildings
     Buffer<U32> index_buffer;
 };
 
-struct CarInstance
+struct Model3DInstance
 {
     glm::vec4 x_basis;
     glm::vec4 y_basis;
@@ -235,10 +233,9 @@ read_only static RoadNode g_road_node = {&g_road_node, 0, 0.0f, 0.0f};
 read_only static NodeUtm g_road_node_utm = {&g_road_node_utm, 0, 0.0f, 0.0f};
 ///////////////////////
 static Road*
-RoadCreate(wrapper::VulkanContext* vk_ctx, String8 texture_path, String8 cache_path,
-           GCSBoundingBox* gcs_bbox);
+RoadCreate(String8 texture_path, String8 cache_path, GCSBoundingBox* gcs_bbox);
 static void
-RoadDestroy(wrapper::VulkanContext* vk_ctx, Road* road);
+RoadDestroy(Road* road);
 static String8
 DataFetch(Arena* arena, String8 data_cache_path, String8 query, GCSBoundingBox* gcs_bbox);
 static void
@@ -262,10 +259,10 @@ static void
 RoadIntersectionPointsFind(Road* road, RoadSegment* in_out_segment, Way* current_road_way);
 // ~mgj: Cars
 static CarSim*
-CarSimCreate(wrapper::VulkanContext* vk_ctx, U32 car_count, Road* road);
+CarSimCreate(String8 texture_path, U32 car_count, Road* road);
 static void
-CarSimDestroy(wrapper::VulkanContext* vk_ctx, CarSim* car_sim);
-static Buffer<CarInstance>
+CarSimDestroy(CarSim* car_sim);
+static Buffer<Model3DInstance>
 CarUpdate(Arena* arena, CarSim* car, Road* road, F32 time_delta);
 
 // ~mgj: Buildings

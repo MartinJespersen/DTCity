@@ -1,8 +1,7 @@
 namespace city
 {
 static Road*
-RoadCreate(wrapper::VulkanContext* vk_ctx, String8 texture_path, String8 cache_path,
-           GCSBoundingBox* gcs_bbox)
+RoadCreate(String8 texture_path, String8 cache_path, GCSBoundingBox* gcs_bbox)
 {
     ScratchScope scratch = ScratchScope(0, 0);
     Arena* arena = ArenaAlloc();
@@ -51,7 +50,7 @@ RoadCreate(wrapper::VulkanContext* vk_ctx, String8 texture_path, String8 cache_p
 }
 
 static void
-RoadDestroy(wrapper::VulkanContext* vk_ctx, Road* road)
+RoadDestroy(Road* road)
 {
     wrapper::AssetManagerBufferFree(road->asset_vertex_info.id);
     wrapper::AssetManagerBufferFree(road->asset_index_info.id);
@@ -430,22 +429,6 @@ QuadToBufferAdd(RoadSegment* road_segment, Buffer<Vertex3D> buffer, Buffer<U32> 
     *cur_index_idx += 6;
 }
 
-static B32
-RoadNodeIsCrossing(NodeUtm* node)
-{
-    U32 way_count = 0;
-    U32 is_part_of_crossing = 0;
-    for (Way* way = 0; node->way_queue.first; way = way->next)
-    {
-        way_count++;
-    }
-    if (way_count > 1)
-    {
-        is_part_of_crossing = 1;
-    }
-    return is_part_of_crossing;
-}
-
 static NodeUtm*
 NodeUtmFind(NodeUtmStructure* node_ways, U64 node_id)
 {
@@ -700,7 +683,7 @@ NeighbourNodeChoose(NodeUtm* node, Road* road)
 // ~mgj: Cars
 
 static Rng1F32
-CarCenterHeightOffset(Buffer<CarVertex> vertices)
+CarCenterHeightOffset(Buffer<Vertex3D> vertices)
 {
     F32 highest_value = 0;
     for (int i = 0; i < vertices.size; i++)
@@ -718,7 +701,7 @@ CarCenterHeightOffset(Buffer<CarVertex> vertices)
 }
 
 static CarSim*
-CarSimCreate(wrapper::VulkanContext* vk_ctx, U32 car_count, Road* road)
+CarSimCreate(String8 texture_path, U32 car_count, Road* road)
 {
     Arena* arena = ArenaAlloc();
 
@@ -733,16 +716,18 @@ CarSimCreate(wrapper::VulkanContext* vk_ctx, U32 car_count, Road* road)
     car_sim->index_buffer = parsed_result.index_buffer;
     car_sim->sampler_info = sampler_info;
 
-    String8 car_texture_path = PushStr8Copy(arena, S("../../../textures/car_collection.ktx"));
-    render::AssetId car_texture_id = render::AssetIdFromStr8(car_texture_path);
+    car_sim->texture_path = Str8PathFromStr8List(arena, {texture_path, S("car_collection.ktx2")});
+    car_sim->texture_info = render::AssetInfoCreate(texture_path, render::AssetItemType_Texture,
+                                                    render::PipelineUsageType_3DInstanced);
+    car_sim->index_buffer_info =
+        render::AssetInfoCreate(S("model_3d_instance_index_buffer"), render::AssetItemType_Buffer,
+                                render::PipelineUsageType_IndexBuffer);
+    car_sim->vertex_buffer_info =
+        render::AssetInfoCreate(S("model_3d_instance_vertex_buffer"), render::AssetItemType_Buffer,
+                                render::PipelineUsageType_VertexBuffer);
 
-    car_sim->car = wrapper::CarCreate(car_texture_id, car_texture_path, parsed_result.sampler,
-                                      car_sim->vertex_buffer, car_sim->index_buffer);
     car_sim->car_center_offset = CarCenterHeightOffset(car_sim->vertex_buffer);
-
-    // create cars for simulation
     car_sim->cars = BufferAlloc<Car>(arena, car_count);
-    // initialize cars
 
     for (U32 i = 0; i < car_count; ++i)
     {
@@ -763,17 +748,19 @@ CarSimCreate(wrapper::VulkanContext* vk_ctx, U32 car_count, Road* road)
 }
 
 static void
-CarSimDestroy(wrapper::VulkanContext* vk_ctx, CarSim* car_sim)
+CarSimDestroy(CarSim* car_sim)
 {
-    wrapper::CarDestroy(vk_ctx, car_sim->car);
+    wrapper::AssetManagerBufferFree(car_sim->vertex_buffer_info.id);
+    wrapper::AssetManagerBufferFree(car_sim->index_buffer_info.id);
+    wrapper::AssetManagerTextureFree(car_sim->texture_info.id);
     ArenaRelease(car_sim->arena);
 }
 
-static Buffer<CarInstance>
+static Buffer<Model3DInstance>
 CarUpdate(Arena* arena, CarSim* car, Road* road, F32 time_delta)
 {
-    Buffer<CarInstance> instance_buffer = BufferAlloc<CarInstance>(arena, car->cars.size);
-    CarInstance* instance;
+    Buffer<Model3DInstance> instance_buffer = BufferAlloc<Model3DInstance>(arena, car->cars.size);
+    Model3DInstance* instance;
     city::Car* car_info;
 
     F32 car_speed_default = 5.0f; // m/s
@@ -849,8 +836,9 @@ BuildingsCreate(String8 cache_path, String8 texture_path, F32 road_height, GCSBo
     buildings->vertex_buffer_info =
         render::AssetInfoCreate(S("buildings_vertex_buffer"), render::AssetItemType_Buffer,
                                 render::PipelineUsageType_VertexBuffer);
-    buildings->texture_info = render::AssetInfoCreate(
-        S("buildings_texture"), render::AssetItemType_Texture, render::PipelineUsageType_3D);
+    buildings->texture_info =
+        render::AssetInfoCreate(S("buildings_texture"), render::AssetItemType_Texture,
+                                render::PipelineUsageType_3DInstanced);
     buildings->index_buffer_info =
         render::AssetInfoCreate(S("buildings_index_buffer"), render::AssetItemType_Buffer,
                                 render::PipelineUsageType_IndexBuffer);

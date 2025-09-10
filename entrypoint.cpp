@@ -46,18 +46,11 @@ CommandBufferRecord(U32 image_index, U32 current_frame)
 
     wrapper::VulkanContext* vk_ctx = ctx->vk_ctx;
     ui::Camera* camera = ctx->camera;
-    DT_Time* time = ctx->time;
 
     VkCommandBufferBeginInfo beginInfo{};
     beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
     beginInfo.flags = 0;                  // Optional
     beginInfo.pInheritanceInfo = nullptr; // Optional
-
-    UpdateTime(time);
-    CameraUpdate(camera, ctx->io, ctx->time, vk_ctx->swapchain_resources->swapchain_extent);
-
-    Buffer<city::CarInstance> instance_buffer =
-        city::CarUpdate(scratch.arena, ctx->car_sim, ctx->road, ctx->time->delta_time_sec);
 
     wrapper::SwapchainResources* swapchain_resource = vk_ctx->swapchain_resources;
     VkImage swapchain_image = swapchain_resource->image_resources.data[image_index].image;
@@ -158,8 +151,8 @@ CommandBufferRecord(U32 image_index, U32 current_frame)
 
             vkCmdBeginRendering(current_cmd_buf, &rendering_info);
 
-            wrapper::CarUpdate(ctx->car_sim, instance_buffer, image_index);
-            wrapper::BuildingRendering();
+            wrapper::Model3DInstanceRendering();
+            wrapper::Model3DRendering();
 
             IO_InputReset(ctx->io);
 
@@ -230,13 +223,14 @@ MainLoop(void* ptr)
     ctx->vk_ctx = wrapper::VK_VulkanInit(ctx);
     wrapper::VulkanContext* vk_ctx = wrapper::VulkanCtxGet();
 
-    ctx->road = city::RoadCreate(ctx->vk_ctx, vk_ctx->texture_path, ctx->cache_path, &gcs_bbox);
+    ctx->road = city::RoadCreate(vk_ctx->texture_path, ctx->cache_path, &gcs_bbox);
     city::Road* road = ctx->road;
     ctx->buildings = city::BuildingsCreate(ctx->cache_path, ctx->vk_ctx->texture_path,
                                            ctx->road->road_height, &gcs_bbox);
 
     CameraInit(ctx->camera);
-    ctx->car_sim = city::CarSimCreate(ctx->vk_ctx, 100, ctx->road);
+    ctx->car_sim = city::CarSimCreate(vk_ctx->texture_path, 100, ctx->road);
+    city::CarSim* car_sim = ctx->car_sim;
 
     // upload assets to GPU
     // city::CarSim* car_sim = ctx->car_sim;
@@ -252,32 +246,49 @@ MainLoop(void* ptr)
         .address_mode_u = render::SamplerAddressMode_Repeat,
         .address_mode_v = render::SamplerAddressMode_Repeat,
     };
-    // wrapper::Road* w_road = ctx->road->w_road;
-    // AssetManagerRoadResourceLoadAsync(w_road->texture_id, w_road->road_texture_path,
-    // &sampler_info);
+
     city::Buildings* buildings = ctx->buildings;
+
+    // buildings buffer create
     render::BufferInfo building_vertex_buffer_info =
         render::BufferInfoFromTemplateBuffer(buildings->vertex_buffer);
     render::BufferInfo building_index_buffer_info =
         render::BufferInfoFromTemplateBuffer(buildings->index_buffer);
 
+    // road buffers create
     render::BufferInfo road_vertex_buffer_info =
         render::BufferInfoFromTemplateBuffer(road->vertex_buffer);
     render::BufferInfo road_index_buffer_info =
         render::BufferInfoFromTemplateBuffer(road->index_buffer);
-    // // wrapper::BuildingCreateAsync(buildings->vertex_buffer_id, buildings->index_buffer_id,
-    //                              buildings->vertex_buffer, buildings->index_buffer);
+
+    // car buffers create
+    render::BufferInfo car_vertex_buffer_info =
+        render::BufferInfoFromTemplateBuffer(car_sim->vertex_buffer);
+    render::BufferInfo car_index_buffer_info =
+        render::BufferInfoFromTemplateBuffer(car_sim->index_buffer);
 
     ProfileBuffersCreate(vk_ctx);
     while (ctx->running)
     {
         wrapper::DrawFrameReset();
-        wrapper::BuildingDraw(&buildings->vertex_buffer_info, &buildings->index_buffer_info,
-                              &buildings->texture_info, buildings->texture_path, &sampler_info,
-                              &building_vertex_buffer_info, &building_index_buffer_info);
-        wrapper::BuildingDraw(&road->asset_vertex_info, &road->asset_index_info,
-                              &road->asset_texture_info, road->texture_path, &sampler_info,
-                              &road_vertex_buffer_info, &road_index_buffer_info);
+        UpdateTime(ctx->time);
+        CameraUpdate(ctx->camera, ctx->io, ctx->time,
+                     vk_ctx->swapchain_resources->swapchain_extent);
+
+        Buffer<city::Model3DInstance> instance_buffer = city::CarUpdate(
+            vk_ctx->draw_frame_arena, car_sim, ctx->road, ctx->time->delta_time_sec);
+        render::BufferInfo car_instance_buffer_info =
+            render::BufferInfoFromTemplateBuffer(instance_buffer);
+        wrapper::Model3DDraw(&buildings->vertex_buffer_info, &buildings->index_buffer_info,
+                             &buildings->texture_info, buildings->texture_path, &sampler_info,
+                             &building_vertex_buffer_info, &building_index_buffer_info);
+        wrapper::Model3DDraw(&road->asset_vertex_info, &road->asset_index_info,
+                             &road->asset_texture_info, road->texture_path, &sampler_info,
+                             &road_vertex_buffer_info, &road_index_buffer_info);
+        wrapper::Model3DInstanceDraw(&car_sim->vertex_buffer_info, &car_sim->index_buffer_info,
+                                     &car_sim->texture_info, car_sim->texture_path, &sampler_info,
+                                     &car_vertex_buffer_info, &car_index_buffer_info,
+                                     &car_instance_buffer_info);
 
         wrapper::AssetManagerExecuteCmds();
         wrapper::AssetManagerCmdDoneCheck();
@@ -370,8 +381,8 @@ MainLoop(void* ptr)
     }
     ProfileBuffersDestroy(ctx->vk_ctx);
     vkDeviceWaitIdle(ctx->vk_ctx->device);
-    city::RoadDestroy(ctx->vk_ctx, ctx->road);
-    city::CarSimDestroy(ctx->vk_ctx, ctx->car_sim);
+    city::RoadDestroy(ctx->road);
+    city::CarSimDestroy(ctx->car_sim);
     city::BuildingDestroy(ctx->buildings);
-    wrapper::VK_Cleanup(ctx, ctx->vk_ctx);
+    wrapper::VK_Cleanup(ctx->vk_ctx);
 }

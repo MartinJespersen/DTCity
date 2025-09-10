@@ -18,7 +18,7 @@ WindowCreate(U32 window_width, U32 window_height)
     glfwInit();
     glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
     glfwWindowHint(GLFW_RESIZABLE, GLFW_TRUE);
-    io_ctx->window = glfwCreateWindow(800, 600, "Vulkan", nullptr, nullptr);
+    io_ctx->window = glfwCreateWindow(window_width, window_height, "Vulkan", nullptr, nullptr);
     glfwSetWindowUserPointer(io_ctx->window, io_ctx);
     glfwSetFramebufferSizeCallback(io_ctx->window, VK_FramebufferResizeCallback);
     glfwSetScrollCallback(io_ctx->window, IO_ScrollCallback);
