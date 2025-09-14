@@ -857,13 +857,32 @@ BuildingDestroy(Buildings* building)
     wrapper::AssetManagerTextureFree(building->texture_info.id);
     ArenaRelease(building->arena);
 }
+static F32
+Cross2F32ZComponent(Vec2F32 a, Vec2F32 b)
+{
+    return a.x * b.y - a.y * b.x;
+}
+static B32
+AreTwoConnectedLineSegmentsCollinear(Vec2F32 prev, Vec2F32 cur, Vec2F32 next)
+{
+    Vec2F32 ba = Sub2F32(prev, cur);
+    Vec2F32 ac = Sub2F32(next, prev);
 
+    F32 cross_product_z = Cross2F32ZComponent(ba, ac);
+    B32 is_collinear = FALSE;
+    if (cross_product_z == 0)
+    {
+        is_collinear = TRUE;
+    }
+    return is_collinear;
+}
 // TODO: Built the roof, which requires a way to divide the concave polygons (that are the
 // buildings) and divide it into convex parts
 static void
 BuildingsBuffersCreate(Arena* arena, Buildings* buildings, F32 road_height,
                        Buffer<Vertex3D>* out_vertex_buffer, Buffer<U32>* out_index_buffer)
 {
+    ScratchScope scratch = ScratchScope(&arena, 1);
     NodeWays* node_ways = &buildings->node_ways;
     NodeUtmStructure* node_utm_structure = &buildings->node_utm_structure;
     F32 building_height = 3;
@@ -875,29 +894,31 @@ BuildingsBuffersCreate(Arena* arena, Buildings* buildings, F32 road_height,
     {
         Way* way = &node_ways->ways.data[i];
         // ~mgj: first and last node id should be the same
-        vertex_count += (way->node_count - 1) * 4;
+        vertex_count += (way->node_count - 1) * 4 + (way->node_count - 1) * 2;
         // ~mgj: count of index for Polyhedron (without ground floor) that makes up the building
         // facade(roof+sides)
         // U64 roof_triangle_count = way->node_count - 2;
         U64 sides_triangle_count = (way->node_count - 1) * 2;
-        // U64 total_triangle_count = roof_triangle_count + sides_triangle_count;
-        U64 total_triangle_count = sides_triangle_count;
+        U64 roof_triangle_count = way->node_count - 2;
+        U64 total_triangle_count = sides_triangle_count + roof_triangle_count;
         index_count += total_triangle_count * 3;
 
         Assert(way->node_ids[0] == way->node_ids[way->node_count - 1]);
     }
 
-    Buffer<Vertex3D> vertex_buffer = BufferAlloc<Vertex3D>(arena, vertex_count);
-    Buffer<U32> index_buffer = BufferAlloc<U32>(arena, index_count);
+    Buffer<Vertex3D> vertex_buffer = BufferAlloc<Vertex3D>(scratch.arena, vertex_count);
+    Buffer<U32> index_buffer = BufferAlloc<U32>(scratch.arena, index_count);
 
     U32 base_index_idx = 0;
     U32 base_vertex_idx = 0;
     for (U32 way_idx = 0; way_idx < node_ways->ways.size; way_idx++)
+    // for (U32 way_idx = 0; way_idx < 1; way_idx++)
     {
         Way* way = &node_ways->ways.data[way_idx];
-        // ~mgj: Create vertices
-        for (U32 node_idx = 0, vert_idx = base_vertex_idx; node_idx < way->node_count - 1;
-             node_idx++, vert_idx += 4)
+
+        // ~mgj: Add Vertices and Indices for the sides of building
+        for (U32 node_idx = 0, vert_idx = base_vertex_idx, index_idx = base_index_idx;
+             node_idx < way->node_count - 1; node_idx++, vert_idx += 4, index_idx += 6)
         {
             NodeUtm* utm_node = NodeUtmFind(node_utm_structure, way->node_ids[node_idx]);
             NodeUtm* utm_node_next = NodeUtmFind(node_utm_structure, way->node_ids[node_idx + 1]);
@@ -915,12 +936,7 @@ BuildingsBuffersCreate(Arena* arena, Buildings* buildings, F32 road_height,
             vertex_buffer.data[vert_idx + 3] = {
                 .pos = {utm_node_next->pos.x, road_height + building_height, utm_node_next->pos.y},
                 .uv = {side_width, building_height}};
-        }
 
-        // ~mgj Create sides
-        for (U32 node_idx = 0, vert_idx = base_vertex_idx, index_idx = base_index_idx;
-             node_idx < way->node_count - 1; node_idx++, vert_idx += 4, index_idx += 6)
-        {
             index_buffer.data[index_idx] = vert_idx;
             index_buffer.data[index_idx + 1] = vert_idx + 1;
             index_buffer.data[index_idx + 2] = vert_idx + 2;
@@ -930,21 +946,272 @@ BuildingsBuffersCreate(Arena* arena, Buildings* buildings, F32 road_height,
         }
 
         base_index_idx += (way->node_count - 1) * 6;
-
-        // ~mgj: Create roof
-        // for (U32 node_idx = 0, vert_idx = base_vertex_idx + 3, index_idx = base_index_idx;
-        //      node_idx < way->node_count - 2; node_idx += 1, vert_idx += 4, index_idx += 3)
-        // {
-        //     index_buffer.data[index_idx] = base_vertex_idx + 1; // first node of the roof
-        //     index_buffer.data[index_idx + 1] = vert_idx;
-        //     index_buffer.data[index_idx + 2] = vert_idx + 4;
-        // }
-
-        // base_index_idx += (way->node_count - 2) * 3;
         base_vertex_idx += (way->node_count - 1) * 4;
+
+        ///////////////////////////////////////////////////////////////////
+        // ~mgj: Create roof
+
+        Buffer<NodeUtm*> node_utm_buffer =
+            BufferAlloc<NodeUtm*>(scratch.arena, way->node_count - 1);
+        for (U32 idx = 0; idx < way->node_count - 1; idx += 1)
+        {
+            node_utm_buffer.data[idx] = NodeUtmFind(node_utm_structure, way->node_ids[idx]);
+        }
+        // check for repeating nodes
+        for (U32 idx = 0; idx < node_utm_buffer.size; idx += 1)
+        {
+            Vec2F32 ref_node_pos = node_utm_buffer.data[idx]->pos;
+            for (U32 jdx = 0; jdx < node_utm_buffer.size - 1; jdx += 1)
+            {
+                Vec2F32 node_pos =
+                    node_utm_buffer.data[(idx + jdx + 1) % node_utm_buffer.size]->pos;
+                if (ref_node_pos.x == node_pos.x && ref_node_pos.y == node_pos.y)
+                {
+                    Assert(0);
+                    DEBUG_LOG("BuildingsBuffersCreate: Repetition of a node");
+                }
+            }
+        }
+
+        // Non of the non-connected line segments should cross for the earclipping algo to work
+        // properly
+        {
+            B32 does_intersect = FALSE;
+            for (U32 idx = 0; idx < node_utm_buffer.size; idx += 1)
+            {
+                NodeUtm* n0 = node_utm_buffer.data[idx];
+                NodeUtm* n1 = node_utm_buffer.data[(idx + 1) % node_utm_buffer.size];
+                for (U32 jdx = 0; jdx < node_utm_buffer.size - 3; jdx += 1)
+                {
+                    NodeUtm* n2 = node_utm_buffer.data[(jdx + idx + 2) % node_utm_buffer.size];
+                    NodeUtm* n3 = node_utm_buffer.data[(jdx + idx + 3) % node_utm_buffer.size];
+                    Vec2F32 dummy_res;
+                    does_intersect =
+                        ui::LineIntersect2F32(n0->pos, n1->pos, n2->pos, n3->pos, &dummy_res);
+                    if (does_intersect)
+                    {
+                        break;
+                    }
+                }
+                if (does_intersect)
+                {
+                    DEBUG_LOG("Intersection detected between line segments: current base vertex "
+                              "index: %ul\n",
+                              base_vertex_idx);
+                    break;
+                }
+            }
+            if (does_intersect)
+            {
+                continue;
+            }
+        }
+
+        Buffer<NodeUtm*> final_node_utm_buffer =
+            BufferAlloc<NodeUtm*>(scratch.arena, node_utm_buffer.size);
+        {
+            U32 cur_idx = 0;
+            for (U32 idx = 0; idx < node_utm_buffer.size; idx += 1)
+            {
+                Vec2F32 prev_pos =
+                    node_utm_buffer.data[(node_utm_buffer.size + idx - 1) % node_utm_buffer.size]
+                        ->pos;
+                Vec2F32 cur_pos = node_utm_buffer.data[idx % node_utm_buffer.size]->pos;
+                Vec2F32 next_pos = node_utm_buffer.data[(idx + 1) % node_utm_buffer.size]->pos;
+
+                B32 is_collinear =
+                    AreTwoConnectedLineSegmentsCollinear(prev_pos, cur_pos, next_pos);
+                if (!is_collinear)
+                {
+                    final_node_utm_buffer.data[cur_idx++] = node_utm_buffer.data[idx];
+                }
+            }
+            final_node_utm_buffer.size = cur_idx;
+        }
+
+        Buffer<Vec2F32> node_pos_buffer = BufferAlloc<Vec2F32>(scratch.arena, way->node_count - 1);
+        for (U32 idx = 0; idx < final_node_utm_buffer.size; idx += 1)
+        {
+            NodeUtm* node_utm = final_node_utm_buffer.data[idx];
+            vertex_buffer.data[base_vertex_idx + idx] = {
+                .pos = {node_utm->pos.x, road_height + building_height, node_utm->pos.y}};
+            node_pos_buffer.data[idx] = node_utm->pos;
+        }
+        Buffer<U32> polygon_index_buffer = EarClipping(scratch.arena, node_pos_buffer);
+        for (U32 idx = 0; idx < polygon_index_buffer.size; idx += 1)
+        {
+            index_buffer.data[base_index_idx + idx] =
+                polygon_index_buffer.data[idx] + base_vertex_idx;
+        }
+
+        base_vertex_idx += final_node_utm_buffer.size;
+        base_index_idx += polygon_index_buffer.size;
     }
-    *out_vertex_buffer = vertex_buffer;
-    *out_index_buffer = index_buffer;
+    Buffer<Vertex3D> vertex_buffer_final = BufferAlloc<Vertex3D>(arena, base_vertex_idx);
+    Buffer<U32> index_buffer_final = BufferAlloc<U32>(arena, base_index_idx);
+    BufferCopy(vertex_buffer_final, vertex_buffer, base_vertex_idx);
+    BufferCopy(index_buffer_final, index_buffer, base_index_idx);
+
+    *out_vertex_buffer = vertex_buffer_final;
+    *out_index_buffer = index_buffer_final;
 }
 
+enum Direction
+{
+    Direction_Undefined,
+    Direction_Clockwise,
+    Direction_CounterClockwise
+};
+
+static Direction
+ClockWiseTest(Buffer<Vec2F32> node_buffer)
+{
+    F32 total = 0;
+    for (U32 idx = 1; idx < node_buffer.size - 1; idx += 1)
+    {
+        Vec2F32 a = node_buffer.data[idx];
+        Vec2F32 b = node_buffer.data[idx - 1];
+        Vec2F32 c = node_buffer.data[idx + 1];
+
+        Vec2F32 ba = Sub2F32(a, b);
+        Vec2F32 ac = Sub2F32(c, a);
+
+        F32 cross_product_z = Cross2F32ZComponent(ba, ac);
+        total += cross_product_z;
+    }
+    AssertAlways(total > 0 || total < 0);
+    if (total > 0)
+    {
+        return Direction_CounterClockwise;
+    }
+    else if (total < 0)
+    {
+        return Direction_Clockwise;
+    }
+    DEBUG_LOG("ClockWiseTest: Lines are collinear");
+    return Direction_Undefined;
+}
+
+static Buffer<U32>
+IndexBufferCreate(Arena* arena, U64 buffer_size, Direction direction)
+{
+    Buffer<U32> index_buffer = BufferAlloc<U32>(arena, buffer_size);
+    if (direction == Direction_Clockwise)
+    {
+        for (U32 i = 0; i < index_buffer.size; i++)
+        {
+            index_buffer.data[i] = i;
+        }
+    }
+    else if (direction == Direction_CounterClockwise)
+    {
+        for (U32 i = 0; i < index_buffer.size; i++)
+        {
+            index_buffer.data[i] = index_buffer.size - i - 1;
+        }
+    }
+    else if (direction == Direction_Undefined)
+    {
+        Assert(0);
+    }
+    return index_buffer;
+}
+
+static B32
+PointInTriangle(Vec2F32 p1, Vec2F32 p2, Vec2F32 p3, Vec2F32 point)
+{
+    F32 d1, d2, d3;
+    B32 has_neg, has_pos;
+
+    d1 = Cross2F32ZComponent(Sub2F32(point, p1), Sub2F32(p2, p1));
+    d2 = Cross2F32ZComponent(Sub2F32(point, p2), Sub2F32(p3, p2));
+    d3 = Cross2F32ZComponent(Sub2F32(point, p3), Sub2F32(p1, p3));
+
+    has_neg = (d1 < 0) || (d2 < 0) || (d3 < 0);
+    has_pos = (d1 > 0) || (d2 > 0) || (d3 > 0);
+
+    return !(has_neg && has_pos);
+}
+
+static Buffer<U32>
+EarClipping(Arena* arena, Buffer<Vec2F32> node_buffer)
+{
+    Assert(node_buffer.size >= 3);
+    ScratchScope scratch = ScratchScope(&arena, 1);
+
+    U32 total_triangle_count = (node_buffer.size - 2);
+    U32 total_index_count = total_triangle_count * 3;
+
+    Direction direction = ClockWiseTest(node_buffer);
+    if (direction == Direction_Undefined)
+    {
+        Assert(0);
+    }
+    Buffer<U32> index_buffer = IndexBufferCreate(scratch.arena, node_buffer.size, direction);
+
+    // algo has a complexity of O(n^2). The for loop replaces an infinite loop.
+    Buffer<U32> out_vertex_index_buffer = BufferAlloc<U32>(arena, total_index_count);
+    U32 cur_index_buffer_idx = 0;
+    U32 idx = 0;
+    for (; idx < index_buffer.size; idx++)
+    {
+        if (index_buffer.size < 3)
+        {
+            break;
+        }
+
+        U32 ear_index_buffer_idx = idx % index_buffer.size;
+        U32 prev_index_buffer_idx = (index_buffer.size + idx - 1) % index_buffer.size;
+        U32 next_index_buffer_idx = (index_buffer.size + idx + 1) % index_buffer.size;
+
+        U32 ear_node_buffer_idx = index_buffer.data[ear_index_buffer_idx];
+        U32 prev_node_buffer_idx = index_buffer.data[prev_index_buffer_idx];
+        U32 next_node_buffer_idx = index_buffer.data[next_index_buffer_idx];
+
+        Vec2F32 ear = node_buffer.data[ear_node_buffer_idx];
+        Vec2F32 prev = node_buffer.data[prev_node_buffer_idx];
+        Vec2F32 next = node_buffer.data[next_node_buffer_idx];
+
+        Vec2F32 prev_to_ear = Sub2F32(ear, prev);
+        Vec2F32 ear_to_next = Sub2F32(next, ear);
+
+        F32 cross_product_z = Cross2F32ZComponent(prev_to_ear, ear_to_next);
+
+        // negative cross product z component means that the triangle has clockwise orientation.
+        if (cross_product_z < 0)
+        {
+            B32 is_ear = TRUE;
+            for (U32 test_i = 0; test_i < index_buffer.size - 3; test_i++)
+            {
+                U32 test_node_buffer_idx =
+                    index_buffer.data[(next_index_buffer_idx + test_i + 1) % index_buffer.size];
+                Vec2F32 test_point = node_buffer.data[test_node_buffer_idx];
+
+                if (PointInTriangle(prev, ear, next, test_point))
+                {
+                    is_ear = FALSE;
+                    break;
+                }
+            }
+
+            if (is_ear)
+            {
+                // add ear to vertex buffer
+                out_vertex_index_buffer.data[cur_index_buffer_idx] = prev_node_buffer_idx;
+                out_vertex_index_buffer.data[cur_index_buffer_idx + 1] = ear_node_buffer_idx;
+                out_vertex_index_buffer.data[cur_index_buffer_idx + 2] = next_node_buffer_idx;
+                cur_index_buffer_idx += 3;
+
+                // remove ear from index buffer
+                BufferItemRemove(&index_buffer, ear_index_buffer_idx);
+                idx = 0;
+            }
+        }
+        else if (cross_product_z == 0)
+        {
+            DEBUG_LOG("Error in EarClipping: two line segments are collinear");
+        }
+    }
+    return out_vertex_index_buffer;
+}
 } // namespace city

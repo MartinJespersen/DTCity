@@ -65,6 +65,8 @@ CommandBufferRecord(U32 image_index, U32 current_frame)
         VkImageMemoryBarrier2 transition_to_drawing_barrier{};
         transition_to_drawing_barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2;
         transition_to_drawing_barrier.pNext = nullptr;
+        transition_to_drawing_barrier.srcStageMask = VK_PIPELINE_STAGE_2_NONE;
+        transition_to_drawing_barrier.srcAccessMask = VK_ACCESS_2_NONE;
         transition_to_drawing_barrier.dstStageMask =
             VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT;
         transition_to_drawing_barrier.dstAccessMask = VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT;
@@ -324,7 +326,7 @@ MainLoop(void* ptr)
         VkSemaphoreSubmitInfo waitSemaphoreInfo{};
         waitSemaphoreInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO;
         waitSemaphoreInfo.semaphore = image_available_semaphore;
-        waitSemaphoreInfo.stageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT;
+        waitSemaphoreInfo.stageMask = VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT;
 
         VkSemaphoreSubmitInfo signalSemaphoreInfo{};
         signalSemaphoreInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO;

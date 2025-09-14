@@ -11,6 +11,34 @@ BufferAlloc(Arena* arena, U64 count)
     return buffer;
 };
 
+template <typename T>
+static void
+BufferCopy(Buffer<T> dst, Buffer<T> src, U64 element_count_to_copy)
+{
+    Assert(dst.size >= element_count_to_copy);
+    MemoryCopy(dst.data, src.data, element_count_to_copy * sizeof(T));
+}
+
+template <typename T>
+static void
+BufferItemRemove(Buffer<T>* in_out_buffer, U32 index)
+{
+    Assert(index < in_out_buffer->size);
+    U32 type_size = sizeof(T);
+    MemoryCopy(in_out_buffer->data + index, in_out_buffer->data + index + 1,
+               type_size * (in_out_buffer->size - index - 1));
+    in_out_buffer->size--;
+}
+
+template <typename T>
+static void
+BufferAppend(Buffer<T> buffer, Buffer<T> buffer_append, U32 append_idx)
+{
+    Assert(buffer_append.size + append_idx <= buffer.size);
+    T* dst_ptr = buffer.data + append_idx;
+    MemoryCopy(dst_ptr, buffer_append.data, buffer_append.size * sizeof(T));
+}
+
 ////////////////////////////////
 static Buffer<String8>
 Str8BufferFromCString(Arena* arena, std::initializer_list<const char*> strings)

@@ -392,7 +392,7 @@ TextureCreate(VkCommandBuffer cmd_buffer, render::AssetInfo asset_info, String8 
     // Get texture
     ktxTexture2* ktx_texture;
     ktx_error_code_e ktxresult = ktxTexture2_CreateFromNamedFile(
-        (char*)texture_path.str, KTX_TEXTURE_CREATE_LOAD_IMAGE_DATA_BIT, &ktx_texture);
+        (char*)texture_path.str, KTX_TEXTURE_CREATE_ALLOC_STORAGE, &ktx_texture);
     Assert(ktxresult == KTX_SUCCESS);
 
     BufferAllocation texture_staging_buffer =
@@ -1490,7 +1490,7 @@ Model3DRendering()
                                 descriptor_sets, 0, NULL);
         vkCmdBindVertexBuffers(cmd_buffer, 0, 1, &node->vertex_alloc.buffer, offsets);
         vkCmdBindIndexBuffer(cmd_buffer, node->index_alloc.buffer, 0, VK_INDEX_TYPE_UINT32);
-
+        U32 index_count = U32(node->index_alloc.size / 4);
         if (node->depth_write_per_draw_enabled)
         {
             for (WriteType write_type = (WriteType)0; write_type < WriteType_Count;
@@ -1509,7 +1509,7 @@ Model3DRendering()
                                                 color_write_disabled);
                 }
 
-                vkCmdDrawIndexed(cmd_buffer, U32(node->index_alloc.size / 4), 1, 0, 0, 0);
+                vkCmdDrawIndexed(cmd_buffer, index_count, 1, 0, 0, 0);
             }
         }
         else
@@ -1517,7 +1517,7 @@ Model3DRendering()
             vkCmdSetDepthWriteEnable(cmd_buffer, VK_TRUE);
             vkCmdSetColorWriteEnableEXT(cmd_buffer, ArrayCount(color_write_enabled),
                                         color_write_enabled);
-            vkCmdDrawIndexed(cmd_buffer, U32(node->index_alloc.size / 4), 1, 0, 0, 0);
+            vkCmdDrawIndexed(cmd_buffer, index_count, 1, 0, 0, 0);
         }
     }
 }

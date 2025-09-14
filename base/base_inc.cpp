@@ -13,6 +13,7 @@
 #include "base_math.c"
 #include "base_random.cpp"
 #include "base_strings.cpp"
+#include "base_diagnostics.cpp"
 
 #include "base_thread_context.c"
 // #include "base_command_line.c"

@@ -15,7 +15,7 @@ set "tracy_src=%lib_dir%tracy/TracyClient.cpp"
 set "glfw_lib_dir=%lib_dir%glfw\\lib\\"
 set "ktx_lib_dir=%lib_dir%ktx"
 :: Compiler and linker flags
-set "cxxflags=/W4 /std:c++20 /wd4201 /wd4005 /wd4838 /wd4244 /wd4996 /wd4310 /wd4245 /EHsc /Z7"
+set "cxxflags=/W4 /std:c++20 /wd4201 /wd4005 /wd4838 /wd4244 /wd4996 /wd4310 /wd4245 /wd4505 /wd4100 /EHsc /Z7"
 if not "%~1"=="" (
     set "cxxflags=%cxxflags% %~1"
 )

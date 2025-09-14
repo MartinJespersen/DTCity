@@ -10,9 +10,17 @@ exitWithError(const char* message)
     exit(EXIT_FAILURE);
 }
 
+static void
+WriteToLog(const char* file_name, const char* message, ...);
+
 #if defined(BUILD_DEBUG)
-#define DEBUG_LOG(message, ...) printf(message, __VA_ARGS__)
+#define DEBUG_LOG(message, ...)                                                                    \
+    do                                                                                             \
+    {                                                                                              \
+        fprintf(stdout, message, __VA_ARGS__);                                                     \
+    } while (0)
 #else
+
 #define DEBUG_LOG(message, ...)
 #endif
 

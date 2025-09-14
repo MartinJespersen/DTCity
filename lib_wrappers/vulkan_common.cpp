@@ -963,7 +963,7 @@ ImageAllocationCreate(VmaAllocator allocator, U32 width, U32 height,
 {
     ImageAllocation image_alloc = {0};
 
-    VkImageCreateInfo image_create_info{};
+    VkImageCreateInfo image_create_info = {};
     image_create_info.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
     image_create_info.imageType = VK_IMAGE_TYPE_2D;
     image_create_info.extent.width = width;
@@ -1041,7 +1041,7 @@ VK_ChooseSwapSurfaceFormat(Buffer<VkSurfaceFormatKHR> availableFormats)
 {
     for (U32 i = 0; i < availableFormats.size; i++)
     {
-        if (availableFormats.data[i].format == VK_FORMAT_B8G8R8A8_SRGB &&
+        if (availableFormats.data[i].format == VK_FORMAT_R8G8B8A8_SRGB &&
             availableFormats.data[i].colorSpace == VK_COLOR_SPACE_SRGB_NONLINEAR_KHR)
         {
             return availableFormats.data[i];

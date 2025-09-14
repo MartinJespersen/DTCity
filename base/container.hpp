@@ -10,9 +10,24 @@ template <typename T> struct Buffer
     U64 size;
 };
 
+template <typename T> struct BufferGrowable
+{
+    Buffer<T> buffer;
+    U64 index;
+};
+
 template <typename T>
 Buffer<T>
 BufferAlloc(Arena* arena, U64 count);
+template <typename T>
+static void
+BufferCopy(Buffer<T> dst, Buffer<T> src, U64 element_count_to_copy);
+template <typename T>
+static void
+BufferItemRemove(Buffer<T>* in_out_buffer, U32 index);
+template <typename T>
+static void
+BufferAppend(Buffer<T> buffer, Buffer<T> buffer_append, U32 append_idx);
 
 //~mgj: container creation
 static Buffer<String8>

@@ -274,5 +274,6 @@ BuildingDestroy(Buildings* building);
 static void
 BuildingsBuffersCreate(Arena* arena, city::Buildings* buildings, F32 road_height,
                        Buffer<city::Vertex3D>* out_vertex_buffer, Buffer<U32>* out_index_buffer);
-
+static Buffer<U32>
+EarClipping(Arena* arena, Buffer<Vec2F32> node_buffer);
 } // namespace city

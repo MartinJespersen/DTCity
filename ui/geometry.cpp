@@ -109,4 +109,18 @@ LineIntersect(F64 x1, F64 y1, F64 x2, F64 y2, F64 x3, F64 y3, F64 x4, F64 y4, F6
     return (TRUE);
 }
 
+static B32
+LineIntersect2F32(Vec2F32 v0, Vec2F32 v1, Vec2F32 v2, Vec2F32 v3, Vec2F32* res)
+{
+    Vec2F64 res_f64 = {};
+
+    B32 does_intersect =
+        LineIntersect(v0.x, v0.y, v1.x, v1.y, v2.x, v2.y, v3.x, v3.y, &res_f64.x, &res_f64.y);
+
+    res->x = (F32)res_f64.x;
+    res->y = (F32)res_f64.y;
+
+    return does_intersect;
+}
+
 } // namespace ui
