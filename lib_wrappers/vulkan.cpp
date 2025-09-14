@@ -424,11 +424,13 @@ Model3DInstancePipelineCreate(VulkanContext* vk_ctx)
         DescriptorSetLayoutCreate(vk_ctx->device, &desc_set_layout_info, 1);
 
     String8 vert_path = CreatePathFromStrings(
-        scratch.arena, Str8BufferFromCString(
-                           scratch.arena, {(char*)vk_ctx->shader_path.str, "car", "car_vert.spv"}));
+        scratch.arena,
+        Str8BufferFromCString(scratch.arena, {(char*)vk_ctx->shader_path.str, "model_3d_instancing",
+                                              "model_3d_instancing_vert.spv"}));
     String8 frag_path = CreatePathFromStrings(
-        scratch.arena, Str8BufferFromCString(
-                           scratch.arena, {(char*)vk_ctx->shader_path.str, "car", "car_frag.spv"}));
+        scratch.arena,
+        Str8BufferFromCString(scratch.arena, {(char*)vk_ctx->shader_path.str, "model_3d_instancing",
+                                              "model_3d_instancing_frag.spv"}));
 
     ShaderModuleInfo vert_shader_stage_info =
         ShaderStageFromSpirv(scratch.arena, vk_ctx->device, VK_SHADER_STAGE_VERTEX_BIT, vert_path);
@@ -598,10 +600,10 @@ Model3DPipelineCreate(VulkanContext* vk_ctx)
 
     String8 vert_path = CreatePathFromStrings(
         scratch.arena, Str8BufferFromCString(scratch.arena, {(char*)vk_ctx->shader_path.str,
-                                                             "building", "building_vert.spv"}));
+                                                             "model_3d", "model_3d_vert.spv"}));
     String8 frag_path = CreatePathFromStrings(
         scratch.arena, Str8BufferFromCString(scratch.arena, {(char*)vk_ctx->shader_path.str,
-                                                             "building", "building_frag.spv"}));
+                                                             "model_3d", "model_3d_frag.spv"}));
 
     ShaderModuleInfo vert_shader_stage_info =
         ShaderStageFromSpirv(scratch.arena, vk_ctx->device, VK_SHADER_STAGE_VERTEX_BIT, vert_path);
@@ -628,8 +630,7 @@ Model3DPipelineCreate(VulkanContext* vk_ctx)
         {.location = 1,
          .binding = 0,
          .format = VK_FORMAT_R32G32_SFLOAT,
-         .offset = offsetof(city::Vertex3D, uv)},
-    };
+         .offset = offsetof(city::Vertex3D, uv)}};
     VkVertexInputBindingDescription input_desc[] = {
         {.binding = 0, .stride = sizeof(city::Vertex3D), .inputRate = VK_VERTEX_INPUT_RATE_VERTEX}};
 

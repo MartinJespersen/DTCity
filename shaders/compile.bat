@@ -3,18 +3,13 @@
 :: Exit on error
 setlocal
 
-pushd car
-call glslc car.frag -o car_frag.spv
-call glslc car.vert -o car_vert.spv
+pushd model_3d_instancing
+call glslc model_3d_instancing.frag -o model_3d_instancing_frag.spv
+call glslc model_3d_instancing.vert -o model_3d_instancing_vert.spv
 popd
 
-pushd road
-call glslc road.frag -o road_frag.spv
-call glslc road.vert -o road_vert.spv
-popd
-
-pushd building
-call glslc building.frag -o building_frag.spv
-call glslc building.vert -o building_vert.spv
+pushd model_3d
+call glslc model_3d.frag -o model_3d_frag.spv
+call glslc model_3d.vert -o model_3d_vert.spv
 popd
 endlocal
