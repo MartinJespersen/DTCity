@@ -276,11 +276,19 @@ MainLoop(void* ptr)
             render::BufferInfoFromTemplateBuffer(instance_buffer);
         wrapper::Model3DDraw(&road->asset_vertex_info, &road->asset_index_info,
                              &road->asset_texture_info, road->texture_path, &sampler_info,
-                             &road_vertex_buffer_info, &road_index_buffer_info, TRUE);
+                             &road_vertex_buffer_info, &road_index_buffer_info, TRUE, 0,
+                             road->index_buffer.size);
 
         wrapper::Model3DDraw(&buildings->vertex_buffer_info, &buildings->index_buffer_info,
-                             &buildings->texture_info, buildings->texture_path, &sampler_info,
-                             &building_vertex_buffer_info, &building_index_buffer_info, FALSE);
+                             &buildings->roof_texture_info, buildings->roof_texture_path,
+                             &sampler_info, &building_vertex_buffer_info,
+                             &building_index_buffer_info, FALSE,
+                             buildings->roof_index_buffer_offset, buildings->roof_index_count);
+        wrapper::Model3DDraw(&buildings->vertex_buffer_info, &buildings->index_buffer_info,
+                             &buildings->facade_texture_info, buildings->facade_texture_path,
+                             &sampler_info, &building_vertex_buffer_info,
+                             &building_index_buffer_info, FALSE,
+                             buildings->facade_index_buffer_offset, buildings->facade_index_count);
         wrapper::Model3DInstanceDraw(&car_sim->vertex_buffer_info, &car_sim->index_buffer_info,
                                      &car_sim->texture_info, car_sim->texture_path, &sampler_info,
                                      &car_vertex_buffer_info, &car_index_buffer_info,

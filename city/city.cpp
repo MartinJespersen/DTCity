@@ -835,16 +835,28 @@ BuildingsCreate(String8 cache_path, String8 texture_path, F32 road_height, GCSBo
     buildings->vertex_buffer_info =
         render::AssetInfoCreate(S("buildings_vertex_buffer"), render::AssetItemType_Buffer,
                                 render::PipelineUsageType_VertexBuffer);
-    buildings->texture_info =
-        render::AssetInfoCreate(S("buildings_texture"), render::AssetItemType_Texture,
-                                render::PipelineUsageType_3DInstanced);
     buildings->index_buffer_info =
         render::AssetInfoCreate(S("buildings_index_buffer"), render::AssetItemType_Buffer,
                                 render::PipelineUsageType_IndexBuffer);
-    buildings->texture_path = Str8PathFromStr8List(arena, {texture_path, S("brick_wall.ktx2")});
 
-    city::BuildingsBuffersCreate(arena, buildings, road_height, &buildings->vertex_buffer,
-                                 &buildings->index_buffer);
+    buildings->roof_texture_info = render::AssetInfoCreate(
+        S("buildings_roof_texture"), render::AssetItemType_Texture, render::PipelineUsageType_3D);
+    buildings->facade_texture_info = render::AssetInfoCreate(
+        S("buildings_facade_texture"), render::AssetItemType_Texture, render::PipelineUsageType_3D);
+
+    buildings->facade_texture_path =
+        Str8PathFromStr8List(arena, {texture_path, S("brick_wall.ktx2")});
+    buildings->roof_texture_path =
+        Str8PathFromStr8List(arena, {texture_path, S("concrete042A.ktx2")});
+
+    BuildingRenderInfo render_info;
+    city::BuildingsBuffersCreate(arena, buildings, road_height, &render_info);
+    buildings->vertex_buffer = render_info.vertex_buffer;
+    buildings->index_buffer = render_info.index_buffer;
+    buildings->roof_index_buffer_offset = render_info.roof_index_offset;
+    buildings->facade_index_buffer_offset = render_info.facade_index_offset;
+    buildings->facade_index_count = render_info.facade_index_count;
+    buildings->roof_index_count = render_info.roof_index_count;
 
     return buildings;
 }
@@ -854,7 +866,8 @@ BuildingDestroy(Buildings* building)
 {
     wrapper::AssetManagerBufferFree(building->vertex_buffer_info.id);
     wrapper::AssetManagerBufferFree(building->index_buffer_info.id);
-    wrapper::AssetManagerTextureFree(building->texture_info.id);
+    wrapper::AssetManagerTextureFree(building->roof_texture_info.id);
+    wrapper::AssetManagerTextureFree(building->facade_texture_info.id);
     ArenaRelease(building->arena);
 }
 static F32
@@ -880,7 +893,7 @@ AreTwoConnectedLineSegmentsCollinear(Vec2F32 prev, Vec2F32 cur, Vec2F32 next)
 // buildings) and divide it into convex parts
 static void
 BuildingsBuffersCreate(Arena* arena, Buildings* buildings, F32 road_height,
-                       Buffer<Vertex3D>* out_vertex_buffer, Buffer<U32>* out_index_buffer)
+                       BuildingRenderInfo* out_render_info)
 {
     ScratchScope scratch = ScratchScope(&arena, 1);
     NodeWays* node_ways = &buildings->node_ways;
@@ -888,31 +901,32 @@ BuildingsBuffersCreate(Arena* arena, Buildings* buildings, F32 road_height,
     F32 building_height = 3;
 
     // ~mgj: Calculate vertex buffer size based on node count
-    U32 vertex_count = 0;
-    U32 index_count = 0;
+    U32 total_vertex_count = 0;
+    U32 total_index_count = 0;
+
     for (U32 i = 0; i < node_ways->ways.size; i++)
     {
         Way* way = &node_ways->ways.data[i];
         // ~mgj: first and last node id should be the same
-        vertex_count += (way->node_count - 1) * 4 + (way->node_count - 1) * 2;
+        U32 way_facade_vertex_count = (way->node_count - 1) * 4;
+        total_vertex_count += way_facade_vertex_count + (way->node_count - 1) * 2;
         // ~mgj: count of index for Polyhedron (without ground floor) that makes up the building
         // facade(roof+sides)
         // U64 roof_triangle_count = way->node_count - 2;
         U64 sides_triangle_count = (way->node_count - 1) * 2;
         U64 roof_triangle_count = way->node_count - 2;
         U64 total_triangle_count = sides_triangle_count + roof_triangle_count;
-        index_count += total_triangle_count * 3;
+        total_index_count += total_triangle_count * 3;
 
         Assert(way->node_ids[0] == way->node_ids[way->node_count - 1]);
     }
 
-    Buffer<Vertex3D> vertex_buffer = BufferAlloc<Vertex3D>(scratch.arena, vertex_count);
-    Buffer<U32> index_buffer = BufferAlloc<U32>(scratch.arena, index_count);
+    Buffer<Vertex3D> vertex_buffer = BufferAlloc<Vertex3D>(scratch.arena, total_vertex_count);
+    Buffer<U32> index_buffer = BufferAlloc<U32>(scratch.arena, total_index_count);
 
     U32 base_index_idx = 0;
     U32 base_vertex_idx = 0;
     for (U32 way_idx = 0; way_idx < node_ways->ways.size; way_idx++)
-    // for (U32 way_idx = 0; way_idx < 1; way_idx++)
     {
         Way* way = &node_ways->ways.data[way_idx];
 
@@ -947,10 +961,14 @@ BuildingsBuffersCreate(Arena* arena, Buildings* buildings, F32 road_height,
 
         base_index_idx += (way->node_count - 1) * 6;
         base_vertex_idx += (way->node_count - 1) * 4;
+    }
 
-        ///////////////////////////////////////////////////////////////////
-        // ~mgj: Create roof
-
+    ///////////////////////////////////////////////////////////////////
+    // ~mgj: Create roof
+    U32 roof_base_index = base_index_idx;
+    for (U32 way_idx = 0; way_idx < node_ways->ways.size; way_idx++)
+    {
+        Way* way = &node_ways->ways.data[way_idx];
         Buffer<NodeUtm*> node_utm_buffer =
             BufferAlloc<NodeUtm*>(scratch.arena, way->node_count - 1);
         for (U32 idx = 0; idx < way->node_count - 1; idx += 1)
@@ -1052,8 +1070,12 @@ BuildingsBuffersCreate(Arena* arena, Buildings* buildings, F32 road_height,
     BufferCopy(vertex_buffer_final, vertex_buffer, base_vertex_idx);
     BufferCopy(index_buffer_final, index_buffer, base_index_idx);
 
-    *out_vertex_buffer = vertex_buffer_final;
-    *out_index_buffer = index_buffer_final;
+    out_render_info->vertex_buffer = vertex_buffer_final;
+    out_render_info->index_buffer = index_buffer_final;
+    out_render_info->facade_index_offset = 0;
+    out_render_info->roof_index_offset = roof_base_index;
+    out_render_info->facade_index_count = roof_base_index;
+    out_render_info->roof_index_count = base_index_idx - roof_base_index;
 }
 
 enum Direction

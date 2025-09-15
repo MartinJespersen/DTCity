@@ -204,6 +204,17 @@ struct CarSim
     String8 texture_path;
 };
 
+struct BuildingRenderInfo
+{
+    Buffer<city::Vertex3D> vertex_buffer;
+    Buffer<U32> index_buffer;
+    U32 roof_index_offset;
+    U32 roof_index_count;
+
+    U32 facade_index_offset;
+    U32 facade_index_count;
+};
+
 struct Buildings
 {
     Arena* arena;
@@ -214,11 +225,17 @@ struct Buildings
 
     render::AssetInfo vertex_buffer_info;
     render::AssetInfo index_buffer_info;
-    render::AssetInfo texture_info;
-    String8 texture_path;
+    render::AssetInfo roof_texture_info;
+    render::AssetInfo facade_texture_info;
+    String8 roof_texture_path;
+    String8 facade_texture_path;
 
     Buffer<city::Vertex3D> vertex_buffer;
     Buffer<U32> index_buffer;
+    U32 roof_index_buffer_offset;
+    U32 roof_index_count;
+    U32 facade_index_buffer_offset;
+    U32 facade_index_count;
 };
 
 struct Model3DInstance
@@ -272,8 +289,8 @@ BuildingsCreate(String8 cache_path, String8 texture_path, F32 road_height,
 static void
 BuildingDestroy(Buildings* building);
 static void
-BuildingsBuffersCreate(Arena* arena, city::Buildings* buildings, F32 road_height,
-                       Buffer<city::Vertex3D>* out_vertex_buffer, Buffer<U32>* out_index_buffer);
+BuildingsBuffersCreate(Arena* arena, Buildings* buildings, F32 road_height,
+                       BuildingRenderInfo* out_render_info);
 static Buffer<U32>
 EarClipping(Arena* arena, Buffer<Vec2F32> node_buffer);
 } // namespace city

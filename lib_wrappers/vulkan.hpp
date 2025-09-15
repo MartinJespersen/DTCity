@@ -114,6 +114,8 @@ struct Model3DNode
     Model3DNode* next;
     B32 depth_write_per_draw_enabled;
     BufferAllocation index_alloc;
+    U32 index_buffer_offset;
+    U32 index_count;
     BufferAllocation vertex_alloc;
     VkDescriptorSet descriptor_set;
 };
@@ -327,7 +329,7 @@ BuildingCreateAsync(render::AssetId vertex_buffer_id, render::AssetId index_buff
 static void
 Model3DBucketAdd(BufferAllocation* vertex_buffer_allocation,
                  BufferAllocation* index_buffer_allocation, VkDescriptorSet desc_set,
-                 B32 depth_test_enabled);
+                 B32 depth_write_per_draw_call_only, U32 index_buffer_offset, U32 vertex_count);
 static void
 Model3DInstanceBucketAdd(BufferAllocation* vertex_buffer_allocation,
                          BufferAllocation* index_buffer_allocation, VkDescriptorSet desc_set,
@@ -336,7 +338,8 @@ static void
 Model3DDraw(render::AssetInfo* vertex_info, render::AssetInfo* index_info,
             render::AssetInfo* texture_info, String8 texture_path,
             render::SamplerInfo* sampler_info, render::BufferInfo* vertex_buffer_info,
-            render::BufferInfo* index_buffer_info, B32 depth_test_enable);
+            render::BufferInfo* index_buffer_info, B32 depth_test_per_draw_call_only,
+            U32 index_buffer_offset, U32 index_count);
 static void
 Model3DInstanceDraw(render::AssetInfo* vertex_info, render::AssetInfo* index_info,
                     render::AssetInfo* texture_info, String8 texture_path,
