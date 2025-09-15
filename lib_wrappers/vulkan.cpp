@@ -278,7 +278,7 @@ AssetBufferLoad(Arena* arena, render::AssetItem<AssetItemBuffer>* asset_item,
     *buffer_load_info = *buffer_info;
 
     AssetLoad(asset_loading_wait_list, node);
-    asset_item->is_loading = true;
+    asset_item->is_loading = TRUE;
 }
 
 static void
@@ -295,7 +295,7 @@ AssetTextureLoad(Arena* arena, render::AssetItem<Texture>* asset_item,
     texture_load_info->texture_path = PushStr8Copy(arena, texture_path);
 
     AssetLoad(asset_loading_wait_list, node);
-    asset_item->is_loading = true;
+    asset_item->is_loading = TRUE;
 }
 
 static render::ThreadInput*
@@ -367,7 +367,7 @@ ThreadSetup(async::ThreadInfo thread_info, void* input)
             Assert(0);
             continue;
         }
-        asset_loading_info->is_loaded = 1;
+        ins_atomic_u32_eval_assign(&asset_loading_info->is_loaded, TRUE);
     }
     VK_CHECK_RESULT(vkEndCommandBuffer(cmd));
 
@@ -985,6 +985,7 @@ AssetCmdQueueItemEnqueue(U32 thread_id, VkCommandBuffer cmd, render::ThreadInput
     for (render::AssetLoadingInfoNode* asset_node = thread_input->asset_loading_wait_list.first;
          asset_node; asset_node = asset_node->next)
     {
+        ins_atomic_u32_eval_cond_assign(&asset_node->load_info.is_loaded, 1, 0);
         if (asset_node->load_info.is_loaded)
         {
             DEBUG_LOG("Asset ID: %llu - Cmd Getting Queued\n", asset_node->load_info.info.id.id);
@@ -1138,7 +1139,8 @@ AssetManagerCmdDoneCheck()
                  asset_node; asset_node = asset_node->next)
             {
                 render::AssetLoadingInfo* asset_load_info = &asset_node->load_info;
-                if (asset_load_info->is_loaded)
+                ins_atomic_u32_eval_cond_assign(&asset_node->load_info.is_loaded, 1, 0);
+                if (asset_node->load_info.is_loaded)
                 {
                     if (asset_load_info->info.type == render::AssetItemType_Texture)
                     {
