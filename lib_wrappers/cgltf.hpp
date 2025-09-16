@@ -24,5 +24,5 @@ struct CgltfResult
 static render::SamplerInfo
 SamplerFromCgltfSampler(CgltfSampler sampler);
 static CgltfResult
-CgltfParse(Arena* arena, String8 gltf_path);
+CgltfParse(Arena* arena, String8 gltf_path, String8 root_node_name);
 } // namespace wrapper

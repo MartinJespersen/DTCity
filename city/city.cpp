@@ -708,14 +708,15 @@ CarSimCreate(String8 texture_path, U32 car_count, Road* road)
     car_sim->arena = arena;
 
     // parse gltf file
-    String8 gltf_path = S("../../../assets/cars/scene.gltf");
-    wrapper::CgltfResult parsed_result = wrapper::CgltfParse(arena, gltf_path);
+    String8 gltf_path = S("../../../assets/audi/scene.gltf");
+    wrapper::CgltfResult parsed_result = wrapper::CgltfParse(arena, gltf_path, S("root"));
     render::SamplerInfo sampler_info = wrapper::SamplerFromCgltfSampler(parsed_result.sampler);
     car_sim->vertex_buffer = parsed_result.vertex_buffer;
     car_sim->index_buffer = parsed_result.index_buffer;
     car_sim->sampler_info = sampler_info;
 
-    car_sim->texture_path = Str8PathFromStr8List(arena, {texture_path, S("car_collection.ktx2")});
+    car_sim->texture_path =
+        Str8PathFromStr8List(arena, {S("../../../assets/audi/textures/color.ktx2")});
     car_sim->texture_info = render::AssetInfoCreate(texture_path, render::AssetItemType_Texture,
                                                     render::PipelineUsageType_3DInstanced);
     car_sim->index_buffer_info =

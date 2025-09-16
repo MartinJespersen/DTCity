@@ -21,6 +21,14 @@ BufferCopy(Buffer<T> dst, Buffer<T> src, U64 element_count_to_copy)
 
 template <typename T>
 static void
+BufferCopy(Buffer<T> dst, Buffer<T> src, U64 dst_offset, U64 src_offset, U64 size)
+{
+    Assert(dst.size >= dst_offset + size);
+    MemoryCopy(dst.data + dst_offset, src.data + src_offset, size * sizeof(T));
+}
+
+template <typename T>
+static void
 BufferItemRemove(Buffer<T>* in_out_buffer, U32 index)
 {
     Assert(index < in_out_buffer->size);

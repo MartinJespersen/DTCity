@@ -538,7 +538,7 @@ static Mat4x4F32 make_rotate_4x4f32(Vec3F32 axis, F32 turns) {
   return result;
 }
 
-static Mat4x4F32 mul_4x4f32(Mat4x4F32 a, Mat4x4F32 b) {
+static Mat4x4F32 Mul4x4f32(Mat4x4F32 a, Mat4x4F32 b) {
   Mat4x4F32 c = {0};
   for (int j = 0; j < 4; j += 1) {
     for (int i = 0; i < 4; i += 1) {
@@ -546,6 +546,19 @@ static Mat4x4F32 mul_4x4f32(Mat4x4F32 a, Mat4x4F32 b) {
                    a.v[2][j] * b.v[i][2] + a.v[3][j] * b.v[i][3]);
     }
   }
+  return c;
+}
+
+static Vec4F32 Mul4x4Vec4F32(Mat4x4F32 a, Vec4F32 b) {
+  Vec4F32 c = {0};
+  c.v[0] = (a.v[0][0] * b.v[0] + a.v[0][1] * b.v[1] + a.v[0][2] * b.v[2] +
+            a.v[0][3] * b.v[3]);
+  c.v[1] = (a.v[1][0] * b.v[0] + a.v[1][1] * b.v[1] + a.v[1][2] * b.v[2] +
+            a.v[1][3] * b.v[3]);
+  c.v[2] = (a.v[2][0] * b.v[0] + a.v[2][1] * b.v[1] + a.v[2][2] * b.v[2] +
+            a.v[2][3] * b.v[3]);
+  c.v[3] = (a.v[3][0] * b.v[0] + a.v[3][1] * b.v[1] + a.v[3][2] * b.v[2] +
+            a.v[3][3] * b.v[3]);
   return c;
 }
 

@@ -1,0 +1,8 @@
+Model Information:
+* title:	AUDI RS7 2024 3D GLB OBJECT
+* source:	https://sketchfab.com/3d-models/audi-rs7-2024-3d-glb-object-821f32fd080e42c1b33174ddbc624779
+* author:	3D Next Level Gen (https://sketchfab.com/3dnextlevelgen)
+
+Model License:
+* license type:	SKETCHFAB Standard (https://sketchfab.com/licenses)
+* requirements:	Under basic restrictions, use worldwide, on all types of media, commercially or not, and in all types of derivative works

@@ -660,7 +660,9 @@ make_look_at_4x4f32(Vec3F32 eye, Vec3F32 center, Vec3F32 up);
 static Mat4x4F32
 make_rotate_4x4f32(Vec3F32 axis, F32 turns);
 static Mat4x4F32
-mul_4x4f32(Mat4x4F32 a, Mat4x4F32 b);
+Mul4x4f32(Mat4x4F32 a, Mat4x4F32 b);
+static Vec4F32
+Mul4x4Vec4F32(Mat4x4F32 a, Vec4F32 b);
 static Mat4x4F32
 scale_4x4f32(Mat4x4F32 m, F32 scale);
 static Mat4x4F32

@@ -788,9 +788,9 @@ Model3DInstanceRendering()
         vkCmdBindVertexBuffers(cmd_buffer, 0, 2, vertex_buffers, vertex_offsets);
         U32 instance_count =
             U32(node->instance_buffer_info.buffer.size / node->instance_buffer_info.type_size);
-        U32 vertex_count = U32(node->vertex_alloc.size / sizeof(city::Vertex3D));
+        U32 index_count = U32(node->index_alloc.size / sizeof(U32));
         vkCmdBindIndexBuffer(cmd_buffer, node->index_alloc.buffer, 0, VK_INDEX_TYPE_UINT32);
-        vkCmdDrawIndexed(cmd_buffer, vertex_count, instance_count, 0, 0, 0);
+        vkCmdDrawIndexed(cmd_buffer, index_count, instance_count, 0, 0, 0);
     }
 }
 
