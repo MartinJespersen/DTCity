@@ -166,6 +166,7 @@ struct VulkanContext
 #endif
     Arena* arena;
 
+    String8 asset_path;
     String8 texture_path;
     String8 shader_path;
 

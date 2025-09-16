@@ -700,23 +700,23 @@ CarCenterHeightOffset(Buffer<Vertex3D> vertices)
 }
 
 static CarSim*
-CarSimCreate(String8 texture_path, U32 car_count, Road* road)
+CarSimCreate(String8 asset_path, String8 texture_path, U32 car_count, Road* road)
 {
+    ScratchScope scratch = ScratchScope(0, 0);
     Arena* arena = ArenaAlloc();
 
     CarSim* car_sim = PushStruct(arena, CarSim);
     car_sim->arena = arena;
 
     // parse gltf file
-    String8 gltf_path = S("../../../assets/audi/scene.gltf");
-    wrapper::CgltfResult parsed_result = wrapper::CgltfParse(arena, gltf_path, S("root"));
+    String8 gltf_path = Str8PathFromStr8List(scratch.arena, {asset_path, S("cars/scene.gltf")});
+    wrapper::CgltfResult parsed_result = wrapper::CgltfParse(arena, gltf_path, S("Car.013"));
     render::SamplerInfo sampler_info = wrapper::SamplerFromCgltfSampler(parsed_result.sampler);
     car_sim->vertex_buffer = parsed_result.vertex_buffer;
     car_sim->index_buffer = parsed_result.index_buffer;
     car_sim->sampler_info = sampler_info;
 
-    car_sim->texture_path =
-        Str8PathFromStr8List(arena, {S("../../../assets/audi/textures/color.ktx2")});
+    car_sim->texture_path = Str8PathFromStr8List(arena, {texture_path, S("car_collection.ktx2")});
     car_sim->texture_info = render::AssetInfoCreate(texture_path, render::AssetItemType_Texture,
                                                     render::PipelineUsageType_3DInstanced);
     car_sim->index_buffer_info =

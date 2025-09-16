@@ -227,7 +227,7 @@ CgltfParse(Arena* arena, String8 gltf_path, String8 root_node_name)
     first_node->cur_child_index = 0;
     first_node->matrix = MatrixConversion(root_node->matrix);
     CgltfNode* node_stack = {0};
-    // SLLStackPush(node_stack, first_node);
+
     for (CgltfNode* cur_node = first_node; cur_node;
          cur_node = ChildrenNodesDepthFirstPreOrder(scratch.arena, &node_stack, cur_node))
     {
@@ -322,14 +322,10 @@ CgltfParse(Arena* arena, String8 gltf_path, String8 root_node_name)
     for (BufferNode* buffer_node = buffer_node_list.first; buffer_node;
          buffer_node = buffer_node->next)
     {
-        for (U32 vertex_idx = 0; vertex_idx < buffer_node->vertex_buffer.size; ++vertex_idx)
+        for (U32 i = 0; i < buffer_node->index_buffer.size; ++i)
         {
-            Vec4F32 input = {buffer_node->vertex_buffer.data[vertex_idx].pos.x,
-                             buffer_node->vertex_buffer.data[vertex_idx].pos.y,
-                             buffer_node->vertex_buffer.data[vertex_idx].pos.z, 1.0f};
-            Vec4F32 transformed_vertex = Mul4x4Vec4F32(buffer_node->matrix, input);
-            buffer_node->vertex_buffer.data[vertex_idx].pos = {
-                transformed_vertex.x, transformed_vertex.y, transformed_vertex.z};
+            buffer_node->index_buffer.data[i] =
+                buffer_node->index_buffer.data[i] + cur_index_buffer_idx;
         }
         BufferCopy(vertex_buffer, buffer_node->vertex_buffer, cur_vertex_buffer_idx, 0,
                    buffer_node->vertex_buffer.size);

@@ -276,7 +276,7 @@ static void
 RoadIntersectionPointsFind(Road* road, RoadSegment* in_out_segment, Way* current_road_way);
 // ~mgj: Cars
 static CarSim*
-CarSimCreate(String8 texture_path, U32 car_count, Road* road);
+CarSimCreate(String8 asset_path, String8 texture_path, U32 car_count, Road* road);
 static void
 CarSimDestroy(CarSim* car_sim);
 static Buffer<Model3DInstance>

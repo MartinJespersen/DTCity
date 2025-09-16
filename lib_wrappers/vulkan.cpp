@@ -63,6 +63,7 @@ VK_VulkanInit(Context* ctx)
     vk_ctx->arena = arena;
     vk_ctx->texture_path = Str8PathFromStr8List(arena, {ctx->cwd, S("textures")});
     vk_ctx->shader_path = Str8PathFromStr8List(arena, {ctx->cwd, S("shaders")});
+    vk_ctx->asset_path = Str8PathFromStr8List(arena, {ctx->cwd, S("assets")});
 
     const char* validation_layers[] = {"VK_LAYER_KHRONOS_validation",
                                        "VK_LAYER_KHRONOS_synchronization2"};

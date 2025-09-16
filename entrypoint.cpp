@@ -231,7 +231,7 @@ MainLoop(void* ptr)
                                            ctx->road->road_height, &gcs_bbox);
 
     CameraInit(ctx->camera);
-    ctx->car_sim = city::CarSimCreate(vk_ctx->texture_path, 100, ctx->road);
+    ctx->car_sim = city::CarSimCreate(vk_ctx->asset_path, vk_ctx->texture_path, 100, ctx->road);
     city::CarSim* car_sim = ctx->car_sim;
 
     render::SamplerInfo sampler_info = {
