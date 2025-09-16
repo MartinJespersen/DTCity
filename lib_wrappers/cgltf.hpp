@@ -21,6 +21,22 @@ struct CgltfResult
     Buffer<U32> index_buffer;
     CgltfSampler sampler;
 };
+
+struct CgltfNode
+{
+    CgltfNode* next;
+    cgltf_node* node;
+    U32 cur_child_index;
+};
+
+struct BufferNode
+{
+    BufferNode* next;
+    Buffer<city::Vertex3D> vertex_buffer;
+    Buffer<U32> index_buffer;
+};
+static CgltfNode*
+ChildrenNodesDepthFirstPreOrder(Arena* arena, CgltfNode** stack, CgltfNode* node);
 static render::SamplerInfo
 SamplerFromCgltfSampler(CgltfSampler sampler);
 static CgltfResult

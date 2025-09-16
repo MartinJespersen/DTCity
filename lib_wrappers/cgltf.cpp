@@ -129,32 +129,6 @@ SamplerFromCgltfSampler(CgltfSampler sampler)
     return sampler_info;
 }
 
-struct CgltfNode
-{
-    CgltfNode* next;
-    cgltf_node* node;
-    Mat4x4F32 matrix;
-    U32 cur_child_index;
-};
-
-struct BufferNode
-{
-    BufferNode* next;
-    Buffer<city::Vertex3D> vertex_buffer;
-    Buffer<U32> index_buffer;
-    Mat4x4F32 matrix;
-};
-
-static Mat4x4F32
-MatrixConversion(F32* matrix)
-{
-    Mat4x4F32 result = {0};
-    for (U32 i = 0; i < 4; ++i)
-        for (U32 j = 0; j < 4; ++j)
-            result.v[i][j] = matrix[j * 4 + i];
-    return result;
-}
-
 static CgltfNode*
 ChildrenNodesDepthFirstPreOrder(Arena* arena, CgltfNode** stack, CgltfNode* node)
 {
@@ -164,7 +138,6 @@ ChildrenNodesDepthFirstPreOrder(Arena* arena, CgltfNode** stack, CgltfNode* node
         next = PushStruct(arena, CgltfNode);
         SLLStackPush(*stack, node);
         next->node = *node->node->children;
-        next->matrix = Mul4x4f32(node->matrix, MatrixConversion(next->node->matrix));
     }
     else
         for (CgltfNode* cur = node; cur && (*stack); cur = *stack, SLLStackPop(*stack))
@@ -179,7 +152,6 @@ ChildrenNodesDepthFirstPreOrder(Arena* arena, CgltfNode** stack, CgltfNode* node
                     {
                         next = PushStruct(arena, CgltfNode);
                         next->node = parent->node->children[next_index];
-                        next->matrix = node->matrix;
 
                         parent->cur_child_index = next_index;
                         break;
@@ -225,7 +197,6 @@ CgltfParse(Arena* arena, String8 gltf_path, String8 root_node_name)
     CgltfNode* first_node = PushStruct(scratch.arena, CgltfNode);
     first_node->node = root_node;
     first_node->cur_child_index = 0;
-    first_node->matrix = MatrixConversion(root_node->matrix);
     CgltfNode* node_stack = {0};
 
     for (CgltfNode* cur_node = first_node; cur_node;
@@ -270,7 +241,6 @@ CgltfParse(Arena* arena, String8 gltf_path, String8 root_node_name)
                 SLLQueuePush(buffer_node_list.first, buffer_node_list.last, buffer_node);
                 buffer_node->index_buffer = BufferAlloc<U32>(arena, accessor_indices->count);
                 buffer_node->vertex_buffer = BufferAlloc<city::Vertex3D>(arena, expected_count);
-                buffer_node->matrix = cur_node->matrix;
                 Buffer<city::Vertex3D>* vertex_buffer = &buffer_node->vertex_buffer;
                 Buffer<U32>* index_buffer = &buffer_node->index_buffer;
                 for (U32 indice_idx = 0; indice_idx < accessor_indices->count; indice_idx++)
