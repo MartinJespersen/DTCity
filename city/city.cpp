@@ -992,40 +992,6 @@ BuildingsBuffersCreate(Arena* arena, Buildings* buildings, F32 road_height,
             }
         }
 
-        // Non of the non-connected line segments should cross for the earclipping algo to work
-        // properly
-        {
-            B32 does_intersect = FALSE;
-            for (U32 idx = 0; idx < node_utm_buffer.size; idx += 1)
-            {
-                NodeUtm* n0 = node_utm_buffer.data[idx];
-                NodeUtm* n1 = node_utm_buffer.data[(idx + 1) % node_utm_buffer.size];
-                for (U32 jdx = 0; jdx < node_utm_buffer.size - 3; jdx += 1)
-                {
-                    NodeUtm* n2 = node_utm_buffer.data[(jdx + idx + 2) % node_utm_buffer.size];
-                    NodeUtm* n3 = node_utm_buffer.data[(jdx + idx + 3) % node_utm_buffer.size];
-                    Vec2F32 dummy_res;
-                    does_intersect =
-                        ui::LineIntersect2F32(n0->pos, n1->pos, n2->pos, n3->pos, &dummy_res);
-                    if (does_intersect)
-                    {
-                        break;
-                    }
-                }
-                if (does_intersect)
-                {
-                    DEBUG_LOG("Intersection detected between line segments: current base vertex "
-                              "index: %ul\n",
-                              base_vertex_idx);
-                    break;
-                }
-            }
-            if (does_intersect)
-            {
-                continue;
-            }
-        }
-
         Buffer<NodeUtm*> final_node_utm_buffer =
             BufferAlloc<NodeUtm*>(scratch.arena, node_utm_buffer.size);
         {
@@ -1053,7 +1019,8 @@ BuildingsBuffersCreate(Arena* arena, Buildings* buildings, F32 road_height,
         {
             NodeUtm* node_utm = final_node_utm_buffer.data[idx];
             vertex_buffer.data[base_vertex_idx + idx] = {
-                .pos = {node_utm->pos.x, road_height + building_height, node_utm->pos.y}};
+                .pos = {node_utm->pos.x, road_height + building_height, node_utm->pos.y},
+                .uv = {node_utm->pos.x, node_utm->pos.y}};
             node_pos_buffer.data[idx] = node_utm->pos;
         }
         Buffer<U32> polygon_index_buffer = EarClipping(scratch.arena, node_pos_buffer);
@@ -1090,16 +1057,12 @@ static Direction
 ClockWiseTest(Buffer<Vec2F32> node_buffer)
 {
     F32 total = 0;
-    for (U32 idx = 1; idx < node_buffer.size - 1; idx += 1)
+    for (U32 idx = 0; idx < node_buffer.size; idx += 1)
     {
         Vec2F32 a = node_buffer.data[idx];
-        Vec2F32 b = node_buffer.data[idx - 1];
-        Vec2F32 c = node_buffer.data[idx + 1];
+        Vec2F32 b = node_buffer.data[(idx + 1) % node_buffer.size];
 
-        Vec2F32 ba = Sub2F32(a, b);
-        Vec2F32 ac = Sub2F32(c, a);
-
-        F32 cross_product_z = Cross2F32ZComponent(ba, ac);
+        F32 cross_product_z = Cross2F32ZComponent(a, b);
         total += cross_product_z;
     }
     AssertAlways(total > 0 || total < 0);
@@ -1140,6 +1103,8 @@ IndexBufferCreate(Arena* arena, U64 buffer_size, Direction direction)
     return index_buffer;
 }
 
+// Shoelace Algorithm
+// source: https://artofproblemsolving.com/wiki/index.php/Shoelace_Theorem
 static B32
 PointInTriangle(Vec2F32 p1, Vec2F32 p2, Vec2F32 p3, Vec2F32 point)
 {
@@ -1154,6 +1119,17 @@ PointInTriangle(Vec2F32 p1, Vec2F32 p2, Vec2F32 p3, Vec2F32 point)
     has_pos = (d1 > 0) || (d2 > 0) || (d3 > 0);
 
     return !(has_neg && has_pos);
+}
+
+static void
+NodeBufferPrintDebug(Buffer<Vec2F32> node_buffer)
+{
+    printf("Error in ear clipping algo. Expecting vertex_count-2 number of triangles\n"
+           "The following vertices are the problem: \n");
+    for (U32 i = 0; i < node_buffer.size; i++)
+    {
+        printf("%f, %f\n", node_buffer.data[i].x, node_buffer.data[i].y);
+    }
 }
 
 static Buffer<U32>
@@ -1171,8 +1147,6 @@ EarClipping(Arena* arena, Buffer<Vec2F32> node_buffer)
         Assert(0);
     }
     Buffer<U32> index_buffer = IndexBufferCreate(scratch.arena, node_buffer.size, direction);
-
-    // algo has a complexity of O(n^2). The for loop replaces an infinite loop.
     Buffer<U32> out_vertex_index_buffer = BufferAlloc<U32>(arena, total_index_count);
     U32 cur_index_buffer_idx = 0;
     U32 idx = 0;
@@ -1235,6 +1209,13 @@ EarClipping(Arena* arena, Buffer<Vec2F32> node_buffer)
             DEBUG_LOG("Error in EarClipping: two line segments are collinear");
         }
     }
+    if (cur_index_buffer_idx != out_vertex_index_buffer.size)
+    {
+        DEBUG_FUNC(NodeBufferPrintDebug(node_buffer));
+        out_vertex_index_buffer.size = cur_index_buffer_idx;
+    }
+
+    Assert(cur_index_buffer_idx == out_vertex_index_buffer.size);
     return out_vertex_index_buffer;
 }
 } // namespace city

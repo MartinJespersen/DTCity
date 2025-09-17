@@ -1492,14 +1492,12 @@ Model3DRendering()
     VkDeviceSize offsets[] = {0};
     for (Model3DNode* node = draw_frame->model_3D_list.first; node; node = node->next)
     {
-        U32 index_buffer_byte_offset = node->index_buffer_offset * sizeof(U32);
         descriptor_sets[1] = node->descriptor_set;
         vkCmdBindDescriptorSets(cmd_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS,
                                 model_3D_pipeline->pipeline_layout, 0, ArrayCount(descriptor_sets),
                                 descriptor_sets, 0, NULL);
         vkCmdBindVertexBuffers(cmd_buffer, 0, 1, &node->vertex_alloc.buffer, offsets);
-        vkCmdBindIndexBuffer(cmd_buffer, node->index_alloc.buffer, index_buffer_byte_offset,
-                             VK_INDEX_TYPE_UINT32);
+        vkCmdBindIndexBuffer(cmd_buffer, node->index_alloc.buffer, 0, VK_INDEX_TYPE_UINT32);
         if (node->depth_write_per_draw_enabled)
         {
             for (WriteType write_type = (WriteType)0; write_type < WriteType_Count;
@@ -1518,7 +1516,7 @@ Model3DRendering()
                                                 color_write_disabled);
                 }
 
-                vkCmdDrawIndexed(cmd_buffer, node->index_count, 1, 0, 0, 0);
+                vkCmdDrawIndexed(cmd_buffer, node->index_count, 1, node->index_buffer_offset, 0, 0);
             }
         }
         else
@@ -1526,7 +1524,7 @@ Model3DRendering()
             vkCmdSetDepthWriteEnable(cmd_buffer, VK_TRUE);
             vkCmdSetColorWriteEnableEXT(cmd_buffer, ArrayCount(color_write_enabled),
                                         color_write_enabled);
-            vkCmdDrawIndexed(cmd_buffer, node->index_count, 1, 0, 0, 0);
+            vkCmdDrawIndexed(cmd_buffer, node->index_count, 1, node->index_buffer_offset, 0, 0);
         }
     }
 }

@@ -20,8 +20,13 @@ WriteToLog(const char* file_name, const char* message, ...);
         fprintf(stdout, message, __VA_ARGS__);                                                     \
     } while (0)
 #else
-
 #define DEBUG_LOG(message, ...)
+#endif
+
+#if BUILD_DEBUG
+#define DEBUG_FUNC(f) (f)
+#else
+#define DEBUG_FUNC(f)
 #endif
 
 #define ERROR_LOG(message, ...) fprintf(stderr, message, __VA_ARGS__)
