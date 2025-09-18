@@ -1,8 +1,5 @@
 # Problems:
-* ASAN notice leak when freeing depth buffer with at swapchain recreation, but it only happens sometimes.
- * AddressSanitizer: attempting free on address which was not malloc()
-
-* Device loss happens during swapchain recreation on AMD integrated graphics hardware
+* Sometimes the wrong texture is used on objects, which is a problem with the loading use of textures in the asset manager.
 
 # Things to do:
 
@@ -16,11 +13,6 @@
   * hot reloading refactor to simplify the implementation for linux
   * Base library fixes
 * Create method for logging
-* explore dynamic renderpasses in vulkan to simplify rendering
-* Change C namespacing to C++ namespacing
-* remove snake case naming to pascal case for function along the way
-* Reconsider global state for http, tctx, etc.
-* Create hot reload enable/disable switch
 
 
 # On Linux
