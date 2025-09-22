@@ -51,6 +51,7 @@ union Vec2U32
         U32 y;
     };
     U32 v[2];
+    U64 u64;
 };
 
 typedef union Vec2S32 Vec2S32;

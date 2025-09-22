@@ -391,7 +391,7 @@ HeightDimAdd(Vec2F32 pos, F32 height)
 }
 
 static void
-QuadToBufferAdd(RoadSegment* road_segment, Buffer<Vertex3D> buffer, Buffer<U32> indices, U32 way_id,
+QuadToBufferAdd(RoadSegment* road_segment, Buffer<Vertex3D> buffer, Buffer<U32> indices, U64 way_id,
                 F32 road_height, U32* cur_vertex_idx, U32* cur_index_idx)
 {
     F32 road_width = Dist2F32(road_segment->start.top, road_segment->start.btm);
@@ -406,19 +406,21 @@ QuadToBufferAdd(RoadSegment* road_segment, Buffer<Vertex3D> buffer, Buffer<U32> 
     U32 base_vertex_idx = *cur_vertex_idx;
     U32 base_index_idx = *cur_index_idx;
 
+    Vec2U32 id = {.u64 = way_id};
+
     // quad of vertices
     buffer.data[base_vertex_idx] = {.pos = HeightDimAdd(road_segment->start.top, road_height),
                                     .uv = {uv_x_top, uv_y_start},
-                                    .object_id = way_id};
+                                    .object_id = id};
     buffer.data[base_vertex_idx + 1] = {.pos = HeightDimAdd(road_segment->start.btm, road_height),
                                         .uv = {uv_x_btm, uv_y_start},
-                                        .object_id = way_id};
+                                        .object_id = id};
     buffer.data[base_vertex_idx + 2] = {.pos = HeightDimAdd(road_segment->end.top, road_height),
                                         .uv = {uv_x_top, uv_y_end},
-                                        .object_id = way_id};
+                                        .object_id = id};
     buffer.data[base_vertex_idx + 3] = {.pos = HeightDimAdd(road_segment->end.btm, road_height),
                                         .uv = {uv_x_btm, uv_y_end},
-                                        .object_id = way_id};
+                                        .object_id = id};
 
     // creating quad from
     indices.data[base_index_idx] = base_vertex_idx;
@@ -943,18 +945,24 @@ BuildingsBuffersCreate(Arena* arena, Buildings* buildings, F32 road_height,
             NodeUtm* utm_node_next = NodeUtmFind(node_utm_structure, way->node_ids[node_idx + 1]);
             F32 side_width = Length2F32(Sub2F32(utm_node->pos, utm_node_next->pos));
 
+            Vec2U32 id = {.u64 = way->id};
+
             vertex_buffer.data[vert_idx] = {.pos = {utm_node->pos.x, road_height, utm_node->pos.y},
-                                            .uv = {0.0f, 0.0f}};
+                                            .uv = {0.0f, 0.0f},
+                                            .object_id = id};
             vertex_buffer.data[vert_idx + 1] = {
                 .pos = {utm_node->pos.x, road_height + building_height, utm_node->pos.y},
-                .uv = {0.0f, building_height}};
+                .uv = {0.0f, building_height},
+                .object_id = id};
 
             vertex_buffer.data[vert_idx + 2] = {
                 .pos = {utm_node_next->pos.x, road_height, utm_node_next->pos.y},
-                .uv = {side_width, 0.0f}};
+                .uv = {side_width, 0.0f},
+                .object_id = id};
             vertex_buffer.data[vert_idx + 3] = {
                 .pos = {utm_node_next->pos.x, road_height + building_height, utm_node_next->pos.y},
-                .uv = {side_width, building_height}};
+                .uv = {side_width, building_height},
+                .object_id = id};
 
             index_buffer.data[index_idx] = vert_idx;
             index_buffer.data[index_idx + 1] = vert_idx + 1;
@@ -1022,9 +1030,11 @@ BuildingsBuffersCreate(Arena* arena, Buildings* buildings, F32 road_height,
         for (U32 idx = 0; idx < final_node_utm_buffer.size; idx += 1)
         {
             NodeUtm* node_utm = final_node_utm_buffer.data[idx];
+            Vec2U32 id = {.u64 = node_utm->id};
             vertex_buffer.data[base_vertex_idx + idx] = {
                 .pos = {node_utm->pos.x, road_height + building_height, node_utm->pos.y},
-                .uv = {node_utm->pos.x, node_utm->pos.y}};
+                .uv = {node_utm->pos.x, node_utm->pos.y},
+                .object_id = id};
             node_pos_buffer.data[idx] = node_utm->pos;
         }
         Buffer<U32> polygon_index_buffer = EarClipping(scratch.arena, node_pos_buffer);

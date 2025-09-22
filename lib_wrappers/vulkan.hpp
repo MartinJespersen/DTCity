@@ -194,6 +194,7 @@ struct VulkanContext
     Buffer<VkFence> in_flight_fences;
     U32 current_frame = 0;
 
+    VkFormat object_id_format;
     SwapchainResources* swapchain_resources;
 
     VkSampleCountFlagBits msaa_samples = VK_SAMPLE_COUNT_1_BIT;

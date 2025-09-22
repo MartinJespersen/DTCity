@@ -294,8 +294,10 @@ CommandBufferRecord(U32 image_index, U32 current_frame)
                     swapchain_resource->object_id_buffer_readback.buffer_alloc.buffer,
                     ArrayCount(buffer_image_copy), buffer_image_copy);
 
-                U32* object_id = (U32*)swapchain_resource->object_id_buffer_readback.mapped_ptr;
-                printf("Object ID: %u\n", *object_id);
+                Assert(vk_ctx->object_id_format == VK_FORMAT_R32G32_UINT);
+                Vec2U32* object_id =
+                    (Vec2U32*)swapchain_resource->object_id_buffer_readback.mapped_ptr;
+                printf("Object ID: %llu\n", object_id->u64);
             }
 
             // ~mgj: Reset object ID resolve image layout to

@@ -103,7 +103,7 @@ ObjectIdImageResourceCreate(SwapchainResources* swapchain_resources, U32 image_c
 {
     VkImageTiling tiling = VK_IMAGE_TILING_OPTIMAL;
     VulkanContext* vk_ctx = VulkanCtxGet();
-    VkFormat attachment_formats[] = {VK_FORMAT_R32_UINT};
+    VkFormat attachment_formats[] = {vk_ctx->object_id_format};
 
     VkFormat attachment_format = VK_SupportedFormat(vk_ctx->physical_device, attachment_formats,
                                                     ArrayCount(attachment_formats), tiling,

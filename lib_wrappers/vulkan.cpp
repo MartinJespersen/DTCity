@@ -106,6 +106,7 @@ VulkanCreate(Context* ctx)
 
     vmaCreateAllocator(&allocatorInfo, &vk_ctx->allocator);
 
+    vk_ctx->object_id_format = VK_FORMAT_R32G32_UINT;
     vk_ctx->swapchain_resources = VK_SwapChainCreate(vk_ctx, io_ctx);
 
     VkCommandPoolCreateInfo poolInfo{};
@@ -639,7 +640,7 @@ Model3DPipelineCreate(VulkanContext* vk_ctx)
          .offset = offsetof(city::Vertex3D, uv)},
         {.location = 2,
          .binding = 0,
-         .format = VK_FORMAT_R32_UINT,
+         .format = vk_ctx->object_id_format,
          .offset = offsetof(city::Vertex3D, object_id)}};
     VkVertexInputBindingDescription input_desc[] = {
         {.binding = 0, .stride = sizeof(city::Vertex3D), .inputRate = VK_VERTEX_INPUT_RATE_VERTEX}};

@@ -7,7 +7,7 @@ struct Vertex3D
 {
     Vec3F32 pos;
     Vec2F32 uv;
-    U32 object_id;
+    Vec2U32 object_id;
 };
 
 struct RoadNode
@@ -271,7 +271,7 @@ UtmNodeFind(NodeUtmStructure* road, U64 node_id);
 static NodeUtm*
 RandomUtmNodeFind(NodeUtmStructure* utm_node_structure);
 static void
-QuadToBufferAdd(RoadSegment* road_segment, Buffer<Vertex3D> buffer, Buffer<U32> indices, U32 way_id,
+QuadToBufferAdd(RoadSegment* road_segment, Buffer<Vertex3D> buffer, Buffer<U32> indices, U64 way_id,
                 F32 road_height, U32* cur_vertex_idx, U32* cur_index_idx);
 static void
 RoadIntersectionPointsFind(Road* road, RoadSegment* in_out_segment, Way* current_road_way);
