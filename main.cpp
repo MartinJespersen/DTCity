@@ -14,6 +14,7 @@
 #include "http/http_inc.cpp"
 #include "async/async.cpp"
 #include "lib_wrappers/lib_wrappers_inc.cpp"
+#include "render/render_inc.cpp"
 #include "ui/ui.cpp"
 #include "city/city_inc.cpp"
 #include "entrypoint.cpp"
