@@ -200,7 +200,6 @@ struct VulkanContext
 
     // queue
     QueueFamilyIndices queue_family_indices;
-
     VkDescriptorPool descriptor_pool;
     // ~mgj: camera resources for uniform buffers
     BufferAllocationMapped camera_buffer_alloc_mapped[MAX_FRAMES_IN_FLIGHT];
@@ -315,9 +314,9 @@ ImageFromKtx2file(VkCommandBuffer cmd, BufferAllocation staging_buffer, VulkanCo
                   ktxTexture2* ktx_texture);
 // ~mgj: Vulkan Lifetime
 static VulkanContext*
-VK_VulkanInit(Context* ctx);
+VulkanCreate(Context* ctx);
 static void
-VK_Cleanup(VulkanContext* vk_ctx);
+VulkanDestroy(VulkanContext* vk_ctx);
 static void
 VulkanCtxSet(VulkanContext* vk_ctx);
 static VulkanContext*
@@ -356,7 +355,6 @@ static void
 Model3DRendering();
 static void
 PipelineDestroy(Pipeline* draw_ctx);
-
 #define VK_CHECK_RESULT(f)                                                                         \
     {                                                                                              \
         VkResult res = (f);                                                                        \

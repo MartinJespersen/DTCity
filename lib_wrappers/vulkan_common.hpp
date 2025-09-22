@@ -28,11 +28,18 @@ struct BufferAllocationMapped
     Arena* arena;
 };
 
+struct BufferReadback
+{
+    BufferAllocation buffer_alloc;
+    void* mapped_ptr;
+};
+
 struct ImageAllocation
 {
     VkImage image;
     VmaAllocation allocation;
     VkDeviceSize size;
+    VkExtent3D extent;
 };
 
 struct ImageViewResource
@@ -76,6 +83,12 @@ struct SwapchainResources
     ImageResource depth_image_resource;
     VkFormat depth_format;
     Buffer<ImageSwapchainResource> image_resources;
+
+    // object id location resource
+    VkFormat object_id_image_format;
+    Buffer<ImageResource> object_id_image_resources;
+    Buffer<ImageResource> object_id_image_resolve_resources;
+    BufferReadback object_id_buffer_readback;
 };
 
 struct QueueFamilyIndices
@@ -147,6 +160,11 @@ BufferDestroy(VmaAllocator allocator, BufferAllocation* buffer_allocation);
 static void
 BufferMappedDestroy(VmaAllocator allocator, BufferAllocationMapped* mapped_buffer);
 
+static void
+BufferReadbackCreate(VmaAllocator allocator, VkDeviceSize size, VkBufferUsageFlags buffer_usage,
+                     BufferReadback* out_buffer_readback);
+static void
+BufferReadbackDestroy(VmaAllocator allocator, BufferReadback* out_buffer_readback);
 static BufferAllocation
 StagingBufferCreate(VmaAllocator allocator, VkDeviceSize size);
 

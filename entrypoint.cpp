@@ -53,6 +53,24 @@ CommandBufferRecord(U32 image_index, U32 current_frame)
     beginInfo.pInheritanceInfo = nullptr; // Optional
 
     wrapper::SwapchainResources* swapchain_resource = vk_ctx->swapchain_resources;
+
+    // object id color attachment image
+    wrapper::ImageResource* object_id_image_resource =
+        &swapchain_resource->object_id_image_resources.data[image_index];
+    wrapper::ImageAllocation* object_id_image_alloc = &object_id_image_resource->image_alloc;
+    VkImageView object_id_image_view = object_id_image_resource->image_view_resource.image_view;
+    VkImage object_id_image = object_id_image_alloc->image;
+
+    // object id resolve image
+    wrapper::ImageResource* object_id_image_resolve_resource =
+        &swapchain_resource->object_id_image_resolve_resources.data[image_index];
+    VkImageView object_id_image_resolve_view =
+        object_id_image_resolve_resource->image_view_resource.image_view;
+    VkImage object_id_resolve_image = object_id_image_resolve_resource->image_alloc.image;
+
+    VkImageView swapchain_image_view =
+        swapchain_resource->image_resources.data[image_index].image_view_resource.image_view;
+
     VkImage swapchain_image = swapchain_resource->image_resources.data[image_index].image;
     // ~mgj: Render scope (Tracy Profiler documentation says this is necessary)
     {
@@ -62,31 +80,63 @@ CommandBufferRecord(U32 image_index, U32 current_frame)
         {
             exitWithError("failed to begin recording command buffer!");
         }
-        VkImageMemoryBarrier2 transition_to_drawing_barrier{};
-        transition_to_drawing_barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2;
-        transition_to_drawing_barrier.pNext = nullptr;
-        transition_to_drawing_barrier.srcStageMask = VK_PIPELINE_STAGE_2_NONE;
-        transition_to_drawing_barrier.srcAccessMask = VK_ACCESS_2_NONE;
-        transition_to_drawing_barrier.dstStageMask =
-            VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT;
-        transition_to_drawing_barrier.dstAccessMask = VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT;
-        transition_to_drawing_barrier.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-        transition_to_drawing_barrier.newLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-        transition_to_drawing_barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-        transition_to_drawing_barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-        transition_to_drawing_barrier.image = swapchain_image;
-        transition_to_drawing_barrier.subresourceRange = {.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
-                                                          .baseMipLevel = 0,
-                                                          .levelCount = 1,
-                                                          .baseArrayLayer = 0,
-                                                          .layerCount = 1};
+        VkImageMemoryBarrier2 pre_render_swapchain_barrier{};
+        pre_render_swapchain_barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2;
+        pre_render_swapchain_barrier.pNext = nullptr;
+        pre_render_swapchain_barrier.srcStageMask = VK_PIPELINE_STAGE_2_NONE;
+        pre_render_swapchain_barrier.srcAccessMask = VK_ACCESS_2_NONE;
+        pre_render_swapchain_barrier.dstStageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT;
+        pre_render_swapchain_barrier.dstAccessMask = VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT;
+        pre_render_swapchain_barrier.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+        pre_render_swapchain_barrier.newLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+        pre_render_swapchain_barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        pre_render_swapchain_barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        pre_render_swapchain_barrier.image = swapchain_image;
+        pre_render_swapchain_barrier.subresourceRange = {.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+                                                         .baseMipLevel = 0,
+                                                         .levelCount = 1,
+                                                         .baseArrayLayer = 0,
+                                                         .layerCount = 1};
 
-        VkDependencyInfo to_draw_transition_info = {.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
-                                                    .imageMemoryBarrierCount = 1,
-                                                    .pImageMemoryBarriers =
-                                                        &transition_to_drawing_barrier};
+        VkImageMemoryBarrier2 pre_render_object_id_barrier{
+            .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
+            .srcStageMask = VK_PIPELINE_STAGE_2_NONE,
+            .srcAccessMask = VK_ACCESS_2_NONE,
+            .dstStageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
+            .dstAccessMask = VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT,
+            .oldLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+            .newLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+            .image = object_id_image,
+            .subresourceRange = {.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+                                 .baseMipLevel = 0,
+                                 .levelCount = 1,
+                                 .baseArrayLayer = 0,
+                                 .layerCount = 1}};
 
-        vkCmdPipelineBarrier2(current_cmd_buf, &to_draw_transition_info);
+        VkImageMemoryBarrier2 pre_render_object_id_resolve_image_barrier{
+            .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
+            .srcStageMask = VK_PIPELINE_STAGE_2_NONE,
+            .srcAccessMask = VK_ACCESS_2_NONE,
+            .dstStageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
+            .dstAccessMask = VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT,
+            .oldLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+            .newLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+            .image = object_id_resolve_image,
+            .subresourceRange = {.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+                                 .baseMipLevel = 0,
+                                 .levelCount = 1,
+                                 .baseArrayLayer = 0,
+                                 .layerCount = 1}};
+
+        VkImageMemoryBarrier2 pre_render_barriers[] = {pre_render_object_id_barrier,
+                                                       pre_render_swapchain_barrier,
+                                                       pre_render_object_id_resolve_image_barrier};
+        VkDependencyInfo pre_render_transition_info = {.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
+                                                       .imageMemoryBarrierCount =
+                                                           ArrayCount(pre_render_barriers),
+                                                       .pImageMemoryBarriers = pre_render_barriers};
+
+        vkCmdPipelineBarrier2(current_cmd_buf, &pre_render_transition_info);
         // ~mgj: this scope is necessary to avoid the vulkan validation error:
         // validation layer: vkDestroyQueryPool(): can't be called on VkQueryPool 0x9638f80000000036
         // that is currently in use by VkCommandBuffer 0x121e6955ed50.
@@ -98,8 +148,6 @@ CommandBufferRecord(U32 image_index, U32 current_frame)
                 swapchain_resource->color_image_resource.image_view_resource.image_view;
             VkImageView depth_image_view =
                 swapchain_resource->depth_image_resource.image_view_resource.image_view;
-            VkImageView swapchain_image_view = swapchain_resource->image_resources.data[image_index]
-                                                   .image_view_resource.image_view;
 
             VkClearColorValue clear_color = {0.0f, 0.0f, 0.0f, 1.0f};
             VkClearDepthStencilValue clear_depth = {1.0f, 0};
@@ -109,14 +157,41 @@ CommandBufferRecord(U32 image_index, U32 current_frame)
                                                    .baseArrayLayer = 0,
                                                    .layerCount = 1};
 
-            // Color attachment (assuming you want to render to the same targets)
+            // ~mgj: Transition color attachment image layout to
+            // VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL to render into
             VkRenderingAttachmentInfo color_attachment{};
             color_attachment.sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO;
-            color_attachment.imageView = color_image_view;
             color_attachment.imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
             color_attachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
             color_attachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
             color_attachment.clearValue = {.color = clear_color};
+
+            // Object ID attachment
+            VkRenderingAttachmentInfo object_id_attachment{};
+            object_id_attachment.sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO;
+            object_id_attachment.imageView = object_id_image_view;
+            object_id_attachment.imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+            object_id_attachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+            object_id_attachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+            object_id_attachment.clearValue = {.color = clear_color};
+
+            if (vk_ctx->msaa_samples == VK_SAMPLE_COUNT_1_BIT)
+            {
+                color_attachment.imageView = swapchain_image_view;
+                object_id_attachment.imageView = object_id_image_resolve_view;
+            }
+            else
+            {
+                color_attachment.imageView = color_image_view;
+                color_attachment.resolveMode = VK_RESOLVE_MODE_AVERAGE_BIT;
+                color_attachment.resolveImageView = swapchain_image_view;
+                color_attachment.resolveImageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+
+                object_id_attachment.imageView = object_id_image_view;
+                object_id_attachment.resolveMode = VK_RESOLVE_MODE_SAMPLE_ZERO_BIT;
+                object_id_attachment.resolveImageView = object_id_image_resolve_view;
+                object_id_attachment.resolveImageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+            }
 
             // Depth attachment
             VkRenderingAttachmentInfo depth_attachment{};
@@ -127,22 +202,15 @@ CommandBufferRecord(U32 image_index, U32 current_frame)
             depth_attachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
             depth_attachment.clearValue = {.depthStencil = clear_depth};
 
-            // Set up MSAA resolve if needed
-            if (vk_ctx->msaa_samples != VK_SAMPLE_COUNT_1_BIT)
-            {
-                color_attachment.resolveMode = VK_RESOLVE_MODE_AVERAGE_BIT;
-                color_attachment.resolveImageView = swapchain_image_view;
-                color_attachment.resolveImageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-            }
-
-            // Rendering info
+            VkRenderingAttachmentInfo color_attachments[] = {color_attachment,
+                                                             object_id_attachment};
             VkRenderingInfo rendering_info{};
             rendering_info.sType = VK_STRUCTURE_TYPE_RENDERING_INFO;
             rendering_info.renderArea.offset = {0, 0};
             rendering_info.renderArea.extent = swapchain_extent;
             rendering_info.layerCount = 1;
-            rendering_info.colorAttachmentCount = 1;
-            rendering_info.pColorAttachments = &color_attachment;
+            rendering_info.colorAttachmentCount = ArrayCount(color_attachments);
+            rendering_info.pColorAttachments = color_attachments;
             rendering_info.pDepthAttachment = &depth_attachment;
 
             wrapper::CameraUniformBufferUpdate(
@@ -160,6 +228,7 @@ CommandBufferRecord(U32 image_index, U32 current_frame)
 
             vkCmdEndRendering(current_cmd_buf);
 
+            // ~mgj: Transition color attachment images for presentation or transfer
             VkImageMemoryBarrier2 present_barrier{};
             present_barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2;
             present_barrier.pNext = nullptr;
@@ -177,12 +246,83 @@ CommandBufferRecord(U32 image_index, U32 current_frame)
                                                 .levelCount = 1,
                                                 .baseArrayLayer = 0,
                                                 .layerCount = 1};
+            VkImageMemoryBarrier2 object_id_read_barrier = {
+                .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
+                .srcStageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
+                .srcAccessMask = VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT,
+                .dstStageMask = VK_PIPELINE_STAGE_TRANSFER_BIT,
+                .dstAccessMask = VK_ACCESS_2_TRANSFER_READ_BIT,
+                .oldLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+                .newLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+                .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+                .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+                .image = object_id_resolve_image,
+                .subresourceRange = {.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+                                     .baseMipLevel = 0,
+                                     .levelCount = 1,
+                                     .baseArrayLayer = 0,
+                                     .layerCount = 1}};
 
-            VkDependencyInfo layout_transition_info = {.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
-                                                       .imageMemoryBarrierCount = 1,
-                                                       .pImageMemoryBarriers = &present_barrier};
+            VkImageMemoryBarrier2 post_render_barriers[] = {present_barrier,
+                                                            object_id_read_barrier};
+            VkDependencyInfo layout_transition_info = {
+                .sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
+                .imageMemoryBarrierCount = ArrayCount(post_render_barriers),
+                .pImageMemoryBarriers = post_render_barriers};
 
             vkCmdPipelineBarrier2(current_cmd_buf, &layout_transition_info);
+
+            // ~mgj: Read object id from mouse position
+            Vec2S64 mouse_position_screen_coords = ctx->io->mouse_pos_cur_s64;
+            if (mouse_position_screen_coords.x > 0 && mouse_position_screen_coords.y > 0 &&
+                mouse_position_screen_coords.x <
+                    vk_ctx->swapchain_resources->swapchain_extent.width &&
+                mouse_position_screen_coords.y <
+                    vk_ctx->swapchain_resources->swapchain_extent.height)
+            {
+                VkBufferImageCopy buffer_image_copy[] = {{
+                    .imageSubresource = {.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+                                         .mipLevel = 0,
+                                         .baseArrayLayer = 0,
+                                         .layerCount = 1},
+                    .imageOffset = {(S32)mouse_position_screen_coords.x,
+                                    (S32)mouse_position_screen_coords.y, 0},
+                    .imageExtent = {1, 1, 1},
+                }};
+                vkCmdCopyImageToBuffer(
+                    current_cmd_buf, object_id_resolve_image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+                    swapchain_resource->object_id_buffer_readback.buffer_alloc.buffer,
+                    ArrayCount(buffer_image_copy), buffer_image_copy);
+
+                U32* object_id = (U32*)swapchain_resource->object_id_buffer_readback.mapped_ptr;
+                printf("Object ID: %u\n", *object_id);
+            }
+
+            // ~mgj: Reset object ID resolve image layout to
+            // VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL
+            VkImageMemoryBarrier2 object_id_reset_barrier = {
+                .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
+                .srcStageMask = VK_PIPELINE_STAGE_2_TRANSFER_BIT,
+                .srcAccessMask = VK_ACCESS_2_TRANSFER_READ_BIT,
+                .dstStageMask = VK_PIPELINE_STAGE_2_NONE,
+                .dstAccessMask = VK_ACCESS_2_NONE,
+                .oldLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+                .newLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+                .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+                .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+                .image = object_id_resolve_image,
+                .subresourceRange = {.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+                                     .baseMipLevel = 0,
+                                     .levelCount = 1,
+                                     .baseArrayLayer = 0,
+                                     .layerCount = 1}};
+
+            VkDependencyInfo layout_reset_transition_info = {
+                .sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
+                .imageMemoryBarrierCount = 1,
+                .pImageMemoryBarriers = &object_id_reset_barrier};
+
+            vkCmdPipelineBarrier2(current_cmd_buf, &layout_reset_transition_info);
         }
 
         TracyVkCollect(vk_ctx->tracy_ctx[current_frame], current_cmd_buf);
@@ -222,7 +362,7 @@ MainLoop(void* ptr)
                                      .lat_top_right = 56.17371342689877,
                                      .lon_top_right = 10.198376789774187};
 
-    ctx->vk_ctx = wrapper::VK_VulkanInit(ctx);
+    ctx->vk_ctx = wrapper::VulkanCreate(ctx);
     wrapper::VulkanContext* vk_ctx = wrapper::VulkanCtxGet();
 
     ctx->road = city::RoadCreate(vk_ctx->texture_path, ctx->cache_path, &gcs_bbox);
@@ -388,5 +528,5 @@ MainLoop(void* ptr)
     city::RoadDestroy(ctx->road);
     city::CarSimDestroy(ctx->car_sim);
     city::BuildingDestroy(ctx->buildings);
-    wrapper::VK_Cleanup(ctx->vk_ctx);
+    wrapper::VulkanDestroy(ctx->vk_ctx);
 }

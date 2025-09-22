@@ -14,3 +14,13 @@
 //
 // Questions: What role does the viewport play in the UI? Should multiple be used?
 // viewports be used?
+//
+// Hit Test Implementation:
+// - Map the result of the depth buffer to a way id to identify find the closest object to the
+// screen
+// - Start mirroring the road and building pipeline (they have a way id for each road/building)
+// - - Build a buffer with with 3D information (depth buffer calculation) and the way ID of the
+// object
+// - - Swapchain should include images (for each frame in flight) that will have a format like
+// VK_FORMAT_R32_UINT (consider a larger value)
+//

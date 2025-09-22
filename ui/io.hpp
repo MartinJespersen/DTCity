@@ -4,6 +4,7 @@ struct IO
     Arena* arena;
 
     Vec2F64 mouse_pos_cur;
+    Vec2S64 mouse_pos_cur_s64;
     B32 mouse_left_clicked;
     F32 mouse_sensitivity;
     B32 is_cursor_inside_win;

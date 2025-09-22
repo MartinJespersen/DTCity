@@ -289,8 +289,8 @@ RoadVertexBufferCreate(Road* road, Buffer<Vertex3D>* out_vertex_buffer,
         if (way->node_count == 2)
         {
             // RoadIntersectionPointsFind(road, &road_segment_prev, way);
-            QuadToBufferAdd(&road_segment_prev, vertex_buffer, index_buffer, road->road_height,
-                            &current_vertex_idx, &current_index_idx);
+            QuadToBufferAdd(&road_segment_prev, vertex_buffer, index_buffer, way->id,
+                            road->road_height, &current_vertex_idx, &current_index_idx);
         }
         else
         {
@@ -309,12 +309,12 @@ RoadVertexBufferCreate(Road* road, Buffer<Vertex3D>* out_vertex_buffer,
                                                          road_width);
 
                 // RoadIntersectionPointsFind(road, &road_segment_prev, way);
-                QuadToBufferAdd(&road_segment_prev, vertex_buffer, index_buffer, road->road_height,
-                                &current_vertex_idx, &current_index_idx);
+                QuadToBufferAdd(&road_segment_prev, vertex_buffer, index_buffer, way->id,
+                                road->road_height, &current_vertex_idx, &current_index_idx);
                 if (node_idx == way->node_count - 2)
                 {
                     // RoadIntersectionPointsFind(road, &road_segment_cur, way);
-                    QuadToBufferAdd(&road_segment_cur, vertex_buffer, index_buffer,
+                    QuadToBufferAdd(&road_segment_cur, vertex_buffer, index_buffer, way->id,
                                     road->road_height, &current_vertex_idx, &current_index_idx);
                 }
 
@@ -391,7 +391,7 @@ HeightDimAdd(Vec2F32 pos, F32 height)
 }
 
 static void
-QuadToBufferAdd(RoadSegment* road_segment, Buffer<Vertex3D> buffer, Buffer<U32> indices,
+QuadToBufferAdd(RoadSegment* road_segment, Buffer<Vertex3D> buffer, Buffer<U32> indices, U32 way_id,
                 F32 road_height, U32* cur_vertex_idx, U32* cur_index_idx)
 {
     F32 road_width = Dist2F32(road_segment->start.top, road_segment->start.btm);
@@ -408,13 +408,17 @@ QuadToBufferAdd(RoadSegment* road_segment, Buffer<Vertex3D> buffer, Buffer<U32> 
 
     // quad of vertices
     buffer.data[base_vertex_idx] = {.pos = HeightDimAdd(road_segment->start.top, road_height),
-                                    .uv = {uv_x_top, uv_y_start}};
+                                    .uv = {uv_x_top, uv_y_start},
+                                    .object_id = way_id};
     buffer.data[base_vertex_idx + 1] = {.pos = HeightDimAdd(road_segment->start.btm, road_height),
-                                        .uv = {uv_x_btm, uv_y_start}};
+                                        .uv = {uv_x_btm, uv_y_start},
+                                        .object_id = way_id};
     buffer.data[base_vertex_idx + 2] = {.pos = HeightDimAdd(road_segment->end.top, road_height),
-                                        .uv = {uv_x_top, uv_y_end}};
+                                        .uv = {uv_x_top, uv_y_end},
+                                        .object_id = way_id};
     buffer.data[base_vertex_idx + 3] = {.pos = HeightDimAdd(road_segment->end.btm, road_height),
-                                        .uv = {uv_x_btm, uv_y_end}};
+                                        .uv = {uv_x_btm, uv_y_end},
+                                        .object_id = way_id};
 
     // creating quad from
     indices.data[base_index_idx] = base_vertex_idx;

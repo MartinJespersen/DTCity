@@ -65,6 +65,8 @@ IO_InputStateUpdate(IO* input)
     glfwGetCursorPos(input->window, &mouse_x, &mouse_y);
     input->mouse_pos_cur.x = mouse_x;
     input->mouse_pos_cur.y = mouse_y;
+    input->mouse_pos_cur_s64.x = floor(mouse_x);
+    input->mouse_pos_cur_s64.y = floor(mouse_y);
 
     input->mouse_left_clicked =
         glfwGetMouseButton(input->window, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS;

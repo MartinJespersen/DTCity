@@ -44,8 +44,7 @@ if exist %exec_full_path_single_quote% del %exec_full_path_single_quote%
 set glfw_dll_path_single_quote=%glfw_dll_path:\\=\%
 copy %glfw_dll_path_single_quote% %debug_dir_single_quote%
 :: Compile main executable
-:: /fsanitize=address
-set MAIN=cl /MD %main_file_name% %tracy_src% /Fe%exec_full_path% %cxxflags%  %include_dirs% /DBUILD_CONSOLE_INTERFACE /DBUILD_DEBUG /nologo /link %link_dirs% %link_libs% %link_flags% /INCREMENTAL:NO /noexp
+set MAIN=cl /fsanitize=address /MD %main_file_name% %tracy_src% /Fe%exec_full_path% %cxxflags%  %include_dirs% /DBUILD_CONSOLE_INTERFACE /DBUILD_DEBUG /nologo /link %link_dirs% %link_libs% %link_flags% /INCREMENTAL:NO /noexp
 
 call %MAIN%
 echo %MAIN%

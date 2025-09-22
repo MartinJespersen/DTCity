@@ -7,7 +7,7 @@ static VulkanContext* g_vk_ctx = 0;
 
 // ~mgj: vulkan context
 static void
-VK_Cleanup(VulkanContext* vk_ctx)
+VulkanDestroy(VulkanContext* vk_ctx)
 {
     vkDeviceWaitIdle(vk_ctx->device);
 
@@ -50,7 +50,7 @@ VK_Cleanup(VulkanContext* vk_ctx)
 }
 
 static VulkanContext*
-VK_VulkanInit(Context* ctx)
+VulkanCreate(Context* ctx)
 {
     IO* io_ctx = ctx->io;
 
@@ -73,9 +73,9 @@ VK_VulkanInit(Context* ctx)
         vk_ctx->validation_layers.data[i] = {Str8CString(validation_layers[i])};
     }
 
-    const char* device_extensions[3] = {VK_KHR_SWAPCHAIN_EXTENSION_NAME,
-                                        VK_KHR_DYNAMIC_RENDERING_EXTENSION_NAME,
-                                        VK_EXT_COLOR_WRITE_ENABLE_EXTENSION_NAME};
+    const char* device_extensions[] = {VK_KHR_SWAPCHAIN_EXTENSION_NAME,
+                                       VK_KHR_DYNAMIC_RENDERING_EXTENSION_NAME,
+                                       VK_EXT_COLOR_WRITE_ENABLE_EXTENSION_NAME};
     vk_ctx->device_extensions = BufferAlloc<String8>(vk_ctx->arena, ArrayCount(device_extensions));
     for (U32 i = 0; i < ArrayCount(device_extensions); i++)
     {
@@ -525,10 +525,12 @@ Model3DInstancePipelineCreate(VulkanContext* vk_ctx)
         .colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT |
                           VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT};
 
+    VkPipelineColorBlendAttachmentState color_blend_attachments[] = {color_blend_attachment,
+                                                                     color_blend_attachment};
     VkPipelineColorBlendStateCreateInfo color_blending{};
     color_blending.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
-    color_blending.attachmentCount = 1;
-    color_blending.pAttachments = &color_blend_attachment;
+    color_blending.attachmentCount = ArrayCount(color_blend_attachments);
+    color_blending.pAttachments = color_blend_attachments;
 
     VkDescriptorSetLayout descriptor_set_layouts[] = {vk_ctx->camera_descriptor_set_layout,
                                                       desc_set_layout};
@@ -550,10 +552,13 @@ Model3DInstancePipelineCreate(VulkanContext* vk_ctx)
         exitWithError("failed to create pipeline layout!");
     }
 
+    VkFormat color_attachment_formats[] = {vk_ctx->swapchain_resources->color_format,
+                                           vk_ctx->swapchain_resources->object_id_image_format};
+
     VkPipelineRenderingCreateInfo pipeline_rendering_info{};
     pipeline_rendering_info.sType = VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO;
-    pipeline_rendering_info.colorAttachmentCount = 1;
-    pipeline_rendering_info.pColorAttachmentFormats = &vk_ctx->swapchain_resources->color_format;
+    pipeline_rendering_info.colorAttachmentCount = ArrayCount(color_attachment_formats);
+    pipeline_rendering_info.pColorAttachmentFormats = color_attachment_formats;
     pipeline_rendering_info.depthAttachmentFormat = vk_ctx->swapchain_resources->depth_format;
 
     VkGraphicsPipelineCreateInfo pipeline_create_info{};
@@ -631,7 +636,11 @@ Model3DPipelineCreate(VulkanContext* vk_ctx)
         {.location = 1,
          .binding = 0,
          .format = VK_FORMAT_R32G32_SFLOAT,
-         .offset = offsetof(city::Vertex3D, uv)}};
+         .offset = offsetof(city::Vertex3D, uv)},
+        {.location = 2,
+         .binding = 0,
+         .format = VK_FORMAT_R32_UINT,
+         .offset = offsetof(city::Vertex3D, object_id)}};
     VkVertexInputBindingDescription input_desc[] = {
         {.binding = 0, .stride = sizeof(city::Vertex3D), .inputRate = VK_VERTEX_INPUT_RATE_VERTEX}};
 
@@ -680,10 +689,12 @@ Model3DPipelineCreate(VulkanContext* vk_ctx)
         .colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT |
                           VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT};
 
+    VkPipelineColorBlendAttachmentState color_blend_attachments[] = {color_blend_attachment,
+                                                                     color_blend_attachment};
     VkPipelineColorBlendStateCreateInfo color_blending{};
     color_blending.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
-    color_blending.attachmentCount = 1;
-    color_blending.pAttachments = &color_blend_attachment;
+    color_blending.attachmentCount = ArrayCount(color_blend_attachments);
+    color_blending.pAttachments = color_blend_attachments;
 
     VkDescriptorSetLayout descriptor_set_layouts[] = {vk_ctx->camera_descriptor_set_layout,
                                                       desc_set_layout};
@@ -705,10 +716,12 @@ Model3DPipelineCreate(VulkanContext* vk_ctx)
         exitWithError("failed to create pipeline layout!");
     }
 
+    VkFormat color_attachment_formats[] = {vk_ctx->swapchain_resources->color_format,
+                                           vk_ctx->swapchain_resources->object_id_image_format};
     VkPipelineRenderingCreateInfo pipeline_rendering_info{};
     pipeline_rendering_info.sType = VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO;
-    pipeline_rendering_info.colorAttachmentCount = 1;
-    pipeline_rendering_info.pColorAttachmentFormats = &vk_ctx->swapchain_resources->color_format;
+    pipeline_rendering_info.colorAttachmentCount = ArrayCount(color_attachment_formats);
+    pipeline_rendering_info.pColorAttachmentFormats = color_attachment_formats;
     pipeline_rendering_info.depthAttachmentFormat = vk_ctx->swapchain_resources->depth_format;
 
     VkGraphicsPipelineCreateInfo pipeline_create_info{};
@@ -1528,5 +1541,4 @@ Model3DRendering()
         }
     }
 }
-
 } // namespace wrapper

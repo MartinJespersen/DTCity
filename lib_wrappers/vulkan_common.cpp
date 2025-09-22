@@ -44,10 +44,10 @@ DestroyDebugUtilsMessengerEXT(VkInstance instance, VkDebugUtilsMessengerEXT debu
 
 // queue family
 VkFormat
-VK_SupportedFormat(VkPhysicalDevice physical_device, const VkFormat candidates[3],
+VK_SupportedFormat(VkPhysicalDevice physical_device, VkFormat* candidates, U32 candidate_count,
                    VkImageTiling tiling, VkFormatFeatureFlags features)
 {
-    for (U32 i = 0; i < ArrayCount(candidates); i++)
+    for (U32 i = 0; i < candidate_count; i++)
     {
         VkFormatProperties props;
         vkGetPhysicalDeviceFormatProperties(physical_device, candidates[i], &props);
@@ -77,8 +77,8 @@ VK_DepthResourcesCreate(VulkanContext* vk_ctx, SwapchainResources* swapchain_res
     };
 
     VkFormat depth_format =
-        VK_SupportedFormat(vk_ctx->physical_device, depth_formats, VK_IMAGE_TILING_OPTIMAL,
-                           VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT);
+        VK_SupportedFormat(vk_ctx->physical_device, depth_formats, ArrayCount(depth_formats),
+                           VK_IMAGE_TILING_OPTIMAL, VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT);
     swapchain_resources->depth_format = depth_format;
 
     VmaAllocationCreateInfo vma_info = {
@@ -96,6 +96,78 @@ VK_DepthResourcesCreate(VulkanContext* vk_ctx, SwapchainResources* swapchain_res
 
     swapchain_resources->depth_image_resource = {.image_alloc = image_alloc,
                                                  .image_view_resource = image_view_resource};
+}
+
+static void
+ObjectIdImageResourceCreate(SwapchainResources* swapchain_resources, U32 image_count)
+{
+    VkImageTiling tiling = VK_IMAGE_TILING_OPTIMAL;
+    VulkanContext* vk_ctx = VulkanCtxGet();
+    VkFormat attachment_formats[] = {VK_FORMAT_R32_UINT};
+
+    VkFormat attachment_format = VK_SupportedFormat(vk_ctx->physical_device, attachment_formats,
+                                                    ArrayCount(attachment_formats), tiling,
+                                                    VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BIT);
+
+    VmaAllocationCreateInfo vma_info = {.flags = VMA_ALLOCATION_CREATE_DEDICATED_MEMORY_BIT,
+                                        .usage = VMA_MEMORY_USAGE_AUTO,
+                                        .priority = 1.0f};
+
+    Buffer<ImageResource> object_id_image_resources =
+        BufferAlloc<ImageResource>(swapchain_resources->arena, image_count);
+    Buffer<ImageResource> object_id_image_resolve_resources =
+        BufferAlloc<ImageResource>(swapchain_resources->arena, image_count);
+
+    Buffer<void*> object_id_buffer_handles =
+        BufferAlloc<void*>(swapchain_resources->arena, image_count);
+
+    U32 buffer_size = 0;
+    for (U32 i = 0; i < image_count; i++)
+    {
+        // multisampled image
+        ImageResource* object_id_image_resource = &object_id_image_resources.data[i];
+        ImageAllocation* image_alloc = &object_id_image_resource->image_alloc;
+        ImageViewResource* image_view_resource = &object_id_image_resource->image_view_resource;
+
+        *image_alloc = ImageAllocationCreate(
+            vk_ctx->allocator, swapchain_resources->swapchain_extent.width,
+            swapchain_resources->swapchain_extent.height, vk_ctx->msaa_samples, attachment_format,
+            tiling,
+            VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT |
+                VK_IMAGE_USAGE_TRANSFER_SRC_BIT,
+            1, vma_info);
+
+        *image_view_resource = ImageViewResourceCreate(
+            vk_ctx->device, image_alloc->image, attachment_format, VK_IMAGE_ASPECT_COLOR_BIT, 1);
+
+        // resolve image
+        ImageResource* object_id_image_resolve_resource =
+            &object_id_image_resolve_resources.data[i];
+        ImageAllocation* image_resolve_alloc = &object_id_image_resolve_resource->image_alloc;
+        ImageViewResource* image_resolve_view_resource =
+            &object_id_image_resolve_resource->image_view_resource;
+
+        *image_resolve_alloc = ImageAllocationCreate(
+            vk_ctx->allocator, swapchain_resources->swapchain_extent.width,
+            swapchain_resources->swapchain_extent.height, VK_SAMPLE_COUNT_1_BIT, attachment_format,
+            tiling,
+            VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT |
+                VK_IMAGE_USAGE_TRANSFER_SRC_BIT,
+            1, vma_info);
+
+        *image_resolve_view_resource =
+            ImageViewResourceCreate(vk_ctx->device, image_resolve_alloc->image, attachment_format,
+                                    VK_IMAGE_ASPECT_COLOR_BIT, 1);
+
+        buffer_size = image_resolve_alloc->size;
+    }
+
+    swapchain_resources->object_id_image_format = attachment_format;
+    swapchain_resources->object_id_image_resources = object_id_image_resources;
+    swapchain_resources->object_id_image_resolve_resources = object_id_image_resolve_resources;
+
+    BufferReadbackCreate(vk_ctx->allocator, buffer_size, VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+                         &swapchain_resources->object_id_buffer_readback);
 }
 
 static VkCommandPool
@@ -213,7 +285,8 @@ VK_LogicalDeviceCreate(Arena* arena, VulkanContext* vk_ctx)
 
     VkPhysicalDeviceColorWriteEnableFeaturesEXT colorWriteEnableFeatures = {
         .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_COLOR_WRITE_ENABLE_FEATURES_EXT,
-        .colorWriteEnable = VK_TRUE};
+        .colorWriteEnable = VK_TRUE,
+    };
 
     // setup linked list of device features
     VkPhysicalDeviceSynchronization2Features sync2_features{};
@@ -456,6 +529,22 @@ static void
 VK_DepthResourcesCleanup(VmaAllocator allocator, ImageResource depth_image_resource)
 {
     ImageResourceDestroy(allocator, depth_image_resource);
+}
+
+static void
+ObjectIdResourcesCleanup()
+{
+    VulkanContext* vk_ctx = VulkanCtxGet();
+    SwapchainResources* swapchain_resources = vk_ctx->swapchain_resources;
+    for (U32 i = 0; i < swapchain_resources->object_id_image_resources.size; i++)
+    {
+        ImageResourceDestroy(vk_ctx->allocator,
+                             swapchain_resources->object_id_image_resources.data[i]);
+        ImageResourceDestroy(vk_ctx->allocator,
+                             swapchain_resources->object_id_image_resolve_resources.data[i]);
+    }
+
+    BufferReadbackDestroy(vk_ctx->allocator, &swapchain_resources->object_id_buffer_readback);
 }
 
 static void
@@ -810,13 +899,40 @@ BufferAllocationCreate(VmaAllocator allocator, VkDeviceSize size, VkBufferUsageF
     bufferInfo.usage = buffer_usage;
     bufferInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
 
-    if (vmaCreateBuffer(allocator, &bufferInfo, &vma_info, &buffer.buffer, &buffer.allocation,
-                        nullptr) != VK_SUCCESS)
-    {
-        exitWithError("Failed to create buffer!");
-    }
+    VK_CHECK_RESULT(vmaCreateBuffer(allocator, &bufferInfo, &vma_info, &buffer.buffer,
+                                    &buffer.allocation, nullptr));
 
     return buffer;
+}
+
+static void
+BufferReadbackCreate(VmaAllocator allocator, VkDeviceSize size, VkBufferUsageFlags buffer_usage,
+                     BufferReadback* out_buffer_readback)
+{
+    VkBufferCreateInfo bufCreateInfo = {VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO};
+    bufCreateInfo.size = size;
+    bufCreateInfo.usage = VK_BUFFER_USAGE_TRANSFER_DST_BIT | buffer_usage;
+
+    VmaAllocationCreateInfo allocCreateInfo = {};
+    allocCreateInfo.usage = VMA_MEMORY_USAGE_AUTO;
+    allocCreateInfo.flags =
+        VMA_ALLOCATION_CREATE_HOST_ACCESS_RANDOM_BIT | VMA_ALLOCATION_CREATE_MAPPED_BIT;
+
+    VkBuffer buf;
+    VmaAllocation alloc;
+    VmaAllocationInfo allocInfo;
+    VK_CHECK_RESULT(
+        vmaCreateBuffer(allocator, &bufCreateInfo, &allocCreateInfo, &buf, &alloc, &allocInfo));
+
+    out_buffer_readback->mapped_ptr = allocInfo.pMappedData;
+    out_buffer_readback->buffer_alloc = {.buffer = buf, .allocation = alloc, .size = size};
+}
+
+static void
+BufferReadbackDestroy(VmaAllocator allocator, BufferReadback* out_buffer_readback)
+{
+    vmaDestroyBuffer(allocator, out_buffer_readback->buffer_alloc.buffer,
+                     out_buffer_readback->buffer_alloc.allocation);
 }
 
 // inspiration:
@@ -948,10 +1064,7 @@ ImageViewResourceCreate(VkDevice device, VkImage image, VkFormat format,
     viewInfo.subresourceRange.layerCount = 1;
 
     VkImageView view;
-    if (vkCreateImageView(device, &viewInfo, nullptr, &view) != VK_SUCCESS)
-    {
-        exitWithError("failed to create texture image view!");
-    }
+    VK_CHECK_RESULT(vkCreateImageView(device, &viewInfo, nullptr, &view));
 
     return {.image_view = view, .device = device};
 }
@@ -962,13 +1075,12 @@ ImageAllocationCreate(VmaAllocator allocator, U32 width, U32 height,
                       VkImageUsageFlags usage, U32 mipmap_level, VmaAllocationCreateInfo vma_info)
 {
     ImageAllocation image_alloc = {0};
+    VkExtent3D extent = {width, height, 1};
 
     VkImageCreateInfo image_create_info = {};
     image_create_info.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
     image_create_info.imageType = VK_IMAGE_TYPE_2D;
-    image_create_info.extent.width = width;
-    image_create_info.extent.height = height;
-    image_create_info.extent.depth = 1;
+    image_create_info.extent = extent;
     image_create_info.mipLevels = mipmap_level;
     image_create_info.arrayLayers = 1;
     image_create_info.format = format;
@@ -978,12 +1090,11 @@ ImageAllocationCreate(VmaAllocator allocator, U32 width, U32 height,
     image_create_info.samples = numSamples;
     image_create_info.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
 
-    if (vmaCreateImage(allocator, &image_create_info, &vma_info, &image_alloc.image,
-                       &image_alloc.allocation, 0))
-    {
-        exitWithError("ImageCreate: Could not create image");
-    };
-
+    VmaAllocationInfo alloc_info;
+    VK_CHECK_RESULT(vmaCreateImage(allocator, &image_create_info, &vma_info, &image_alloc.image,
+                                   &image_alloc.allocation, &alloc_info))
+    image_alloc.size = alloc_info.size;
+    image_alloc.extent = extent;
     return image_alloc;
 }
 
@@ -1144,19 +1255,19 @@ VK_SwapChainCreate(VulkanContext* vk_ctx, IO* io_ctx)
     VkPresentModeKHR present_mode = VK_ChooseSwapPresentMode(swapchain_details.presentModes);
     VkExtent2D swapchain_extent = VK_ChooseSwapExtent(io_ctx, swapchain_details.capabilities);
 
-    U32 imageCount = swapchain_details.capabilities.minImageCount + 1;
+    U32 image_count = swapchain_details.capabilities.minImageCount + 1;
 
     if (swapchain_details.capabilities.maxImageCount > 0 &&
-        imageCount > swapchain_details.capabilities.maxImageCount)
+        image_count > swapchain_details.capabilities.maxImageCount)
     {
-        imageCount = swapchain_details.capabilities.maxImageCount;
+        image_count = swapchain_details.capabilities.maxImageCount;
     }
 
     QueueFamilyIndices queueFamilyIndices = vk_ctx->queue_family_indices;
     VkSwapchainCreateInfoKHR createInfo{};
     createInfo.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
     createInfo.surface = vk_ctx->surface;
-    createInfo.minImageCount = imageCount;
+    createInfo.minImageCount = image_count;
     createInfo.imageFormat = surface_format.format;
     createInfo.imageColorSpace = surface_format.colorSpace;
     createInfo.imageExtent = swapchain_extent;
@@ -1199,8 +1310,8 @@ VK_SwapChainCreate(VulkanContext* vk_ctx, IO* io_ctx)
     SwapChainImageResourceCreate(vk_ctx->device, swapchain_resources, swapchain_image_count);
 
     VK_ColorResourcesCreate(vk_ctx, swapchain_resources);
-
     VK_DepthResourcesCreate(vk_ctx, swapchain_resources);
+    ObjectIdImageResourceCreate(swapchain_resources, image_count);
 
     return swapchain_resources;
 }
@@ -1210,9 +1321,8 @@ VK_SwapChainCleanup(VkDevice device, VmaAllocator allocator,
                     SwapchainResources* swapchain_resources)
 {
     VK_ColorResourcesCleanup(allocator, swapchain_resources->color_image_resource);
-    swapchain_resources->color_image_resource = {0};
     VK_DepthResourcesCleanup(allocator, swapchain_resources->depth_image_resource);
-    swapchain_resources->depth_image_resource = {0};
+    ObjectIdResourcesCleanup();
 
     for (size_t i = 0; i < swapchain_resources->image_resources.size; i++)
     {
