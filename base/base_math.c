@@ -120,7 +120,7 @@ static Vec2S32 add_2s32(Vec2S32 a, Vec2S32 b) {
   Vec2S32 c = {a.x + b.x, a.y + b.y};
   return c;
 }
-static Vec2S32 sub_2s32(Vec2S32 a, Vec2S32 b) {
+static Vec2S32 Sub_2S32(Vec2S32 a, Vec2S32 b) {
   Vec2S32 c = {a.x - b.x, a.y - b.y};
   return c;
 }
@@ -926,7 +926,7 @@ static Rng2S32 shift_2s32(Rng2S32 r, Vec2S32 x) {
 }
 static Rng2S32 pad_2s32(Rng2S32 r, S32 x) {
   Vec2S32 xv = {x, x};
-  r.min = sub_2s32(r.min, xv);
+  r.min = Sub_2S32(r.min, xv);
   r.max = add_2s32(r.max, xv);
   return r;
 }

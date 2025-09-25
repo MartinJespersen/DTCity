@@ -1160,19 +1160,19 @@ AssetManagerCmdDoneCheck()
                                R_PipelineUsageType_Undefined);
                         if (asset->item.pipeline_usage_type == R_PipelineUsageType_3D)
                         {
-                            R_Handle texture_handle = DescriptorSetCreate(
+                            VkDescriptorSet texture_handle = DescriptorSetCreate(
                                 vk_ctx->arena, vk_ctx->device, vk_ctx->descriptor_pool,
                                 vk_ctx->model_3D_pipeline.descriptor_set_layout, &asset->item);
-                            asset->item.handle = texture_handle;
+                            asset->item.desc_set = texture_handle;
                         }
                         else if (asset_load_info->info.pipeline_usage_type ==
                                  R_PipelineUsageType_3DInstanced)
                         {
-                            R_Handle texture_handle = DescriptorSetCreate(
+                            VkDescriptorSet texture_handle = DescriptorSetCreate(
                                 vk_ctx->arena, vk_ctx->device, vk_ctx->descriptor_pool,
                                 vk_ctx->model_3D_instance_pipeline.descriptor_set_layout,
                                 &asset->item);
-                            asset->item.handle = texture_handle;
+                            asset->item.desc_set = texture_handle;
                         }
                         asset->is_loaded = 1;
                     }
@@ -1372,7 +1372,7 @@ Model3DDraw(R_AssetInfo* vertex_info, R_AssetInfo* index_info, R_AssetInfo* text
     if (asset_index_buffer->is_loaded && asset_index_buffer->is_loaded && asset_texture->is_loaded)
     {
         Model3DBucketAdd(&asset_vertex_buffer->item.buffer_alloc,
-                         &asset_index_buffer->item.buffer_alloc, asset_texture->item.handle,
+                         &asset_index_buffer->item.buffer_alloc, asset_texture->item.desc_set,
                          depth_test_per_draw_call_only, index_buffer_offset, index_count);
     }
     else if (!IsAssetLoadedOrInProgress(asset_vertex_buffer) ||
@@ -1419,8 +1419,8 @@ Model3DInstanceDraw(R_AssetInfo* vertex_info, R_AssetInfo* index_info, R_AssetIn
     if (asset_index_buffer->is_loaded && asset_index_buffer->is_loaded && asset_texture->is_loaded)
     {
         Model3DInstanceBucketAdd(&asset_vertex_buffer->item.buffer_alloc,
-                                 &asset_index_buffer->item.buffer_alloc, asset_texture->item.handle,
-                                 instance_buffer);
+                                 &asset_index_buffer->item.buffer_alloc,
+                                 asset_texture->item.desc_set, instance_buffer);
     }
     else if (!IsAssetLoadedOrInProgress(asset_vertex_buffer) ||
              !IsAssetLoadedOrInProgress(asset_index_buffer) ||
@@ -1528,4 +1528,5 @@ Model3DRendering()
         }
     }
 }
+
 } // namespace wrapper

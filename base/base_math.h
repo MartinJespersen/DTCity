@@ -503,7 +503,7 @@ vec_2s32(S32 x, S32 y);
 static Vec2S32
 add_2s32(Vec2S32 a, Vec2S32 b);
 static Vec2S32
-sub_2s32(Vec2S32 a, Vec2S32 b);
+Sub_2S32(Vec2S32 a, Vec2S32 b);
 static Vec2S32
 mul_2s32(Vec2S32 a, Vec2S32 b);
 static Vec2S32
