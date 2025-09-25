@@ -473,7 +473,7 @@ str8_chop(String8 str, U64 amt)
 }
 
 static String8
-str8_skip_chop_whitespace(String8 string)
+Str8SkipChopWhitespace(String8 string)
 {
     U8* first = string.str;
     U8* opl = first + string.size;
@@ -1806,7 +1806,7 @@ str8_from_32(Arena* arena, String32 in)
 }
 
 static String32
-str32_from_8(Arena* arena, String8 in)
+Str32From8(Arena* arena, String8 in)
 {
     String32 result = str32_zero();
     if (in.size)
@@ -2123,8 +2123,7 @@ indented_from_string(Arena* arena, String8 string)
         case '\n':
         case 0:
         {
-            String8 line =
-                str8_skip_chop_whitespace(str8_substr(string, r1u64(line_begin_off, off)));
+            String8 line = Str8SkipChopWhitespace(str8_substr(string, r1u64(line_begin_off, off)));
             if (line.size != 0)
             {
                 Str8ListPushF(scratch.arena, &indented_strings, "%.*s%s\n", (int)depth * 2,

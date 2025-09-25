@@ -376,33 +376,33 @@ MainLoop(void* ptr)
     ctx->car_sim = city::CarSimCreate(vk_ctx->asset_path, vk_ctx->texture_path, 100, ctx->road);
     city::CarSim* car_sim = ctx->car_sim;
 
-    render::SamplerInfo sampler_info = {
-        .min_filter = render::Filter_Linear,
-        .mag_filter = render::Filter_Linear,
-        .mip_map_mode = render::MipMapMode_Linear,
-        .address_mode_u = render::SamplerAddressMode_Repeat,
-        .address_mode_v = render::SamplerAddressMode_Repeat,
+    R_SamplerInfo sampler_info = {
+        .min_filter = R_Filter_Linear,
+        .mag_filter = R_Filter_Linear,
+        .mip_map_mode = R_MipMapMode_Linear,
+        .address_mode_u = R_SamplerAddressMode_Repeat,
+        .address_mode_v = R_SamplerAddressMode_Repeat,
     };
 
     city::Buildings* buildings = ctx->buildings;
 
     // buildings buffer create
-    render::BufferInfo building_vertex_buffer_info =
-        render::BufferInfoFromTemplateBuffer(buildings->vertex_buffer);
-    render::BufferInfo building_index_buffer_info =
-        render::BufferInfoFromTemplateBuffer(buildings->index_buffer);
+    R_BufferInfo building_vertex_buffer_info =
+        R_BufferInfoFromTemplateBuffer(buildings->vertex_buffer);
+    R_BufferInfo building_index_buffer_info =
+        R_BufferInfoFromTemplateBuffer(buildings->index_buffer);
 
     // road buffers create
-    render::BufferInfo road_vertex_buffer_info =
-        render::BufferInfoFromTemplateBuffer(road->vertex_buffer);
-    render::BufferInfo road_index_buffer_info =
-        render::BufferInfoFromTemplateBuffer(road->index_buffer);
+    R_BufferInfo road_vertex_buffer_info =
+        R_BufferInfoFromTemplateBuffer(road->vertex_buffer);
+    R_BufferInfo road_index_buffer_info =
+        R_BufferInfoFromTemplateBuffer(road->index_buffer);
 
     // car buffers create
-    render::BufferInfo car_vertex_buffer_info =
-        render::BufferInfoFromTemplateBuffer(car_sim->vertex_buffer);
-    render::BufferInfo car_index_buffer_info =
-        render::BufferInfoFromTemplateBuffer(car_sim->index_buffer);
+    R_BufferInfo car_vertex_buffer_info =
+        R_BufferInfoFromTemplateBuffer(car_sim->vertex_buffer);
+    R_BufferInfo car_index_buffer_info =
+        R_BufferInfoFromTemplateBuffer(car_sim->index_buffer);
 
     ProfileBuffersCreate(vk_ctx);
     while (ctx->running)
@@ -414,8 +414,8 @@ MainLoop(void* ptr)
 
         Buffer<city::Model3DInstance> instance_buffer = city::CarUpdate(
             vk_ctx->draw_frame_arena, car_sim, ctx->road, ctx->time->delta_time_sec);
-        render::BufferInfo car_instance_buffer_info =
-            render::BufferInfoFromTemplateBuffer(instance_buffer);
+        R_BufferInfo car_instance_buffer_info =
+            R_BufferInfoFromTemplateBuffer(instance_buffer);
         wrapper::Model3DDraw(&road->asset_vertex_info, &road->asset_index_info,
                              &road->asset_texture_info, road->texture_path, &sampler_info,
                              &road_vertex_buffer_info, &road_index_buffer_info, TRUE, 0,

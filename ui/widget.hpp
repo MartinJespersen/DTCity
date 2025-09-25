@@ -24,3 +24,13 @@
 // - - Swapchain should include images (for each frame in flight) that will have a format like
 // VK_FORMAT_R32_UINT (consider a larger value)
 //
+
+namespace ui
+{
+struct RectInstance
+{
+    Vec2F32 p0;
+    Vec2F32 p1;
+    Vec2F32 uv;
+};
+} // namespace ui

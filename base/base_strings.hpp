@@ -265,7 +265,7 @@ str8_postfix(String8 str, U64 size);
 static String8
 str8_chop(String8 str, U64 amt);
 static String8
-str8_skip_chop_whitespace(String8 string);
+Str8SkipChopWhitespace(String8 string);
 static String8
 str8_skip_chop_slashes(String8 string);
 
@@ -428,7 +428,7 @@ Str16From8(Arena* arena, String8 in);
 static String8
 str8_from_32(Arena* arena, String32 in);
 static String32
-str32_from_8(Arena* arena, String8 in);
+Str32From8(Arena* arena, String8 in);
 
 ////////////////////////////////
 //~ String -> Enum Conversions

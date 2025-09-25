@@ -144,9 +144,9 @@ struct Road
     glm::mat4 model_matrix;
 
     String8 texture_path;
-    render::AssetInfo asset_vertex_info;
-    render::AssetInfo asset_index_info;
-    render::AssetInfo asset_texture_info;
+    R_AssetInfo asset_vertex_info;
+    R_AssetInfo asset_index_info;
+    R_AssetInfo asset_texture_info;
 
     Buffer<Vertex3D> vertex_buffer;
     Buffer<U32> index_buffer;
@@ -195,12 +195,12 @@ struct CarSim
 
     Buffer<city::Vertex3D> vertex_buffer;
     Buffer<U32> index_buffer;
-    render::SamplerInfo sampler_info;
+    R_SamplerInfo sampler_info;
     Rng1F32 car_center_offset;
 
-    render::AssetInfo vertex_buffer_info;
-    render::AssetInfo index_buffer_info;
-    render::AssetInfo texture_info;
+    R_AssetInfo vertex_buffer_info;
+    R_AssetInfo index_buffer_info;
+    R_AssetInfo texture_info;
 
     String8 texture_path;
 };
@@ -224,10 +224,10 @@ struct Buildings
     NodeWays node_ways;
     NodeUtmStructure node_utm_structure;
 
-    render::AssetInfo vertex_buffer_info;
-    render::AssetInfo index_buffer_info;
-    render::AssetInfo roof_texture_info;
-    render::AssetInfo facade_texture_info;
+    R_AssetInfo vertex_buffer_info;
+    R_AssetInfo index_buffer_info;
+    R_AssetInfo roof_texture_info;
+    R_AssetInfo facade_texture_info;
     String8 roof_texture_path;
     String8 facade_texture_path;
 

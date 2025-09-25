@@ -1,28 +1,46 @@
-
-namespace render
+////////////////////////////////////////////////////////
+// ~mgj: Handles
+static R_Handle
+R_HandleZero()
 {
+    R_Handle handle = {};
+    return handle;
+}
+static R_Handle
+R_HandleFromPtr(void* ptr)
+{
+    R_Handle handle = {};
+    handle.u64[0] = (U64)ptr;
+    return handle;
+}
 
+static void*
+R_HandleToPtr(R_Handle handle)
+{
+    return (void*)handle.u64[0];
+}
+
+////////////////////////////////////////////////////////
 template <typename T>
-static BufferInfo
-BufferInfoFromTemplateBuffer(Buffer<T> buffer)
+static R_BufferInfo
+R_BufferInfoFromTemplateBuffer(Buffer<T> buffer)
 {
     U64 type_size = sizeof(T);
     U64 byte_count = buffer.size * type_size;
     Buffer<U8> general_buffer = {.data = (U8*)buffer.data, .size = byte_count};
     return {.buffer = general_buffer, .type_size = type_size};
 }
-static AssetId
-AssetIdFromStr8(String8 str)
+static R_AssetId
+R_AssetIdFromStr8(String8 str)
 {
     return {.id = HashU128FromStr8(str).u64[0]};
 }
-static AssetInfo
-AssetInfoCreate(String8 name, AssetItemType type, PipelineUsageType pipeline_usage_type)
+static R_AssetInfo
+R_AssetInfoCreate(String8 name, R_AssetItemType type, R_PipelineUsageType pipeline_usage_type)
 {
-    AssetInfo asset_info = {};
-    asset_info.id = AssetIdFromStr8(name);
+    R_AssetInfo asset_info = {};
+    asset_info.id = R_AssetIdFromStr8(name);
     asset_info.type = type;
     asset_info.pipeline_usage_type = pipeline_usage_type;
     return asset_info;
 }
-} // namespace render

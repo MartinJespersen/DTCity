@@ -6,5 +6,7 @@ DISABLE_WARNINGS_POP
 
 // ~mgj: user libs
 #include "render.cpp"
+
+#include "vulkan/vulkan_interface.cpp"
 #include "vulkan/vulkan_common.cpp"
 #include "vulkan/vulkan.cpp"

@@ -1,0 +1,14 @@
+namespace draw
+{
+////////////////////////////////////////////////////
+// ~mgj: globals
+static DrawCtx g_draw_ctx;
+
+static DrawCtx*
+DrawCtxGet()
+{
+    return &g_draw_ctx;
+}
+////////////////////////////////////////////////////
+
+} // namespace draw

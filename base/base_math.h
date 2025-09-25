@@ -406,7 +406,7 @@ struct Rng1S64Array
 #define mod_f32(a, b) fmodf((a), (b))
 #define pow_f32(b, e) powf((b), (e))
 #define ceil_f32(v) ceilf(v)
-#define floor_f32(v) floorf(v)
+#define FloorF32(v) floorf(v)
 #define round_f32(v) roundf(v)
 #define AbsF32(v) fabsf(v)
 #define radians_from_turns_f32(v) ((v) * 2 * 3.1415926535897f)

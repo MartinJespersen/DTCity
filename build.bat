@@ -10,22 +10,18 @@ set "exec_full_path=%debug_dir%%exec_name%"
 set "dll_full_path=%debug_dir%%dll_name%"
 set "shader_path=%cwd%shaders\\"
 set "lib_dir=%cwd%third_party\\"
-set "vulkan_path=C:\\VulkanSDK\\"
+set "vulkan_path=%lib_dir%vulkan_sdk_v1_4_309_0\\"
 set "tracy_src=%lib_dir%tracy/TracyClient.cpp"
-set "glfw_lib_dir=%lib_dir%glfw\\lib\\"
-set "ktx_lib_dir=%lib_dir%ktx"
+
+set "freetype_include_dir=%lib_dir%freetype_v2_14_1\\include\\"
 :: Compiler and linker flags
 set "cxxflags=/W4 /std:c++20 /wd4201 /wd4005 /wd4838 /wd4244 /wd4996 /wd4310 /wd4245 /wd4505 /wd4100 /EHsc /Z7"
 if not "%~1"=="" (
     set "cxxflags=%cxxflags% %~1"
 )
-set "include_dirs=/I. /I%vulkan_path%Include /I%lib_dir%glfw\\include /I%lib_dir% /I%lib_dir%ktx\\include"
-:: free typed is the debug lib
-
-set "link_libs=glfw3dll.lib vulkan-1.lib gdi32.lib ktx_read.lib"
-set "link_flags=/ignore:4099 /MACHINE:X64"
-set "link_dirs=/LIBPATH:%glfw_lib_dir% /LIBPATH:%vulkan_path%Lib /LIBPATH:%ktx_lib_dir%"
-set "glfw_dll_path=%glfw_lib_dir%glfw3.dll"
+set "include_dirs=/I. /I%freetype_include_dir% /I%vulkan_path%include /I%lib_dir%glfw\\include /I%lib_dir% /I%lib_dir%ktx\\include"
+set "link_flags=/ignore:4099 /MACHINE:X64 /NODEFAULTLIB:library"
+set "link_dirs=/LIBPATH:%cwd%lib_artifacts\\win32"
 
 if not exist "%shader_path%" mkdir "%shader_path%"
 :: Compile shaders
@@ -40,11 +36,8 @@ if not exist "%debug_dir_single_quote%" mkdir "%debug_dir_single_quote%"
 set exec_full_path_single_quote=%exec_full_path:\\=\%
 if exist %exec_full_path_single_quote% del %exec_full_path_single_quote%
 
-
-set glfw_dll_path_single_quote=%glfw_dll_path:\\=\%
-copy %glfw_dll_path_single_quote% %debug_dir_single_quote%
 :: Compile main executable
-set MAIN=cl /fsanitize=address /MD %main_file_name% %tracy_src% /Fe%exec_full_path% %cxxflags%  %include_dirs% /DBUILD_CONSOLE_INTERFACE /DBUILD_DEBUG /nologo /link %link_dirs% %link_libs% %link_flags% /INCREMENTAL:NO /noexp
+set MAIN=cl /fsanitize=address /MD %main_file_name% %tracy_src% /Fe%exec_full_path% %cxxflags%  %include_dirs% /DBUILD_CONSOLE_INTERFACE /DBUILD_DEBUG /nologo /link %link_dirs% %link_flags% /INCREMENTAL:NO /noexp
 
 call %MAIN%
 echo %MAIN%
