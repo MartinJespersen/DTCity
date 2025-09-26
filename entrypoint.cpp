@@ -358,7 +358,6 @@ MainLoop(void* ptr)
     Context* ctx = (Context*)ptr;
     IO* io_ctx = ctx->io;
     OS_SetThreadName(Str8CString("Entrypoint thread"));
-
     city::GCSBoundingBox gcs_bbox = {.lat_btm_left = 56.16923976826141,
                                      .lon_btm_left = 10.1852768812041,
                                      .lat_top_right = 56.17371342689877,
@@ -393,16 +392,12 @@ MainLoop(void* ptr)
         R_BufferInfoFromTemplateBuffer(buildings->index_buffer);
 
     // road buffers create
-    R_BufferInfo road_vertex_buffer_info =
-        R_BufferInfoFromTemplateBuffer(road->vertex_buffer);
-    R_BufferInfo road_index_buffer_info =
-        R_BufferInfoFromTemplateBuffer(road->index_buffer);
+    R_BufferInfo road_vertex_buffer_info = R_BufferInfoFromTemplateBuffer(road->vertex_buffer);
+    R_BufferInfo road_index_buffer_info = R_BufferInfoFromTemplateBuffer(road->index_buffer);
 
     // car buffers create
-    R_BufferInfo car_vertex_buffer_info =
-        R_BufferInfoFromTemplateBuffer(car_sim->vertex_buffer);
-    R_BufferInfo car_index_buffer_info =
-        R_BufferInfoFromTemplateBuffer(car_sim->index_buffer);
+    R_BufferInfo car_vertex_buffer_info = R_BufferInfoFromTemplateBuffer(car_sim->vertex_buffer);
+    R_BufferInfo car_index_buffer_info = R_BufferInfoFromTemplateBuffer(car_sim->index_buffer);
 
     ProfileBuffersCreate(vk_ctx);
     while (ctx->running)
@@ -414,8 +409,7 @@ MainLoop(void* ptr)
 
         Buffer<city::Model3DInstance> instance_buffer = city::CarUpdate(
             vk_ctx->draw_frame_arena, car_sim, ctx->road, ctx->time->delta_time_sec);
-        R_BufferInfo car_instance_buffer_info =
-            R_BufferInfoFromTemplateBuffer(instance_buffer);
+        R_BufferInfo car_instance_buffer_info = R_BufferInfoFromTemplateBuffer(instance_buffer);
         wrapper::Model3DDraw(&road->asset_vertex_info, &road->asset_index_info,
                              &road->asset_texture_info, road->texture_path, &sampler_info,
                              &road_vertex_buffer_info, &road_index_buffer_info, TRUE, 0,
