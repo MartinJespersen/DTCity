@@ -792,7 +792,7 @@ Model3DInstanceRendering()
             instance_buffer_alloc->buffer,
         };
         VkDeviceSize vertex_offsets[] = {0, node->instance_buffer_offset};
-        descriptor_sets[1] = {(VkDescriptorSet)R_HandleToPtr(node->texture_handle)};
+        descriptor_sets[1] = {node->texture_handle};
         vkCmdBindDescriptorSets(cmd_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS,
                                 pipeline->pipeline_layout, 0, ArrayCount(descriptor_sets),
                                 descriptor_sets, 0, NULL);
@@ -1316,7 +1316,7 @@ PipelineDestroy(Pipeline* pipeline)
 
 static void
 Model3DBucketAdd(BufferAllocation* vertex_buffer_allocation,
-                 BufferAllocation* index_buffer_allocation, R_Handle texture_handle,
+                 BufferAllocation* index_buffer_allocation, VkDescriptorSet texture_handle,
                  B32 depth_write_per_draw_call_only, U32 index_buffer_offset, U32 index_count)
 {
     VulkanContext* vk_ctx = VulkanCtxGet();
@@ -1335,7 +1335,7 @@ Model3DBucketAdd(BufferAllocation* vertex_buffer_allocation,
 
 static void
 Model3DInstanceBucketAdd(BufferAllocation* vertex_buffer_allocation,
-                         BufferAllocation* index_buffer_allocation, R_Handle texture_handle,
+                         BufferAllocation* index_buffer_allocation, VkDescriptorSet texture_handle,
                          R_BufferInfo* instance_buffer_info)
 {
     U32 align = 16;
@@ -1492,7 +1492,7 @@ Model3DRendering()
     VkDeviceSize offsets[] = {0};
     for (Model3DNode* node = draw_frame->model_3D_list.first; node; node = node->next)
     {
-        descriptor_sets[1] = (VkDescriptorSet)R_HandleToPtr(node->texture_handle);
+        descriptor_sets[1] = node->texture_handle;
         vkCmdBindDescriptorSets(cmd_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS,
                                 model_3D_pipeline->pipeline_layout, 0, ArrayCount(descriptor_sets),
                                 descriptor_sets, 0, NULL);

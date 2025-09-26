@@ -148,10 +148,7 @@ struct R_ThreadInput
 };
 static R_Handle
 R_HandleZero();
-static R_Handle
-R_HandleFromPtr(void* ptr);
-static void*
-R_HandleToPtr(R_Handle handle);
+
 template <typename T>
 static R_BufferInfo
 R_BufferInfoFromTemplateBuffer(Buffer<T> buffer);

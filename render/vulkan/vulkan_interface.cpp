@@ -36,38 +36,38 @@ R_Tex2dAlloc(R_ResourceKind kind, Vec2S32 size, R_Tex2DFormat format, void* data
         image_view_resource.image_view, vk_sampler);
 
     // ~mgj: save texture as asset
-    if (*free_list)
+    VK_Tex2D* vk_tex2d = r_tex2d_free_list;
+    if (vk_tex2d)
     {
-        asset_item = *free_list;
-        SLLStackPop(asset_item);
+        SLLStackPop(vk_tex2d);
     }
     else
     {
-        asset_item = PushStruct(arena, R_AssetItem<T>);
-        asset_item->id = id;
-        SLLQueuePushFront(list->first, list->last, asset_item);
+        vk_tex2d = PushStruct(asset_manager->arena, VK_Tex2D);
+        SLLQueuePushFront(r_tex2d_list.first, r_tex2d_list.last, vk_tex2d);
     }
-
-    VK_Tex2D* vk_tex2d = PushStruct(asset_manager->arena, VK_Tex2D);
-    SLLQueuePush(r_tex2d_list.first, r_tex2d_list.last, vk_tex2d);
     vk_tex2d->format = format;
     vk_tex2d->desc_set = desc_set;
     vk_tex2d->image_resource = image_resource;
     vk_tex2d->sampler = vk_sampler;
 
-    return (R_Handle)R_HandleFromPtr(vk_tex2d);
+    return VK_Tex2DToHandle(vk_tex2d);
 }
 
 static void
-R_Tex2dRelease(R_Handle texture)
+R_Tex2dRelease(R_Handle texture_handle)
 {
+    wrapper::VulkanContext* vk_ctx = wrapper::VulkanCtxGet();
+    VK_Tex2D* vk_tex2d = VK_Tex2DFromHandle(texture_handle);
+    vkDestroySampler(vk_ctx->device, vk_tex2d->sampler, NULL);
+    wrapper::ImageResourceDestroy(vk_ctx->allocator, vk_tex2d->image_resource);
 }
 
 static void
 R_FillTex2dRegion(R_Handle handle, Rng2S32 subrect, void* data)
 {
     wrapper::VulkanContext* vk_ctx = wrapper::VulkanCtxGet();
-    VK_Tex2D* vk_texture = VK_TextureFromHandle(handle);
+    VK_Tex2D* vk_texture = VK_Tex2DFromHandle(handle);
 
     U8 num_bytes_per_pixel = r_tex2d_format_bytes_per_pixel_table[vk_texture->format];
 
@@ -133,7 +133,7 @@ R_FillTex2dRegion(R_Handle handle, Rng2S32 subrect, void* data)
                                           .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
                                           .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
                                           .image = vk_image,
-                                          .subresourceRange = (VkImageSubresourceRange){
+                                          .subresourceRange = {
                                               .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
                                               .baseMipLevel = 0,
                                               .levelCount = 1,
@@ -148,4 +148,15 @@ R_FillTex2dRegion(R_Handle handle, Rng2S32 subrect, void* data)
     vkCmdPipelineBarrier2(cmd, &depInfo);
 
     VK_CHECK_RESULT(vkEndCommandBuffer(cmd));
+
+    VkCommandBufferSubmitInfo cmd_info = {.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_SUBMIT_INFO,
+                                          .commandBuffer = cmd};
+    VkSubmitInfo2 submit_info = {
+        .commandBufferInfoCount = 1,
+        .pCommandBufferInfos = &cmd_info,
+    };
+
+    vkQueueSubmit2(vk_ctx->graphics_queue, 1, &submit_info, NULL);
+
+    wrapper::BufferDestroy(vk_ctx->allocator, &texture_staging_buffer);
 }

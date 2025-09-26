@@ -6,19 +6,6 @@ R_HandleZero()
     R_Handle handle = {};
     return handle;
 }
-static R_Handle
-R_HandleFromPtr(void* ptr)
-{
-    R_Handle handle = {};
-    handle.u64[0] = (U64)ptr;
-    return handle;
-}
-
-static void*
-R_HandleToPtr(R_Handle handle)
-{
-    return (void*)handle.u64[0];
-}
 
 ////////////////////////////////////////////////////////
 template <typename T>

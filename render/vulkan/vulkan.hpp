@@ -117,7 +117,7 @@ struct Model3DNode
     U32 index_buffer_offset;
     U32 index_count;
     BufferAllocation vertex_alloc;
-    R_Handle texture_handle;
+    VkDescriptorSet texture_handle;
 };
 
 struct Model3DInstanceNode
@@ -127,7 +127,7 @@ struct Model3DInstanceNode
     BufferAllocation vertex_alloc;
     R_BufferInfo instance_buffer_info;
     U32 instance_buffer_offset;
-    R_Handle texture_handle;
+    VkDescriptorSet texture_handle;
 };
 
 struct Model3DNodeList
@@ -331,11 +331,11 @@ BuildingCreateAsync(R_AssetId vertex_buffer_id, R_AssetId index_buffer_id,
                     Buffer<city::Vertex3D> vertex_buffer, Buffer<U32> index_buffer);
 static void
 Model3DBucketAdd(BufferAllocation* vertex_buffer_allocation,
-                 BufferAllocation* index_buffer_allocation, VkDescriptorSet desc_set,
-                 B32 depth_write_per_draw_call_only, U32 index_buffer_offset, U32 vertex_count);
+                 BufferAllocation* index_buffer_allocation, VkDescriptorSet texture_handle,
+                 B32 depth_write_per_draw_call_only, U32 index_buffer_offset, U32 index_count);
 static void
 Model3DInstanceBucketAdd(BufferAllocation* vertex_buffer_allocation,
-                         BufferAllocation* index_buffer_allocation, R_Handle texture_handle,
+                         BufferAllocation* index_buffer_allocation, VkDescriptorSet texture_handle,
                          R_BufferInfo* instance_buffer_info);
 static void
 Model3DDraw(R_AssetInfo* vertex_info, R_AssetInfo* index_info, R_AssetInfo* texture_info,
