@@ -961,10 +961,6 @@ AssetManagerCreate(VkDevice device, U32 queue_family_index, async::Threads* thre
     asset_store->cmd_queue = async::QueueInit<CmdQueueItem>(
         arena, cmd_queue_size, vk_ctx->queue_family_indices.graphicsFamilyIndex);
 
-    // ~mgj: textures
-    asset_store->texture_arena = ArenaAlloc();
-    // ~ mgj: buffers
-    asset_store->buffer_arena = ArenaAlloc();
     return asset_store;
 }
 static void
@@ -977,11 +973,6 @@ AssetManagerDestroy(VulkanContext* vk_ctx, AssetManager* asset_store)
     }
     async::QueueDestroy(asset_store->cmd_queue);
     AssetManagerCmdListDestroy(asset_store->cmd_wait_list);
-
-    // ~mgj: textures
-    ArenaRelease(asset_store->texture_arena);
-    // ~ mgj: buffers
-    ArenaRelease(asset_store->buffer_arena);
 
     ArenaRelease(asset_store->arena);
 }
@@ -1060,8 +1051,8 @@ AssetManagerTextureItemGet(R_AssetId asset_id)
         &asset_store->texture_hashmap
              .data[HashIndexFromAssetId(asset_id, asset_store->texture_hashmap.size)];
 
-    return AssetManagerItemGet(asset_store->texture_arena, texture_list,
-                               &asset_store->texture_free_list, asset_id);
+    return AssetManagerItemGet(asset_store->arena, texture_list, &asset_store->texture_free_list,
+                               asset_id);
 }
 
 static R_AssetItem<AssetItemBuffer>*
@@ -1070,7 +1061,7 @@ AssetManagerBufferItemGet(R_AssetId asset_id)
     VulkanContext* vk_ctx = VulkanCtxGet();
     AssetManager* asset_store = vk_ctx->asset_manager;
 
-    return AssetManagerItemGet(asset_store->buffer_arena, &asset_store->buffer_list,
+    return AssetManagerItemGet(asset_store->arena, &asset_store->buffer_list,
                                &asset_store->buffer_free_list, asset_id);
 }
 

@@ -1519,7 +1519,6 @@ VkSamplerCreateInfoFromSamplerInfo(R_SamplerInfo* sampler, VkSamplerCreateInfo* 
     out_sampler_info->borderColor = VK_BORDER_COLOR_INT_OPAQUE_BLACK;
 }
 
-
 } // namespace wrapper
 
 // ~mgj: Format Conversion

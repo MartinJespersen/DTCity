@@ -92,12 +92,10 @@ struct AssetManager
     Arena* arena;
 
     // ~mgj: Textures
-    Arena* texture_arena;
     Buffer<R_AssetItemList<Texture>> texture_hashmap;
     R_AssetItem<Texture>* texture_free_list;
 
     // ~mgj: Buffers
-    Arena* buffer_arena;
     R_AssetItemList<AssetItemBuffer> buffer_list;
     R_AssetItem<AssetItemBuffer>* buffer_free_list;
 
@@ -313,8 +311,7 @@ static void
 ThreadInputDestroy(R_ThreadInput* thread_input);
 
 static ImageKtx2*
-ImageFromKtx2file(VkCommandBuffer cmd, BufferAllocation staging_buffer, VulkanContext* vk_ctx,
-                  ktxTexture2* ktx_texture);
+ImageFromKtx2file(VkCommandBuffer cmd, VulkanContext* vk_ctx, ktxTexture2* ktx_texture);
 // ~mgj: Vulkan Lifetime
 static VulkanContext*
 VulkanCreate(Context* ctx);

@@ -28,5 +28,4 @@ DISABLE_WARNINGS_POP
 // ~mgj: user lib includes
 #include "render.hpp"
 #include "vulkan/vulkan_common.hpp"
-#include "vulkan/vk_texture.hpp"
 #include "vulkan/vulkan.hpp"
