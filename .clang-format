@@ -7,13 +7,16 @@ IndentWidth: 4
 AlwaysBreakAfterReturnType: All
 
 # Align parameters
-AlignAfterOpenBracket: Align
+#AlignAfterOpenBracket: Align
 
 # Break before braces
 BreakBeforeBraces: Allman
 
+IndentCaseLabels: true
+
 # Other common settings (adjust as needed)
 ColumnLimit: 100
+AllowShortCaseLabelsOnASingleLine: true
 AllowShortFunctionsOnASingleLine: None
 KeepEmptyLinesAtTheStartOfBlocks: false
 MaxEmptyLinesToKeep: 1

@@ -114,7 +114,6 @@ struct R_AssetInfo
 struct R_TextureLoadingInfo
 {
     String8 texture_path;
-    R_SamplerInfo sampler_info;
 };
 
 struct R_AssetLoadingInfo

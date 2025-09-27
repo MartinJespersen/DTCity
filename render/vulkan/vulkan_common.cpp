@@ -1443,26 +1443,14 @@ VK_DescriptorSetCreate(Arena* arena, VkDevice device, VkDescriptorPool desc_pool
     return desc_set;
 }
 
-static VkDescriptorSet
-DescriptorSetCreate(Arena* arena, VkDevice device, VkDescriptorPool desc_pool,
-                    VkDescriptorSetLayout desc_set_layout, Texture* texture)
-{
-    return VK_DescriptorSetCreate(arena, device, desc_pool, desc_set_layout,
-                                  texture->image_resource.image_view_resource.image_view,
-                                  texture->sampler);
-}
-
 static VkFilter
 VkFilterFromFilter(R_Filter filter)
 {
     switch (filter)
     {
-    case R_Filter_Nearest:
-        return VK_FILTER_NEAREST;
-    case R_Filter_Linear:
-        return VK_FILTER_LINEAR;
-    default:
-        AssertAlways(1);
+        case R_Filter_Nearest: return VK_FILTER_NEAREST;
+        case R_Filter_Linear: return VK_FILTER_LINEAR;
+        default: AssertAlways(1);
     }
     return VK_FILTER_NEAREST;
 }
@@ -1472,12 +1460,9 @@ VkSamplerMipmapModeFromMipMapMode(R_MipMapMode mip_map_mode)
 {
     switch (mip_map_mode)
     {
-    case R_MipMapMode_Nearest:
-        return VK_SAMPLER_MIPMAP_MODE_NEAREST;
-    case R_MipMapMode_Linear:
-        return VK_SAMPLER_MIPMAP_MODE_LINEAR;
-    default:
-        AssertAlways(1);
+        case R_MipMapMode_Nearest: return VK_SAMPLER_MIPMAP_MODE_NEAREST;
+        case R_MipMapMode_Linear: return VK_SAMPLER_MIPMAP_MODE_LINEAR;
+        default: AssertAlways(1);
     }
     return VK_SAMPLER_MIPMAP_MODE_NEAREST;
 }
@@ -1487,14 +1472,10 @@ VkSamplerAddressModeFromSamplerAddressMode(R_SamplerAddressMode address_mode)
 {
     switch (address_mode)
     {
-    case R_SamplerAddressMode_Repeat:
-        return VK_SAMPLER_ADDRESS_MODE_REPEAT;
-    case R_SamplerAddressMode_MirroredRepeat:
-        return VK_SAMPLER_ADDRESS_MODE_MIRRORED_REPEAT;
-    case R_SamplerAddressMode_ClampToEdge:
-        return VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
-    default:
-        AssertAlways(1);
+        case R_SamplerAddressMode_Repeat: return VK_SAMPLER_ADDRESS_MODE_REPEAT;
+        case R_SamplerAddressMode_MirroredRepeat: return VK_SAMPLER_ADDRESS_MODE_MIRRORED_REPEAT;
+        case R_SamplerAddressMode_ClampToEdge: return VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+        default: AssertAlways(1);
     }
     return VK_SAMPLER_ADDRESS_MODE_REPEAT;
 }
@@ -1529,56 +1510,56 @@ R_VkFormatFromTex2DFormat(R_Tex2DFormat format)
 
     switch (format)
     {
-    case R_Tex2DFormat_R8:
-    {
-        result = VK_FORMAT_R8_UNORM;
-    }
-    break;
-    case R_Tex2DFormat_RG8:
-    {
-        result = VK_FORMAT_R8G8_UNORM;
-    }
-    break;
-    case R_Tex2DFormat_RGBA8:
-    {
-        result = VK_FORMAT_R8G8B8A8_UNORM;
-    }
-    break;
-    case R_Tex2DFormat_BGRA8:
-    {
-        result = VK_FORMAT_B8G8R8A8_UNORM;
-    }
-    break;
-    case R_Tex2DFormat_R16:
-    {
-        result = VK_FORMAT_R16_UNORM; // Or VK_FORMAT_R16_SFLOAT if HDR
-    }
-    break;
-    case R_Tex2DFormat_RGBA16:
-    {
-        result = VK_FORMAT_R16G16B16A16_SFLOAT;
-    }
-    break;
-    case R_Tex2DFormat_R32:
-    {
-        result = VK_FORMAT_R32_SFLOAT;
-    }
-    break;
-    case R_Tex2DFormat_RG32:
-    {
-        result = VK_FORMAT_R32G32_SFLOAT;
-    }
-    break;
-    case R_Tex2DFormat_RGBA32:
-    {
-        result = VK_FORMAT_R32G32B32A32_SFLOAT;
-    }
-    break;
-    default:
-    {
-        InvalidPath;
-    }
-    break;
+        case R_Tex2DFormat_R8:
+        {
+            result = VK_FORMAT_R8_UNORM;
+        }
+        break;
+        case R_Tex2DFormat_RG8:
+        {
+            result = VK_FORMAT_R8G8_UNORM;
+        }
+        break;
+        case R_Tex2DFormat_RGBA8:
+        {
+            result = VK_FORMAT_R8G8B8A8_UNORM;
+        }
+        break;
+        case R_Tex2DFormat_BGRA8:
+        {
+            result = VK_FORMAT_B8G8R8A8_UNORM;
+        }
+        break;
+        case R_Tex2DFormat_R16:
+        {
+            result = VK_FORMAT_R16_UNORM; // Or VK_FORMAT_R16_SFLOAT if HDR
+        }
+        break;
+        case R_Tex2DFormat_RGBA16:
+        {
+            result = VK_FORMAT_R16G16B16A16_SFLOAT;
+        }
+        break;
+        case R_Tex2DFormat_R32:
+        {
+            result = VK_FORMAT_R32_SFLOAT;
+        }
+        break;
+        case R_Tex2DFormat_RG32:
+        {
+            result = VK_FORMAT_R32G32_SFLOAT;
+        }
+        break;
+        case R_Tex2DFormat_RGBA32:
+        {
+            result = VK_FORMAT_R32G32B32A32_SFLOAT;
+        }
+        break;
+        default:
+        {
+            InvalidPath;
+        }
+        break;
     }
 
     return result;

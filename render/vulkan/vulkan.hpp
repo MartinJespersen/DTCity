@@ -28,13 +28,6 @@ struct CameraUniformBuffer
     Frustum frustum;
     glm::vec2 viewport_dim;
 };
-struct ImageKtx2
-{
-    ImageResource image_resource;
-    S32 width;
-    S32 height;
-    U32 mip_level_count;
-};
 
 struct AssetManagerCommandPool
 {
@@ -225,8 +218,7 @@ struct VulkanContext
 static void
 ThreadSetup(async::ThreadInfo thread_info, void* input);
 static void
-TextureCreate(VkCommandBuffer cmd_buffer, R_AssetInfo asset_info, String8 texture_path,
-              R_SamplerInfo sampler_info);
+TextureCreate(VkCommandBuffer cmd_buffer, R_AssetInfo asset_info, String8 texture_path);
 
 static void
 CarCreateDescriptorSetLayout();
@@ -310,8 +302,9 @@ ThreadInputCreate();
 static void
 ThreadInputDestroy(R_ThreadInput* thread_input);
 
-static ImageKtx2*
-ImageFromKtx2file(VkCommandBuffer cmd, VulkanContext* vk_ctx, ktxTexture2* ktx_texture);
+static void
+ImageFromKtx2file(VkCommandBuffer cmd, VkImage image, BufferAllocation staging_buffer,
+                  VulkanContext* vk_ctx, ktxTexture2* ktx_texture);
 // ~mgj: Vulkan Lifetime
 static VulkanContext*
 VulkanCreate(Context* ctx);

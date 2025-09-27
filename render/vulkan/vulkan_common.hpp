@@ -242,10 +242,6 @@ VK_DescriptorSetCreate(Arena* arena, VkDevice device, VkDescriptorPool desc_pool
                        VkDescriptorSetLayout desc_set_layout, VkImageView image_view,
                        VkSampler sampler);
 
-static VkDescriptorSet
-DescriptorSetCreate(Arena* arena, VkDevice device, VkDescriptorPool desc_pool,
-                    VkDescriptorSetLayout desc_set_layout, Texture* texture);
-
 static VkDescriptorSetLayout
 DescriptorSetLayoutCreate(VkDevice device, VkDescriptorSetLayoutBinding* bindings,
                           U32 binding_count);
