@@ -185,7 +185,7 @@
 #endif
 
 #if !defined(BUILD_ISSUES_LINK_STRING_LITERAL)
-#define BUILD_ISSUES_LINK_STRING_LITERAL "https://github.com/EpicGamesExt/raddebugger/issues"
+#define BUILD_ISSUES_LINK_STRING_LITERAL "https://github.com/MartinJespersen/DTCity/issues"
 #endif
 
 #define BUILD_TITLE_STRING_LITERAL                                                                 \

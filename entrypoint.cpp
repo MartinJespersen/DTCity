@@ -387,17 +387,21 @@ MainLoop(void* ptr)
 
     // buildings buffer create
     R_BufferInfo building_vertex_buffer_info =
-        R_BufferInfoFromTemplateBuffer(buildings->vertex_buffer);
+        R_BufferInfoFromTemplateBuffer(buildings->vertex_buffer, R_BufferType_Vertex);
     R_BufferInfo building_index_buffer_info =
-        R_BufferInfoFromTemplateBuffer(buildings->index_buffer);
+        R_BufferInfoFromTemplateBuffer(buildings->index_buffer, R_BufferType_Index);
 
     // road buffers create
-    R_BufferInfo road_vertex_buffer_info = R_BufferInfoFromTemplateBuffer(road->vertex_buffer);
-    R_BufferInfo road_index_buffer_info = R_BufferInfoFromTemplateBuffer(road->index_buffer);
+    R_BufferInfo road_vertex_buffer_info =
+        R_BufferInfoFromTemplateBuffer(road->vertex_buffer, R_BufferType_Vertex);
+    R_BufferInfo road_index_buffer_info =
+        R_BufferInfoFromTemplateBuffer(road->index_buffer, R_BufferType_Index);
 
     // car buffers create
-    R_BufferInfo car_vertex_buffer_info = R_BufferInfoFromTemplateBuffer(car_sim->vertex_buffer);
-    R_BufferInfo car_index_buffer_info = R_BufferInfoFromTemplateBuffer(car_sim->index_buffer);
+    R_BufferInfo car_vertex_buffer_info =
+        R_BufferInfoFromTemplateBuffer(car_sim->vertex_buffer, R_BufferType_Vertex);
+    R_BufferInfo car_index_buffer_info =
+        R_BufferInfoFromTemplateBuffer(car_sim->index_buffer, R_BufferType_Index);
 
     ProfileBuffersCreate(vk_ctx);
     while (ctx->running)
@@ -409,7 +413,8 @@ MainLoop(void* ptr)
 
         Buffer<city::Model3DInstance> instance_buffer = city::CarUpdate(
             vk_ctx->draw_frame_arena, car_sim, ctx->road, ctx->time->delta_time_sec);
-        R_BufferInfo car_instance_buffer_info = R_BufferInfoFromTemplateBuffer(instance_buffer);
+        R_BufferInfo car_instance_buffer_info =
+            R_BufferInfoFromTemplateBuffer(instance_buffer, R_BufferType_Vertex);
         wrapper::Model3DDraw(&road->asset_vertex_info, &road->asset_index_info,
                              &road->asset_texture_info, road->texture_path, &sampler_info,
                              &road_vertex_buffer_info, &road_index_buffer_info, TRUE, 0,

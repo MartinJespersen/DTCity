@@ -237,6 +237,28 @@ AssetBufferLoad(Arena* arena, R_AssetItem<AssetItemBuffer>* asset_item,
                 R_AssetLoadingInfoNodeList* asset_loading_wait_list, R_AssetInfo* asset_info,
                 R_BufferInfo* buffer_info)
 {
+    VulkanContext* vk_ctx = VulkanCtxGet();
+
+    // ~mgj: Create buffer allocation
+    VmaAllocationCreateInfo vma_info = {0};
+    vma_info.usage = VMA_MEMORY_USAGE_AUTO;
+    vma_info.requiredFlags = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
+    VkBufferUsageFlags usage_flags = NULL;
+    switch (buffer_info->buffer_type)
+    {
+        case R_BufferType_Vertex: usage_flags = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT; break;
+        case R_BufferType_Index: usage_flags = VK_BUFFER_USAGE_INDEX_BUFFER_BIT; break;
+        default: InvalidPath;
+    }
+    wrapper::BufferAllocation buffer =
+        wrapper::BufferAllocationCreate(vk_ctx->allocator, buffer_info->buffer.size,
+                                        usage_flags | VK_BUFFER_USAGE_TRANSFER_DST_BIT, vma_info);
+
+    // ~mgj: Prepare Texture
+    AssetItemBuffer* asset_buffer = &asset_item->item;
+    asset_buffer->buffer_alloc = buffer;
+
+    // ~mgj: Preparing buffer loading for another thread
     R_AssetLoadingInfoNode* node = PushStruct(arena, R_AssetLoadingInfoNode);
     R_AssetLoadingInfo* asset_load_info = &node->load_info;
     asset_load_info->info = *asset_info;
@@ -359,24 +381,8 @@ ThreadSetup(async::ThreadInfo thread_info, void* input)
             break;
             case R_AssetItemType_Buffer:
             {
-                VkBufferUsageFlagBits buffer_usage_flags = {};
-                switch (asset_loading_info->info.pipeline_usage_type)
-                {
-                    case R_PipelineUsageType_VertexBuffer:
-                        buffer_usage_flags = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT;
-                        break;
-                    case R_PipelineUsageType_IndexBuffer:
-                        buffer_usage_flags = VK_BUFFER_USAGE_INDEX_BUFFER_BIT;
-                        break;
-                    default:
-                        DEBUG_LOG("Unknown pipeline usage type for buffer: %d",
-                                  asset_loading_info->info.pipeline_usage_type);
-                        Assert(0);
-                        continue;
-                };
                 R_BufferInfo* buffer_info = (R_BufferInfo*)&asset_loading_info->extra_info;
-                R_AssetInfo vertex_buffer_info = AssetInfoBufferCmd(
-                    cmd, asset_loading_info->info.id, buffer_info->buffer, buffer_usage_flags);
+                AssetInfoBufferCmd(cmd, asset_loading_info->info.id, buffer_info->buffer);
             }
             break;
             default: Assert(0); continue;
@@ -1098,24 +1104,26 @@ AssetManagerItemGet(Arena* arena, R_AssetItemList<T>* list, R_AssetItem<T>** fre
 }
 
 template <typename T>
-static R_AssetInfo
-AssetInfoBufferCmd(VkCommandBuffer cmd, R_AssetId id, Buffer<T> buffer,
-                   VkBufferUsageFlagBits usage_flags)
+static void
+AssetInfoBufferCmd(VkCommandBuffer cmd, R_AssetId id, Buffer<T> buffer)
 {
     VulkanContext* vk_ctx = VulkanCtxGet();
+    R_AssetItem<AssetItemBuffer>* asset_item_buffer = AssetManagerBufferItemGet(id);
+    AssetItemBuffer* asset_buffer = &asset_item_buffer->item;
+
+    // ~mgj: copy to staging and record copy command
     U32 buffer_byte_size = buffer.size * sizeof(T);
-    BufferAllocation buffer_alloc = StagingBufferCreate(vk_ctx->allocator, buffer_byte_size);
+    BufferAllocation staging_buffer_alloc =
+        StagingBufferCreate(vk_ctx->allocator, buffer_byte_size);
 
-    BufferAllocation vertex_buffer_alloc =
-        BufferUploadDevice(cmd, buffer_alloc, vk_ctx, buffer, usage_flags);
+    vmaCopyMemoryToAllocation(vk_ctx->allocator, buffer.data, staging_buffer_alloc.allocation, 0,
+                              staging_buffer_alloc.size);
+    VkBufferCopy copy_region = {0};
+    copy_region.size = staging_buffer_alloc.size;
+    vkCmdCopyBuffer(cmd, staging_buffer_alloc.buffer, asset_buffer->buffer_alloc.buffer, 1,
+                    &copy_region);
 
-    R_AssetItem<AssetItemBuffer>* asset_vertex_buffer = AssetManagerBufferItemGet(id);
-    asset_vertex_buffer->item.buffer_alloc = vertex_buffer_alloc;
-    asset_vertex_buffer->item.staging_buffer = buffer_alloc;
-
-    R_AssetInfo info = {.id = id, .type = R_AssetItemType_Buffer};
-
-    return info;
+    asset_buffer->staging_buffer = staging_buffer_alloc;
 }
 
 static void
@@ -1157,6 +1165,7 @@ AssetManagerCmdDoneCheck()
                         R_AssetItem<AssetItemBuffer>* asset =
                             wrapper::AssetManagerBufferItemGet(asset_load_info->info.id);
                         BufferDestroy(vk_ctx->allocator, &asset->item.staging_buffer);
+                        asset->is_loaded = 1;
                     }
                     Assert(asset_load_info->info.type != R_AssetItemType_Undefined);
                     DEBUG_LOG("Asset: %llu - Finished loading\n", asset_load_info->info.id.id);

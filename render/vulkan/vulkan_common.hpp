@@ -165,10 +165,6 @@ BufferReadbackDestroy(VmaAllocator allocator, BufferReadback* out_buffer_readbac
 static BufferAllocation
 StagingBufferCreate(VmaAllocator allocator, VkDeviceSize size);
 
-template <typename T>
-static BufferAllocation
-BufferUploadDevice(VkCommandBuffer cmd_buffer, BufferAllocation staging_buffer,
-                   VulkanContext* vk_ctx, Buffer<T> buffer_host, VkBufferUsageFlagBits usage);
 // ~mgj: Images
 static ImageAllocation
 ImageAllocationCreate(VmaAllocator allocator, U32 width, U32 height,

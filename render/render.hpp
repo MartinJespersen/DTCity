@@ -64,10 +64,18 @@ struct R_SamplerInfo
     R_SamplerAddressMode address_mode_v;
 };
 
+enum R_BufferType
+{
+    R_BufferType_Invalid,
+    R_BufferType_Vertex,
+    R_BufferType_Index
+};
+
 struct R_BufferInfo
 {
     Buffer<U8> buffer;
     U64 type_size;
+    R_BufferType buffer_type;
 };
 struct R_AssetId
 {
@@ -82,9 +90,7 @@ enum R_AssetItemType
 
 enum R_PipelineUsageType
 {
-    R_PipelineUsageType_Undefined,
-    R_PipelineUsageType_VertexBuffer,
-    R_PipelineUsageType_IndexBuffer,
+    R_PipelineUsageType_Invalid,
     R_PipelineUsageType_3D,
     R_PipelineUsageType_3DInstanced,
 };
@@ -108,7 +114,6 @@ struct R_AssetInfo
 {
     R_AssetId id;
     R_AssetItemType type;
-    R_PipelineUsageType pipeline_usage_type;
 };
 
 struct R_TextureLoadingInfo
@@ -150,11 +155,11 @@ R_HandleZero();
 
 template <typename T>
 static R_BufferInfo
-R_BufferInfoFromTemplateBuffer(Buffer<T> buffer);
+R_BufferInfoFromTemplateBuffer(Buffer<T> buffer, R_BufferType buffer_type);
 static R_AssetId
 R_AssetIdFromStr8(String8 str);
 static R_AssetInfo
-R_AssetInfoCreate(String8 name, R_AssetItemType type, R_PipelineUsageType pipeline_usage_type);
+R_AssetInfoCreate(String8 name, R_AssetItemType type);
 
 //////////////////////////////////////////////////////////////////////////
 // ~mgj: function declaration to be implemented by backend

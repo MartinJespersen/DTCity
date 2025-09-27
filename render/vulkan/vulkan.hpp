@@ -285,9 +285,8 @@ static void
 AssetCmdQueueItemEnqueue(U32 thread_id, VkCommandBuffer cmd, R_ThreadInput* thread_input);
 
 template <typename T>
-static R_AssetInfo
-AssetInfoBufferCmd(VkCommandBuffer cmd, R_AssetId id, Buffer<T> vertex_buffer,
-                   VkBufferUsageFlagBits usage_flags);
+static void
+AssetInfoBufferCmd(VkCommandBuffer cmd, R_AssetId id, Buffer<T> vertex_buffer);
 static void
 AssetTextureLoad(Arena* arena, R_AssetItem<Texture> asset_item,
                  R_AssetLoadingInfoNodeList* asset_loading_wait_list, R_AssetInfo* asset_info,

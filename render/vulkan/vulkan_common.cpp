@@ -651,27 +651,6 @@ BufferMappedDestroy(VmaAllocator allocator, BufferAllocationMapped* mapped_buffe
     ArenaRelease(mapped_buffer->arena);
 }
 
-template <typename T>
-static BufferAllocation
-BufferUploadDevice(VkCommandBuffer cmd_buffer, BufferAllocation staging_buffer,
-                   VulkanContext* vk_ctx, Buffer<T> buffer_host, VkBufferUsageFlagBits usage)
-{
-    VmaAllocationCreateInfo vma_info = {0};
-    vma_info.usage = VMA_MEMORY_USAGE_AUTO;
-    vma_info.requiredFlags = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
-    wrapper::BufferAllocation buffer = wrapper::BufferAllocationCreate(
-        vk_ctx->allocator, staging_buffer.size, usage | VK_BUFFER_USAGE_TRANSFER_DST_BIT, vma_info);
-
-    vmaCopyMemoryToAllocation(vk_ctx->allocator, buffer_host.data, staging_buffer.allocation, 0,
-                              staging_buffer.size);
-
-    VkBufferCopy copy_region = {0};
-    copy_region.size = staging_buffer.size;
-    vkCmdCopyBuffer(cmd_buffer, staging_buffer.buffer, buffer.buffer, 1, &copy_region);
-
-    return buffer;
-}
-
 static BufferAllocation
 StagingBufferCreate(VmaAllocator allocator, VkDeviceSize size)
 {

@@ -33,14 +33,9 @@ RoadCreate(String8 texture_path, String8 cache_path, GCSBoundingBox* gcs_bbox)
     NodeStructureCreate(road->arena, node_ways, gcs_bbox, hashmap_slot_count,
                         &road->node_utm_structure);
 
-    road->asset_vertex_info =
-        R_AssetInfoCreate(S("road_vertex_buffer"), R_AssetItemType_Buffer,
-                                R_PipelineUsageType_VertexBuffer);
-    road->asset_index_info =
-        R_AssetInfoCreate(S("road_index_buffer"), R_AssetItemType_Buffer,
-                                R_PipelineUsageType_IndexBuffer);
-    road->asset_texture_info = R_AssetInfoCreate(
-        S("road_texture"), R_AssetItemType_Texture, R_PipelineUsageType_3D);
+    road->asset_vertex_info = R_AssetInfoCreate(S("road_vertex_buffer"), R_AssetItemType_Buffer);
+    road->asset_index_info = R_AssetInfoCreate(S("road_index_buffer"), R_AssetItemType_Buffer);
+    road->asset_texture_info = R_AssetInfoCreate(S("road_texture"), R_AssetItemType_Texture);
 
     road->texture_path = Str8PathFromStr8List(road->arena, {texture_path, S("road_texture.ktx2")});
 
@@ -723,14 +718,11 @@ CarSimCreate(String8 asset_path, String8 texture_path, U32 car_count, Road* road
     car_sim->sampler_info = sampler_info;
 
     car_sim->texture_path = Str8PathFromStr8List(arena, {texture_path, S("car_collection.ktx2")});
-    car_sim->texture_info = R_AssetInfoCreate(texture_path, R_AssetItemType_Texture,
-                                                    R_PipelineUsageType_3DInstanced);
+    car_sim->texture_info = R_AssetInfoCreate(texture_path, R_AssetItemType_Texture);
     car_sim->index_buffer_info =
-        R_AssetInfoCreate(S("model_3d_instance_index_buffer"), R_AssetItemType_Buffer,
-                                R_PipelineUsageType_IndexBuffer);
+        R_AssetInfoCreate(S("model_3d_instance_index_buffer"), R_AssetItemType_Buffer);
     car_sim->vertex_buffer_info =
-        R_AssetInfoCreate(S("model_3d_instance_vertex_buffer"), R_AssetItemType_Buffer,
-                                R_PipelineUsageType_VertexBuffer);
+        R_AssetInfoCreate(S("model_3d_instance_vertex_buffer"), R_AssetItemType_Buffer);
 
     car_sim->car_center_offset = CarCenterHeightOffset(car_sim->vertex_buffer);
     car_sim->cars = BufferAlloc<Car>(arena, car_count);
@@ -840,16 +832,14 @@ BuildingsCreate(String8 cache_path, String8 texture_path, F32 road_height, GCSBo
                         &buildings->node_utm_structure);
 
     buildings->vertex_buffer_info =
-        R_AssetInfoCreate(S("buildings_vertex_buffer"), R_AssetItemType_Buffer,
-                                R_PipelineUsageType_VertexBuffer);
+        R_AssetInfoCreate(S("buildings_vertex_buffer"), R_AssetItemType_Buffer);
     buildings->index_buffer_info =
-        R_AssetInfoCreate(S("buildings_index_buffer"), R_AssetItemType_Buffer,
-                                R_PipelineUsageType_IndexBuffer);
+        R_AssetInfoCreate(S("buildings_index_buffer"), R_AssetItemType_Buffer);
 
-    buildings->roof_texture_info = R_AssetInfoCreate(
-        S("buildings_roof_texture"), R_AssetItemType_Texture, R_PipelineUsageType_3D);
-    buildings->facade_texture_info = R_AssetInfoCreate(
-        S("buildings_facade_texture"), R_AssetItemType_Texture, R_PipelineUsageType_3D);
+    buildings->roof_texture_info =
+        R_AssetInfoCreate(S("buildings_roof_texture"), R_AssetItemType_Texture);
+    buildings->facade_texture_info =
+        R_AssetInfoCreate(S("buildings_facade_texture"), R_AssetItemType_Texture);
 
     buildings->facade_texture_path =
         Str8PathFromStr8List(arena, {texture_path, S("brick_wall.ktx2")});
