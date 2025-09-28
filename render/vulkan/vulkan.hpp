@@ -288,13 +288,11 @@ template <typename T>
 static void
 AssetInfoBufferCmd(VkCommandBuffer cmd, R_AssetId id, Buffer<T> vertex_buffer);
 static void
-AssetTextureLoad(Arena* arena, R_AssetItem<Texture> asset_item,
-                 R_AssetLoadingInfoNodeList* asset_loading_wait_list, R_AssetInfo* asset_info,
-                 R_SamplerInfo* sampler_info, String8 texture_path);
+AssetTextureLoad(R_AssetInfo* asset_info, R_SamplerInfo* sampler_info, String8 texture_path,
+                 R_PipelineUsageType pipeline_usage_type);
 
 static void
-AssetBufferLoad(Arena* arena, R_AssetItem<AssetItemBuffer>* asset_item,
-                R_AssetLoadingInfoNodeList* asset_loading_wait_list, R_AssetInfo* asset_info,
+AssetBufferLoad(Arena* arena, R_AssetItem<AssetItemBuffer>* asset_item, R_AssetInfo* asset_info,
                 R_BufferInfo* buffer_info);
 static R_ThreadInput*
 ThreadInputCreate();

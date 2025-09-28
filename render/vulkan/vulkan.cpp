@@ -225,19 +225,11 @@ ImageFromKtx2file(VkCommandBuffer cmd, VkImage image, BufferAllocation staging_b
 }
 
 static void
-AssetLoad(R_AssetLoadingInfoNodeList* asset_loading_wait_list,
-          R_AssetLoadingInfoNode* asset_info_node)
-{
-    SLLQueuePush(asset_loading_wait_list->first, asset_loading_wait_list->last, asset_info_node);
-    asset_loading_wait_list->count++;
-}
-
-static void
-AssetBufferLoad(Arena* arena, R_AssetItem<AssetItemBuffer>* asset_item,
-                R_AssetLoadingInfoNodeList* asset_loading_wait_list, R_AssetInfo* asset_info,
-                R_BufferInfo* buffer_info)
+AssetBufferLoad(R_AssetInfo* asset_info, R_BufferInfo* buffer_info)
 {
     VulkanContext* vk_ctx = VulkanCtxGet();
+    AssetManager* asset_manager = vk_ctx->asset_manager;
+    R_AssetItem<AssetItemBuffer>* asset_item = AssetManagerBufferItemGet(asset_info->id);
 
     // ~mgj: Create buffer allocation
     VmaAllocationCreateInfo vma_info = {0};
@@ -259,24 +251,23 @@ AssetBufferLoad(Arena* arena, R_AssetItem<AssetItemBuffer>* asset_item,
     asset_buffer->buffer_alloc = buffer;
 
     // ~mgj: Preparing buffer loading for another thread
-    R_AssetLoadingInfoNode* node = PushStruct(arena, R_AssetLoadingInfoNode);
-    R_AssetLoadingInfo* asset_load_info = &node->load_info;
+    R_ThreadInput* thread_input = ThreadInputCreate();
+    R_AssetLoadingInfo* asset_load_info = &thread_input->asset_info;
     asset_load_info->info = *asset_info;
     R_BufferInfo* buffer_load_info = &asset_load_info->extra_info.buffer_info;
     *buffer_load_info = *buffer_info;
-
-    AssetLoad(asset_loading_wait_list, node);
     asset_item->is_loading = TRUE;
+
+    async::QueueItem queue_input = {.data = thread_input, .worker_func = ThreadSetup};
+    async::QueuePush(asset_manager->work_queue, &queue_input);
 }
 
 static void
-AssetTextureLoad(Arena* arena, R_AssetItem<Texture>* asset_item,
-                 R_AssetLoadingInfoNodeList* asset_loading_wait_list, R_AssetInfo* asset_info,
-                 R_SamplerInfo* sampler_info, String8 texture_path,
+AssetTextureLoad(R_AssetInfo* asset_info, R_SamplerInfo* sampler_info, String8 texture_path,
                  R_PipelineUsageType pipeline_usage_type)
 {
     VulkanContext* vk_ctx = VulkanCtxGet();
-    Texture* texture = &asset_item->item;
+    AssetManager* asset_manager = vk_ctx->asset_manager;
 
     // ~mgj: Create sampler
     VkSamplerCreateInfo sampler_create_info = {};
@@ -321,6 +312,8 @@ AssetTextureLoad(Arena* arena, R_AssetItem<Texture>* asset_item,
                                desc_set_layout, image_view_resource.image_view, vk_sampler);
 
     // ~mgj: Assign values to texture
+    R_AssetItem<Texture>* asset_item = AssetManagerTextureItemGet(asset_info->id);
+    Texture* texture = &asset_item->item;
     texture->image_resource = {.image_alloc = image_alloc,
                                .image_view_resource = image_view_resource};
     texture->desc_set = texture_handle;
@@ -328,13 +321,15 @@ AssetTextureLoad(Arena* arena, R_AssetItem<Texture>* asset_item,
     texture->sampler = vk_sampler;
 
     // ~mgj: make input ready for texture loading on thread
-    R_AssetLoadingInfoNode* node = PushStruct(arena, R_AssetLoadingInfoNode);
-    R_AssetLoadingInfo* asset_load_info = &node->load_info;
+    R_ThreadInput* thread_input = ThreadInputCreate();
+    R_AssetLoadingInfo* asset_load_info = &thread_input->asset_info;
     asset_load_info->info = *asset_info;
     R_TextureLoadingInfo* texture_load_info = &asset_load_info->extra_info.texture_info;
-    texture_load_info->texture_path = PushStr8Copy(arena, texture_path);
-    AssetLoad(asset_loading_wait_list, node);
+    texture_load_info->texture_path = PushStr8Copy(thread_input->arena, texture_path);
     asset_item->is_loading = TRUE;
+
+    async::QueueItem queue_input = {.data = thread_input, .worker_func = ThreadSetup};
+    async::QueuePush(asset_manager->work_queue, &queue_input);
 }
 
 static R_ThreadInput*
@@ -364,30 +359,25 @@ ThreadSetup(async::ThreadInfo thread_info, void* input)
     VkCommandBuffer cmd = BeginCommand(
         vk_ctx->device, asset_store->threaded_cmd_pools.data[thread_info.thread_id]); // Your helper
 
-    for (R_AssetLoadingInfoNode* node = thread_input->asset_loading_wait_list.first; node;
-         node = node->next)
-    {
-        R_AssetLoadingInfo* asset_loading_info = &node->load_info;
-        Assert(asset_loading_info->info.id.id != 0);
+    R_AssetLoadingInfo* asset_loading_info = &thread_input->asset_info;
+    Assert(asset_loading_info->info.id.id != 0);
 
-        switch (asset_loading_info->info.type)
+    switch (asset_loading_info->info.type)
+    {
+        case R_AssetItemType_Texture:
         {
-            case R_AssetItemType_Texture:
-            {
-                R_TextureLoadingInfo* extra_info =
-                    (R_TextureLoadingInfo*)&asset_loading_info->extra_info;
-                TextureCreate(cmd, asset_loading_info->info, extra_info->texture_path);
-            }
-            break;
-            case R_AssetItemType_Buffer:
-            {
-                R_BufferInfo* buffer_info = (R_BufferInfo*)&asset_loading_info->extra_info;
-                AssetInfoBufferCmd(cmd, asset_loading_info->info.id, buffer_info->buffer);
-            }
-            break;
-            default: Assert(0); continue;
+            R_TextureLoadingInfo* extra_info =
+                (R_TextureLoadingInfo*)&asset_loading_info->extra_info;
+            TextureCreate(cmd, asset_loading_info->info, extra_info->texture_path);
         }
-        ins_atomic_u32_eval_assign(&asset_loading_info->is_loaded, TRUE);
+        break;
+        case R_AssetItemType_Buffer:
+        {
+            R_BufferInfo* buffer_info = (R_BufferInfo*)&asset_loading_info->extra_info;
+            AssetInfoBufferCmd(cmd, asset_loading_info->info.id, buffer_info->buffer);
+        }
+        break;
+        default: InvalidPath;
     }
     VK_CHECK_RESULT(vkEndCommandBuffer(cmd));
 
@@ -993,15 +983,7 @@ AssetCmdQueueItemEnqueue(U32 thread_id, VkCommandBuffer cmd, R_ThreadInput* thre
     AssetManager* asset_manager = VulkanCtxGet()->asset_manager;
 
     CmdQueueItem item = {.thread_input = thread_input, .thread_id = thread_id, .cmd_buffer = cmd};
-    for (R_AssetLoadingInfoNode* asset_node = thread_input->asset_loading_wait_list.first;
-         asset_node; asset_node = asset_node->next)
-    {
-        ins_atomic_u32_eval_cond_assign(&asset_node->load_info.is_loaded, 1, 0);
-        if (asset_node->load_info.is_loaded)
-        {
-            DEBUG_LOG("Asset ID: %llu - Cmd Getting Queued\n", asset_node->load_info.info.id.id);
-        }
-    }
+    DEBUG_LOG("Asset ID: %llu - Cmd Getting Queued\n", thread_input->asset_info.info.id.id);
     async::QueuePush(asset_manager->cmd_queue, &item);
 }
 
@@ -1027,12 +1009,8 @@ AssetManagerExecuteCmds()
 
             VK_CHECK_RESULT(vkQueueSubmit(vk_ctx->graphics_queue, 1, &submit_info, item.fence));
 
-            for (R_AssetLoadingInfoNode* asset = item.thread_input->asset_loading_wait_list.first;
-                 asset; asset = asset->next)
-            {
-                DEBUG_LOG("Asset ID: %llu - Submitted Command Buffer\n",
-                          asset->load_info.info.id.id);
-            }
+            DEBUG_LOG("Asset ID: %llu - Submitted Command Buffer\n",
+                      item.thread_input->asset_info.info.id.id);
             AssetManagerCmdListAdd(asset_store->cmd_wait_list, item);
         }
     }
@@ -1146,31 +1124,24 @@ AssetManagerCmdDoneCheck()
             }
 
             R_ThreadInput* thread_input = cmd_queue_item->thread_input;
-            for (R_AssetLoadingInfoNode* asset_node = thread_input->asset_loading_wait_list.first;
-                 asset_node; asset_node = asset_node->next)
+
+            R_AssetLoadingInfo* asset_load_info = &thread_input->asset_info;
+            if (asset_load_info->info.type == R_AssetItemType_Texture)
             {
-                R_AssetLoadingInfo* asset_load_info = &asset_node->load_info;
-                ins_atomic_u32_eval_cond_assign(&asset_node->load_info.is_loaded, 1, 0);
-                if (asset_node->load_info.is_loaded)
-                {
-                    if (asset_load_info->info.type == R_AssetItemType_Texture)
-                    {
-                        R_AssetItem<Texture>* asset =
-                            wrapper::AssetManagerTextureItemGet(asset_load_info->info.id);
-                        BufferDestroy(vk_ctx->allocator, &asset->item.staging_buffer);
-                        asset->is_loaded = 1;
-                    }
-                    else if (asset_load_info->info.type == R_AssetItemType_Buffer)
-                    {
-                        R_AssetItem<AssetItemBuffer>* asset =
-                            wrapper::AssetManagerBufferItemGet(asset_load_info->info.id);
-                        BufferDestroy(vk_ctx->allocator, &asset->item.staging_buffer);
-                        asset->is_loaded = 1;
-                    }
-                    Assert(asset_load_info->info.type != R_AssetItemType_Undefined);
-                    DEBUG_LOG("Asset: %llu - Finished loading\n", asset_load_info->info.id.id);
-                }
+                R_AssetItem<Texture>* asset =
+                    wrapper::AssetManagerTextureItemGet(asset_load_info->info.id);
+                BufferDestroy(vk_ctx->allocator, &asset->item.staging_buffer);
+                asset->is_loaded = 1;
             }
+            else if (asset_load_info->info.type == R_AssetItemType_Buffer)
+            {
+                R_AssetItem<AssetItemBuffer>* asset =
+                    wrapper::AssetManagerBufferItemGet(asset_load_info->info.id);
+                BufferDestroy(vk_ctx->allocator, &asset->item.staging_buffer);
+                asset->is_loaded = 1;
+            }
+            Assert(asset_load_info->info.type != R_AssetItemType_Undefined);
+            DEBUG_LOG("Asset: %llu - Finished loading\n", asset_load_info->info.id.id);
             vkDestroyFence(vk_ctx->device, cmd_queue_item->fence, 0);
             ThreadInputDestroy(cmd_queue_item->thread_input);
             AssetManagerCmdListItemRemove(asset_store->cmd_wait_list, cmd_queue_item);
@@ -1346,9 +1317,6 @@ Model3DDraw(R_AssetInfo* vertex_info, R_AssetInfo* index_info, R_AssetInfo* text
             R_BufferInfo* index_buffer_info, B32 depth_test_per_draw_call_only,
             U32 index_buffer_offset, U32 index_count)
 {
-    VulkanContext* vk_ctx = VulkanCtxGet();
-    AssetManager* asset_manager = vk_ctx->asset_manager;
-
     R_AssetItem<AssetItemBuffer>* asset_vertex_buffer = AssetManagerBufferItemGet(vertex_info->id);
     R_AssetItem<AssetItemBuffer>* asset_index_buffer = AssetManagerBufferItemGet(index_info->id);
     R_AssetItem<Texture>* asset_texture = AssetManagerTextureItemGet(texture_info->id);
@@ -1363,27 +1331,18 @@ Model3DDraw(R_AssetInfo* vertex_info, R_AssetInfo* index_info, R_AssetInfo* text
              !IsAssetLoadedOrInProgress(asset_index_buffer) ||
              !IsAssetLoadedOrInProgress(asset_texture))
     {
-        R_ThreadInput* thread_input = ThreadInputCreate();
-        R_AssetLoadingInfoNodeList* asset_loading_info = &thread_input->asset_loading_wait_list;
-
         if (!IsAssetLoadedOrInProgress(asset_vertex_buffer))
         {
-            AssetBufferLoad(thread_input->arena, asset_vertex_buffer, asset_loading_info,
-                            vertex_info, vertex_buffer_info);
+            AssetBufferLoad(vertex_info, vertex_buffer_info);
         }
         if (!IsAssetLoadedOrInProgress(asset_index_buffer))
         {
-            AssetBufferLoad(thread_input->arena, asset_index_buffer, asset_loading_info, index_info,
-                            index_buffer_info);
+            AssetBufferLoad(index_info, index_buffer_info);
         }
         if (!IsAssetLoadedOrInProgress(asset_texture))
         {
-            AssetTextureLoad(thread_input->arena, asset_texture, asset_loading_info, texture_info,
-                             sampler_info, texture_path, R_PipelineUsageType_3D);
+            AssetTextureLoad(texture_info, sampler_info, texture_path, R_PipelineUsageType_3D);
         }
-        Assert((asset_loading_info->first != NULL) && (asset_loading_info->last != NULL));
-        async::QueueItem queue_input = {.data = thread_input, .worker_func = ThreadSetup};
-        async::QueuePush(asset_manager->work_queue, &queue_input);
     }
 }
 
@@ -1393,9 +1352,6 @@ Model3DInstanceDraw(R_AssetInfo* vertex_info, R_AssetInfo* index_info, R_AssetIn
                     R_BufferInfo* vertex_buffer_info, R_BufferInfo* index_buffer_info,
                     R_BufferInfo* instance_buffer)
 {
-    VulkanContext* vk_ctx = VulkanCtxGet();
-    AssetManager* asset_manager = vk_ctx->asset_manager;
-
     R_AssetItem<AssetItemBuffer>* asset_vertex_buffer = AssetManagerBufferItemGet(vertex_info->id);
     R_AssetItem<AssetItemBuffer>* asset_index_buffer = AssetManagerBufferItemGet(index_info->id);
     R_AssetItem<Texture>* asset_texture = AssetManagerTextureItemGet(texture_info->id);
@@ -1410,27 +1366,19 @@ Model3DInstanceDraw(R_AssetInfo* vertex_info, R_AssetInfo* index_info, R_AssetIn
              !IsAssetLoadedOrInProgress(asset_index_buffer) ||
              !IsAssetLoadedOrInProgress(asset_texture))
     {
-        R_ThreadInput* thread_input = ThreadInputCreate();
-        R_AssetLoadingInfoNodeList* asset_loading_info = &thread_input->asset_loading_wait_list;
-
         if (!IsAssetLoadedOrInProgress(asset_vertex_buffer))
         {
-            AssetBufferLoad(thread_input->arena, asset_vertex_buffer, asset_loading_info,
-                            vertex_info, vertex_buffer_info);
+            AssetBufferLoad(vertex_info, vertex_buffer_info);
         }
         if (!IsAssetLoadedOrInProgress(asset_index_buffer))
         {
-            AssetBufferLoad(thread_input->arena, asset_index_buffer, asset_loading_info, index_info,
-                            index_buffer_info);
+            AssetBufferLoad(index_info, index_buffer_info);
         }
         if (!IsAssetLoadedOrInProgress(asset_texture))
         {
-            AssetTextureLoad(thread_input->arena, asset_texture, asset_loading_info, texture_info,
-                             sampler_info, texture_path, R_PipelineUsageType_3DInstanced);
+            AssetTextureLoad(texture_info, sampler_info, texture_path,
+                             R_PipelineUsageType_3DInstanced);
         }
-        Assert((asset_loading_info->first != NULL) && (asset_loading_info->last != NULL));
-        async::QueueItem queue_input = {.data = thread_input, .worker_func = ThreadSetup};
-        async::QueuePush(asset_manager->work_queue, &queue_input);
     }
 }
 

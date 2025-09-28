@@ -124,7 +124,6 @@ struct R_TextureLoadingInfo
 struct R_AssetLoadingInfo
 {
     R_AssetInfo info;
-    B32 is_loaded;
     union
     {
         R_TextureLoadingInfo texture_info;
@@ -132,23 +131,10 @@ struct R_AssetLoadingInfo
     } extra_info;
 };
 
-struct R_AssetLoadingInfoNode
-{
-    R_AssetLoadingInfoNode* next;
-    R_AssetLoadingInfo load_info;
-};
-
-struct R_AssetLoadingInfoNodeList
-{
-    R_AssetLoadingInfoNode* first;
-    R_AssetLoadingInfoNode* last;
-    U64 count;
-};
-
 struct R_ThreadInput
 {
     Arena* arena;
-    R_AssetLoadingInfoNodeList asset_loading_wait_list;
+    R_AssetLoadingInfo asset_info;
 };
 static R_Handle
 R_HandleZero();
