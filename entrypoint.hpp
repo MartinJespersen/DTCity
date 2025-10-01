@@ -10,6 +10,13 @@
 #include "city/city_inc.hpp"
 #include "ui/ui.hpp"
 
+// ~mgj: include imgui
+#pragma push_macro("Swap")
+#undef Swap
+#define IMGUI_DEFINE_MATH_OPERATORS
+#include "imgui/imgui.h"
+#pragma pop_macro("Swap")
+
 const U32 MAX_FONTS_IN_USE = 10;
 
 static OS_Handle
