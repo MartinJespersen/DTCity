@@ -53,5 +53,3 @@ Cleanup(OS_Handle thread_handle, void* ptr);
 
 static void
 MainLoop(void* ptr);
-static void
-CommandBufferRecord(U32 imageIndex, U32 currentFrame, ui::Camera* camera, Vec2S64 mouse_cursor_pos);

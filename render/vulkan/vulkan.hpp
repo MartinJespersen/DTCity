@@ -349,6 +349,9 @@ PipelineDestroy(Pipeline* draw_ctx);
     }
 
 } // namespace wrapper
+static void
+VK_CommandBufferRecord(U32 image_index, U32 current_frame, ui::Camera* camera,
+                       Vec2S64 mouse_cursor_pos);
 
 static void
 VK_ProfileBuffersCreate(wrapper::VulkanContext* vk_ctx);
