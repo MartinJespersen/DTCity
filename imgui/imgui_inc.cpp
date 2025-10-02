@@ -1,0 +1,15 @@
+#pragma push_macro("Swap")
+#pragma push_macro("Min")
+#pragma push_macro("Max")
+#undef Swap
+#undef Min
+#undef Max
+#include "imgui.cpp"
+#include "imgui_widgets.cpp"
+#include "imgui_draw.cpp"
+#include "imgui_tables.cpp"
+#include "backends/imgui_impl_vulkan.cpp"
+#include "backends/imgui_impl_glfw.cpp"
+#pragma pop_macro("Swap")
+#pragma pop_macro("Min")
+#pragma pop_macro("Max")

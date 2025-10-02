@@ -9,13 +9,7 @@
 #include "lib_wrappers/lib_wrappers_inc.hpp"
 #include "city/city_inc.hpp"
 #include "ui/ui.hpp"
-
-// ~mgj: include imgui
-#pragma push_macro("Swap")
-#undef Swap
-#define IMGUI_DEFINE_MATH_OPERATORS
-#include "imgui/imgui.h"
-#pragma pop_macro("Swap")
+#include "imgui/imgui_inc.hpp"
 
 const U32 MAX_FONTS_IN_USE = 10;
 
