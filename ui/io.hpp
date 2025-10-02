@@ -29,6 +29,8 @@ struct IO
 static void
 IO_InputStateUpdate(IO* io);
 
+static Vec2S32
+IO_WaitForValidFramebufferSize(IO* io_ctx);
 static void
 VK_FramebufferResizeCallback(GLFWwindow* window, int width, int height);
 

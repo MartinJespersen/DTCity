@@ -1,28 +1,5 @@
 
-static void
-ProfileBuffersCreate(wrapper::VulkanContext* vk_ctx)
-{
-#ifdef TRACY_ENABLE
-    for (U32 i = 0; i < ArrayCount(vk_ctx->tracy_ctx); i++)
-    {
-        vk_ctx->tracy_ctx[i] =
-            TracyVkContext(vk_ctx->physical_device, vk_ctx->device, vk_ctx->graphics_queue,
-                           vk_ctx->command_buffers.data[i]);
-    }
-#endif
-}
 
-static void
-ProfileBuffersDestroy(wrapper::VulkanContext* vk_ctx)
-{
-#ifdef TRACY_ENABLE
-    vkQueueWaitIdle(vk_ctx->graphics_queue);
-    for (U32 i = 0; i < ArrayCount(vk_ctx->tracy_ctx); i++)
-    {
-        TracyVkDestroy(vk_ctx->tracy_ctx[i]);
-    }
-#endif
-}
 static void
 TimeInit(DT_Time* time)
 {
@@ -38,14 +15,13 @@ UpdateTime(DT_Time* time)
 }
 
 static void
-CommandBufferRecord(U32 image_index, U32 current_frame)
+CommandBufferRecord(U32 image_index, U32 current_frame, ui::Camera* camera,
+                    Vec2S64 mouse_cursor_pos)
 {
     ProfScopeMarker;
     Temp scratch = ScratchBegin(0, 0);
-    Context* ctx = GlobalContextGet();
 
-    wrapper::VulkanContext* vk_ctx = ctx->vk_ctx;
-    ui::Camera* camera = ctx->camera;
+    wrapper::VulkanContext* vk_ctx = wrapper::VulkanCtxGet();
 
     VkCommandBufferBeginInfo beginInfo{};
     beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
@@ -225,23 +201,22 @@ CommandBufferRecord(U32 image_index, U32 current_frame)
             wrapper::Model3DRendering();
 
             vkCmdEndRendering(current_cmd_buf);
-            VkRenderingAttachmentInfo imgui_color_attachment =
-                color_attachment; // Copy main color attachment
-            imgui_color_attachment.loadOp =
-                VK_ATTACHMENT_LOAD_OP_LOAD; // Load existing content (don't clear)
+
+            // ~mgj: Render ImGui
+            VkRenderingAttachmentInfo imgui_color_attachment = color_attachment;
+            imgui_color_attachment.loadOp = VK_ATTACHMENT_LOAD_OP_LOAD; // Overlay existing content
 
             VkRenderingInfo imgui_rendering_info{};
             imgui_rendering_info.sType = VK_STRUCTURE_TYPE_RENDERING_INFO;
             imgui_rendering_info.renderArea.offset = {0, 0};
             imgui_rendering_info.renderArea.extent = swapchain_extent;
             imgui_rendering_info.layerCount = 1;
-            imgui_rendering_info.colorAttachmentCount = 1; // Only main color attachment
+            imgui_rendering_info.colorAttachmentCount = 1;
             imgui_rendering_info.pColorAttachments = &imgui_color_attachment;
-            imgui_rendering_info.pDepthAttachment = nullptr; // No depth attachment for ImGui
+            imgui_rendering_info.pDepthAttachment = nullptr;
 
             vkCmdBeginRendering(current_cmd_buf, &imgui_rendering_info);
 
-            // Render ImGui
             ImGui::Render();
             ImDrawData* draw_data = ImGui::GetDrawData();
             const bool is_minimized =
@@ -252,8 +227,6 @@ CommandBufferRecord(U32 image_index, U32 current_frame)
             }
 
             vkCmdEndRendering(current_cmd_buf);
-
-            IO_InputReset(ctx->io);
 
             // ~mgj: Transition color attachment images for presentation or transfer
             VkImageMemoryBarrier2 present_barrier{};
@@ -300,7 +273,7 @@ CommandBufferRecord(U32 image_index, U32 current_frame)
             vkCmdPipelineBarrier2(current_cmd_buf, &layout_transition_info);
 
             // ~mgj: Read object id from mouse position
-            Vec2S64 mouse_position_screen_coords = ctx->io->mouse_pos_cur_s64;
+            Vec2S64 mouse_position_screen_coords = mouse_cursor_pos;
             if (mouse_position_screen_coords.x > 0 && mouse_position_screen_coords.y > 0 &&
                 mouse_position_screen_coords.x <
                     vk_ctx->swapchain_resources->swapchain_extent.width &&
@@ -432,6 +405,23 @@ ImguiSetup(wrapper::VulkanContext* vk_ctx, IO* io_ctx)
 }
 
 static void
+NewFrameUpdate(IO* io_ctx)
+{
+    Context* ctx = GlobalContextGet();
+    wrapper::DrawFrameReset();
+
+    // Start the Dear ImGui frame
+    ImGui_ImplVulkan_NewFrame();
+    ImGui_ImplGlfw_NewFrame();
+    ImGui::NewFrame();
+
+    Vec2U32 framebuffer_dim = {.x = (U32)io_ctx->framebuffer_width,
+                               .y = (U32)io_ctx->framebuffer_height};
+    UpdateTime(ctx->time);
+    CameraUpdate(ctx->camera, ctx->io, ctx->time->delta_time_sec, framebuffer_dim);
+}
+
+static void
 MainLoop(void* ptr)
 {
     Context* ctx = (Context*)ptr;
@@ -442,17 +432,17 @@ MainLoop(void* ptr)
                                      .lat_top_right = 56.17371342689877,
                                      .lon_top_right = 10.198376789774187};
 
-    ctx->vk_ctx = wrapper::VulkanCreate(ctx);
+    R_RenderCtxCreate(ctx->shader_path, io_ctx, ctx->thread_pool);
     wrapper::VulkanContext* vk_ctx = wrapper::VulkanCtxGet();
     ImguiSetup(vk_ctx, io_ctx);
 
-    ctx->road = city::RoadCreate(vk_ctx->texture_path, ctx->cache_path, &gcs_bbox);
+    ctx->road = city::RoadCreate(ctx->texture_path, ctx->cache_path, &gcs_bbox);
     city::Road* road = ctx->road;
-    ctx->buildings = city::BuildingsCreate(ctx->cache_path, ctx->vk_ctx->texture_path,
+    ctx->buildings = city::BuildingsCreate(ctx->cache_path, ctx->texture_path,
                                            ctx->road->road_height, &gcs_bbox);
 
     CameraInit(ctx->camera);
-    ctx->car_sim = city::CarSimCreate(vk_ctx->asset_path, vk_ctx->texture_path, 100, ctx->road);
+    ctx->car_sim = city::CarSimCreate(ctx->asset_path, ctx->texture_path, 100, ctx->road);
     city::CarSim* car_sim = ctx->car_sim;
 
     R_SamplerInfo sampler_info = {
@@ -483,23 +473,12 @@ MainLoop(void* ptr)
     R_BufferInfo car_index_buffer_info =
         R_BufferInfoFromTemplateBuffer(car_sim->index_buffer, R_BufferType_Index);
 
-    ProfileBuffersCreate(vk_ctx);
     while (ctx->running)
     {
-        wrapper::DrawFrameReset();
-
-        // Start the Dear ImGui frame
-        ImGui_ImplVulkan_NewFrame();
-        ImGui_ImplGlfw_NewFrame();
-        ImGui::NewFrame();
-
+        NewFrameUpdate(io_ctx);
         // ~mgj: Test UI
         bool show_demo_window = TRUE;
         ImGui::ShowDemoWindow(&show_demo_window);
-
-        UpdateTime(ctx->time);
-        CameraUpdate(ctx->camera, ctx->io, ctx->time,
-                     vk_ctx->swapchain_resources->swapchain_extent);
 
         Buffer<city::Model3DInstance> instance_buffer = city::CarUpdate(
             vk_ctx->draw_frame_arena, car_sim, ctx->road, ctx->time->delta_time_sec);
@@ -525,104 +504,15 @@ MainLoop(void* ptr)
                                      &car_vertex_buffer_info, &car_index_buffer_info,
                                      &car_instance_buffer_info);
 
-        wrapper::AssetManagerExecuteCmds();
-        wrapper::AssetManagerCmdDoneCheck();
-        VkSemaphore image_available_semaphore =
-            vk_ctx->image_available_semaphores.data[vk_ctx->current_frame];
-        VkSemaphore render_finished_semaphore =
-            vk_ctx->render_finished_semaphores.data[vk_ctx->current_frame];
-        VkFence* in_flight_fence = &vk_ctx->in_flight_fences.data[vk_ctx->current_frame];
-        {
-            ProfScopeMarkerNamed("Wait for frame");
-            VK_CHECK_RESULT(
-                vkWaitForFences(vk_ctx->device, 1, in_flight_fence, VK_TRUE, 1000000000));
-        }
-
-        uint32_t imageIndex;
-        VkResult result = vkAcquireNextImageKHR(
-            vk_ctx->device, vk_ctx->swapchain_resources->swapchain, UINT64_MAX,
-            image_available_semaphore, VK_NULL_HANDLE, &imageIndex);
-
-        if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR ||
-            io_ctx->framebuffer_resized)
-        {
-            io_ctx->framebuffer_resized = false;
-            ImGui::EndFrame();
-
-            VK_RecreateSwapChain(io_ctx, vk_ctx);
-            vk_ctx->current_frame = (vk_ctx->current_frame + 1) % wrapper::MAX_FRAMES_IN_FLIGHT;
-            continue;
-        }
-        else if (result != VK_SUCCESS)
-        {
-            exitWithError("failed to acquire swap chain image!");
-        }
-
-        VkCommandBuffer cmd_buffer = vk_ctx->command_buffers.data[vk_ctx->current_frame];
-        VK_CHECK_RESULT(vkResetFences(vk_ctx->device, 1, in_flight_fence));
-        VK_CHECK_RESULT(vkResetCommandBuffer(cmd_buffer, 0));
-
-        CommandBufferRecord(imageIndex, vk_ctx->current_frame);
-
-        VkSemaphoreSubmitInfo waitSemaphoreInfo{};
-        waitSemaphoreInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO;
-        waitSemaphoreInfo.semaphore = image_available_semaphore;
-        waitSemaphoreInfo.stageMask = VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT;
-
-        VkSemaphoreSubmitInfo signalSemaphoreInfo{};
-        signalSemaphoreInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO;
-        signalSemaphoreInfo.semaphore = render_finished_semaphore;
-        signalSemaphoreInfo.stageMask = VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT;
-
-        VkCommandBufferSubmitInfo commandBufferInfo{};
-        commandBufferInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_SUBMIT_INFO;
-        commandBufferInfo.commandBuffer = cmd_buffer;
-
-        VkSubmitInfo2 submitInfo{};
-        submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO_2;
-        submitInfo.waitSemaphoreInfoCount = 1;
-        submitInfo.pWaitSemaphoreInfos = &waitSemaphoreInfo;
-        submitInfo.signalSemaphoreInfoCount = 1;
-        submitInfo.pSignalSemaphoreInfos = &signalSemaphoreInfo;
-        submitInfo.commandBufferInfoCount = 1;
-        submitInfo.pCommandBufferInfos = &commandBufferInfo;
-
-        VK_CHECK_RESULT(vkQueueSubmit2(vk_ctx->graphics_queue, 1, &submitInfo, *in_flight_fence));
-
-        VkPresentInfoKHR presentInfo{};
-        presentInfo.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
-
-        presentInfo.waitSemaphoreCount = 1;
-        presentInfo.pWaitSemaphores = &render_finished_semaphore;
-
-        VkSwapchainKHR swapChains[] = {vk_ctx->swapchain_resources->swapchain};
-        presentInfo.swapchainCount = 1;
-        presentInfo.pSwapchains = swapChains;
-        presentInfo.pImageIndices = &imageIndex;
-        presentInfo.pResults = nullptr; // Optional
-
-        result = vkQueuePresentKHR(vk_ctx->present_queue, &presentInfo);
-        ProfFrameMarker; // end of frame is assumed to be here
-        if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR ||
-            io_ctx->framebuffer_resized)
-        {
-            io_ctx->framebuffer_resized = 0;
-            VK_RecreateSwapChain(io_ctx, vk_ctx);
-        }
-        else if (result != VK_SUCCESS)
-        {
-            exitWithError("failed to present swap chain image!");
-        }
-
-        vk_ctx->current_frame = (vk_ctx->current_frame + 1) % wrapper::MAX_FRAMES_IN_FLIGHT;
+        Vec2U32 framebuffer_dim = {.x = (U32)io_ctx->framebuffer_width,
+                                   .y = (U32)io_ctx->framebuffer_height};
+        R_RenderFrame(framebuffer_dim, &io_ctx->framebuffer_resized, ctx->camera,
+                      io_ctx->mouse_pos_cur_s64);
+        IO_InputReset(ctx->io);
     }
-    ProfileBuffersDestroy(ctx->vk_ctx);
-    vkDeviceWaitIdle(ctx->vk_ctx->device);
+    R_GpuWorkDoneWait();
     city::RoadDestroy(ctx->road);
     city::CarSimDestroy(ctx->car_sim);
     city::BuildingDestroy(ctx->buildings);
-    ImGui_ImplVulkan_Shutdown();
-    ImGui_ImplGlfw_Shutdown();
-    ImGui::DestroyContext();
-    wrapper::VulkanDestroy(ctx->vk_ctx);
+    R_RenderCtxDestroy();
 }

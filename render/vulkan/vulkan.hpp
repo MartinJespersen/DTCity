@@ -157,10 +157,6 @@ struct VulkanContext
 #endif
     Arena* arena;
 
-    String8 asset_path;
-    String8 texture_path;
-    String8 shader_path;
-
     Buffer<String8> validation_layers;
     Buffer<String8> device_extensions;
 
@@ -303,10 +299,6 @@ static void
 ImageFromKtx2file(VkCommandBuffer cmd, VkImage image, BufferAllocation staging_buffer,
                   VulkanContext* vk_ctx, ktxTexture2* ktx_texture);
 // ~mgj: Vulkan Lifetime
-static VulkanContext*
-VulkanCreate(Context* ctx);
-static void
-VulkanDestroy(VulkanContext* vk_ctx);
 static void
 VulkanCtxSet(VulkanContext* vk_ctx);
 static VulkanContext*
@@ -335,9 +327,9 @@ Model3DInstanceDraw(R_AssetInfo* vertex_info, R_AssetInfo* index_info, R_AssetIn
                     R_BufferInfo* vertex_buffer_info, R_BufferInfo* index_buffer_info,
                     R_BufferInfo* instance_buffer);
 static Pipeline
-Model3DInstancePipelineCreate(VulkanContext* vk_ctx);
+Model3DInstancePipelineCreate(VulkanContext* vk_ctx, String8 shader_path);
 static Pipeline
-Model3DPipelineCreate(VulkanContext* vk_ctx);
+Model3DPipelineCreate(VulkanContext* vk_ctx, String8 shader_path);
 static void
 DrawFrameReset();
 static void
@@ -357,3 +349,8 @@ PipelineDestroy(Pipeline* draw_ctx);
     }
 
 } // namespace wrapper
+
+static void
+VK_ProfileBuffersCreate(wrapper::VulkanContext* vk_ctx);
+static void
+VK_ProfileBuffersDestroy(wrapper::VulkanContext* vk_ctx);

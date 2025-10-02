@@ -24,7 +24,7 @@ CameraInit(Camera* camera)
 }
 
 static void
-CameraUpdate(Camera* camera, IO* input, DT_Time* time, VkExtent2D extent)
+CameraUpdate(Camera* camera, IO* input, F32 time, Vec2U32 extent)
 {
     F32 mouse_sensitivity = 0.1f;
     if (input->mouse_left_clicked & input->is_cursor_inside_win & input->is_window_focused)
@@ -52,10 +52,8 @@ CameraUpdate(Camera* camera, IO* input, DT_Time* time, VkExtent2D extent)
 
     glm::vec3 camera_up = glm::vec3(0.0f, 1.0f, 0.0f);
 
-    F32 zoom_y = (input->w_btn_clicked + (-input->s_btn_clicked)) * time->delta_time_sec *
-                 camera->zoom_sensitivity;
-    F32 zoom_x = (-input->a_btn_clicked + (input->d_btn_clicked)) * time->delta_time_sec *
-                 camera->zoom_sensitivity;
+    F32 zoom_y = (input->w_btn_clicked + (-input->s_btn_clicked)) * time * camera->zoom_sensitivity;
+    F32 zoom_x = (-input->a_btn_clicked + (input->d_btn_clicked)) * time * camera->zoom_sensitivity;
     glm::vec3 x_view_norm = glm::normalize(glm::cross(camera->view_dir, camera_up));
 
     camera->position += camera->view_dir * zoom_y;
@@ -64,7 +62,7 @@ CameraUpdate(Camera* camera, IO* input, DT_Time* time, VkExtent2D extent)
     camera->view_matrix =
         glm::lookAt(camera->position, camera->position + camera->view_dir, camera_up);
     camera->projection_matrix = glm::perspective(
-        glm::radians(camera->fov), (F32)((F32)extent.width / (F32)extent.height), 0.1f, 1000.0f);
+        glm::radians(camera->fov), (F32)((F32)extent.x / (F32)extent.y), 0.1f, 1000.0f);
     camera->projection_matrix[1][1] *= -1.0f;
 }
 

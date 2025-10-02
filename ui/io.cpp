@@ -87,11 +87,27 @@ IO_InputStateUpdate(IO* input)
     S32 framebuffer_height = 0;
     glfwGetFramebufferSize(input->window, &framebuffer_width, &framebuffer_height);
 
-    if (framebuffer_width != 0 && framebuffer_height != 0)
+    if (framebuffer_width > 0 && framebuffer_height > 0)
     {
         input->framebuffer_width = framebuffer_width;
         input->framebuffer_height = framebuffer_height;
     }
+}
+
+static Vec2S32
+IO_WaitForValidFramebufferSize(IO* io_ctx)
+{
+    // framebuffer update
+    S32 framebuffer_width = 0;
+    S32 framebuffer_height = 0;
+    glfwGetFramebufferSize(io_ctx->window, &framebuffer_width, &framebuffer_height);
+    while (framebuffer_width <= 0 || framebuffer_height <= 0)
+    {
+        io_ctx->framebuffer_width = framebuffer_width;
+        io_ctx->framebuffer_height = framebuffer_height;
+    }
+    Vec2S32 framebuffer_dim = {framebuffer_width, framebuffer_height};
+    return framebuffer_dim;
 }
 
 static void

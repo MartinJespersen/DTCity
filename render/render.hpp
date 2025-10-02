@@ -149,9 +149,13 @@ R_AssetInfoCreate(String8 name, R_AssetItemType type);
 
 //////////////////////////////////////////////////////////////////////////
 // ~mgj: function declaration to be implemented by backend
-static R_Handle
-R_Tex2dAlloc(R_ResourceKind kind, Vec2S32 size, R_Tex2DFormat format, void* data);
+
 static void
-R_FillTex2dRegion(R_Handle handle, Rng2S32 subrect, void* data);
+R_RenderCtxCreate(String8 shader_path, IO* io_ctx, async::Threads* thread_pool);
 static void
-R_Tex2dRelease(R_Handle texture);
+R_RenderCtxDestroy();
+static void
+R_RenderFrame(Vec2U32 framebuffer_dim, B32* in_out_framebuffer_resized, ui::Camera* camera,
+              Vec2S64 mouse_cursor_pos);
+static void
+R_GpuWorkDoneWait();

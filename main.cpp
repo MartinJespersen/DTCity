@@ -33,18 +33,21 @@ ContextCreate(IO* io_ctx)
     ctx->io = PushStruct(app_arena, IO);
     ctx->camera = PushStruct(app_arena, ui::Camera);
     ctx->time = PushStruct(app_arena, DT_Time);
-    ctx->io = io_ctx;
 
     ctx->cwd = Str8PathFromStr8List(app_arena,
                                     {OS_GetCurrentPath(scratch.arena), S(".."), S(".."), S("..")});
     ctx->cache_path = Str8PathFromStr8List(app_arena, {ctx->cwd, S("cache")});
+    ctx->texture_path = Str8PathFromStr8List(app_arena, {ctx->cwd, S("textures")});
+    ctx->shader_path = Str8PathFromStr8List(app_arena, {ctx->cwd, S("shaders")});
+    ctx->asset_path = Str8PathFromStr8List(app_arena, {ctx->cwd, S("assets")});
+    ctx->io = io_ctx;
 
     GlobalContextSet(ctx);
 
     // ~mgj: -2 as 2 are used for Main thread and IO thread
     U32 thread_count = OS_GetSystemInfo()->logical_processor_count - 2;
     U32 queue_size = 10; // TODO: should be increased
-    ctx->thread_info = async::WorkerThreadsCreate(app_arena, thread_count, queue_size);
+    ctx->thread_pool = async::WorkerThreadsCreate(app_arena, thread_count, queue_size);
 
     return ctx;
 }
@@ -52,7 +55,7 @@ ContextCreate(IO* io_ctx)
 static void
 ContextDestroy(Context* ctx)
 {
-    async::WorkerThreadDestroy(ctx->thread_info);
+    async::WorkerThreadDestroy(ctx->thread_pool);
     ArenaRelease(ctx->arena_permanent);
 }
 

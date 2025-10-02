@@ -6,138 +6,6 @@ namespace wrapper
 static VulkanContext* g_vk_ctx = 0;
 
 // ~mgj: vulkan context
-static void
-VulkanDestroy(VulkanContext* vk_ctx)
-{
-    vkDeviceWaitIdle(vk_ctx->device);
-
-    if (vk_ctx->enable_validation_layers)
-    {
-        DestroyDebugUtilsMessengerEXT(vk_ctx->instance, vk_ctx->debug_messenger, nullptr);
-    }
-
-    CameraCleanup(vk_ctx);
-
-    VK_SwapChainCleanup(vk_ctx->device, vk_ctx->allocator, vk_ctx->swapchain_resources);
-
-    vkDestroyCommandPool(vk_ctx->device, vk_ctx->command_pool, nullptr);
-
-    vkDestroySurfaceKHR(vk_ctx->instance, vk_ctx->surface, nullptr);
-    for (U32 i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
-    {
-        vkDestroySemaphore(vk_ctx->device, vk_ctx->render_finished_semaphores.data[i], nullptr);
-        vkDestroySemaphore(vk_ctx->device, vk_ctx->image_available_semaphores.data[i], nullptr);
-        vkDestroyFence(vk_ctx->device, vk_ctx->in_flight_fences.data[i], nullptr);
-    }
-
-    vkDestroyDescriptorPool(vk_ctx->device, vk_ctx->descriptor_pool, 0);
-
-    BufferDestroy(vk_ctx->allocator, &vk_ctx->model_3D_instance_buffer);
-
-    vmaDestroyAllocator(vk_ctx->allocator);
-
-    AssetManagerDestroy(vk_ctx, vk_ctx->asset_manager);
-
-    PipelineDestroy(&vk_ctx->model_3D_pipeline);
-    PipelineDestroy(&vk_ctx->model_3D_instance_pipeline);
-
-    vkDestroyDevice(vk_ctx->device, nullptr);
-    vkDestroyInstance(vk_ctx->instance, nullptr);
-
-    ArenaRelease(vk_ctx->draw_frame_arena);
-
-    ArenaRelease(vk_ctx->arena);
-}
-
-static VulkanContext*
-VulkanCreate(Context* ctx)
-{
-    IO* io_ctx = ctx->io;
-
-    Temp scratch = ScratchBegin(0, 0);
-
-    Arena* arena = ArenaAlloc();
-
-    VulkanContext* vk_ctx = PushStruct(arena, VulkanContext);
-    wrapper::VulkanCtxSet(vk_ctx);
-    vk_ctx->arena = arena;
-    vk_ctx->texture_path = Str8PathFromStr8List(arena, {ctx->cwd, S("textures")});
-    vk_ctx->shader_path = Str8PathFromStr8List(arena, {ctx->cwd, S("shaders")});
-    vk_ctx->asset_path = Str8PathFromStr8List(arena, {ctx->cwd, S("assets")});
-
-    const char* validation_layers[] = {"VK_LAYER_KHRONOS_validation",
-                                       "VK_LAYER_KHRONOS_synchronization2"};
-    vk_ctx->validation_layers = BufferAlloc<String8>(vk_ctx->arena, ArrayCount(validation_layers));
-    for (U32 i = 0; i < ArrayCount(validation_layers); i++)
-    {
-        vk_ctx->validation_layers.data[i] = {Str8CString(validation_layers[i])};
-    }
-
-    const char* device_extensions[] = {VK_KHR_SWAPCHAIN_EXTENSION_NAME,
-                                       VK_KHR_DYNAMIC_RENDERING_EXTENSION_NAME,
-                                       VK_EXT_COLOR_WRITE_ENABLE_EXTENSION_NAME};
-    vk_ctx->device_extensions = BufferAlloc<String8>(vk_ctx->arena, ArrayCount(device_extensions));
-    for (U32 i = 0; i < ArrayCount(device_extensions); i++)
-    {
-        vk_ctx->device_extensions.data[i] = {Str8CString(device_extensions[i])};
-    }
-
-    VK_CreateInstance(vk_ctx);
-    VK_DebugMessengerSetup(vk_ctx);
-    VK_SurfaceCreate(vk_ctx, io_ctx);
-    VK_PhysicalDevicePick(vk_ctx);
-    VK_LogicalDeviceCreate(scratch.arena, vk_ctx);
-
-    // ~mgj: Blitting format
-    vk_ctx->blit_format = VK_FORMAT_R8G8B8A8_SRGB;
-    VkFormatProperties formatProperties;
-    vkGetPhysicalDeviceFormatProperties(vk_ctx->physical_device, vk_ctx->blit_format,
-                                        &formatProperties);
-    if (!(formatProperties.optimalTilingFeatures &
-          VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT))
-    {
-        exitWithError("texture image format does not support linear blitting!");
-    }
-
-    VmaAllocatorCreateInfo allocatorInfo = {};
-    allocatorInfo.physicalDevice = vk_ctx->physical_device;
-    allocatorInfo.device = vk_ctx->device;
-    allocatorInfo.instance = vk_ctx->instance;
-
-    vmaCreateAllocator(&allocatorInfo, &vk_ctx->allocator);
-
-    vk_ctx->object_id_format = VK_FORMAT_R32G32_UINT;
-    vk_ctx->swapchain_resources = VK_SwapChainCreate(vk_ctx, io_ctx);
-
-    VkCommandPoolCreateInfo poolInfo{};
-    poolInfo.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
-    poolInfo.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
-    poolInfo.queueFamilyIndex = vk_ctx->queue_family_indices.graphicsFamilyIndex;
-    vk_ctx->command_pool = VK_CommandPoolCreate(vk_ctx->device, &poolInfo);
-
-    VK_CommandBuffersCreate(vk_ctx);
-
-    VK_SyncObjectsCreate(vk_ctx);
-
-    DescriptorPoolCreate(vk_ctx);
-    CameraUniformBufferCreate(vk_ctx);
-    CameraDescriptorSetLayoutCreate(vk_ctx);
-    CameraDescriptorSetCreate(vk_ctx);
-
-    // TODO: change from 1 to much larger value
-    vk_ctx->asset_manager =
-        AssetManagerCreate(vk_ctx->device, vk_ctx->queue_family_indices.graphicsFamilyIndex,
-                           ctx->thread_info, 1, GB(1));
-
-    // ~mgj: Rendering
-    vk_ctx->draw_frame_arena = ArenaAlloc();
-    vk_ctx->model_3D_pipeline = Model3DPipelineCreate(vk_ctx);
-    vk_ctx->model_3D_instance_pipeline = Model3DInstancePipelineCreate(vk_ctx);
-
-    ScratchEnd(scratch);
-
-    return vk_ctx;
-}
 
 static void
 VulkanCtxSet(VulkanContext* vk_ctx)
@@ -408,7 +276,7 @@ TextureCreate(VkCommandBuffer cmd_buffer, R_AssetInfo asset_info, String8 textur
 }
 
 static Pipeline
-Model3DInstancePipelineCreate(VulkanContext* vk_ctx)
+Model3DInstancePipelineCreate(VulkanContext* vk_ctx, String8 shader_path)
 {
     ScratchScope scratch = ScratchScope(0, 0);
 
@@ -423,11 +291,11 @@ Model3DInstancePipelineCreate(VulkanContext* vk_ctx)
 
     String8 vert_path = CreatePathFromStrings(
         scratch.arena,
-        Str8BufferFromCString(scratch.arena, {(char*)vk_ctx->shader_path.str, "model_3d_instancing",
+        Str8BufferFromCString(scratch.arena, {(char*)shader_path.str, "model_3d_instancing",
                                               "model_3d_instancing_vert.spv"}));
     String8 frag_path = CreatePathFromStrings(
         scratch.arena,
-        Str8BufferFromCString(scratch.arena, {(char*)vk_ctx->shader_path.str, "model_3d_instancing",
+        Str8BufferFromCString(scratch.arena, {(char*)shader_path.str, "model_3d_instancing",
                                               "model_3d_instancing_frag.spv"}));
 
     ShaderModuleInfo vert_shader_stage_info =
@@ -587,7 +455,7 @@ Model3DInstancePipelineCreate(VulkanContext* vk_ctx)
 }
 
 static Pipeline
-Model3DPipelineCreate(VulkanContext* vk_ctx)
+Model3DPipelineCreate(VulkanContext* vk_ctx, String8 shader_path)
 {
     ScratchScope scratch = ScratchScope(0, 0);
 
@@ -602,11 +470,11 @@ Model3DPipelineCreate(VulkanContext* vk_ctx)
         DescriptorSetLayoutCreate(vk_ctx->device, &desc_set_layout_info, 1);
 
     String8 vert_path = CreatePathFromStrings(
-        scratch.arena, Str8BufferFromCString(scratch.arena, {(char*)vk_ctx->shader_path.str,
-                                                             "model_3d", "model_3d_vert.spv"}));
+        scratch.arena, Str8BufferFromCString(scratch.arena, {(char*)shader_path.str, "model_3d",
+                                                             "model_3d_vert.spv"}));
     String8 frag_path = CreatePathFromStrings(
-        scratch.arena, Str8BufferFromCString(scratch.arena, {(char*)vk_ctx->shader_path.str,
-                                                             "model_3d", "model_3d_frag.spv"}));
+        scratch.arena, Str8BufferFromCString(scratch.arena, {(char*)shader_path.str, "model_3d",
+                                                             "model_3d_frag.spv"}));
 
     ShaderModuleInfo vert_shader_stage_info =
         ShaderStageFromSpirv(scratch.arena, vk_ctx->device, VK_SHADER_STAGE_VERTEX_BIT, vert_path);
@@ -1462,3 +1330,263 @@ Model3DRendering()
 }
 
 } // namespace wrapper
+
+static void
+VK_ProfileBuffersCreate(wrapper::VulkanContext* vk_ctx)
+{
+#ifdef TRACY_ENABLE
+    for (U32 i = 0; i < ArrayCount(vk_ctx->tracy_ctx); i++)
+    {
+        vk_ctx->tracy_ctx[i] =
+            TracyVkContext(vk_ctx->physical_device, vk_ctx->device, vk_ctx->graphics_queue,
+                           vk_ctx->command_buffers.data[i]);
+    }
+#endif
+}
+
+static void
+VK_ProfileBuffersDestroy(wrapper::VulkanContext* vk_ctx)
+{
+#ifdef TRACY_ENABLE
+    vkQueueWaitIdle(vk_ctx->graphics_queue);
+    for (U32 i = 0; i < ArrayCount(vk_ctx->tracy_ctx); i++)
+    {
+        TracyVkDestroy(vk_ctx->tracy_ctx[i]);
+    }
+#endif
+}
+// ~mgj: Vulkan Interface
+static void
+R_RenderCtxCreate(String8 shader_path, IO* io_ctx, async::Threads* thread_pool)
+{
+    ScratchScope scratch = ScratchScope(0, 0);
+
+    Arena* arena = ArenaAlloc();
+
+    wrapper::VulkanContext* vk_ctx = PushStruct(arena, wrapper::VulkanContext);
+    wrapper::VulkanCtxSet(vk_ctx);
+    vk_ctx->arena = arena;
+
+    const char* validation_layers[] = {"VK_LAYER_KHRONOS_validation",
+                                       "VK_LAYER_KHRONOS_synchronization2"};
+    vk_ctx->validation_layers = BufferAlloc<String8>(vk_ctx->arena, ArrayCount(validation_layers));
+    for (U32 i = 0; i < ArrayCount(validation_layers); i++)
+    {
+        vk_ctx->validation_layers.data[i] = {Str8CString(validation_layers[i])};
+    }
+
+    const char* device_extensions[] = {VK_KHR_SWAPCHAIN_EXTENSION_NAME,
+                                       VK_KHR_DYNAMIC_RENDERING_EXTENSION_NAME,
+                                       VK_EXT_COLOR_WRITE_ENABLE_EXTENSION_NAME};
+    vk_ctx->device_extensions = BufferAlloc<String8>(vk_ctx->arena, ArrayCount(device_extensions));
+    for (U32 i = 0; i < ArrayCount(device_extensions); i++)
+    {
+        vk_ctx->device_extensions.data[i] = {Str8CString(device_extensions[i])};
+    }
+
+    VK_CreateInstance(vk_ctx);
+    VK_DebugMessengerSetup(vk_ctx);
+    VK_SurfaceCreate(vk_ctx, io_ctx);
+    VK_PhysicalDevicePick(vk_ctx);
+    VK_LogicalDeviceCreate(scratch.arena, vk_ctx);
+
+    // ~mgj: Blitting format
+    vk_ctx->blit_format = VK_FORMAT_R8G8B8A8_SRGB;
+    VkFormatProperties formatProperties;
+    vkGetPhysicalDeviceFormatProperties(vk_ctx->physical_device, vk_ctx->blit_format,
+                                        &formatProperties);
+    if (!(formatProperties.optimalTilingFeatures &
+          VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT))
+    {
+        exitWithError("texture image format does not support linear blitting!");
+    }
+
+    VmaAllocatorCreateInfo allocatorInfo = {};
+    allocatorInfo.physicalDevice = vk_ctx->physical_device;
+    allocatorInfo.device = vk_ctx->device;
+    allocatorInfo.instance = vk_ctx->instance;
+
+    vmaCreateAllocator(&allocatorInfo, &vk_ctx->allocator);
+    vk_ctx->object_id_format = VK_FORMAT_R32G32_UINT;
+
+    Vec2S32 vk_framebuffer_dim_s32 = IO_WaitForValidFramebufferSize(io_ctx);
+    Vec2U32 vk_framebuffer_dim_u32 = {(U32)vk_framebuffer_dim_s32.x, (U32)vk_framebuffer_dim_s32.y};
+    vk_ctx->swapchain_resources = VK_SwapChainCreate(vk_ctx, vk_framebuffer_dim_u32);
+
+    VkCommandPoolCreateInfo poolInfo{};
+    poolInfo.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
+    poolInfo.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
+    poolInfo.queueFamilyIndex = vk_ctx->queue_family_indices.graphicsFamilyIndex;
+    vk_ctx->command_pool = wrapper::VK_CommandPoolCreate(vk_ctx->device, &poolInfo);
+
+    VK_CommandBuffersCreate(vk_ctx);
+
+    VK_SyncObjectsCreate(vk_ctx);
+
+    DescriptorPoolCreate(vk_ctx);
+    CameraUniformBufferCreate(vk_ctx);
+    CameraDescriptorSetLayoutCreate(vk_ctx);
+    CameraDescriptorSetCreate(vk_ctx);
+    VK_ProfileBuffersCreate(vk_ctx);
+
+    // TODO: change from 1 to much larger value
+    vk_ctx->asset_manager = wrapper::AssetManagerCreate(
+        vk_ctx->device, vk_ctx->queue_family_indices.graphicsFamilyIndex, thread_pool, 1, GB(1));
+
+    // ~mgj: Drawing (TODO: Move out of vulkan context to own module)
+    vk_ctx->draw_frame_arena = ArenaAlloc();
+    vk_ctx->model_3D_pipeline = Model3DPipelineCreate(vk_ctx, shader_path);
+    vk_ctx->model_3D_instance_pipeline = Model3DInstancePipelineCreate(vk_ctx, shader_path);
+}
+static void
+R_RenderCtxDestroy()
+{
+    wrapper::VulkanContext* vk_ctx = wrapper::VulkanCtxGet();
+    ImGui_ImplVulkan_Shutdown();
+    ImGui_ImplGlfw_Shutdown();
+    ImGui::DestroyContext();
+
+    vkDeviceWaitIdle(vk_ctx->device);
+
+    if (vk_ctx->enable_validation_layers)
+    {
+        wrapper::DestroyDebugUtilsMessengerEXT(vk_ctx->instance, vk_ctx->debug_messenger, nullptr);
+    }
+
+    CameraCleanup(vk_ctx);
+    VK_ProfileBuffersDestroy(vk_ctx);
+
+    VK_SwapChainCleanup(vk_ctx->device, vk_ctx->allocator, vk_ctx->swapchain_resources);
+
+    vkDestroyCommandPool(vk_ctx->device, vk_ctx->command_pool, nullptr);
+
+    vkDestroySurfaceKHR(vk_ctx->instance, vk_ctx->surface, nullptr);
+    for (U32 i = 0; i < wrapper::MAX_FRAMES_IN_FLIGHT; i++)
+    {
+        vkDestroySemaphore(vk_ctx->device, vk_ctx->render_finished_semaphores.data[i], nullptr);
+        vkDestroySemaphore(vk_ctx->device, vk_ctx->image_available_semaphores.data[i], nullptr);
+        vkDestroyFence(vk_ctx->device, vk_ctx->in_flight_fences.data[i], nullptr);
+    }
+
+    vkDestroyDescriptorPool(vk_ctx->device, vk_ctx->descriptor_pool, 0);
+
+    BufferDestroy(vk_ctx->allocator, &vk_ctx->model_3D_instance_buffer);
+
+    vmaDestroyAllocator(vk_ctx->allocator);
+
+    AssetManagerDestroy(vk_ctx, vk_ctx->asset_manager);
+
+    PipelineDestroy(&vk_ctx->model_3D_pipeline);
+    PipelineDestroy(&vk_ctx->model_3D_instance_pipeline);
+
+    vkDestroyDevice(vk_ctx->device, nullptr);
+    vkDestroyInstance(vk_ctx->instance, nullptr);
+
+    ArenaRelease(vk_ctx->draw_frame_arena);
+
+    ArenaRelease(vk_ctx->arena);
+}
+
+static void
+R_RenderFrame(Vec2U32 framebuffer_dim, B32* in_out_framebuffer_resized, ui::Camera* camera,
+              Vec2S64 mouse_cursor_pos)
+{
+    wrapper::VulkanContext* vk_ctx = wrapper::VulkanCtxGet();
+
+    wrapper::AssetManagerExecuteCmds();
+    wrapper::AssetManagerCmdDoneCheck();
+    VkSemaphore image_available_semaphore =
+        vk_ctx->image_available_semaphores.data[vk_ctx->current_frame];
+    VkSemaphore render_finished_semaphore =
+        vk_ctx->render_finished_semaphores.data[vk_ctx->current_frame];
+    VkFence* in_flight_fence = &vk_ctx->in_flight_fences.data[vk_ctx->current_frame];
+    {
+        ProfScopeMarkerNamed("Wait for frame");
+        VK_CHECK_RESULT(vkWaitForFences(vk_ctx->device, 1, in_flight_fence, VK_TRUE, 1000000000));
+    }
+
+    uint32_t imageIndex;
+    VkResult result =
+        vkAcquireNextImageKHR(vk_ctx->device, vk_ctx->swapchain_resources->swapchain, UINT64_MAX,
+                              image_available_semaphore, VK_NULL_HANDLE, &imageIndex);
+
+    if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR ||
+        *in_out_framebuffer_resized)
+    {
+        *in_out_framebuffer_resized = FALSE;
+        ImGui::EndFrame();
+
+        VK_RecreateSwapChain(framebuffer_dim, vk_ctx);
+        vk_ctx->current_frame = (vk_ctx->current_frame + 1) % wrapper::MAX_FRAMES_IN_FLIGHT;
+        return;
+    }
+    else if (result != VK_SUCCESS)
+    {
+        exitWithError("failed to acquire swap chain image!");
+    }
+
+    VkCommandBuffer cmd_buffer = vk_ctx->command_buffers.data[vk_ctx->current_frame];
+    VK_CHECK_RESULT(vkResetFences(vk_ctx->device, 1, in_flight_fence));
+    VK_CHECK_RESULT(vkResetCommandBuffer(cmd_buffer, 0));
+
+    CommandBufferRecord(imageIndex, vk_ctx->current_frame, camera, mouse_cursor_pos);
+
+    VkSemaphoreSubmitInfo waitSemaphoreInfo{};
+    waitSemaphoreInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO;
+    waitSemaphoreInfo.semaphore = image_available_semaphore;
+    waitSemaphoreInfo.stageMask = VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT;
+
+    VkSemaphoreSubmitInfo signalSemaphoreInfo{};
+    signalSemaphoreInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO;
+    signalSemaphoreInfo.semaphore = render_finished_semaphore;
+    signalSemaphoreInfo.stageMask = VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT;
+
+    VkCommandBufferSubmitInfo commandBufferInfo{};
+    commandBufferInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_SUBMIT_INFO;
+    commandBufferInfo.commandBuffer = cmd_buffer;
+
+    VkSubmitInfo2 submitInfo{};
+    submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO_2;
+    submitInfo.waitSemaphoreInfoCount = 1;
+    submitInfo.pWaitSemaphoreInfos = &waitSemaphoreInfo;
+    submitInfo.signalSemaphoreInfoCount = 1;
+    submitInfo.pSignalSemaphoreInfos = &signalSemaphoreInfo;
+    submitInfo.commandBufferInfoCount = 1;
+    submitInfo.pCommandBufferInfos = &commandBufferInfo;
+
+    VK_CHECK_RESULT(vkQueueSubmit2(vk_ctx->graphics_queue, 1, &submitInfo, *in_flight_fence));
+
+    VkPresentInfoKHR presentInfo{};
+    presentInfo.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
+
+    presentInfo.waitSemaphoreCount = 1;
+    presentInfo.pWaitSemaphores = &render_finished_semaphore;
+
+    VkSwapchainKHR swapChains[] = {vk_ctx->swapchain_resources->swapchain};
+    presentInfo.swapchainCount = 1;
+    presentInfo.pSwapchains = swapChains;
+    presentInfo.pImageIndices = &imageIndex;
+    presentInfo.pResults = nullptr; // Optional
+
+    result = vkQueuePresentKHR(vk_ctx->present_queue, &presentInfo);
+    ProfFrameMarker; // end of frame is assumed to be here
+    if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR ||
+        *in_out_framebuffer_resized)
+    {
+        *in_out_framebuffer_resized = 0;
+        VK_RecreateSwapChain(framebuffer_dim, vk_ctx);
+    }
+    else if (result != VK_SUCCESS)
+    {
+        exitWithError("failed to present swap chain image!");
+    }
+
+    vk_ctx->current_frame = (vk_ctx->current_frame + 1) % wrapper::MAX_FRAMES_IN_FLIGHT;
+}
+
+static void
+R_GpuWorkDoneWait()
+{
+    wrapper::VulkanContext* vk_ctx = wrapper::VulkanCtxGet();
+    vkDeviceWaitIdle(vk_ctx->device);
+}

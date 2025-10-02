@@ -189,7 +189,7 @@ ImageResourceDestroy(VmaAllocator allocator, ImageResource image);
 static U32
 VK_SwapChainImageCountGet(VkDevice device, SwapchainResources* swapchain_resources);
 static SwapchainResources*
-VK_SwapChainCreate(VulkanContext* vk_ctx, IO* io_ctx);
+VK_SwapChainCreate(VulkanContext* vk_ctx, Vec2U32 framebuffer_dim);
 
 static ShaderModuleInfo
 ShaderStageFromSpirv(Arena* arena, VkDevice device, VkShaderStageFlagBits flag, String8 path);
@@ -257,7 +257,7 @@ static void
 VK_DepthResourcesCreate(VulkanContext* vk_context, SwapchainResources* swapchain_resources);
 
 static void
-VK_RecreateSwapChain(IO* io_ctx, VulkanContext* vk_ctx);
+VK_RecreateSwapChain(Vec2U32 framebuffer_dim, VulkanContext* vk_ctx);
 
 static void
 VK_SyncObjectsCreate(VulkanContext* vk_ctx);
@@ -285,7 +285,7 @@ static void
 VK_LogicalDeviceCreate(Arena* arena, VulkanContext* vk_ctx);
 
 static VkExtent2D
-VK_ChooseSwapExtent(IO* io_ctx, const VkSurfaceCapabilitiesKHR& capabilities);
+VK_ChooseSwapExtent(Vec2U32 framebuffer_dim, const VkSurfaceCapabilitiesKHR& capabilities);
 
 static Buffer<String8>
 VK_RequiredExtensionsGet(VulkanContext* vk_ctx);

@@ -1154,7 +1154,7 @@ VK_ChooseSwapPresentMode(Buffer<VkPresentModeKHR> availablePresentModes)
 }
 
 static VkExtent2D
-VK_ChooseSwapExtent(IO* io_ctx, const VkSurfaceCapabilitiesKHR& capabilities)
+VK_ChooseSwapExtent(Vec2U32 framebuffer_dim, const VkSurfaceCapabilitiesKHR& capabilities)
 {
     if (capabilities.currentExtent.width != UINT32_MAX)
     {
@@ -1162,11 +1162,11 @@ VK_ChooseSwapExtent(IO* io_ctx, const VkSurfaceCapabilitiesKHR& capabilities)
     }
     else
     {
-        VkExtent2D actualExtent = {(U32)io_ctx->framebuffer_width, (U32)io_ctx->framebuffer_height};
+        VkExtent2D actualExtent = {0, 0};
 
-        actualExtent.width = Clamp(capabilities.minImageExtent.width, actualExtent.width,
+        actualExtent.width = Clamp(capabilities.minImageExtent.width, framebuffer_dim.x,
                                    capabilities.maxImageExtent.width);
-        actualExtent.height = Clamp(capabilities.minImageExtent.height, actualExtent.height,
+        actualExtent.height = Clamp(capabilities.minImageExtent.height, framebuffer_dim.y,
                                     capabilities.maxImageExtent.height);
 
         return actualExtent;
@@ -1221,7 +1221,7 @@ VK_SwapChainImageCountGet(VkDevice device, SwapchainResources* swapchain_resourc
 }
 
 static SwapchainResources*
-VK_SwapChainCreate(VulkanContext* vk_ctx, IO* io_ctx)
+VK_SwapChainCreate(VulkanContext* vk_ctx, Vec2U32 framebuffer_dim)
 {
     Arena* arena = ArenaAlloc();
     SwapchainResources* swapchain_resources = PushStruct(arena, SwapchainResources);
@@ -1232,7 +1232,8 @@ VK_SwapChainCreate(VulkanContext* vk_ctx, IO* io_ctx)
 
     VkSurfaceFormatKHR surface_format = VK_ChooseSwapSurfaceFormat(swapchain_details.formats);
     VkPresentModeKHR present_mode = VK_ChooseSwapPresentMode(swapchain_details.presentModes);
-    VkExtent2D swapchain_extent = VK_ChooseSwapExtent(io_ctx, swapchain_details.capabilities);
+    VkExtent2D swapchain_extent =
+        VK_ChooseSwapExtent(framebuffer_dim, swapchain_details.capabilities);
 
     U32 image_count = swapchain_details.capabilities.minImageCount + 1;
 
@@ -1317,14 +1318,14 @@ VK_SwapChainCleanup(VkDevice device, VmaAllocator allocator,
 }
 
 static void
-VK_RecreateSwapChain(IO* io_ctx, VulkanContext* vk_ctx)
+VK_RecreateSwapChain(Vec2U32 framebuffer_dim, VulkanContext* vk_ctx)
 {
     VK_CHECK_RESULT(vkDeviceWaitIdle(vk_ctx->device));
 
     SyncObjectsDestroy(vk_ctx);
     VK_SwapChainCleanup(vk_ctx->device, vk_ctx->allocator, vk_ctx->swapchain_resources);
     vk_ctx->swapchain_resources = 0;
-    vk_ctx->swapchain_resources = VK_SwapChainCreate(vk_ctx, io_ctx);
+    vk_ctx->swapchain_resources = VK_SwapChainCreate(vk_ctx, framebuffer_dim);
     VK_SyncObjectsCreate(vk_ctx);
 }
 // Samplers helpers

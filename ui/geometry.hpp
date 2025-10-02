@@ -19,7 +19,7 @@ static void
 CameraInit(Camera* camera);
 
 static void
-CameraUpdate(Camera* camera, IO* input, DT_Time* time, VkExtent2D extent);
+CameraUpdate(Camera* camera, IO* input, F32 time, Vec2U32 extent);
 
 static B32
 LineIntersect(F64 x1, F64 y1, F64 x2, F64 y2, F64 x3, F64 y3, F64 x4, F64 y4, F64* x, F64* y);
