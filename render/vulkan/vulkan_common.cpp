@@ -1285,8 +1285,9 @@ VK_SwapChainCreate(VulkanContext* vk_ctx, IO* io_ctx)
     swapchain_resources->swapchain_support = swapchain_details;
     swapchain_resources->present_mode = present_mode;
     swapchain_resources->surface_format = surface_format;
-
     U32 swapchain_image_count = VK_SwapChainImageCountGet(vk_ctx->device, swapchain_resources);
+    swapchain_resources->image_count = swapchain_image_count;
+
     SwapChainImageResourceCreate(vk_ctx->device, swapchain_resources, swapchain_image_count);
 
     VK_ColorResourcesCreate(vk_ctx, swapchain_resources);

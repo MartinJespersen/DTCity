@@ -77,6 +77,7 @@ struct SwapchainResources
     SwapChainSupportDetails swapchain_support;
     VkSurfaceFormatKHR surface_format;
     VkPresentModeKHR present_mode;
+    U32 image_count;
 
     ImageResource color_image_resource;
     VkFormat color_format;

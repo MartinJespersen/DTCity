@@ -224,9 +224,36 @@ CommandBufferRecord(U32 image_index, U32 current_frame)
             wrapper::Model3DInstanceRendering();
             wrapper::Model3DRendering();
 
-            IO_InputReset(ctx->io);
+            vkCmdEndRendering(current_cmd_buf);
+            VkRenderingAttachmentInfo imgui_color_attachment =
+                color_attachment; // Copy main color attachment
+            imgui_color_attachment.loadOp =
+                VK_ATTACHMENT_LOAD_OP_LOAD; // Load existing content (don't clear)
+
+            VkRenderingInfo imgui_rendering_info{};
+            imgui_rendering_info.sType = VK_STRUCTURE_TYPE_RENDERING_INFO;
+            imgui_rendering_info.renderArea.offset = {0, 0};
+            imgui_rendering_info.renderArea.extent = swapchain_extent;
+            imgui_rendering_info.layerCount = 1;
+            imgui_rendering_info.colorAttachmentCount = 1; // Only main color attachment
+            imgui_rendering_info.pColorAttachments = &imgui_color_attachment;
+            imgui_rendering_info.pDepthAttachment = nullptr; // No depth attachment for ImGui
+
+            vkCmdBeginRendering(current_cmd_buf, &imgui_rendering_info);
+
+            // Render ImGui
+            ImGui::Render();
+            ImDrawData* draw_data = ImGui::GetDrawData();
+            const bool is_minimized =
+                (draw_data->DisplaySize.x <= 0.0f || draw_data->DisplaySize.y <= 0.0f);
+            if (!is_minimized)
+            {
+                ImGui_ImplVulkan_RenderDrawData(draw_data, current_cmd_buf);
+            }
 
             vkCmdEndRendering(current_cmd_buf);
+
+            IO_InputReset(ctx->io);
 
             // ~mgj: Transition color attachment images for presentation or transfer
             VkImageMemoryBarrier2 present_barrier{};
@@ -353,6 +380,58 @@ Cleanup(OS_Handle thread_handle, Context* ctx)
 }
 
 static void
+CheckVkResult(VkResult result)
+{
+    if (result != VK_SUCCESS)
+        VK_CHECK_RESULT(result);
+}
+
+void
+ImguiSetup(wrapper::VulkanContext* vk_ctx, IO* io_ctx)
+{
+    //~mgj: Initialize ImGui
+    IMGUI_CHECKVERSION();
+    ImGui::CreateContext();
+
+    //~mgj: Set Styling
+    ImGui::StyleColorsDark();
+    ImGui_ImplGlfw_InitForVulkan(io_ctx->window, true);
+
+    float main_scale = ImGui_ImplGlfw_GetContentScaleForMonitor(glfwGetPrimaryMonitor());
+    ImGuiStyle& style = ImGui::GetStyle();
+    style.ScaleAllSizes(
+        main_scale); // Bake a fixed style scale. (until we have a solution for dynamic style
+                     // scaling, changing this requires resetting Style + calling this again)
+    style.FontScaleDpi = main_scale;
+
+    ImGui_ImplVulkan_InitInfo init_info = {};
+    init_info.ApiVersion =
+        VK_API_VERSION_1_3; // Pass in your value of VkApplicationInfo::apiVersion, otherwise will
+                            // default to header version.
+    init_info.Instance = vk_ctx->instance;
+    init_info.PhysicalDevice = vk_ctx->physical_device;
+    init_info.Device = vk_ctx->device;
+    init_info.QueueFamily = vk_ctx->queue_family_indices.graphicsFamilyIndex;
+    init_info.Queue = vk_ctx->graphics_queue;
+    init_info.PipelineCache = VK_NULL_HANDLE;
+    init_info.DescriptorPoolSize = 8;
+    init_info.MinImageCount = 2;
+    init_info.ImageCount = vk_ctx->swapchain_resources->image_count;
+    init_info.Allocator = VK_NULL_HANDLE;
+    init_info.PipelineInfoMain.RenderPass = VK_NULL_HANDLE;
+    init_info.PipelineInfoMain.Subpass = 0;
+    init_info.PipelineInfoMain.PipelineRenderingCreateInfo = {
+        .sType = VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO_KHR,
+        .colorAttachmentCount = 1,
+        .pColorAttachmentFormats = &vk_ctx->swapchain_resources->color_format,
+        .depthAttachmentFormat = vk_ctx->swapchain_resources->depth_format};
+    init_info.PipelineInfoMain.MSAASamples = vk_ctx->msaa_samples;
+    init_info.CheckVkResultFn = CheckVkResult;
+    init_info.UseDynamicRendering = VK_TRUE;
+    ImGui_ImplVulkan_Init(&init_info);
+}
+
+static void
 MainLoop(void* ptr)
 {
     Context* ctx = (Context*)ptr;
@@ -365,6 +444,7 @@ MainLoop(void* ptr)
 
     ctx->vk_ctx = wrapper::VulkanCreate(ctx);
     wrapper::VulkanContext* vk_ctx = wrapper::VulkanCtxGet();
+    ImguiSetup(vk_ctx, io_ctx);
 
     ctx->road = city::RoadCreate(vk_ctx->texture_path, ctx->cache_path, &gcs_bbox);
     city::Road* road = ctx->road;
@@ -407,6 +487,16 @@ MainLoop(void* ptr)
     while (ctx->running)
     {
         wrapper::DrawFrameReset();
+
+        // Start the Dear ImGui frame
+        ImGui_ImplVulkan_NewFrame();
+        ImGui_ImplGlfw_NewFrame();
+        ImGui::NewFrame();
+
+        // ~mgj: Test UI
+        bool show_demo_window = TRUE;
+        ImGui::ShowDemoWindow(&show_demo_window);
+
         UpdateTime(ctx->time);
         CameraUpdate(ctx->camera, ctx->io, ctx->time,
                      vk_ctx->swapchain_resources->swapchain_extent);
@@ -457,6 +547,8 @@ MainLoop(void* ptr)
             io_ctx->framebuffer_resized)
         {
             io_ctx->framebuffer_resized = false;
+            ImGui::EndFrame();
+
             VK_RecreateSwapChain(io_ctx, vk_ctx);
             vk_ctx->current_frame = (vk_ctx->current_frame + 1) % wrapper::MAX_FRAMES_IN_FLIGHT;
             continue;
@@ -529,5 +621,8 @@ MainLoop(void* ptr)
     city::RoadDestroy(ctx->road);
     city::CarSimDestroy(ctx->car_sim);
     city::BuildingDestroy(ctx->buildings);
+    ImGui_ImplVulkan_Shutdown();
+    ImGui_ImplGlfw_Shutdown();
+    ImGui::DestroyContext();
     wrapper::VulkanDestroy(ctx->vk_ctx);
 }

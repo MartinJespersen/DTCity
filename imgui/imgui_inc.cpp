@@ -10,6 +10,7 @@
 #include "imgui_tables.cpp"
 #include "backends/imgui_impl_vulkan.cpp"
 #include "backends/imgui_impl_glfw.cpp"
+#include "imgui_demo.cpp"
 #pragma pop_macro("Swap")
 #pragma pop_macro("Min")
 #pragma pop_macro("Max")
