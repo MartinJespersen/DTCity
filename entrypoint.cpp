@@ -81,23 +81,6 @@ ImguiSetup(wrapper::VulkanContext* vk_ctx, IO* io_ctx)
 }
 
 static void
-NewFrameUpdate(IO* io_ctx)
-{
-    Context* ctx = GlobalContextGet();
-    wrapper::DrawFrameReset();
-
-    // Start the Dear ImGui frame
-    ImGui_ImplVulkan_NewFrame();
-    ImGui_ImplGlfw_NewFrame();
-    ImGui::NewFrame();
-
-    Vec2U32 framebuffer_dim = {.x = (U32)io_ctx->framebuffer_width,
-                               .y = (U32)io_ctx->framebuffer_height};
-    UpdateTime(ctx->time);
-    CameraUpdate(ctx->camera, ctx->io, ctx->time->delta_time_sec, framebuffer_dim);
-}
-
-static void
 MainLoop(void* ptr)
 {
     Context* ctx = (Context*)ptr;
@@ -151,7 +134,13 @@ MainLoop(void* ptr)
 
     while (ctx->running)
     {
-        NewFrameUpdate(io_ctx);
+        IO_NewFrame(io_ctx);
+        R_NewFrame();
+        ImGui::NewFrame();
+        Vec2U32 framebuffer_dim = {.x = (U32)io_ctx->framebuffer_width,
+                                   .y = (U32)io_ctx->framebuffer_height};
+        UpdateTime(ctx->time);
+        CameraUpdate(ctx->camera, ctx->io, ctx->time->delta_time_sec, framebuffer_dim);
         // ~mgj: Test UI
         bool show_demo_window = TRUE;
         ImGui::ShowDemoWindow(&show_demo_window);
@@ -180,11 +169,8 @@ MainLoop(void* ptr)
                                      &car_vertex_buffer_info, &car_index_buffer_info,
                                      &car_instance_buffer_info);
 
-        Vec2U32 framebuffer_dim = {.x = (U32)io_ctx->framebuffer_width,
-                                   .y = (U32)io_ctx->framebuffer_height};
         R_RenderFrame(framebuffer_dim, &io_ctx->framebuffer_resized, ctx->camera,
                       io_ctx->mouse_pos_cur_s64);
-        IO_InputReset(ctx->io);
     }
     R_GpuWorkDoneWait();
     city::RoadDestroy(ctx->road);

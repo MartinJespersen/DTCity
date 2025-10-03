@@ -159,3 +159,5 @@ R_RenderFrame(Vec2U32 framebuffer_dim, B32* in_out_framebuffer_resized, ui::Came
               Vec2S64 mouse_cursor_pos);
 static void
 R_GpuWorkDoneWait();
+static void
+R_NewFrame();

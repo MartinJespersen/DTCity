@@ -40,6 +40,5 @@ static void
 WindowDestroy(IO* io_ctx);
 static void
 IO_ScrollCallback(GLFWwindow* window, double xoffset, double yoffset);
-
 static void
-IO_InputReset(IO* io);
+IO_NewFrame(IO* io_ctx);

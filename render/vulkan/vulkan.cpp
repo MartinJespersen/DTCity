@@ -1912,3 +1912,12 @@ R_GpuWorkDoneWait()
     wrapper::VulkanContext* vk_ctx = wrapper::VulkanCtxGet();
     vkDeviceWaitIdle(vk_ctx->device);
 }
+
+static void
+R_NewFrame()
+{
+    wrapper::VulkanContext* vk_ctx = wrapper::VulkanCtxGet();
+    ArenaClear(vk_ctx->draw_frame_arena);
+    vk_ctx->draw_frame = PushStruct(vk_ctx->draw_frame_arena, wrapper::DrawFrame);
+    ImGui_ImplVulkan_NewFrame();
+}

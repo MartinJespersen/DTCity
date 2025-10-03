@@ -111,8 +111,9 @@ IO_WaitForValidFramebufferSize(IO* io_ctx)
 }
 
 static void
-IO_InputReset(IO* io)
+IO_NewFrame(IO* io_ctx)
 {
-    io->scroll_x = 0.0;
-    io->scroll_y = 0.0;
+    io_ctx->scroll_x = 0.0;
+    io_ctx->scroll_y = 0.0;
+    ImGui_ImplGlfw_NewFrame();
 }

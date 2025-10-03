@@ -13,13 +13,12 @@ set "lib_dir=%cwd%third_party\\"
 set "vulkan_path=%lib_dir%vulkan_sdk_v1_4_309_0\\"
 set "tracy_src=%lib_dir%tracy/TracyClient.cpp"
 
-set "freetype_include_dir=%lib_dir%freetype_v2_14_1\\include\\"
 :: Compiler and linker flags
 set "cxxflags=/W4 /std:c++20 /wd4201 /wd4005 /wd4838 /wd4244 /wd4996 /wd4310 /wd4245 /wd4505 /wd4100 /EHsc /Z7"
 if not "%~1"=="" (
     set "cxxflags=%cxxflags% %~1"
 )
-set "include_dirs=/I. /I%freetype_include_dir% /I%vulkan_path%include /I%lib_dir%glfw\\include /I%lib_dir% /I%lib_dir%ktx\\include"
+set "include_dirs=/I. /I%vulkan_path%Include /I%lib_dir%glfw\\include /I%lib_dir% /I%lib_dir%ktx\\include"
 set "link_flags=/ignore:4099 /MACHINE:X64 /NODEFAULTLIB:library"
 set "link_dirs=/LIBPATH:%cwd%lib_artifacts\\win32"
 
