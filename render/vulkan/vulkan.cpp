@@ -186,7 +186,6 @@ VK_AssetTextureLoad(R_AssetInfo* asset_info, R_SamplerInfo* sampler_info, String
     texture->image_resource = {.image_alloc = image_alloc,
                                .image_view_resource = image_view_resource};
     texture->desc_set = texture_handle;
-    texture->pipeline_usage_type = pipeline_usage_type;
     texture->sampler = vk_sampler;
 
     // ~mgj: make input ready for texture loading on thread

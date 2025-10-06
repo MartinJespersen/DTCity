@@ -6,11 +6,7 @@ struct VK_Texture
     VK_ImageResource image_resource;
     VkSampler sampler;
     VkDescriptorSet desc_set;
-    R_PipelineUsageType pipeline_usage_type;
 };
-
-static void
-VK_TextureDestroy(VK_Context* vk_ctx, VK_Texture* texture);
 
 static const U32 VK_MAX_FRAMES_IN_FLIGHT = 2;
 
@@ -204,7 +200,8 @@ struct VK_Context
     VK_Pipeline model_3D_instance_pipeline;
     VK_BufferAllocation model_3D_instance_buffer;
 };
-
+static void
+VK_TextureDestroy(VK_Context* vk_ctx, VK_Texture* texture);
 static void
 VK_ThreadSetup(async::ThreadInfo thread_info, void* input);
 static void
