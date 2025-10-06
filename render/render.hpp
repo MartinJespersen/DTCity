@@ -161,3 +161,5 @@ static void
 R_GpuWorkDoneWait();
 static void
 R_NewFrame();
+static U64
+R_LatestHoveredObjectIdGet();

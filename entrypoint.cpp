@@ -74,7 +74,7 @@ ImguiSetup(wrapper::VulkanContext* vk_ctx, IO* io_ctx)
         .colorAttachmentCount = 1,
         .pColorAttachmentFormats = &vk_ctx->swapchain_resources->color_format,
         .depthAttachmentFormat = vk_ctx->swapchain_resources->depth_format};
-    init_info.PipelineInfoMain.MSAASamples = vk_ctx->msaa_samples;
+    init_info.PipelineInfoMain.MSAASamples = VK_SAMPLE_COUNT_1_BIT;
     init_info.CheckVkResultFn = CheckVkResult;
     init_info.UseDynamicRendering = VK_TRUE;
     ImGui_ImplVulkan_Init(&init_info);
@@ -140,10 +140,22 @@ MainLoop(void* ptr)
         Vec2U32 framebuffer_dim = {.x = (U32)io_ctx->framebuffer_width,
                                    .y = (U32)io_ctx->framebuffer_height};
         UpdateTime(ctx->time);
-        CameraUpdate(ctx->camera, ctx->io, ctx->time->delta_time_sec, framebuffer_dim);
-        // ~mgj: Test UI
-        bool show_demo_window = TRUE;
-        ImGui::ShowDemoWindow(&show_demo_window);
+
+        bool open = true;
+        ImGui::Begin("Test Window", &open, ImGuiWindowFlags_AlwaysAutoResize);
+        if (ImGui::IsWindowHovered(ImGuiHoveredFlags_AllowWhenBlockedByActiveItem))
+        {
+            ImGui::Text("Window Hovered!");
+        }
+        else
+        {
+            CameraUpdate(ctx->camera, ctx->io, ctx->time->delta_time_sec, framebuffer_dim);
+            ImGui::Text("Currently Hovered Item ID: %llu", R_LatestHoveredObjectIdGet());
+            ImVec2 window_size = ImGui::GetWindowSize();
+            ImVec2 window_pos = ImVec2((F32)framebuffer_dim.x - window_size.x, 0);
+            ImGui::SetWindowPos(window_pos, ImGuiCond_Always);
+        }
+        ImGui::End();
 
         Buffer<city::Model3DInstance> instance_buffer = city::CarUpdate(
             vk_ctx->draw_frame_arena, car_sim, ctx->road, ctx->time->delta_time_sec);

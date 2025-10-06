@@ -1519,8 +1519,13 @@ VK_CommandBufferRecord(U32 image_index, U32 current_frame, ui::Camera* camera,
             vkCmdEndRendering(current_cmd_buf);
 
             // ~mgj: Render ImGui
-            VkRenderingAttachmentInfo imgui_color_attachment = color_attachment;
-            imgui_color_attachment.loadOp = VK_ATTACHMENT_LOAD_OP_LOAD; // Overlay existing content
+            VkRenderingAttachmentInfo imgui_color_attachment{};
+            imgui_color_attachment.sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO;
+            imgui_color_attachment.imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+            imgui_color_attachment.loadOp = VK_ATTACHMENT_LOAD_OP_LOAD;
+            imgui_color_attachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+            imgui_color_attachment.clearValue = {.color = clear_color};
+            imgui_color_attachment.imageView = swapchain_image_view;
 
             VkRenderingInfo imgui_rendering_info{};
             imgui_rendering_info.sType = VK_STRUCTURE_TYPE_RENDERING_INFO;
@@ -1529,7 +1534,6 @@ VK_CommandBufferRecord(U32 image_index, U32 current_frame, ui::Camera* camera,
             imgui_rendering_info.layerCount = 1;
             imgui_rendering_info.colorAttachmentCount = 1;
             imgui_rendering_info.pColorAttachments = &imgui_color_attachment;
-            imgui_rendering_info.pDepthAttachment = nullptr;
 
             vkCmdBeginRendering(current_cmd_buf, &imgui_rendering_info);
 
@@ -1611,9 +1615,8 @@ VK_CommandBufferRecord(U32 image_index, U32 current_frame, ui::Camera* camera,
                     ArrayCount(buffer_image_copy), buffer_image_copy);
 
                 Assert(vk_ctx->object_id_format == VK_FORMAT_R32G32_UINT);
-                Vec2U32* object_id =
-                    (Vec2U32*)swapchain_resource->object_id_buffer_readback.mapped_ptr;
-                printf("Object ID: %llu\n", object_id->u64);
+                U64* object_id = (U64*)swapchain_resource->object_id_buffer_readback.mapped_ptr;
+                vk_ctx->hovered_object_id = *object_id;
             }
 
             // ~mgj: Reset object ID resolve image layout to
@@ -1920,4 +1923,11 @@ R_NewFrame()
     ArenaClear(vk_ctx->draw_frame_arena);
     vk_ctx->draw_frame = PushStruct(vk_ctx->draw_frame_arena, wrapper::DrawFrame);
     ImGui_ImplVulkan_NewFrame();
+}
+
+static U64
+R_LatestHoveredObjectIdGet()
+{
+    wrapper::VulkanContext* vk_ctx = wrapper::VulkanCtxGet();
+    return vk_ctx->hovered_object_id;
 }

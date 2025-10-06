@@ -182,6 +182,7 @@ struct VulkanContext
     U32 current_frame = 0;
 
     VkFormat object_id_format;
+    U64 hovered_object_id;
     SwapchainResources* swapchain_resources;
 
     VkSampleCountFlagBits msaa_samples = VK_SAMPLE_COUNT_1_BIT;
