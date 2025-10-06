@@ -62,7 +62,7 @@ ContextDestroy(Context* ctx)
 void
 App()
 {
-    IO* io_ctx = WindowCreate(wrapper::VulkanContext::WIDTH, wrapper::VulkanContext::HEIGHT);
+    IO* io_ctx = WindowCreate(VK_Context::WIDTH, VK_Context::HEIGHT);
 
     IO_InputStateUpdate(io_ctx);
     Context* ctx = ContextCreate(io_ctx);

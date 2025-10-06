@@ -3,38 +3,32 @@
 // ~mgj: forward declaration
 struct IO; // TODO: remove this after refactor or maybe not
 
-namespace wrapper
-{
-struct VulkanContext;
-} // namespace wrapper
+struct VK_Context;
 
-namespace wrapper
-{
-
-struct BufferAllocation
+struct VK_BufferAllocation
 {
     VkBuffer buffer;
     VmaAllocation allocation;
     VkDeviceSize size;
 };
 
-struct BufferAllocationMapped
+struct VK_BufferAllocationMapped
 {
-    BufferAllocation buffer_alloc;
+    VK_BufferAllocation buffer_alloc;
     void* mapped_ptr;
     VkMemoryPropertyFlags mem_prop_flags;
 
-    BufferAllocation staging_buffer_alloc;
+    VK_BufferAllocation staging_buffer_alloc;
     Arena* arena;
 };
 
-struct BufferReadback
+struct VK_BufferReadback
 {
-    BufferAllocation buffer_alloc;
+    VK_BufferAllocation buffer_alloc;
     void* mapped_ptr;
 };
 
-struct ImageAllocation
+struct VK_ImageAllocation
 {
     VkImage image;
     VmaAllocation allocation;
@@ -42,253 +36,233 @@ struct ImageAllocation
     VkExtent3D extent;
 };
 
-struct ImageViewResource
+struct VK_ImageViewResource
 {
     VkImageView image_view;
     VkDevice device;
 };
 
-struct ImageResource
+struct VK_ImageResource
 {
-    ImageAllocation image_alloc;
-    ImageViewResource image_view_resource;
+    VK_ImageAllocation image_alloc;
+    VK_ImageViewResource image_view_resource;
 };
 
-struct ImageSwapchainResource
+struct VK_ImageSwapchainResource
 {
     VkImage image;
     VkDeviceSize size;
-    ImageViewResource image_view_resource;
+    VK_ImageViewResource image_view_resource;
 };
 
-struct SwapChainSupportDetails
+struct VK_SwapChainSupportDetails
 {
     VkSurfaceCapabilitiesKHR capabilities;
     Buffer<VkSurfaceFormatKHR> formats;
     Buffer<VkPresentModeKHR> presentModes;
 };
 
-struct SwapchainResources
+struct VK_SwapchainResources
 {
     Arena* arena;
     VkSwapchainKHR swapchain;
     VkFormat swapchain_image_format;
     VkExtent2D swapchain_extent;
-    SwapChainSupportDetails swapchain_support;
+    VK_SwapChainSupportDetails swapchain_support;
     VkSurfaceFormatKHR surface_format;
     VkPresentModeKHR present_mode;
     U32 image_count;
 
-    ImageResource color_image_resource;
+    VK_ImageResource color_image_resource;
     VkFormat color_format;
-    ImageResource depth_image_resource;
+    VK_ImageResource depth_image_resource;
     VkFormat depth_format;
-    Buffer<ImageSwapchainResource> image_resources;
+    Buffer<VK_ImageSwapchainResource> image_resources;
 
     // object id location resource
     VkFormat object_id_image_format;
-    Buffer<ImageResource> object_id_image_resources;
-    Buffer<ImageResource> object_id_image_resolve_resources;
-    BufferReadback object_id_buffer_readback;
+    Buffer<VK_ImageResource> object_id_image_resources;
+    Buffer<VK_ImageResource> object_id_image_resolve_resources;
+    VK_BufferReadback object_id_buffer_readback;
 };
 
-struct QueueFamilyIndices
+struct VK_QueueFamilyIndices
 {
     U32 graphicsFamilyIndex;
     U32 presentFamilyIndex;
 };
 
-struct ShaderModuleInfo
+struct VK_ShaderModuleInfo
 {
     VkPipelineShaderStageCreateInfo info;
     VkDevice device;
 
-    ~ShaderModuleInfo()
+    ~VK_ShaderModuleInfo()
     {
         vkDestroyShaderModule(device, info.module, nullptr);
     }
 };
 
-struct QueueFamilyIndexBits
+struct VK_QueueFamilyIndexBits
 {
     U32 graphicsFamilyIndexBits;
     U32 presentFamilyIndexBits;
 };
 
-enum PlaneType
+enum VK_PlaneType
 {
-    LEFT,
-    RIGHT,
-    TOP,
-    BOTTOM,
-    BACK,
-    FRONT,
-    PlaneType_Count
+    VK_PlaneType_Left,
+    VK_PlaneType_Right,
+    VK_PlaneType_Top,
+    VK_PlaneType_Btm,
+    VK_PlaneType_Back,
+    VK_PlaneType_Front,
+    VK_PlaneType_Count
 };
 
-struct Frustum
+struct VK_Frustum
 {
-    glm::vec4 planes[PlaneType_Count];
-};
-
-struct Texture
-{
-    BufferAllocation staging_buffer;
-    ImageResource image_resource;
-    VkSampler sampler;
-    VkDescriptorSet desc_set;
-    R_PipelineUsageType pipeline_usage_type;
+    glm::vec4 planes[VK_PlaneType_Count];
 };
 
 // ~mgj: Buffers helpers
 //
 // buffer usage patterns with VMA:
 // https://gpuopen-librariesandsdks.github.io/VulkanMemoryAllocator/html/usage_patterns.html
-static BufferAllocation
-BufferAllocationCreate(VmaAllocator allocator, VkDeviceSize size, VkBufferUsageFlags buffer_usage,
-                       VmaAllocationCreateInfo vma_info);
+static VK_BufferAllocation
+VK_BufferAllocationCreate(VmaAllocator allocator, VkDeviceSize size,
+                          VkBufferUsageFlags buffer_usage, VmaAllocationCreateInfo vma_info);
 static void
-BufferMappedUpdate(VkCommandBuffer cmd_buffer, VmaAllocator allocator,
-                   BufferAllocationMapped mapped_buffer);
+VK_BufferMappedUpdate(VkCommandBuffer cmd_buffer, VmaAllocator allocator,
+                      VK_BufferAllocationMapped mapped_buffer);
 
-static BufferAllocationMapped
-BufferMappedCreate(VmaAllocator allocator, VkDeviceSize size, VkBufferUsageFlags buffer_usage);
+static VK_BufferAllocationMapped
+VK_BufferMappedCreate(VmaAllocator allocator, VkDeviceSize size, VkBufferUsageFlags buffer_usage);
 static void
-BufferDestroy(VmaAllocator allocator, BufferAllocation* buffer_allocation);
+VK_BufferDestroy(VmaAllocator allocator, VK_BufferAllocation* buffer_allocation);
 static void
-BufferMappedDestroy(VmaAllocator allocator, BufferAllocationMapped* mapped_buffer);
+VK_BufferMappedDestroy(VmaAllocator allocator, VK_BufferAllocationMapped* mapped_buffer);
 
 static void
-BufferReadbackCreate(VmaAllocator allocator, VkDeviceSize size, VkBufferUsageFlags buffer_usage,
-                     BufferReadback* out_buffer_readback);
+VK_BufferReadbackCreate(VmaAllocator allocator, VkDeviceSize size, VkBufferUsageFlags buffer_usage,
+                        VK_BufferReadback* out_buffer_readback);
 static void
-BufferReadbackDestroy(VmaAllocator allocator, BufferReadback* out_buffer_readback);
-static BufferAllocation
-StagingBufferCreate(VmaAllocator allocator, VkDeviceSize size);
+VK_BufferReadbackDestroy(VmaAllocator allocator, VK_BufferReadback* out_buffer_readback);
+static VK_BufferAllocation
+VK_StagingBufferCreate(VmaAllocator allocator, VkDeviceSize size);
 
 // ~mgj: Images
-static ImageAllocation
-ImageAllocationCreate(VmaAllocator allocator, U32 width, U32 height,
-                      VkSampleCountFlagBits numSamples, VkFormat format, VkImageTiling tiling,
-                      VkImageUsageFlags usage, U32 mipmap_level, VmaAllocationCreateInfo vma_info);
+static VK_ImageAllocation
+VK_ImageAllocationCreate(VmaAllocator allocator, U32 width, U32 height,
+                         VkSampleCountFlagBits numSamples, VkFormat format, VkImageTiling tiling,
+                         VkImageUsageFlags usage, U32 mipmap_level,
+                         VmaAllocationCreateInfo vma_info);
 static void
-SwapChainImageResourceCreate(VkDevice device, SwapchainResources* swapchain_resources,
-                             U32 image_count);
-static ImageViewResource
-ImageViewResourceCreate(VkDevice device, VkImage image, VkFormat format,
-                        VkImageAspectFlags aspect_mask, U32 mipmap_level);
+VK_SwapChainImageResourceCreate(VkDevice device, VK_SwapchainResources* swapchain_resources,
+                                U32 image_count);
+static VK_ImageViewResource
+VK_ImageViewResourceCreate(VkDevice device, VkImage image, VkFormat format,
+                           VkImageAspectFlags aspect_mask, U32 mipmap_level);
 static void
-ImageViewResourceDestroy(ImageViewResource image_view_resource);
+VK_ImageViewResourceDestroy(VK_ImageViewResource image_view_resource);
 static void
-ImageAllocationDestroy(VmaAllocator allocator, ImageAllocation image_alloc);
+VK_ImageAllocationDestroy(VmaAllocator allocator, VK_ImageAllocation image_alloc);
 
 static void
-ImageResourceDestroy(VmaAllocator allocator, ImageResource image);
+VK_ImageResourceDestroy(VmaAllocator allocator, VK_ImageResource image);
 
 // ~mgj: Swapchain functions
 static U32
-VK_SwapChainImageCountGet(VkDevice device, SwapchainResources* swapchain_resources);
-static SwapchainResources*
-VK_SwapChainCreate(VulkanContext* vk_ctx, Vec2U32 framebuffer_dim);
+VK_SwapChainImageCountGet(VkDevice device, VK_SwapchainResources* swapchain_resources);
+static VK_SwapchainResources*
+VK_SwapChainCreate(VK_Context* vk_ctx, Vec2U32 framebuffer_dim);
 
-static ShaderModuleInfo
-ShaderStageFromSpirv(Arena* arena, VkDevice device, VkShaderStageFlagBits flag, String8 path);
+static VK_ShaderModuleInfo
+VK_ShaderStageFromSpirv(Arena* arena, VkDevice device, VkShaderStageFlagBits flag, String8 path);
 static VkShaderModule
-ShaderModuleCreate(VkDevice device, Buffer<U8> buffer);
+VK_ShaderModuleCreate(VkDevice device, Buffer<U8> buffer);
 
 static void
-BufferAllocCreateOrResize(VmaAllocator allocator, U32 total_buffer_byte_count,
-                          BufferAllocation* buffer_alloc, VkBufferUsageFlags usage);
+VK_BufferAllocCreateOrResize(VmaAllocator allocator, U32 total_buffer_byte_count,
+                             VK_BufferAllocation* buffer_alloc, VkBufferUsageFlags usage);
 
-static QueueFamilyIndices
-VK_QueueFamilyIndicesFromBitFields(QueueFamilyIndexBits queueFamilyBits);
-
-static bool
-VK_QueueFamilyIsComplete(QueueFamilyIndexBits queueFamily);
-
-static QueueFamilyIndexBits
-VK_QueueFamiliesFind(VulkanContext* vk_ctx, VkPhysicalDevice device);
+static VK_QueueFamilyIndices
+VK_QueueFamilyIndicesFromBitFields(VK_QueueFamilyIndexBits queueFamilyBits);
 
 static bool
-VK_IsDeviceSuitable(VulkanContext* vk_ctx, VkPhysicalDevice device, QueueFamilyIndexBits indexBits);
+VK_QueueFamilyIsComplete(VK_QueueFamilyIndexBits queueFamily);
 
-static SwapChainSupportDetails
+static VK_QueueFamilyIndexBits
+VK_QueueFamiliesFind(VK_Context* vk_ctx, VkPhysicalDevice device);
+
+static bool
+VK_IsDeviceSuitable(VK_Context* vk_ctx, VkPhysicalDevice device, VK_QueueFamilyIndexBits indexBits);
+
+static VK_SwapChainSupportDetails
 VK_QuerySwapChainSupport(Arena* arena, VkPhysicalDevice device, VkSurfaceKHR surface);
 
-// ~mgj: Road
-static VkVertexInputBindingDescription
-RoadBindingDescriptionGet();
-static Buffer<VkVertexInputAttributeDescription>
-RoadAttributeDescriptionGet(Arena* arena);
+static void
+VK_FrustumPlanesCalculate(VK_Frustum* out_frustum, const glm::mat4 matrix);
 
 static void
-FrustumPlanesCalculate(Frustum* out_frustum, const glm::mat4 matrix);
-
-static void
-VK_ColorResourcesCreate(VulkanContext* vk_ctx, SwapchainResources* swapchain_resources);
+VK_ColorResourcesCreate(VK_Context* vk_ctx, VK_SwapchainResources* swapchain_resources);
 
 // sampler helpers
 static VkSampler
-SamplerCreate(VkDevice device, VkSamplerCreateInfo* sampler_info);
+VK_SamplerCreate(VkDevice device, VkSamplerCreateInfo* sampler_info);
 
 // ~mgj: Descriptor Related Functions
 static void
-DescriptorPoolCreate(VulkanContext* vk_ctx);
+VK_DescriptorPoolCreate(VK_Context* vk_ctx);
 static VkDescriptorSet
 VK_DescriptorSetCreate(Arena* arena, VkDevice device, VkDescriptorPool desc_pool,
                        VkDescriptorSetLayout desc_set_layout, VkImageView image_view,
                        VkSampler sampler);
 
 static VkDescriptorSetLayout
-DescriptorSetLayoutCreate(VkDevice device, VkDescriptorSetLayoutBinding* bindings,
-                          U32 binding_count);
-
-struct Vulkan_PushConstantInfo
-{
-    uint32_t offset;
-    uint32_t size;
-};
+VK_DescriptorSetLayoutCreate(VkDevice device, VkDescriptorSetLayoutBinding* bindings,
+                             U32 binding_count);
 
 // image helpers
 
 // queue family
 
 static void
-VK_DepthResourcesCreate(VulkanContext* vk_context, SwapchainResources* swapchain_resources);
+VK_DepthResourcesCreate(VK_Context* vk_context, VK_SwapchainResources* swapchain_resources);
 
 static void
-VK_RecreateSwapChain(Vec2U32 framebuffer_dim, VulkanContext* vk_ctx);
+VK_RecreateSwapChain(Vec2U32 framebuffer_dim, VK_Context* vk_ctx);
 
 static void
-VK_SyncObjectsCreate(VulkanContext* vk_ctx);
+VK_SyncObjectsCreate(VK_Context* vk_ctx);
 
 static void
-SyncObjectsDestroy(VulkanContext* vk_ctx);
+VK_SyncObjectsDestroy(VK_Context* vk_ctx);
 
 static VkCommandPool
 VK_CommandPoolCreate(VkDevice device, VkCommandPoolCreateInfo* poolInfo);
 
 static void
-VK_ColorResourcesCleanup(VulkanContext* vk_ctx);
+VK_ColorResourcesCleanup(VK_Context* vk_ctx);
 static void
 VK_SwapChainCleanup(VkDevice device, VmaAllocator allocator,
-                    SwapchainResources* swapchain_resources);
+                    VK_SwapchainResources* swapchain_resources);
 static void
-VK_CreateInstance(VulkanContext* vk_ctx);
+VK_CreateInstance(VK_Context* vk_ctx);
 static void
-VK_DebugMessengerSetup(VulkanContext* vk_ctx);
+VK_DebugMessengerSetup(VK_Context* vk_ctx);
 static void
-VK_SurfaceCreate(VulkanContext* vk_ctx, IO* io_ctx);
+VK_SurfaceCreate(VK_Context* vk_ctx, IO* io_ctx);
 static void
-VK_PhysicalDevicePick(VulkanContext* vk_ctx);
+VK_PhysicalDevicePick(VK_Context* vk_ctx);
 static void
-VK_LogicalDeviceCreate(Arena* arena, VulkanContext* vk_ctx);
+VK_LogicalDeviceCreate(Arena* arena, VK_Context* vk_ctx);
 
 static VkExtent2D
 VK_ChooseSwapExtent(Vec2U32 framebuffer_dim, const VkSurfaceCapabilitiesKHR& capabilities);
 
 static Buffer<String8>
-VK_RequiredExtensionsGet(VulkanContext* vk_ctx);
+VK_RequiredExtensionsGet(VK_Context* vk_ctx);
 
 static void
 VK_PopulateDebugMessengerCreateInfo(VkDebugUtilsMessengerCreateInfoEXT& createInfo);
@@ -297,10 +271,10 @@ static VkSampleCountFlagBits
 VK_MaxUsableSampleCountGet(VkPhysicalDevice device);
 
 static bool
-VK_CheckDeviceExtensionSupport(VulkanContext* vk_ctx, VkPhysicalDevice device);
+VK_CheckDeviceExtensionSupport(VK_Context* vk_ctx, VkPhysicalDevice device);
 
 static bool
-VK_CheckValidationLayerSupport(VulkanContext* vk_ctx);
+VK_CheckValidationLayerSupport(VK_Context* vk_ctx);
 
 static VkSurfaceFormatKHR
 VK_ChooseSwapSurfaceFormat(Buffer<VkSurfaceFormatKHR> availableFormats);
@@ -309,22 +283,17 @@ static VkPresentModeKHR
 VK_ChooseSwapPresentMode(Buffer<VkPresentModeKHR> availablePresentModes);
 
 static void
-VK_CommandBuffersCreate(VulkanContext* vk_ctx);
+VK_CommandBuffersCreate(VK_Context* vk_ctx);
 
 static VkResult
-CreateDebugUtilsMessengerEXT(VkInstance instance,
-                             const VkDebugUtilsMessengerCreateInfoEXT* pCreateInfo,
-                             const VkAllocationCallbacks* pAllocator,
-                             VkDebugUtilsMessengerEXT* pDebugMessenger);
+VK_CreateDebugUtilsMessengerEXT(VkInstance instance,
+                                const VkDebugUtilsMessengerCreateInfoEXT* pCreateInfo,
+                                const VkAllocationCallbacks* pAllocator,
+                                VkDebugUtilsMessengerEXT* pDebugMessenger);
 
 static void
-DestroyDebugUtilsMessengerEXT(VkInstance instance, VkDebugUtilsMessengerEXT debugMessenger,
-                              const VkAllocationCallbacks* pAllocator);
-
-//
-// ~mgj: texture functions
-static void
-TextureDestroy(VulkanContext* vk_ctx, Texture* texture);
+VK_DestroyDebugUtilsMessengerEXT(VkInstance instance, VkDebugUtilsMessengerEXT debugMessenger,
+                                 const VkAllocationCallbacks* pAllocator);
 
 #define VK_CHECK_RESULT(f)                                                                         \
     {                                                                                              \
@@ -338,9 +307,4 @@ TextureDestroy(VulkanContext* vk_ctx, Texture* texture);
 
 // ~mgj: sampler functions
 static void
-VkSamplerCreateInfoFromSamplerInfo(R_SamplerInfo* sampler, VkSamplerCreateInfo* out_sampler_info);
-
-} // namespace wrapper
-// ~mgj: Format Conversion
-static VkFormat
-R_VkFormatFromTex2DFormat(R_Tex2DFormat format);
+VK_SamplerCreateInfoFromSamplerInfo(R_SamplerInfo* sampler, VkSamplerCreateInfo* out_sampler_info);

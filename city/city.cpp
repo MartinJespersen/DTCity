@@ -47,9 +47,9 @@ RoadCreate(String8 texture_path, String8 cache_path, GCSBoundingBox* gcs_bbox)
 static void
 RoadDestroy(Road* road)
 {
-    wrapper::AssetManagerBufferFree(road->asset_vertex_info.id);
-    wrapper::AssetManagerBufferFree(road->asset_index_info.id);
-    wrapper::AssetManagerTextureFree(road->asset_texture_info.id);
+    VK_AssetManagerBufferFree(road->asset_vertex_info.id);
+    VK_AssetManagerBufferFree(road->asset_index_info.id);
+    VK_AssetManagerTextureFree(road->asset_texture_info.id);
 
     ArenaRelease(road->arena);
 }
@@ -712,7 +712,7 @@ CarSimCreate(String8 asset_path, String8 texture_path, U32 car_count, Road* road
     // parse gltf file
     String8 gltf_path = Str8PathFromStr8List(scratch.arena, {asset_path, S("cars/scene.gltf")});
     wrapper::CgltfResult parsed_result = wrapper::CgltfParse(arena, gltf_path, S("Car.013"));
-    R_SamplerInfo sampler_info = wrapper::SamplerFromCgltfSampler(parsed_result.sampler);
+    R_SamplerInfo sampler_info = SamplerFromCgltfSampler(parsed_result.sampler);
     car_sim->vertex_buffer = parsed_result.vertex_buffer;
     car_sim->index_buffer = parsed_result.index_buffer;
     car_sim->sampler_info = sampler_info;
@@ -748,9 +748,9 @@ CarSimCreate(String8 asset_path, String8 texture_path, U32 car_count, Road* road
 static void
 CarSimDestroy(CarSim* car_sim)
 {
-    wrapper::AssetManagerBufferFree(car_sim->vertex_buffer_info.id);
-    wrapper::AssetManagerBufferFree(car_sim->index_buffer_info.id);
-    wrapper::AssetManagerTextureFree(car_sim->texture_info.id);
+    VK_AssetManagerBufferFree(car_sim->vertex_buffer_info.id);
+    VK_AssetManagerBufferFree(car_sim->index_buffer_info.id);
+    VK_AssetManagerTextureFree(car_sim->texture_info.id);
     ArenaRelease(car_sim->arena);
 }
 
@@ -861,10 +861,10 @@ BuildingsCreate(String8 cache_path, String8 texture_path, F32 road_height, GCSBo
 static void
 BuildingDestroy(Buildings* building)
 {
-    wrapper::AssetManagerBufferFree(building->vertex_buffer_info.id);
-    wrapper::AssetManagerBufferFree(building->index_buffer_info.id);
-    wrapper::AssetManagerTextureFree(building->roof_texture_info.id);
-    wrapper::AssetManagerTextureFree(building->facade_texture_info.id);
+    VK_AssetManagerBufferFree(building->vertex_buffer_info.id);
+    VK_AssetManagerBufferFree(building->index_buffer_info.id);
+    VK_AssetManagerTextureFree(building->roof_texture_info.id);
+    VK_AssetManagerTextureFree(building->facade_texture_info.id);
     ArenaRelease(building->arena);
 }
 static F32

@@ -36,7 +36,7 @@ CheckVkResult(VkResult result)
 }
 
 void
-ImguiSetup(wrapper::VulkanContext* vk_ctx, IO* io_ctx)
+ImguiSetup(VK_Context* vk_ctx, IO* io_ctx)
 {
     //~mgj: Initialize ImGui
     IMGUI_CHECKVERSION();
@@ -92,7 +92,7 @@ MainLoop(void* ptr)
                                      .lon_top_right = 10.198376789774187};
 
     R_RenderCtxCreate(ctx->shader_path, io_ctx, ctx->thread_pool);
-    wrapper::VulkanContext* vk_ctx = wrapper::VulkanCtxGet();
+    VK_Context* vk_ctx = VK_CtxGet();
     ImguiSetup(vk_ctx, io_ctx);
 
     ctx->road = city::RoadCreate(ctx->texture_path, ctx->cache_path, &gcs_bbox);
@@ -161,25 +161,22 @@ MainLoop(void* ptr)
             vk_ctx->draw_frame_arena, car_sim, ctx->road, ctx->time->delta_time_sec);
         R_BufferInfo car_instance_buffer_info =
             R_BufferInfoFromTemplateBuffer(instance_buffer, R_BufferType_Vertex);
-        wrapper::Model3DDraw(&road->asset_vertex_info, &road->asset_index_info,
-                             &road->asset_texture_info, road->texture_path, &sampler_info,
-                             &road_vertex_buffer_info, &road_index_buffer_info, TRUE, 0,
-                             road->index_buffer.size);
+        VK_Model3DDraw(&road->asset_vertex_info, &road->asset_index_info, &road->asset_texture_info,
+                       road->texture_path, &sampler_info, &road_vertex_buffer_info,
+                       &road_index_buffer_info, TRUE, 0, road->index_buffer.size);
 
-        wrapper::Model3DDraw(&buildings->vertex_buffer_info, &buildings->index_buffer_info,
-                             &buildings->roof_texture_info, buildings->roof_texture_path,
-                             &sampler_info, &building_vertex_buffer_info,
-                             &building_index_buffer_info, FALSE,
-                             buildings->roof_index_buffer_offset, buildings->roof_index_count);
-        wrapper::Model3DDraw(&buildings->vertex_buffer_info, &buildings->index_buffer_info,
-                             &buildings->facade_texture_info, buildings->facade_texture_path,
-                             &sampler_info, &building_vertex_buffer_info,
-                             &building_index_buffer_info, FALSE,
-                             buildings->facade_index_buffer_offset, buildings->facade_index_count);
-        wrapper::Model3DInstanceDraw(&car_sim->vertex_buffer_info, &car_sim->index_buffer_info,
-                                     &car_sim->texture_info, car_sim->texture_path, &sampler_info,
-                                     &car_vertex_buffer_info, &car_index_buffer_info,
-                                     &car_instance_buffer_info);
+        VK_Model3DDraw(&buildings->vertex_buffer_info, &buildings->index_buffer_info,
+                       &buildings->roof_texture_info, buildings->roof_texture_path, &sampler_info,
+                       &building_vertex_buffer_info, &building_index_buffer_info, FALSE,
+                       buildings->roof_index_buffer_offset, buildings->roof_index_count);
+        VK_Model3DDraw(&buildings->vertex_buffer_info, &buildings->index_buffer_info,
+                       &buildings->facade_texture_info, buildings->facade_texture_path,
+                       &sampler_info, &building_vertex_buffer_info, &building_index_buffer_info,
+                       FALSE, buildings->facade_index_buffer_offset, buildings->facade_index_count);
+        VK_Model3DInstanceDraw(&car_sim->vertex_buffer_info, &car_sim->index_buffer_info,
+                               &car_sim->texture_info, car_sim->texture_path, &sampler_info,
+                               &car_vertex_buffer_info, &car_index_buffer_info,
+                               &car_instance_buffer_info);
 
         R_RenderFrame(framebuffer_dim, &io_ctx->framebuffer_resized, ctx->camera,
                       io_ctx->mouse_pos_cur_s64);
