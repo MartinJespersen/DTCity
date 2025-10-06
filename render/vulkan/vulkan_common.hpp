@@ -1,8 +1,5 @@
 #pragma once
 
-// ~mgj: forward declaration
-struct IO; // TODO: remove this after refactor or maybe not
-
 struct VK_Context;
 
 struct VK_BufferAllocation

@@ -1,21 +1,5 @@
 #pragma once
 
-struct Context;
-
-struct VK_Context;
-
-namespace ui
-{
-struct Camera;
-}
-namespace city
-{
-struct Road;
-struct CarSim;
-struct Model3DInstance;
-struct Vertex3D;
-} // namespace city
-
 struct VK_Texture
 {
     VK_BufferAllocation staging_buffer;
@@ -313,9 +297,6 @@ static VK_Context*
 VK_CtxGet();
 
 // ~mgj: Building
-static void
-VK_BuildingCreateAsync(R_AssetId vertex_buffer_id, R_AssetId index_buffer_id,
-                       Buffer<city::Vertex3D> vertex_buffer, Buffer<U32> index_buffer);
 static void
 VK_Model3DBucketAdd(VK_BufferAllocation* vertex_buffer_allocation,
                     VK_BufferAllocation* index_buffer_allocation, VkDescriptorSet texture_handle,
