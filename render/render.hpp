@@ -77,10 +77,7 @@ struct R_BufferInfo
     U64 type_size;
     R_BufferType buffer_type;
 };
-struct R_AssetId
-{
-    U64 id;
-};
+
 enum R_AssetItemType
 {
     R_AssetItemType_Undefined,
@@ -98,9 +95,7 @@ enum R_PipelineUsageType
 template <typename T> struct R_AssetItem
 {
     R_AssetItem* next;
-    R_AssetId id;
     B32 is_loaded;
-    B32 is_loading;
     T item;
 };
 
@@ -110,12 +105,6 @@ template <typename T> struct R_AssetItemList
     R_AssetItem<T>* last;
 };
 
-struct R_AssetInfo
-{
-    R_AssetId id;
-    R_AssetItemType type;
-};
-
 struct R_TextureLoadingInfo
 {
     String8 texture_path;
@@ -123,7 +112,8 @@ struct R_TextureLoadingInfo
 
 struct R_AssetLoadingInfo
 {
-    R_AssetInfo info;
+    R_Handle handle;
+    R_AssetItemType type;
     union
     {
         R_TextureLoadingInfo texture_info;
@@ -142,10 +132,6 @@ R_HandleZero();
 template <typename T>
 static R_BufferInfo
 R_BufferInfoFromTemplateBuffer(Buffer<T> buffer, R_BufferType buffer_type);
-static R_AssetId
-R_AssetIdFromStr8(String8 str);
-static R_AssetInfo
-R_AssetInfoCreate(String8 name, R_AssetItemType type);
 
 //////////////////////////////////////////////////////////////////////////
 // ~mgj: function declaration to be implemented by backend
@@ -163,3 +149,10 @@ static void
 R_NewFrame();
 static U64
 R_LatestHoveredObjectIdGet();
+
+// ~mgj: Texture loading interface
+static R_Handle
+R_TextureLoad(R_SamplerInfo* sampler_info, String8 texture_path,
+              R_PipelineUsageType pipeline_usage_type);
+static R_Handle
+R_BufferLoad(R_BufferInfo* buffer_info);

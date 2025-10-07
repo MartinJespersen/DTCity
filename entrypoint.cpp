@@ -95,15 +95,6 @@ MainLoop(void* ptr)
     VK_Context* vk_ctx = VK_CtxGet();
     ImguiSetup(vk_ctx, io_ctx);
 
-    ctx->road = city::RoadCreate(ctx->texture_path, ctx->cache_path, &gcs_bbox);
-    city::Road* road = ctx->road;
-    ctx->buildings = city::BuildingsCreate(ctx->cache_path, ctx->texture_path,
-                                           ctx->road->road_height, &gcs_bbox);
-
-    CameraInit(ctx->camera);
-    ctx->car_sim = city::CarSimCreate(ctx->asset_path, ctx->texture_path, 100, ctx->road);
-    city::CarSim* car_sim = ctx->car_sim;
-
     R_SamplerInfo sampler_info = {
         .min_filter = R_Filter_Linear,
         .mag_filter = R_Filter_Linear,
@@ -112,25 +103,15 @@ MainLoop(void* ptr)
         .address_mode_v = R_SamplerAddressMode_Repeat,
     };
 
+    ctx->road = city::RoadCreate(ctx->texture_path, ctx->cache_path, &gcs_bbox, &sampler_info);
+    city::Road* road = ctx->road;
+
+    CameraInit(ctx->camera);
+    ctx->buildings = city::BuildingsCreate(ctx->cache_path, ctx->texture_path,
+                                           ctx->road->road_height, &gcs_bbox, &sampler_info);
     city::Buildings* buildings = ctx->buildings;
-
-    // buildings buffer create
-    R_BufferInfo building_vertex_buffer_info =
-        R_BufferInfoFromTemplateBuffer(buildings->vertex_buffer, R_BufferType_Vertex);
-    R_BufferInfo building_index_buffer_info =
-        R_BufferInfoFromTemplateBuffer(buildings->index_buffer, R_BufferType_Index);
-
-    // road buffers create
-    R_BufferInfo road_vertex_buffer_info =
-        R_BufferInfoFromTemplateBuffer(road->vertex_buffer, R_BufferType_Vertex);
-    R_BufferInfo road_index_buffer_info =
-        R_BufferInfoFromTemplateBuffer(road->index_buffer, R_BufferType_Index);
-
-    // car buffers create
-    R_BufferInfo car_vertex_buffer_info =
-        R_BufferInfoFromTemplateBuffer(car_sim->vertex_buffer, R_BufferType_Vertex);
-    R_BufferInfo car_index_buffer_info =
-        R_BufferInfoFromTemplateBuffer(car_sim->index_buffer, R_BufferType_Index);
+    ctx->car_sim = city::CarSimCreate(ctx->asset_path, ctx->texture_path, 100, ctx->road);
+    city::CarSim* car_sim = ctx->car_sim;
 
     while (ctx->running)
     {
@@ -157,26 +138,21 @@ MainLoop(void* ptr)
         }
         ImGui::End();
 
+        VK_Model3DDraw(road->texture_handle, road->vertex_handle, road->index_handle, TRUE, 0,
+                       road->index_buffer.size);
+        VK_Model3DDraw(buildings->roof_texture_handle, buildings->vertex_handle,
+                       buildings->index_handle, FALSE, buildings->roof_index_buffer_offset,
+                       buildings->roof_index_count);
+        VK_Model3DDraw(buildings->facade_texture_handle, buildings->vertex_handle,
+                       buildings->index_handle, FALSE, buildings->facade_index_buffer_offset,
+                       buildings->facade_index_count);
+
         Buffer<city::Model3DInstance> instance_buffer = city::CarUpdate(
             vk_ctx->draw_frame_arena, car_sim, ctx->road, ctx->time->delta_time_sec);
         R_BufferInfo car_instance_buffer_info =
             R_BufferInfoFromTemplateBuffer(instance_buffer, R_BufferType_Vertex);
-        VK_Model3DDraw(&road->asset_vertex_info, &road->asset_index_info, &road->asset_texture_info,
-                       road->texture_path, &sampler_info, &road_vertex_buffer_info,
-                       &road_index_buffer_info, TRUE, 0, road->index_buffer.size);
-
-        VK_Model3DDraw(&buildings->vertex_buffer_info, &buildings->index_buffer_info,
-                       &buildings->roof_texture_info, buildings->roof_texture_path, &sampler_info,
-                       &building_vertex_buffer_info, &building_index_buffer_info, FALSE,
-                       buildings->roof_index_buffer_offset, buildings->roof_index_count);
-        VK_Model3DDraw(&buildings->vertex_buffer_info, &buildings->index_buffer_info,
-                       &buildings->facade_texture_info, buildings->facade_texture_path,
-                       &sampler_info, &building_vertex_buffer_info, &building_index_buffer_info,
-                       FALSE, buildings->facade_index_buffer_offset, buildings->facade_index_count);
-        VK_Model3DInstanceDraw(&car_sim->vertex_buffer_info, &car_sim->index_buffer_info,
-                               &car_sim->texture_info, car_sim->texture_path, &sampler_info,
-                               &car_vertex_buffer_info, &car_index_buffer_info,
-                               &car_instance_buffer_info);
+        VK_Model3DInstanceDraw(car_sim->texture_handle, car_sim->vertex_handle,
+                               car_sim->index_handle, &car_instance_buffer_info);
 
         R_RenderFrame(framebuffer_dim, &io_ctx->framebuffer_resized, ctx->camera,
                       io_ctx->mouse_pos_cur_s64);

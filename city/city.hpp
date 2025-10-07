@@ -144,9 +144,9 @@ struct Road
     glm::mat4 model_matrix;
 
     String8 texture_path;
-    R_AssetInfo asset_vertex_info;
-    R_AssetInfo asset_index_info;
-    R_AssetInfo asset_texture_info;
+    R_Handle texture_handle;
+    R_Handle vertex_handle;
+    R_Handle index_handle;
 
     Buffer<Vertex3D> vertex_buffer;
     Buffer<U32> index_buffer;
@@ -195,12 +195,13 @@ struct CarSim
 
     Buffer<city::Vertex3D> vertex_buffer;
     Buffer<U32> index_buffer;
+
     R_SamplerInfo sampler_info;
     Rng1F32 car_center_offset;
 
-    R_AssetInfo vertex_buffer_info;
-    R_AssetInfo index_buffer_info;
-    R_AssetInfo texture_info;
+    R_Handle texture_handle;
+    R_Handle vertex_handle;
+    R_Handle index_handle;
 
     String8 texture_path;
 };
@@ -224,19 +225,18 @@ struct Buildings
     NodeWays node_ways;
     NodeUtmStructure node_utm_structure;
 
-    R_AssetInfo vertex_buffer_info;
-    R_AssetInfo index_buffer_info;
-    R_AssetInfo roof_texture_info;
-    R_AssetInfo facade_texture_info;
     String8 roof_texture_path;
     String8 facade_texture_path;
 
-    Buffer<city::Vertex3D> vertex_buffer;
-    Buffer<U32> index_buffer;
     U32 roof_index_buffer_offset;
     U32 roof_index_count;
     U32 facade_index_buffer_offset;
     U32 facade_index_count;
+
+    R_Handle vertex_handle;
+    R_Handle index_handle;
+    R_Handle roof_texture_handle;
+    R_Handle facade_texture_handle;
 };
 
 struct Model3DInstance
@@ -251,7 +251,8 @@ read_only static RoadNode g_road_node = {&g_road_node, 0, 0.0f, 0.0f};
 read_only static NodeUtm g_road_node_utm = {&g_road_node_utm, 0, 0.0f, 0.0f};
 ///////////////////////
 static Road*
-RoadCreate(String8 texture_path, String8 cache_path, GCSBoundingBox* gcs_bbox);
+RoadCreate(String8 texture_path, String8 cache_path, GCSBoundingBox* gcs_bbox,
+           R_SamplerInfo* sampler_info);
 static void
 RoadDestroy(Road* road);
 static String8
@@ -285,8 +286,8 @@ CarUpdate(Arena* arena, CarSim* car, Road* road, F32 time_delta);
 
 // ~mgj: Buildings
 static Buildings*
-BuildingsCreate(String8 cache_path, String8 texture_path, F32 road_height,
-                GCSBoundingBox* gcs_bbox);
+BuildingsCreate(String8 cache_path, String8 texture_path, F32 road_height, GCSBoundingBox* gcs_bbox,
+                R_SamplerInfo* sampler_info);
 static void
 BuildingDestroy(Buildings* building);
 static void

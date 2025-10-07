@@ -17,16 +17,3 @@ R_BufferInfoFromTemplateBuffer(Buffer<T> buffer, R_BufferType buffer_type)
     Buffer<U8> general_buffer = {.data = (U8*)buffer.data, .size = byte_count};
     return {.buffer = general_buffer, .type_size = type_size, .buffer_type = buffer_type};
 }
-static R_AssetId
-R_AssetIdFromStr8(String8 str)
-{
-    return {.id = HashU128FromStr8(str).u64[0]};
-}
-static R_AssetInfo
-R_AssetInfoCreate(String8 name, R_AssetItemType type)
-{
-    R_AssetInfo asset_info = {};
-    asset_info.id = R_AssetIdFromStr8(name);
-    asset_info.type = type;
-    return asset_info;
-}

@@ -7,6 +7,7 @@ DISABLE_WARNINGS_PUSH
 #define VMA_DEBUG_DETECT_CORRUPTION 1
 #define VMA_DEBUG_DETECT_LEAKS 1
 #include "third_party/vk_mem_alloc.h"
+DISABLE_WARNINGS_POP
 
 #if OS_WINDOWS
 

@@ -93,113 +93,6 @@ VK_ImageFromKtx2file(VkCommandBuffer cmd, VkImage image, VK_BufferAllocation sta
                          0, 0, NULL, 0, NULL, 1, &barrier);
 }
 
-static void
-VK_AssetBufferLoad(R_AssetInfo* asset_info, R_BufferInfo* buffer_info)
-{
-    VK_Context* vk_ctx = VK_CtxGet();
-    VK_AssetManager* asset_manager = vk_ctx->asset_manager;
-    R_AssetItem<VK_AssetItemBuffer>* asset_item = VK_AssetManagerBufferItemGet(asset_info->id);
-
-    // ~mgj: Create buffer allocation
-    VmaAllocationCreateInfo vma_info = {0};
-    vma_info.usage = VMA_MEMORY_USAGE_AUTO;
-    vma_info.requiredFlags = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
-    VkBufferUsageFlags usage_flags = NULL;
-    switch (buffer_info->buffer_type)
-    {
-        case R_BufferType_Vertex: usage_flags = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT; break;
-        case R_BufferType_Index: usage_flags = VK_BUFFER_USAGE_INDEX_BUFFER_BIT; break;
-        default: InvalidPath;
-    }
-    VK_BufferAllocation buffer =
-        VK_BufferAllocationCreate(vk_ctx->allocator, buffer_info->buffer.size,
-                                  usage_flags | VK_BUFFER_USAGE_TRANSFER_DST_BIT, vma_info);
-
-    // ~mgj: Prepare Texture
-    VK_AssetItemBuffer* asset_buffer = &asset_item->item;
-    asset_buffer->buffer_alloc = buffer;
-
-    // ~mgj: Preparing buffer loading for another thread
-    R_ThreadInput* thread_input = VK_ThreadInputCreate();
-    R_AssetLoadingInfo* asset_load_info = &thread_input->asset_info;
-    asset_load_info->info = *asset_info;
-    R_BufferInfo* buffer_load_info = &asset_load_info->extra_info.buffer_info;
-    *buffer_load_info = *buffer_info;
-    asset_item->is_loading = TRUE;
-
-    async::QueueItem queue_input = {.data = thread_input, .worker_func = VK_ThreadSetup};
-    async::QueuePush(asset_manager->work_queue, &queue_input);
-}
-
-static void
-VK_AssetTextureLoad(R_AssetInfo* asset_info, R_SamplerInfo* sampler_info, String8 texture_path,
-                    R_PipelineUsageType pipeline_usage_type)
-{
-    VK_Context* vk_ctx = VK_CtxGet();
-    VK_AssetManager* asset_manager = vk_ctx->asset_manager;
-
-    // ~mgj: Create sampler
-    VkSamplerCreateInfo sampler_create_info = {};
-    VK_SamplerCreateInfoFromSamplerInfo(sampler_info, &sampler_create_info);
-    sampler_create_info.anisotropyEnable = VK_TRUE;
-    sampler_create_info.maxAnisotropy = (F32)vk_ctx->msaa_samples;
-    VkSampler vk_sampler = VK_SamplerCreate(vk_ctx->device, &sampler_create_info);
-
-    // Get texture dimensions
-    ktxTexture2* ktx_texture;
-    ktx_error_code_e ktxresult = ktxTexture2_CreateFromNamedFile(
-        (char*)texture_path.str, KTX_TEXTURE_CREATE_NO_STORAGE, &ktx_texture);
-    Assert(ktxresult == KTX_SUCCESS);
-
-    // ~mgj: Create Image and Image View
-    VmaAllocationCreateInfo vma_info = {.usage = VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE};
-    VK_ImageAllocation image_alloc = VK_ImageAllocationCreate(
-        vk_ctx->allocator, ktx_texture->baseWidth, ktx_texture->baseHeight, VK_SAMPLE_COUNT_1_BIT,
-        VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_TILING_OPTIMAL,
-        VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT |
-            VK_IMAGE_USAGE_SAMPLED_BIT,
-        ktx_texture->numLevels, vma_info);
-
-    VK_ImageViewResource image_view_resource =
-        VK_ImageViewResourceCreate(vk_ctx->device, image_alloc.image, VK_FORMAT_R8G8B8A8_SRGB,
-                                   VK_IMAGE_ASPECT_COLOR_BIT, ktx_texture->numLevels);
-
-    // ~mgj: Choose Descriptor Set Layout and Create Descriptor Set
-    VkDescriptorSetLayout desc_set_layout = NULL;
-    switch (pipeline_usage_type)
-    {
-        case R_PipelineUsageType_3D:
-            desc_set_layout = vk_ctx->model_3D_pipeline.descriptor_set_layout;
-            break;
-        case R_PipelineUsageType_3DInstanced:
-            desc_set_layout = vk_ctx->model_3D_pipeline.descriptor_set_layout;
-            break;
-        default: InvalidPath;
-    }
-    VkDescriptorSet texture_handle =
-        VK_DescriptorSetCreate(vk_ctx->arena, vk_ctx->device, vk_ctx->descriptor_pool,
-                               desc_set_layout, image_view_resource.image_view, vk_sampler);
-
-    // ~mgj: Assign values to texture
-    R_AssetItem<VK_Texture>* asset_item = VK_AssetManagerTextureItemGet(asset_info->id);
-    VK_Texture* texture = &asset_item->item;
-    texture->image_resource = {.image_alloc = image_alloc,
-                               .image_view_resource = image_view_resource};
-    texture->desc_set = texture_handle;
-    texture->sampler = vk_sampler;
-
-    // ~mgj: make input ready for texture loading on thread
-    R_ThreadInput* thread_input = VK_ThreadInputCreate();
-    R_AssetLoadingInfo* asset_load_info = &thread_input->asset_info;
-    asset_load_info->info = *asset_info;
-    R_TextureLoadingInfo* texture_load_info = &asset_load_info->extra_info.texture_info;
-    texture_load_info->texture_path = PushStr8Copy(thread_input->arena, texture_path);
-    asset_item->is_loading = TRUE;
-
-    async::QueueItem queue_input = {.data = thread_input, .worker_func = VK_ThreadSetup};
-    async::QueuePush(asset_manager->work_queue, &queue_input);
-}
-
 static R_ThreadInput*
 VK_ThreadInputCreate()
 {
@@ -228,21 +121,21 @@ VK_ThreadSetup(async::ThreadInfo thread_info, void* input)
         vk_ctx->device, asset_store->threaded_cmd_pools.data[thread_info.thread_id]); // Your helper
 
     R_AssetLoadingInfo* asset_loading_info = &thread_input->asset_info;
-    Assert(asset_loading_info->info.id.id != 0);
+    Assert(asset_loading_info->handle.u64 != 0);
 
-    switch (asset_loading_info->info.type)
+    switch (asset_loading_info->type)
     {
         case R_AssetItemType_Texture:
         {
             R_TextureLoadingInfo* extra_info =
                 (R_TextureLoadingInfo*)&asset_loading_info->extra_info;
-            VK_TextureCreate(cmd, asset_loading_info->info, extra_info->texture_path);
+            VK_TextureCreate(cmd, asset_loading_info->handle, extra_info->texture_path);
         }
         break;
         case R_AssetItemType_Buffer:
         {
             R_BufferInfo* buffer_info = (R_BufferInfo*)&asset_loading_info->extra_info;
-            VK_AssetInfoBufferCmd(cmd, asset_loading_info->info.id, buffer_info->buffer);
+            VK_AssetInfoBufferCmd(cmd, asset_loading_info->handle, buffer_info->buffer);
         }
         break;
         default: InvalidPath;
@@ -254,10 +147,11 @@ VK_ThreadSetup(async::ThreadInfo thread_info, void* input)
 }
 
 static void
-VK_TextureCreate(VkCommandBuffer cmd_buffer, R_AssetInfo asset_info, String8 texture_path)
+VK_TextureCreate(VkCommandBuffer cmd_buffer, R_Handle handle, String8 texture_path)
 {
     VK_Context* vk_ctx = VK_CtxGet();
-    R_AssetItem<VK_Texture>* asset_store_texture = VK_AssetManagerTextureItemGet(asset_info.id);
+
+    R_AssetItem<VK_Texture>* asset_store_texture = VK_AssetManagerTextureItemGet(handle);
     VK_Texture* texture = &asset_store_texture->item;
 
     // Get texture
@@ -796,14 +690,12 @@ VK_CameraCleanup(VK_Context* vk_ctx)
 
 static VK_AssetManager*
 VK_AssetManagerCreate(VkDevice device, U32 queue_family_index, async::Threads* threads,
-                      U64 texture_map_size, U64 total_size_in_bytes)
+                      U64 total_size_in_bytes)
 {
     VK_Context* vk_ctx = VK_CtxGet();
     Arena* arena = ArenaAlloc();
     VK_AssetManager* asset_store = PushStruct(arena, VK_AssetManager);
     asset_store->arena = arena;
-    asset_store->texture_hashmap =
-        BufferAlloc<R_AssetItemList<VK_Texture>>(arena, texture_map_size);
     asset_store->total_size = total_size_in_bytes;
     asset_store->work_queue = threads->msg_queue;
     asset_store->threaded_cmd_pools =
@@ -853,7 +745,7 @@ VK_AssetCmdQueueItemEnqueue(U32 thread_id, VkCommandBuffer cmd, R_ThreadInput* t
 
     VK_CmdQueueItem item = {
         .thread_input = thread_input, .thread_id = thread_id, .cmd_buffer = cmd};
-    DEBUG_LOG("Asset ID: %llu - Cmd Getting Queued\n", thread_input->asset_info.info.id.id);
+    DEBUG_LOG("Asset ID: %llu - Cmd Getting Queued\n", thread_input->asset_info.handle.u64[0]);
     async::QueuePush(asset_manager->cmd_queue, &item);
 }
 
@@ -880,62 +772,41 @@ VK_AssetManagerExecuteCmds()
             VK_CHECK_RESULT(vkQueueSubmit(vk_ctx->graphics_queue, 1, &submit_info, item.fence));
 
             DEBUG_LOG("Asset ID: %llu - Submitted Command Buffer\n",
-                      item.thread_input->asset_info.info.id.id);
+                      item.thread_input->asset_info.handle.u64[0]);
             VK_AssetManagerCmdListAdd(asset_store->cmd_wait_list, item);
         }
     }
 }
 
-force_inline static U64
-VK_HashIndexFromAssetId(R_AssetId id, U64 hashmap_size)
+template <typename T>
+static R_AssetItem<T>*
+VK_AssetManagerItemGet(R_AssetItemList<T>* list, R_Handle handle)
 {
-    return id.id % hashmap_size;
-}
-
-force_inline static B32
-VK_AssetIdCmp(R_AssetId a, R_AssetId b)
-{
-    return a.id == b.id;
+    for (R_AssetItem<T>* item = list->first; item; item = item->next)
+    {
+        if (handle.u64[0] == (U64)item)
+        {
+            return item;
+        }
+    }
+    InvalidPath;
+    return 0;
 }
 
 static R_AssetItem<VK_Texture>*
-VK_AssetManagerTextureItemGet(R_AssetId asset_id)
-{
-    ScratchScope scratch = ScratchScope(0, 0);
-    VK_Context* vk_ctx = VK_CtxGet();
-    VK_AssetManager* asset_store = vk_ctx->asset_manager;
-
-    R_AssetItemList<VK_Texture>* texture_list =
-        &asset_store->texture_hashmap
-             .data[VK_HashIndexFromAssetId(asset_id, asset_store->texture_hashmap.size)];
-
-    return VK_AssetManagerItemGet(asset_store->arena, texture_list, &asset_store->texture_free_list,
-                                  asset_id);
-}
-
-static R_AssetItem<VK_AssetItemBuffer>*
-VK_AssetManagerBufferItemGet(R_AssetId asset_id)
+VK_AssetManagerTextureItemGet(R_Handle handle)
 {
     VK_Context* vk_ctx = VK_CtxGet();
-    VK_AssetManager* asset_store = vk_ctx->asset_manager;
-
-    return VK_AssetManagerItemGet(asset_store->arena, &asset_store->buffer_list,
-                                  &asset_store->buffer_free_list, asset_id);
+    VK_AssetManager* asset_manager = vk_ctx->asset_manager;
+    R_AssetItem<VK_Texture>* asset_item_texture =
+        VK_AssetManagerItemGet(&asset_manager->texture_list, handle);
+    return asset_item_texture;
 }
 
 template <typename T>
 static R_AssetItem<T>*
-VK_AssetManagerItemGet(Arena* arena, R_AssetItemList<T>* list, R_AssetItem<T>** free_list,
-                       R_AssetId id)
+VK_AssetManagerItemCreate(Arena* arena, R_AssetItemList<T>* list, R_AssetItem<T>** free_list)
 {
-    for (R_AssetItem<T>* buffer_result = list->first; buffer_result;
-         buffer_result = buffer_result->next)
-    {
-        if (VK_AssetIdCmp(buffer_result->id, id))
-        {
-            return buffer_result;
-        }
-    }
     R_AssetItem<T>* asset_item = {0};
     if (*free_list)
     {
@@ -945,7 +816,6 @@ VK_AssetManagerItemGet(Arena* arena, R_AssetItemList<T>* list, R_AssetItem<T>** 
     else
     {
         asset_item = PushStruct(arena, R_AssetItem<T>);
-        asset_item->id = id;
         SLLQueuePushFront(list->first, list->last, asset_item);
     }
     return asset_item;
@@ -953,11 +823,13 @@ VK_AssetManagerItemGet(Arena* arena, R_AssetItemList<T>* list, R_AssetItem<T>** 
 
 template <typename T>
 static void
-VK_AssetInfoBufferCmd(VkCommandBuffer cmd, R_AssetId id, Buffer<T> buffer)
+VK_AssetInfoBufferCmd(VkCommandBuffer cmd, R_Handle handle, Buffer<T> buffer)
 {
     VK_Context* vk_ctx = VK_CtxGet();
-    R_AssetItem<VK_AssetItemBuffer>* asset_item_buffer = VK_AssetManagerBufferItemGet(id);
-    VK_AssetItemBuffer* asset_buffer = &asset_item_buffer->item;
+    VK_AssetManager* asset_manager = vk_ctx->asset_manager;
+    R_AssetItem<VK_Buffer>* asset_item_buffer =
+        VK_AssetManagerItemGet(&asset_manager->buffer_list, handle);
+    VK_Buffer* asset_buffer = &asset_item_buffer->item;
 
     // ~mgj: copy to staging and record copy command
     U32 buffer_byte_size = buffer.size * sizeof(T);
@@ -978,43 +850,44 @@ static void
 VK_AssetManagerCmdDoneCheck()
 {
     VK_Context* vk_ctx = VK_CtxGet();
-    VK_AssetManager* asset_store = vk_ctx->asset_manager;
-    for (VK_CmdQueueItem* cmd_queue_item = asset_store->cmd_wait_list->list_first; cmd_queue_item;)
+    VK_AssetManager* asset_manager = vk_ctx->asset_manager;
+    for (VK_CmdQueueItem* cmd_queue_item = asset_manager->cmd_wait_list->list_first;
+         cmd_queue_item;)
     {
         VK_CmdQueueItem* next = cmd_queue_item->next;
         VkResult result = vkGetFenceStatus(vk_ctx->device, cmd_queue_item->fence);
         if (result == VK_SUCCESS)
         {
-            OS_MutexScope(asset_store->threaded_cmd_pools.data[cmd_queue_item->thread_id].mutex)
+            OS_MutexScope(asset_manager->threaded_cmd_pools.data[cmd_queue_item->thread_id].mutex)
             {
                 vkFreeCommandBuffers(
                     vk_ctx->device,
-                    asset_store->threaded_cmd_pools.data[cmd_queue_item->thread_id].cmd_pool, 1,
+                    asset_manager->threaded_cmd_pools.data[cmd_queue_item->thread_id].cmd_pool, 1,
                     &cmd_queue_item->cmd_buffer);
             }
 
             R_ThreadInput* thread_input = cmd_queue_item->thread_input;
 
             R_AssetLoadingInfo* asset_load_info = &thread_input->asset_info;
-            if (asset_load_info->info.type == R_AssetItemType_Texture)
+            if (asset_load_info->type == R_AssetItemType_Texture)
             {
                 R_AssetItem<VK_Texture>* asset =
-                    VK_AssetManagerTextureItemGet(asset_load_info->info.id);
+                    VK_AssetManagerTextureItemGet(asset_load_info->handle);
                 VK_BufferDestroy(vk_ctx->allocator, &asset->item.staging_buffer);
                 asset->is_loaded = 1;
             }
-            else if (asset_load_info->info.type == R_AssetItemType_Buffer)
+            else if (asset_load_info->type == R_AssetItemType_Buffer)
             {
-                R_AssetItem<VK_AssetItemBuffer>* asset =
-                    VK_AssetManagerBufferItemGet(asset_load_info->info.id);
+                R_AssetItem<VK_Buffer>* asset =
+                    VK_AssetManagerItemGet(&asset_manager->buffer_list, asset_load_info->handle);
                 VK_BufferDestroy(vk_ctx->allocator, &asset->item.staging_buffer);
                 asset->is_loaded = 1;
             }
-            Assert(asset_load_info->info.type != R_AssetItemType_Undefined);
-            DEBUG_LOG("Asset: %llu - Finished loading\n", asset_load_info->info.id.id);
+            Assert(asset_load_info->type != R_AssetItemType_Undefined);
+            DEBUG_LOG("Asset: %llu - Finished loading\n", asset_load_info->handle.u64[0]);
             vkDestroyFence(vk_ctx->device, cmd_queue_item->fence, 0);
             VK_ThreadInputDestroy(cmd_queue_item->thread_input);
-            VK_AssetManagerCmdListItemRemove(asset_store->cmd_wait_list, cmd_queue_item);
+            VK_AssetManagerCmdListItemRemove(asset_manager->cmd_wait_list, cmd_queue_item);
         }
         else if (result != VK_NOT_READY)
         {
@@ -1046,13 +919,6 @@ VK_BeginCommand(VkDevice device, VK_AssetManagerCommandPool threaded_cmd_pool)
     vkBeginCommandBuffer(commandBuffer, &beginInfo);
 
     return commandBuffer;
-}
-
-template <typename T>
-static B32
-IsAssetLoadedOrInProgress(R_AssetItem<T>* asset_item)
-{
-    return asset_item->is_loaded || asset_item->is_loading;
 }
 
 static VK_AssetManagerCmdList*
@@ -1098,10 +964,11 @@ VK_AssetManagerCmdListItemRemove(VK_AssetManagerCmdList* cmd_list, VK_CmdQueueIt
 }
 
 static void
-VK_AssetManagerBufferFree(R_AssetId asset_id)
+VK_AssetManagerBufferFree(R_Handle handle)
 {
     VK_Context* vk_ctx = VK_CtxGet();
-    R_AssetItem<VK_AssetItemBuffer>* item = VK_AssetManagerBufferItemGet(asset_id);
+    VK_AssetManager* asset_manager = vk_ctx->asset_manager;
+    R_AssetItem<VK_Buffer>* item = VK_AssetManagerItemGet(&asset_manager->buffer_list, handle);
     if (item->is_loaded)
     {
         VK_BufferDestroy(vk_ctx->allocator, &item->item.buffer_alloc);
@@ -1109,10 +976,11 @@ VK_AssetManagerBufferFree(R_AssetId asset_id)
     item->is_loaded = false;
 }
 static void
-VK_AssetManagerTextureFree(R_AssetId asset_id)
+VK_AssetManagerTextureFree(R_Handle handle)
 {
     VK_Context* vk_ctx = VK_CtxGet();
-    R_AssetItem<VK_Texture>* item = VK_AssetManagerTextureItemGet(asset_id);
+    VK_AssetManager* asset_manager = vk_ctx->asset_manager;
+    R_AssetItem<VK_Texture>* item = VK_AssetManagerItemGet(&asset_manager->texture_list, handle);
     if (item->is_loaded)
     {
         VK_TextureDestroy(vk_ctx, &item->item);
@@ -1182,16 +1050,16 @@ VK_Model3DInstanceBucketAdd(VK_BufferAllocation* vertex_buffer_allocation,
 }
 
 static void
-VK_Model3DDraw(R_AssetInfo* vertex_info, R_AssetInfo* index_info, R_AssetInfo* texture_info,
-               String8 texture_path, R_SamplerInfo* sampler_info, R_BufferInfo* vertex_buffer_info,
-               R_BufferInfo* index_buffer_info, B32 depth_test_per_draw_call_only,
-               U32 index_buffer_offset, U32 index_count)
+VK_Model3DDraw(R_Handle texture_handle, R_Handle vertex_buffer_handle, R_Handle index_buffer_handle,
+               B32 depth_test_per_draw_call_only, U32 index_buffer_offset, U32 index_count)
 {
-    R_AssetItem<VK_AssetItemBuffer>* asset_vertex_buffer =
-        VK_AssetManagerBufferItemGet(vertex_info->id);
-    R_AssetItem<VK_AssetItemBuffer>* asset_index_buffer =
-        VK_AssetManagerBufferItemGet(index_info->id);
-    R_AssetItem<VK_Texture>* asset_texture = VK_AssetManagerTextureItemGet(texture_info->id);
+    VK_Context* vk_ctx = VK_CtxGet();
+    VK_AssetManager* asset_manager = vk_ctx->asset_manager;
+    R_AssetItem<VK_Buffer>* asset_vertex_buffer =
+        VK_AssetManagerItemGet(&asset_manager->buffer_list, vertex_buffer_handle);
+    R_AssetItem<VK_Buffer>* asset_index_buffer =
+        VK_AssetManagerItemGet(&asset_manager->buffer_list, index_buffer_handle);
+    R_AssetItem<VK_Texture>* asset_texture = VK_AssetManagerTextureItemGet(texture_handle);
 
     if (asset_index_buffer->is_loaded && asset_index_buffer->is_loaded && asset_texture->is_loaded)
     {
@@ -1199,60 +1067,25 @@ VK_Model3DDraw(R_AssetInfo* vertex_info, R_AssetInfo* index_info, R_AssetInfo* t
                             &asset_index_buffer->item.buffer_alloc, asset_texture->item.desc_set,
                             depth_test_per_draw_call_only, index_buffer_offset, index_count);
     }
-    else if (!IsAssetLoadedOrInProgress(asset_vertex_buffer) ||
-             !IsAssetLoadedOrInProgress(asset_index_buffer) ||
-             !IsAssetLoadedOrInProgress(asset_texture))
-    {
-        if (!IsAssetLoadedOrInProgress(asset_vertex_buffer))
-        {
-            VK_AssetBufferLoad(vertex_info, vertex_buffer_info);
-        }
-        if (!IsAssetLoadedOrInProgress(asset_index_buffer))
-        {
-            VK_AssetBufferLoad(index_info, index_buffer_info);
-        }
-        if (!IsAssetLoadedOrInProgress(asset_texture))
-        {
-            VK_AssetTextureLoad(texture_info, sampler_info, texture_path, R_PipelineUsageType_3D);
-        }
-    }
 }
 
 static void
-VK_Model3DInstanceDraw(R_AssetInfo* vertex_info, R_AssetInfo* index_info, R_AssetInfo* texture_info,
-                       String8 texture_path, R_SamplerInfo* sampler_info,
-                       R_BufferInfo* vertex_buffer_info, R_BufferInfo* index_buffer_info,
-                       R_BufferInfo* instance_buffer)
+VK_Model3DInstanceDraw(R_Handle texture_handle, R_Handle vertex_buffer_handle,
+                       R_Handle index_buffer_handle, R_BufferInfo* instance_buffer)
 {
-    R_AssetItem<VK_AssetItemBuffer>* asset_vertex_buffer =
-        VK_AssetManagerBufferItemGet(vertex_info->id);
-    R_AssetItem<VK_AssetItemBuffer>* asset_index_buffer =
-        VK_AssetManagerBufferItemGet(index_info->id);
-    R_AssetItem<VK_Texture>* asset_texture = VK_AssetManagerTextureItemGet(texture_info->id);
+    VK_Context* vk_ctx = VK_CtxGet();
+    VK_AssetManager* asset_manager = vk_ctx->asset_manager;
+    R_AssetItem<VK_Buffer>* asset_vertex_buffer =
+        VK_AssetManagerItemGet(&asset_manager->buffer_list, vertex_buffer_handle);
+    R_AssetItem<VK_Buffer>* asset_index_buffer =
+        VK_AssetManagerItemGet(&asset_manager->buffer_list, index_buffer_handle);
+    R_AssetItem<VK_Texture>* asset_texture = VK_AssetManagerTextureItemGet(texture_handle);
 
     if (asset_index_buffer->is_loaded && asset_index_buffer->is_loaded && asset_texture->is_loaded)
     {
         VK_Model3DInstanceBucketAdd(&asset_vertex_buffer->item.buffer_alloc,
                                     &asset_index_buffer->item.buffer_alloc,
                                     asset_texture->item.desc_set, instance_buffer);
-    }
-    else if (!IsAssetLoadedOrInProgress(asset_vertex_buffer) ||
-             !IsAssetLoadedOrInProgress(asset_index_buffer) ||
-             !IsAssetLoadedOrInProgress(asset_texture))
-    {
-        if (!IsAssetLoadedOrInProgress(asset_vertex_buffer))
-        {
-            VK_AssetBufferLoad(vertex_info, vertex_buffer_info);
-        }
-        if (!IsAssetLoadedOrInProgress(asset_index_buffer))
-        {
-            VK_AssetBufferLoad(index_info, index_buffer_info);
-        }
-        if (!IsAssetLoadedOrInProgress(asset_texture))
-        {
-            VK_AssetTextureLoad(texture_info, sampler_info, texture_path,
-                                R_PipelineUsageType_3DInstanced);
-        }
     }
 }
 
@@ -1761,7 +1594,7 @@ R_RenderCtxCreate(String8 shader_path, IO* io_ctx, async::Threads* thread_pool)
 
     // TODO: change from 1 to much larger value
     vk_ctx->asset_manager = VK_AssetManagerCreate(
-        vk_ctx->device, vk_ctx->queue_family_indices.graphicsFamilyIndex, thread_pool, 1, GB(1));
+        vk_ctx->device, vk_ctx->queue_family_indices.graphicsFamilyIndex, thread_pool, GB(1));
 
     // ~mgj: Drawing (TODO: Move out of vulkan context to own module)
     vk_ctx->draw_frame_arena = ArenaAlloc();
@@ -1935,4 +1768,121 @@ R_LatestHoveredObjectIdGet()
 {
     VK_Context* vk_ctx = VK_CtxGet();
     return vk_ctx->hovered_object_id;
+}
+
+// ~mgj: Texture interface functions
+static R_Handle
+R_TextureLoad(R_SamplerInfo* sampler_info, String8 texture_path,
+              R_PipelineUsageType pipeline_usage_type)
+{
+    VK_Context* vk_ctx = VK_CtxGet();
+    VK_AssetManager* asset_manager = vk_ctx->asset_manager;
+
+    // ~mgj: Create sampler
+    VkSamplerCreateInfo sampler_create_info = {};
+    VK_SamplerCreateInfoFromSamplerInfo(sampler_info, &sampler_create_info);
+    sampler_create_info.anisotropyEnable = VK_TRUE;
+    sampler_create_info.maxAnisotropy = (F32)vk_ctx->msaa_samples;
+    VkSampler vk_sampler = VK_SamplerCreate(vk_ctx->device, &sampler_create_info);
+
+    // Get texture dimensions
+    ktxTexture2* ktx_texture;
+    ktx_error_code_e ktxresult = ktxTexture2_CreateFromNamedFile(
+        (char*)texture_path.str, KTX_TEXTURE_CREATE_NO_STORAGE, &ktx_texture);
+    Assert(ktxresult == KTX_SUCCESS);
+
+    // ~mgj: Create Image and Image View
+    VmaAllocationCreateInfo vma_info = {.usage = VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE};
+    VK_ImageAllocation image_alloc = VK_ImageAllocationCreate(
+        vk_ctx->allocator, ktx_texture->baseWidth, ktx_texture->baseHeight, VK_SAMPLE_COUNT_1_BIT,
+        VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_TILING_OPTIMAL,
+        VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT |
+            VK_IMAGE_USAGE_SAMPLED_BIT,
+        ktx_texture->numLevels, vma_info);
+
+    VK_ImageViewResource image_view_resource =
+        VK_ImageViewResourceCreate(vk_ctx->device, image_alloc.image, VK_FORMAT_R8G8B8A8_SRGB,
+                                   VK_IMAGE_ASPECT_COLOR_BIT, ktx_texture->numLevels);
+
+    // ~mgj: Choose Descriptor Set Layout and Create Descriptor Set
+    VkDescriptorSetLayout desc_set_layout = NULL;
+    switch (pipeline_usage_type)
+    {
+        case R_PipelineUsageType_3D:
+            desc_set_layout = vk_ctx->model_3D_pipeline.descriptor_set_layout;
+            break;
+        case R_PipelineUsageType_3DInstanced:
+            desc_set_layout = vk_ctx->model_3D_pipeline.descriptor_set_layout;
+            break;
+        default: InvalidPath;
+    }
+    VkDescriptorSet desc_set =
+        VK_DescriptorSetCreate(vk_ctx->arena, vk_ctx->device, vk_ctx->descriptor_pool,
+                               desc_set_layout, image_view_resource.image_view, vk_sampler);
+
+    // ~mgj: Assign values to texture
+    R_AssetItem<VK_Texture>* asset_item = VK_AssetManagerItemCreate(
+        asset_manager->arena, &asset_manager->texture_list, &asset_manager->texture_free_list);
+    VK_Texture* texture = &asset_item->item;
+    texture->image_resource = {.image_alloc = image_alloc,
+                               .image_view_resource = image_view_resource};
+    texture->desc_set = desc_set;
+    texture->sampler = vk_sampler;
+    R_Handle texture_handle = {.u64 = (U64)asset_item};
+
+    // ~mgj: make input ready for texture loading on thread
+    R_ThreadInput* thread_input = VK_ThreadInputCreate();
+    R_AssetLoadingInfo* asset_load_info = &thread_input->asset_info;
+    asset_load_info->handle = texture_handle;
+    asset_load_info->type = R_AssetItemType_Texture;
+    R_TextureLoadingInfo* texture_load_info = &asset_load_info->extra_info.texture_info;
+    texture_load_info->texture_path = PushStr8Copy(thread_input->arena, texture_path);
+
+    async::QueueItem queue_input = {.data = thread_input, .worker_func = VK_ThreadSetup};
+    async::QueuePush(asset_manager->work_queue, &queue_input);
+
+    return texture_handle;
+}
+
+static R_Handle
+R_BufferLoad(R_BufferInfo* buffer_info)
+{
+    VK_Context* vk_ctx = VK_CtxGet();
+    VK_AssetManager* asset_manager = vk_ctx->asset_manager;
+    R_AssetItem<VK_Buffer>* asset_item = VK_AssetManagerItemCreate(
+        asset_manager->arena, &asset_manager->buffer_list, &asset_manager->buffer_free_list);
+
+    // ~mgj: Create buffer allocation
+    VmaAllocationCreateInfo vma_info = {0};
+    vma_info.usage = VMA_MEMORY_USAGE_AUTO;
+    vma_info.requiredFlags = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
+    VkBufferUsageFlags usage_flags = NULL;
+    switch (buffer_info->buffer_type)
+    {
+        case R_BufferType_Vertex: usage_flags = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT; break;
+        case R_BufferType_Index: usage_flags = VK_BUFFER_USAGE_INDEX_BUFFER_BIT; break;
+        default: InvalidPath;
+    }
+    VK_BufferAllocation buffer =
+        VK_BufferAllocationCreate(vk_ctx->allocator, buffer_info->buffer.size,
+                                  usage_flags | VK_BUFFER_USAGE_TRANSFER_DST_BIT, vma_info);
+
+    // ~mgj: Prepare Texture
+    VK_Buffer* asset_buffer = &asset_item->item;
+    asset_buffer->buffer_alloc = buffer;
+    R_Handle buffer_handle = {.u64 = (U64)asset_item};
+
+    // ~mgj: Preparing buffer loading for another thread
+    R_ThreadInput* thread_input = VK_ThreadInputCreate();
+    R_AssetLoadingInfo* asset_load_info = &thread_input->asset_info;
+    asset_load_info->handle = buffer_handle;
+    asset_load_info->type = R_AssetItemType_Buffer;
+    R_BufferInfo* buffer_load_info = &asset_load_info->extra_info.buffer_info;
+    *buffer_load_info = *buffer_info;
+
+    async::QueueItem queue_input = {.data = thread_input, .worker_func = VK_ThreadSetup};
+    async::QueuePush(asset_manager->work_queue, &queue_input);
+
+    R_Handle handle = {.u64 = (U64)asset_item};
+    return handle;
 }

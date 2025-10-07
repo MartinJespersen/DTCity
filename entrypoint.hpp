@@ -2,8 +2,9 @@
 
 #include "base/base_inc.hpp"
 
-// third party libs#define GLM_FORCE_RADIANS
+// third party libs
 DISABLE_WARNINGS_PUSH
+#define GLM_FORCE_RADIANS
 #define GLM_FORCE_DEPTH_ZERO_TO_ONE
 #define GLM_FORCE_DEFAULT_ALIGNED_GENTYPES
 #include "glm/glm.hpp"
