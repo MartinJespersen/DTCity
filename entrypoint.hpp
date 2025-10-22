@@ -20,7 +20,6 @@ DISABLE_WARNINGS_POP
 #include "lib_wrappers/lib_wrappers_inc.hpp"
 #include "imgui/imgui_inc.hpp"
 #include "city/city_inc.hpp"
-#include "simulator/simulator_inc.hpp"
 
 struct Context
 {

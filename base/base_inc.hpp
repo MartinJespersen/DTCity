@@ -13,8 +13,6 @@
 #include "base_profile.hpp"
 #include "base_arena.h"
 #include "base_math.h"
-#include "base_math.hpp"
-
 #include "base_random.hpp"
 #include "base_strings.hpp"
 #include "base_thread_context.h"
