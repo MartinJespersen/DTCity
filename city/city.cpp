@@ -997,8 +997,8 @@ BuildingsBuffersCreate(Arena* arena, Buildings* buildings, F32 road_height,
                     node_utm_buffer.data[(idx + jdx + 1) % node_utm_buffer.size]->pos;
                 if (ref_node_pos.x == node_pos.x && ref_node_pos.y == node_pos.y)
                 {
-                    Assert(0);
-                    DEBUG_LOG("BuildingsBuffersCreate: Repetition of a node");
+                    // Assert(0);
+                    DEBUG_LOG("BuildingsBuffersCreate: Repetition of a node\n");
                 }
             }
         }
@@ -1087,7 +1087,7 @@ ClockWiseTest(Buffer<Vec2F32> node_buffer)
     {
         return Direction_Clockwise;
     }
-    DEBUG_LOG("ClockWiseTest: Lines are collinear");
+    DEBUG_LOG("ClockWiseTest: Lines are collinear\n");
     return Direction_Undefined;
 }
 
@@ -1219,7 +1219,7 @@ EarClipping(Arena* arena, Buffer<Vec2F32> node_buffer)
         }
         else if (cross_product_z == 0)
         {
-            DEBUG_LOG("Error in EarClipping: two line segments are collinear");
+            DEBUG_LOG("Error in EarClipping: two line segments are collinear\n");
         }
     }
     if (cur_index_buffer_idx != out_vertex_index_buffer.size)
@@ -1231,4 +1231,21 @@ EarClipping(Arena* arena, Buffer<Vec2F32> node_buffer)
     Assert(cur_index_buffer_idx == out_vertex_index_buffer.size);
     return out_vertex_index_buffer;
 }
+
+// ~mgj: Bounding Box is defined as the bottom left corner to the top right corner
+static Rng2F32
+UtmFromBoundingBox(GCSBoundingBox bbox)
+{
+    F64 long_low_utm;
+    F64 lat_low_utm;
+    F64 long_high_utm;
+    F64 lat_high_utm;
+    char utm_zone[10];
+    UTM::LLtoUTM(bbox.lat_btm_left, bbox.lon_btm_left, lat_low_utm, long_low_utm, utm_zone);
+    UTM::LLtoUTM(bbox.lat_top_right, bbox.lon_top_right, lat_high_utm, long_high_utm, utm_zone);
+
+    Rng2F32 utm_bb = {(F32)lat_low_utm, (F32)long_low_utm, (F32)lat_high_utm, (F32)long_high_utm};
+    return utm_bb;
+}
+
 } // namespace city

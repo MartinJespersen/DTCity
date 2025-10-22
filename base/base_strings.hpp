@@ -255,7 +255,7 @@ str8_ends_with(String8 string, String8 end, StringMatchFlags flags);
 //~ rjf: String Slicing
 
 static String8
-str8_substr(String8 str, Rng1U64 range);
+Str8Substr(String8 str, Rng1U64 range);
 static String8
 Str8Prefix(String8 str, U64 size);
 static String8
@@ -321,7 +321,7 @@ str8_from_s64(Arena* arena, S64 s64, U32 radix, U8 min_digits, U8 digit_group_se
 //~ rjf: String <=> Float Conversions
 
 static F64
-f64_from_str8(String8 string);
+F64FromStr8(String8 string);
 
 ////////////////////////////////
 //~ rjf: String List Construction Functions

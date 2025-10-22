@@ -408,7 +408,7 @@ str8_find_needle_reverse(String8 string, U64 start_pos, String8 needle, StringMa
     U64 result = 0;
     for (S64 i = string.size - start_pos - needle.size; i >= 0; --i)
     {
-        String8 haystack = str8_substr(string, rng_1u64(i, i + needle.size));
+        String8 haystack = Str8Substr(string, rng_1u64(i, i + needle.size));
         if (Str8Match(haystack, needle, flags))
         {
             result = (U64)i + needle.size;
@@ -430,7 +430,7 @@ str8_ends_with(String8 string, String8 end, StringMatchFlags flags)
 //~ rjf: String Slicing
 
 static String8
-str8_substr(String8 str, Rng1U64 range)
+Str8Substr(String8 str, Rng1U64 range)
 {
     range.min = ClampTop(range.min, str.size);
     range.max = ClampTop(range.max, str.size);
@@ -830,36 +830,35 @@ str8_from_u64(Arena* arena, U64 u64, U32 radix, U8 min_digits, U8 digit_group_se
         String8 prefix = {0};
         switch (radix)
         {
-        case 16:
-        {
-            prefix = Str8Lit("0x");
-        }
-        break;
-        case 8:
-        {
-            prefix = Str8Lit("0o");
-        }
-        break;
-        case 2:
-        {
-            prefix = Str8Lit("0b");
-        }
-        break;
+            case 16:
+            {
+                prefix = Str8Lit("0x");
+            }
+            break;
+            case 8:
+            {
+                prefix = Str8Lit("0o");
+            }
+            break;
+            case 2:
+            {
+                prefix = Str8Lit("0b");
+            }
+            break;
         }
 
         // rjf: determine # of chars between separators
         U8 digit_group_size = 3;
         switch (radix)
         {
-        default:
+            default: break;
+            case 2:
+            case 8:
+            case 16:
+            {
+                digit_group_size = 4;
+            }
             break;
-        case 2:
-        case 8:
-        case 16:
-        {
-            digit_group_size = 4;
-        }
-        break;
         }
 
         // rjf: prep
@@ -956,7 +955,7 @@ str8_from_s64(Arena* arena, S64 s64, U32 radix, U8 min_digits, U8 digit_group_se
 //~ rjf: String <=> Float Conversions
 
 static F64
-f64_from_str8(String8 string)
+F64FromStr8(String8 string)
 {
     // TODO(rjf): crappy implementation for now that just uses atof.
     F64 result = 0;
@@ -1503,23 +1502,23 @@ str8_path_list_join_by_style(Arena* arena, String8List* path, PathStyle style)
     StringJoin params = {0};
     switch (style)
     {
-    case PathStyle_Null:
-    {
-    }
-    break;
-    case PathStyle_Relative:
-    case PathStyle_WindowsAbsolute:
-    {
-        params.sep = Str8Lit("/");
-    }
-    break;
+        case PathStyle_Null:
+        {
+        }
+        break;
+        case PathStyle_Relative:
+        case PathStyle_WindowsAbsolute:
+        {
+            params.sep = Str8Lit("/");
+        }
+        break;
 
-    case PathStyle_UnixAbsolute:
-    {
-        params.pre = Str8Lit("/");
-        params.sep = Str8Lit("/");
-    }
-    break;
+        case PathStyle_UnixAbsolute:
+        {
+            params.pre = Str8Lit("/");
+            params.sep = Str8Lit("/");
+        }
+        break;
     }
     String8 result = Str8ListJoin(arena, path, &params);
     return result;
@@ -1598,56 +1597,56 @@ utf8_decode(U8* str, U64 max)
     U8 byte_class = utf8_class[byte >> 3];
     switch (byte_class)
     {
-    case 1:
-    {
-        result.codepoint = byte;
-    }
-    break;
-    case 2:
-    {
-        if (2 < max)
+        case 1:
         {
-            U8 cont_byte = str[1];
-            if (utf8_class[cont_byte >> 3] == 0)
+            result.codepoint = byte;
+        }
+        break;
+        case 2:
+        {
+            if (2 < max)
             {
-                result.codepoint = (byte & bitmask5) << 6;
-                result.codepoint |= (cont_byte & bitmask6);
-                result.inc = 2;
+                U8 cont_byte = str[1];
+                if (utf8_class[cont_byte >> 3] == 0)
+                {
+                    result.codepoint = (byte & bitmask5) << 6;
+                    result.codepoint |= (cont_byte & bitmask6);
+                    result.inc = 2;
+                }
             }
         }
-    }
-    break;
-    case 3:
-    {
-        if (2 < max)
+        break;
+        case 3:
         {
-            U8 cont_byte[2] = {str[1], str[2]};
-            if (utf8_class[cont_byte[0] >> 3] == 0 && utf8_class[cont_byte[1] >> 3] == 0)
+            if (2 < max)
             {
-                result.codepoint = (byte & bitmask4) << 12;
-                result.codepoint |= ((cont_byte[0] & bitmask6) << 6);
-                result.codepoint |= (cont_byte[1] & bitmask6);
-                result.inc = 3;
+                U8 cont_byte[2] = {str[1], str[2]};
+                if (utf8_class[cont_byte[0] >> 3] == 0 && utf8_class[cont_byte[1] >> 3] == 0)
+                {
+                    result.codepoint = (byte & bitmask4) << 12;
+                    result.codepoint |= ((cont_byte[0] & bitmask6) << 6);
+                    result.codepoint |= (cont_byte[1] & bitmask6);
+                    result.inc = 3;
+                }
             }
         }
-    }
-    break;
-    case 4:
-    {
-        if (3 < max)
+        break;
+        case 4:
         {
-            U8 cont_byte[3] = {str[1], str[2], str[3]};
-            if (utf8_class[cont_byte[0] >> 3] == 0 && utf8_class[cont_byte[1] >> 3] == 0 &&
-                utf8_class[cont_byte[2] >> 3] == 0)
+            if (3 < max)
             {
-                result.codepoint = (byte & bitmask3) << 18;
-                result.codepoint |= ((cont_byte[0] & bitmask6) << 12);
-                result.codepoint |= ((cont_byte[1] & bitmask6) << 6);
-                result.codepoint |= (cont_byte[2] & bitmask6);
-                result.inc = 4;
+                U8 cont_byte[3] = {str[1], str[2], str[3]};
+                if (utf8_class[cont_byte[0] >> 3] == 0 && utf8_class[cont_byte[1] >> 3] == 0 &&
+                    utf8_class[cont_byte[2] >> 3] == 0)
+                {
+                    result.codepoint = (byte & bitmask3) << 18;
+                    result.codepoint |= ((cont_byte[0] & bitmask6) << 12);
+                    result.codepoint |= ((cont_byte[1] & bitmask6) << 6);
+                    result.codepoint |= (cont_byte[2] & bitmask6);
+                    result.inc = 4;
+                }
             }
         }
-    }
     }
     return (result);
 }
@@ -2099,44 +2098,45 @@ indented_from_string(Arena* arena, String8 string)
         U8 byte = off < string.size ? string.str[off] : 0;
         switch (byte)
         {
-        default:
-        {
-        }
-        break;
-        case '{':
-        case '[':
-        case '(':
-        {
-            next_depth += 1;
-            next_depth = Max(0, next_depth);
-        }
-        break;
-        case '}':
-        case ']':
-        case ')':
-        {
-            next_depth -= 1;
-            next_depth = Max(0, next_depth);
-            depth = next_depth;
-        }
-        break;
-        case '\n':
-        case 0:
-        {
-            String8 line = Str8SkipChopWhitespace(str8_substr(string, r1u64(line_begin_off, off)));
-            if (line.size != 0)
+            default:
             {
-                Str8ListPushF(scratch.arena, &indented_strings, "%.*s%s\n", (int)depth * 2,
-                              indentation_bytes, (char*)line.str);
             }
-            if (line.size == 0 && indented_strings.node_count != 0 && off < string.size)
+            break;
+            case '{':
+            case '[':
+            case '(':
             {
-                Str8ListPushF(scratch.arena, &indented_strings, "\n");
+                next_depth += 1;
+                next_depth = Max(0, next_depth);
             }
-            line_begin_off = off + 1;
-            depth = next_depth;
-        }
-        break;
+            break;
+            case '}':
+            case ']':
+            case ')':
+            {
+                next_depth -= 1;
+                next_depth = Max(0, next_depth);
+                depth = next_depth;
+            }
+            break;
+            case '\n':
+            case 0:
+            {
+                String8 line =
+                    Str8SkipChopWhitespace(Str8Substr(string, r1u64(line_begin_off, off)));
+                if (line.size != 0)
+                {
+                    Str8ListPushF(scratch.arena, &indented_strings, "%.*s%s\n", (int)depth * 2,
+                                  indentation_bytes, (char*)line.str);
+                }
+                if (line.size == 0 && indented_strings.node_count != 0 && off < string.size)
+                {
+                    Str8ListPushF(scratch.arena, &indented_strings, "\n");
+                }
+                line_begin_off = off + 1;
+                depth = next_depth;
+            }
+            break;
         }
     }
     String8 result = Str8ListJoin(arena, &indented_strings, 0);
@@ -2160,64 +2160,64 @@ escaped_from_raw_str8(Arena* arena, String8 string)
         String8 separator_replace = {0};
         switch (byte)
         {
-        default:
-        {
-            split = 0;
-        }
-        break;
-        case 0:
-        {
-        }
-        break;
-        case '\a':
-        {
-            separator_replace = Str8Lit("\\a");
-        }
-        break;
-        case '\b':
-        {
-            separator_replace = Str8Lit("\\b");
-        }
-        break;
-        case '\f':
-        {
-            separator_replace = Str8Lit("\\f");
-        }
-        break;
-        case '\n':
-        {
-            separator_replace = Str8Lit("\\n");
-        }
-        break;
-        case '\r':
-        {
-            separator_replace = Str8Lit("\\r");
-        }
-        break;
-        case '\t':
-        {
-            separator_replace = Str8Lit("\\t");
-        }
-        break;
-        case '\v':
-        {
-            separator_replace = Str8Lit("\\v");
-        }
-        break;
-        case '\\':
-        {
-            separator_replace = Str8Lit("\\\\");
-        }
-        break;
-        case '"':
-        {
-            separator_replace = Str8Lit("\\\"");
-        }
-        break;
+            default:
+            {
+                split = 0;
+            }
+            break;
+            case 0:
+            {
+            }
+            break;
+            case '\a':
+            {
+                separator_replace = Str8Lit("\\a");
+            }
+            break;
+            case '\b':
+            {
+                separator_replace = Str8Lit("\\b");
+            }
+            break;
+            case '\f':
+            {
+                separator_replace = Str8Lit("\\f");
+            }
+            break;
+            case '\n':
+            {
+                separator_replace = Str8Lit("\\n");
+            }
+            break;
+            case '\r':
+            {
+                separator_replace = Str8Lit("\\r");
+            }
+            break;
+            case '\t':
+            {
+                separator_replace = Str8Lit("\\t");
+            }
+            break;
+            case '\v':
+            {
+                separator_replace = Str8Lit("\\v");
+            }
+            break;
+            case '\\':
+            {
+                separator_replace = Str8Lit("\\\\");
+            }
+            break;
+            case '"':
+            {
+                separator_replace = Str8Lit("\\\"");
+            }
+            break;
         }
         if (split)
         {
-            String8 substr = str8_substr(string, r1u64(start_split_idx, idx));
+            String8 substr = Str8Substr(string, r1u64(start_split_idx, idx));
             start_split_idx = idx + 1;
             Str8ListPush(scratch.arena, &parts, substr);
             if (separator_replace.size != 0)
@@ -2242,7 +2242,7 @@ raw_from_escaped_str8(Arena* arena, String8 string)
     {
         if (idx == string.size || string.str[idx] == '\\' || string.str[idx] == '\r')
         {
-            String8 str = str8_substr(string, r1u64(start, idx));
+            String8 str = Str8Substr(string, r1u64(start, idx));
             if (str.size != 0)
             {
                 Str8ListPush(scratch.arena, &strs, str);
@@ -2255,46 +2255,22 @@ raw_from_escaped_str8(Arena* arena, String8 string)
             U8 replace_byte = 0;
             switch (next_char)
             {
-            default:
-            {
-            }
-            break;
-            case 'a':
-                replace_byte = 0x07;
+                default:
+                {
+                }
                 break;
-            case 'b':
-                replace_byte = 0x08;
-                break;
-            case 'e':
-                replace_byte = 0x1b;
-                break;
-            case 'f':
-                replace_byte = 0x0c;
-                break;
-            case 'n':
-                replace_byte = 0x0a;
-                break;
-            case 'r':
-                replace_byte = 0x0d;
-                break;
-            case 't':
-                replace_byte = 0x09;
-                break;
-            case 'v':
-                replace_byte = 0x0b;
-                break;
-            case '\\':
-                replace_byte = '\\';
-                break;
-            case '\'':
-                replace_byte = '\'';
-                break;
-            case '"':
-                replace_byte = '"';
-                break;
-            case '?':
-                replace_byte = '?';
-                break;
+                case 'a': replace_byte = 0x07; break;
+                case 'b': replace_byte = 0x08; break;
+                case 'e': replace_byte = 0x1b; break;
+                case 'f': replace_byte = 0x0c; break;
+                case 'n': replace_byte = 0x0a; break;
+                case 'r': replace_byte = 0x0d; break;
+                case 't': replace_byte = 0x09; break;
+                case 'v': replace_byte = 0x0b; break;
+                case '\\': replace_byte = '\\'; break;
+                case '\'': replace_byte = '\''; break;
+                case '"': replace_byte = '"'; break;
+                case '?': replace_byte = '?'; break;
             }
             String8 replace_string = PushStr8Copy(scratch.arena, Str8(&replace_byte, 1));
             Str8ListPush(scratch.arena, &strs, replace_string);
@@ -2333,7 +2309,7 @@ wrapped_lines_from_string(Arena* arena, String8 string, U64 first_line_max_width
             {
                 candidate_line_range.max += 1;
             }
-            String8 substr = str8_substr(string, candidate_line_range);
+            String8 substr = Str8Substr(string, candidate_line_range);
             Str8ListPush(arena, &list, substr);
             line_range = r1u64(idx + 1, idx + 1);
         }
@@ -2341,7 +2317,7 @@ wrapped_lines_from_string(Arena* arena, String8 string, U64 first_line_max_width
         {
             Rng1U64 candidate_line_range = line_range;
             candidate_line_range.max = idx;
-            String8 substr = str8_substr(string, candidate_line_range);
+            String8 substr = Str8Substr(string, candidate_line_range);
             U64 width_this_line = max_width - wrapped_indent_level;
             if (list.node_count == 0)
             {
@@ -2349,7 +2325,7 @@ wrapped_lines_from_string(Arena* arena, String8 string, U64 first_line_max_width
             }
             if (substr.size > width_this_line)
             {
-                String8 line = str8_substr(string, line_range);
+                String8 line = Str8Substr(string, line_range);
                 if (wrapped_indent_level > 0)
                 {
                     line = push_str8f(arena, "%.*s%s", wrapped_indent_level, spaces, line.str);
@@ -2366,7 +2342,7 @@ wrapped_lines_from_string(Arena* arena, String8 string, U64 first_line_max_width
     }
     if (line_range.min < string.size && line_range.max > line_range.min)
     {
-        String8 line = str8_substr(string, line_range);
+        String8 line = Str8Substr(string, line_range);
         if (wrapped_indent_level > 0)
         {
             line = push_str8f(arena, "%.*s%s", wrapped_indent_level, spaces, line.str);
@@ -2710,7 +2686,7 @@ static U64
 str8_deserial_read_block(String8 string, U64 off, U64 size, String8* block_out)
 {
     Rng1U64 range = rng_1u64(off, off + size);
-    *block_out = str8_substr(string, range);
+    *block_out = Str8Substr(string, range);
     return block_out->size;
 }
 

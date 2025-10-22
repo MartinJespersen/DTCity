@@ -295,4 +295,7 @@ BuildingsBuffersCreate(Arena* arena, Buildings* buildings, F32 road_height,
                        BuildingRenderInfo* out_render_info);
 static Buffer<U32>
 EarClipping(Arena* arena, Buffer<Vec2F32> node_buffer);
+
+static Rng2F32
+UtmFromBoundingBox(GCSBoundingBox bbox);
 } // namespace city
