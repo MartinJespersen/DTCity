@@ -86,11 +86,14 @@ MainLoop(void* ptr)
     Context* ctx = (Context*)ptr;
     IO* io_ctx = ctx->io;
     OS_SetThreadName(Str8CString("Entrypoint thread"));
-    city::GCSBoundingBox gcs_bbox = {.lat_btm_left = 56.16923976826141,
-                                     .lon_btm_left = 10.1852768812041,
-                                     .lat_top_right = 56.17371342689877,
-                                     .lon_top_right = 10.198376789774187};
+    city::GCSBoundingBox gcs_bbox = {.lat_btm_left = 52.230591,
+                                     .lon_btm_left = 12.977295,
+                                     .lat_top_right = 52.239577,
+                                     .lon_top_right = 12.991955};
 
+    Rng2F32 utm_bb_coords = city::UtmFromBoundingBox(gcs_bbox);
+    printf("UTM: %f %f %f %f\n", utm_bb_coords.min.x, utm_bb_coords.min.y, utm_bb_coords.max.x,
+           utm_bb_coords.max.y);
     R_RenderCtxCreate(ctx->shader_path, io_ctx, ctx->thread_pool);
     VK_Context* vk_ctx = VK_CtxGet();
     ImguiSetup(vk_ctx, io_ctx);
@@ -115,12 +118,13 @@ MainLoop(void* ptr)
 
     while (ctx->running)
     {
+        UpdateTime(ctx->time);
+
         IO_NewFrame(io_ctx);
         R_NewFrame();
         ImGui::NewFrame();
         Vec2U32 framebuffer_dim = {.x = (U32)io_ctx->framebuffer_width,
                                    .y = (U32)io_ctx->framebuffer_height};
-        UpdateTime(ctx->time);
 
         bool open = true;
         ImGui::Begin("Test Window", &open, ImGuiWindowFlags_AlwaysAutoResize);
