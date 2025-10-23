@@ -167,7 +167,7 @@ UniqueNodeAndWayInsert(Arena* arena, U64 node_id, Way* road_way, Buffer<NodeUtmS
         node_inserted = 1;
     }
 
-    WayListElement* road_way_element = PushStruct(arena, WayListElement);
+    WayNode* road_way_element = PushStruct(arena, WayNode);
     road_way_element->road_way = road_way;
 
     SLLQueuePush(node->way_queue.first, node->way_queue.last, road_way_element);
@@ -637,7 +637,7 @@ RoadIntersectionPointsFind(Road* road, RoadSegment* in_out_segment, Way* current
             Dist2F32(btm_of_road_line_segment.p0, btm_of_road_line_segment.p1);
         Vec2F32 shortest_distance_pt_btm = road_cross_section->btm;
 
-        for (WayListElement* road_way_list = node->way_queue.first; road_way_list;
+        for (WayNode* road_way_list = node->way_queue.first; road_way_list;
              road_way_list = road_way_list->next)
         {
             Way* way = road_way_list->road_way;
@@ -799,12 +799,11 @@ NeighbourNodeChoose(NodeUtm* node, Road* road)
 {
     // Calculate roadway count for the node
     U32 roadway_count = 0;
-    for (WayListElement* way_element = node->way_queue.first; way_element;
-         way_element = way_element->next)
+    for (WayNode* way_element = node->way_queue.first; way_element; way_element = way_element->next)
     {
         roadway_count++;
     }
-    WayListElement* way_element = node->way_queue.first;
+    WayNode* way_element = node->way_queue.first;
 
     // Find random roadway
     U32 rand_num = RandomU32();

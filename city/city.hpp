@@ -55,16 +55,16 @@ struct Way
     Buffer<Tag> tags;
 };
 
-struct WayListElement
+struct WayNode
 {
-    WayListElement* next;
+    WayNode* next;
     Way* road_way;
 };
 
 struct WayQueue
 {
-    WayListElement* first;
-    WayListElement* last;
+    WayNode* first;
+    WayNode* last;
 };
 
 struct NodeUtm
@@ -77,7 +77,6 @@ struct NodeUtm
         glm::vec2 vec;
     };
     String8 utm_zone;
-
     WayQueue way_queue; // Linked list of RoadWays sharing this node
 };
 
@@ -85,11 +84,6 @@ struct NodeUtmSlot
 {
     NodeUtm* first;
     NodeUtm* last;
-};
-
-struct WayBuilding
-{
-    Buffer<Way> way_buffer;
 };
 
 struct NodeWays
