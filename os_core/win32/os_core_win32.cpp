@@ -1915,8 +1915,8 @@ w32_entry_point_caller(int argc, WCHAR** wargv)
     //- rjf: set up entity storage InitializeCriticalSection(&os_w32_state.entity_mutex);
     os_w32_state.entity_arena = ArenaAlloc();
     InitializeCriticalSection(&os_w32_state.entity_mutex);
-    //- rjf: call into "real" entry point
-    // main_thread_base_entry_point(argc, argv);
+
+    App(argc, argv);
 }
 
 #if BUILD_CONSOLE_INTERFACE
@@ -1924,7 +1924,6 @@ int
 wmain(int argc, WCHAR** argv)
 {
     w32_entry_point_caller(argc, argv);
-    App();
     return 0;
 }
 #else
@@ -1932,8 +1931,6 @@ int
 wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPWSTR lpCmdLine, int nShowCmd)
 {
     w32_entry_point_caller(__argc, __wargv);
-
-    App();
     return 0;
 }
 #endif

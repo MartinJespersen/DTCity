@@ -15,10 +15,10 @@ UpdateTime(DT_Time* time)
 }
 
 static OS_Handle
-Entrypoint(Context* ctx)
+Entrypoint(Context* ctx, G_Input* input)
 {
     ctx->running = 1;
-    return OS_ThreadLaunch(MainLoop, ctx, NULL);
+    return OS_ThreadLaunch(MainLoop, input, NULL);
 }
 
 static void
@@ -83,16 +83,13 @@ ImguiSetup(VK_Context* vk_ctx, IO* io_ctx)
 static void
 MainLoop(void* ptr)
 {
-    Context* ctx = (Context*)ptr;
+    G_Input* input = (G_Input*)ptr;
+
+    Context* ctx = GlobalContextGet();
     IO* io_ctx = ctx->io;
     OS_SetThreadName(Str8CString("Entrypoint thread"));
 
-    city::GCSBoundingBox gcs_bbox = {.lat_btm_left = 55.704686,
-                                     .lon_btm_left = 9.213970,
-                                     .lat_top_right = 55.713671,
-                                     .lon_top_right = 9.22868};
-
-    Rng2F32 utm_bb_coords = city::UtmFromBoundingBox(gcs_bbox);
+    Rng2F32 utm_bb_coords = city::UtmFromBoundingBox(input->bbox);
     printf("UTM: %f %f %f %f\n", utm_bb_coords.min.x, utm_bb_coords.min.y, utm_bb_coords.max.x,
            utm_bb_coords.max.y);
     R_RenderCtxCreate(ctx->shader_path, io_ctx, ctx->thread_pool);
@@ -107,12 +104,12 @@ MainLoop(void* ptr)
         .address_mode_v = R_SamplerAddressMode_Repeat,
     };
 
-    ctx->road = city::RoadCreate(ctx->texture_path, ctx->cache_path, &gcs_bbox, &sampler_info);
+    ctx->road = city::RoadCreate(ctx->texture_path, ctx->cache_path, &input->bbox, &sampler_info);
     city::Road* road = ctx->road;
 
     CameraInit(ctx->camera);
     ctx->buildings = city::BuildingsCreate(ctx->cache_path, ctx->texture_path,
-                                           ctx->road->road_height, &gcs_bbox, &sampler_info);
+                                           ctx->road->road_height, &input->bbox, &sampler_info);
     city::Buildings* buildings = ctx->buildings;
     ctx->car_sim = city::CarSimCreate(ctx->asset_path, ctx->texture_path, 100, ctx->road);
     city::CarSim* car_sim = ctx->car_sim;

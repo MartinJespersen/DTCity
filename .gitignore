@@ -15,3 +15,4 @@ build
 .clangd
 .raddbg
 compile_commands.json
+cache/**

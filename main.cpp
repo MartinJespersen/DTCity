@@ -42,8 +42,6 @@ ContextCreate(IO* io_ctx)
     ctx->asset_path = Str8PathFromStr8List(app_arena, {ctx->cwd, S("assets")});
     ctx->io = io_ctx;
 
-    GlobalContextSet(ctx);
-
     // ~mgj: -2 as 2 are used for Main thread and IO thread
     U32 thread_count = OS_GetSystemInfo()->logical_processor_count - 2;
     U32 queue_size = 10; // TODO: should be increased
@@ -59,15 +57,59 @@ ContextDestroy(Context* ctx)
     ArenaRelease(ctx->arena_permanent);
 }
 
-void
-App()
+static G_Input
+G_InterpretInput(int argc, char** argv)
 {
-    IO* io_ctx = WindowCreate(VK_Context::WIDTH, VK_Context::HEIGHT);
+    G_Input input = {};
+    city::GCSBoundingBox* bbox = &input.bbox;
+    F64* bbox_coords[4] = {&bbox->lon_btm_left, &bbox->lat_btm_left, &bbox->lon_top_right,
+                           &bbox->lat_top_right};
 
+    if (argc != 1 && argc != 5)
+    {
+        exitWithError("G_InterpretInput: Invalid number of arguments");
+    }
+
+    if (argc == 1)
+    {
+        DEBUG_LOG(
+            "No command line arguments provided: Using default values\n"
+            "lon_btm_left: %lf\n lat_btm_left: %lf\n lon_top_right: %lf\n lat_top_right: %lf\n",
+            bbox->lon_btm_left, bbox->lat_btm_left, bbox->lon_top_right, bbox->lat_top_right);
+
+        // Initialize default values
+        bbox->lon_btm_left = 9.213970;
+        bbox->lat_btm_left = 55.704686;
+        bbox->lon_top_right = 9.22868;
+        bbox->lat_top_right = 55.713671;
+    }
+
+    if (argc == 5)
+    {
+        for (U32 i = 0; (i < (U64)argc) && (i < ArrayCount(bbox_coords)); ++i)
+        {
+            char* arg = argv[i + 1];
+            String8 arg_str = Str8CString(arg);
+            F64 v = F64FromStr8(arg_str);
+            *bbox_coords[i] = v;
+        }
+    }
+    return input;
+}
+
+void
+App(int argc, char** argv)
+{
+    ScratchScope scratch = ScratchScope(0, 0);
+
+    IO* io_ctx = WindowCreate(VK_Context::WIDTH, VK_Context::HEIGHT);
     IO_InputStateUpdate(io_ctx);
     Context* ctx = ContextCreate(io_ctx);
+    GlobalContextSet(ctx);
     TimeInit(ctx->time);
-    OS_Handle thread_handle = Entrypoint(ctx);
+    G_Input input = G_InterpretInput(argc, argv);
+
+    OS_Handle thread_handle = Entrypoint(ctx, &input);
     while (!glfwWindowShouldClose(ctx->io->window))
     {
         IO_InputStateUpdate(ctx->io);

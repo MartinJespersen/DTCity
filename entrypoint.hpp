@@ -21,6 +21,11 @@ DISABLE_WARNINGS_POP
 #include "imgui/imgui_inc.hpp"
 #include "city/city_inc.hpp"
 
+struct G_Input
+{
+    city::GCSBoundingBox bbox;
+};
+
 struct Context
 {
     B32 running;
@@ -40,8 +45,6 @@ struct Context
     city::Buildings* buildings;
 
     async::Threads* thread_pool;
-    // TODO: change this. moves os global state for use in DLL
-    void* os_state;
 };
 
 const U32 MAX_FONTS_IN_USE = 10;

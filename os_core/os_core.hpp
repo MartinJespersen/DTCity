@@ -434,7 +434,7 @@ OS_SystemTimerFreqGet();
 
 //~ mgj: Entrypoint to the application from os layer
 void
-App();
+App(int argc, char** argv);
 
 ////////////////////////////////
 //~ rjf: @os_hooks Entry Points (Implemented Per-OS)

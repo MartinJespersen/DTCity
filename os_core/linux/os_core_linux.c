@@ -1179,5 +1179,5 @@ int main(int argc, char **argv) {
   }
 
   //- rjf: call into "real" entry point
-  App();
+  App(argc, argv);
 }
