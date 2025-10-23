@@ -32,9 +32,9 @@ ktx create --format R8G8B8A8_SRGB --generate-mipmap brick_wall.jpg brick_wall.kt
 
 # TODO for the first draft
 * Caching of OpenStreetMap data needs to be improved - &#9745;
-* Bounding Box for OpenStreetMap should be a command line input - &#9745.
+* Bounding Box for OpenStreetMap should be a command line input - &#9745;
 * Error handling:
-  * OpenStreetMap information fetching.
+  * OpenStreetMap information retry &#9745;
 * Improve the HTTP library implementation
   * Probably consider using a cross platform library only instead of a mix
 * Linux integration:
@@ -46,3 +46,4 @@ ktx create --format R8G8B8A8_SRGB --generate-mipmap brick_wall.jpg brick_wall.kt
 ## Nice to have:
 * Improve the conversion between UTM and WGS84 system
 * Make the optimized build version work
+* Consider testing and how to do it

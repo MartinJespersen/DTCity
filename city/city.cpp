@@ -274,7 +274,7 @@ RoadVertexBufferCreate(Road* road, Buffer<Vertex3D>* out_vertex_buffer,
 
         if (way->node_count < 2)
         {
-            exitWithError("expected at least one road segment comprising of two nodes");
+            ExitWithError("expected at least one road segment comprising of two nodes");
         }
 
         U64 node_first_id = way->node_ids[0];
@@ -472,17 +472,34 @@ DataFetch(Arena* arena, String8 cache_dir, String8 cache_file_name, String8 quer
         DEBUG_LOG("DataFetch: Fetching data from overpass-api.de\n");
         String8 host = S("https://overpass-api.de");
         String8 path = S("/api/interpreter");
-        HTTP_Response response = HTTP_Request(arena, host, path, query_str, &params);
-        if (!response.good)
+
+        U32 max_retries = 3;
+        B32 http_success = false;
+        U32 retry_time_interval_ms = 2000;
+        HTTP_Response response;
+        do
         {
-            exitWithError(
-                "DataFetch: http request did not succeed and Road information is not available\n");
-        }
-        if (response.code != HTTP_StatusCode_OK)
+            response = HTTP_Request(arena, host, path, query_str, &params);
+
+            if (response.good && response.code == HTTP_StatusCode_OK)
+            {
+                http_success = true;
+                break;
+            }
+
+            DEBUG_LOG("DataFetch: Retrying...");
+            Sleep(retry_time_interval_ms);
+            max_retries -= 1;
+        } while (max_retries >= 0);
+
+        if (http_success == false)
         {
-            printf("%s", (char*)response.body.str);
-            exitWithError("DataFetch: http request did not succeed\n");
+            ExitWithError("DataFetch: http request did not succeed after %d retries\n"
+                          "Failed with error code: %d\n"
+                          "Error message: %s\n",
+                          max_retries, response.code, response.body.str);
         }
+
         str = response.body.str;
         size = response.body.size;
 
@@ -491,7 +508,7 @@ DataFetch(Arena* arena, String8 cache_dir, String8 cache_file_name, String8 quer
         U64 bytes_written = OS_FileWrite(file_write_handle, {.min = 0, .max = size}, str);
         if (bytes_written != size)
         {
-            exitWithError("DataFetch: Was not able to write all openapi data to cache\n");
+            DEBUG_LOG("DataFetch: Was not able to write OSM data to cache\n");
         }
         OS_FileClose(file_write_handle);
 
@@ -508,7 +525,7 @@ DataFetch(Arena* arena, String8 cache_dir, String8 cache_file_name, String8 quer
                                                   {.min = 0, .max = meta_str.size}, meta_str.str);
             if (bytes_written_meta != meta_str.size)
             {
-                DEBUG_LOG("DataFetch: Was not able to write all openapi meta to cache\n");
+                DEBUG_LOG("DataFetch: Was not able to write meta data to cache\n");
             }
             OS_FileClose(file_write_handle_meta);
         }

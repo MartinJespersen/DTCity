@@ -579,6 +579,10 @@ F32FromStr8(String8 string, F32* out);
 static U128
 HashU128FromStr8(String8 str);
 
+// ~mgj: Errors
+static void
+ExitWithError(const char* msg, ...);
+
 // string manipulation helpers
 #define CStrEqual(a, b) (!strcmp((a), (b)))
 // ~mgj: String Macros

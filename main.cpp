@@ -67,7 +67,7 @@ G_InterpretInput(int argc, char** argv)
 
     if (argc != 1 && argc != 5)
     {
-        exitWithError("G_InterpretInput: Invalid number of arguments");
+        ExitWithError("G_InterpretInput: Invalid number of arguments");
     }
 
     if (argc == 1)

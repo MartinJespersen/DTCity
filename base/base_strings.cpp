@@ -2762,3 +2762,18 @@ HashU128FromStr8(String8 str)
     MemoryCopy(&result, &hash, sizeof(result));
     return result;
 }
+
+// ~mgj: Errors
+static void
+ExitWithError(const char* msg, ...)
+{
+    ScratchScope scratch = ScratchScope(0, 0);
+    String8 result = {0};
+    va_list args;
+    va_start(args, msg);
+    result = PushStr8FV(scratch.arena, msg, args);
+    va_end(args);
+
+    fprintf(stderr, "%s\n", result.str);
+    exit(EXIT_FAILURE);
+}

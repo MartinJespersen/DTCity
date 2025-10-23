@@ -3,16 +3,6 @@
 
 #define ASSERT(condition, msg) assert(((void)msg, condition))
 
-inline static void
-exitWithError(const char* message)
-{
-    fprintf(stderr, "%s\n", message);
-    exit(EXIT_FAILURE);
-}
-
-static void
-WriteToLog(const char* file_name, const char* message, ...);
-
 #if defined(BUILD_DEBUG)
 #define DEBUG_LOG(message, ...)                                                                    \
     do                                                                                             \

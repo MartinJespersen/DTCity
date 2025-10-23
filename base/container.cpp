@@ -97,7 +97,7 @@ IO_ReadFile(Arena* arena, String8 filename)
     FILE* file = fopen((const char*)filename.str, "rb");
     if (file == NULL)
     {
-        exitWithError("failed to open file!");
+        ExitWithError("failed to open file!");
     }
 
     fseek(file, 0, SEEK_END);

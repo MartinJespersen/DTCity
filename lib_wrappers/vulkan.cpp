@@ -87,7 +87,7 @@ VK_VulkanInit(Context* ctx)
     if (!(formatProperties.optimalTilingFeatures &
           VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT))
     {
-        exitWithError("texture image format does not support linear blitting!");
+        ExitWithError("texture image format does not support linear blitting!");
     }
 
     VmaAllocatorCreateInfo allocatorInfo = {};
@@ -169,7 +169,7 @@ RoadTextureCreate(U32 thread_id, AssetManagerCommandPool threaded_cmd_pool,
 
     if (!pixels)
     {
-        exitWithError("TextureCreate: failed to load texture image!");
+        ExitWithError("TextureCreate: failed to load texture image!");
     }
 
     VmaAllocationCreateInfo vma_staging_info = {0};
@@ -350,7 +350,7 @@ RoadDescriptorSetCreate(VkDevice device, VkDescriptorPool desc_pool, VK_Texture*
     Buffer<VkDescriptorSet> desc_sets = BufferAlloc<VkDescriptorSet>(road->arena, layouts.size);
     if (vkAllocateDescriptorSets(device, &allocInfo, desc_sets.data) != VK_SUCCESS)
     {
-        exitWithError("RoadDescriptorSetCreate: failed to allocate descriptor sets!");
+        ExitWithError("RoadDescriptorSetCreate: failed to allocate descriptor sets!");
     }
 
     for (size_t i = 0; i < desc_sets.size; i++)
@@ -851,7 +851,7 @@ CarPipelineInfoCreate(VulkanContext* vk_ctx, VkDescriptorSetLayout car_layout)
     if (vkCreatePipelineLayout(vk_ctx->device, &pipelineLayoutInfo, nullptr, &pipeline_layout) !=
         VK_SUCCESS)
     {
-        exitWithError("failed to create pipeline layout!");
+        ExitWithError("failed to create pipeline layout!");
     }
 
     VkPipelineRenderingCreateInfo pipeline_rendering_info{};
@@ -879,7 +879,7 @@ CarPipelineInfoCreate(VulkanContext* vk_ctx, VkDescriptorSetLayout car_layout)
     if (vkCreateGraphicsPipelines(vk_ctx->device, VK_NULL_HANDLE, 1, &pipeline_create_info, nullptr,
                                   &pipeline) != VK_SUCCESS)
     {
-        exitWithError("failed to create graphics pipeline!");
+        ExitWithError("failed to create graphics pipeline!");
     }
 
     PipelineInfo pipeline_info = {.pipeline = pipeline, .pipeline_layout = pipeline_layout};
@@ -1116,7 +1116,7 @@ RoadPipelineCreate(Road* road, String8 shader_path)
     if (vkCreatePipelineLayout(vk_ctx->device, &pipelineLayoutInfo, nullptr,
                                &road->pipeline_layout) != VK_SUCCESS)
     {
-        exitWithError("failed to create pipeline layout!");
+        ExitWithError("failed to create pipeline layout!");
     }
 
     VkPipelineRenderingCreateInfo pipeline_rendering_info{};
@@ -1148,7 +1148,7 @@ RoadPipelineCreate(Road* road, String8 shader_path)
     if (vkCreateGraphicsPipelines(vk_ctx->device, VK_NULL_HANDLE, 1, &pipelineInfo, nullptr,
                                   &road->pipeline) != VK_SUCCESS)
     {
-        exitWithError("failed to create graphics pipeline!");
+        ExitWithError("failed to create graphics pipeline!");
     }
 
     return;
@@ -1229,7 +1229,7 @@ CameraDescriptorSetLayoutCreate(VulkanContext* vk_ctx)
     if (vkCreateDescriptorSetLayout(vk_ctx->device, &layoutInfo, nullptr,
                                     &vk_ctx->camera_descriptor_set_layout) != VK_SUCCESS)
     {
-        exitWithError("failed to create camera descriptor set layout!");
+        ExitWithError("failed to create camera descriptor set layout!");
     }
 }
 
@@ -1257,7 +1257,7 @@ CameraDescriptorSetCreate(VulkanContext* vk_ctx)
     if (vkAllocateDescriptorSets(vk_ctx->device, &allocInfo, vk_ctx->camera_descriptor_sets) !=
         VK_SUCCESS)
     {
-        exitWithError("CameraDescriptorSetCreate: failed to allocate descriptor sets!");
+        ExitWithError("CameraDescriptorSetCreate: failed to allocate descriptor sets!");
     }
 
     for (size_t i = 0; i < max_frames_in_flight; i++)
