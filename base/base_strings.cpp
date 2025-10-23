@@ -2730,9 +2730,10 @@ static String8
 PushStr8FillByte(Arena* arena, U64 size, U8 byte)
 {
     String8 result = {0};
-    result.str = PushArrayNoZero(arena, U8, size);
+    result.str = PushArrayNoZero(arena, U8, size + 1);
     MemorySet(result.str, byte, size);
     result.size = size;
+    result.str[result.size] = 0;
     return result;
 }
 

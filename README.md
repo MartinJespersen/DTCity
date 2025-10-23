@@ -29,3 +29,20 @@ cl /W4 /std:c++20 /wd4201 /wd4505 /wd4005 /wd4838 /wd4244 /wd4996 /wd4310 /wd424
 # Jpg/png to ktx2
 Use the ktx tool from khronos group. Example with mip map generation:
 ktx create --format R8G8B8A8_SRGB --generate-mipmap brick_wall.jpg brick_wall.ktx2
+
+# TODO for the first draft
+* Caching of OpenStreetMap data needs to be improved
+* Improve the HTTP library implementation
+  * Probably consider using a cross platform library only instead of a mix
+* Error handling:
+  * OpenStreetMap information fetching.
+* Linux integration:
+  * How to include linux libraries.
+  * Build Script changes.
+    * Should CMake be considered?
+* Bounding Box for OpenStreetMap should be a command line input.
+* Start documentation
+
+## Nice to have:
+* Improve the conversion between UTM and WGS84 system
+* Make the optimized build version work

@@ -129,7 +129,7 @@ struct Road
     Arena* arena;
 
     /////////////////////////////
-    String8 openapi_data_cache_path;
+    String8 openapi_data_file_name;
     // raw data OpenAPI data
     F32 road_height;
     F32 default_road_width;
@@ -220,7 +220,7 @@ struct BuildingRenderInfo
 struct Buildings
 {
     Arena* arena;
-    String8 data_cache_path;
+    String8 cache_file_name;
 
     NodeWays node_ways;
     NodeUtmStructure node_utm_structure;
@@ -246,6 +246,15 @@ struct Model3DInstance
     glm::vec4 z_basis;
     glm::vec4 w_basis;
 };
+
+// ~mgj: File Cache
+static U64
+HashU64FromStr8(String8 str);
+static String8
+Str8FromGCSCoordinates(Arena* arena, GCSBoundingBox* bbox);
+static B32
+CacheNeedsUpdate(String8 data_file_str, String8 cache_meta_file_path);
+
 // ~mgj: Globals
 read_only static RoadNode g_road_node = {&g_road_node, 0, 0.0f, 0.0f};
 read_only static NodeUtm g_road_node_utm = {&g_road_node_utm, 0, 0.0f, 0.0f};
@@ -256,7 +265,8 @@ RoadCreate(String8 texture_path, String8 cache_path, GCSBoundingBox* gcs_bbox,
 static void
 RoadDestroy(Road* road);
 static String8
-DataFetch(Arena* arena, String8 data_cache_path, String8 query, GCSBoundingBox* gcs_bbox);
+DataFetch(Arena* arena, String8 cache_dir, String8 cache_name, String8 query,
+          GCSBoundingBox* gcs_bbox);
 static void
 RoadVertexBufferCreate(Road* road, Buffer<Vertex3D>* out_vertex_buffer,
                        Buffer<U32>* out_index_buffer);

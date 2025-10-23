@@ -86,10 +86,11 @@ MainLoop(void* ptr)
     Context* ctx = (Context*)ptr;
     IO* io_ctx = ctx->io;
     OS_SetThreadName(Str8CString("Entrypoint thread"));
-    city::GCSBoundingBox gcs_bbox = {.lat_btm_left = 52.230591,
-                                     .lon_btm_left = 12.977295,
-                                     .lat_top_right = 52.239577,
-                                     .lon_top_right = 12.991955};
+
+    city::GCSBoundingBox gcs_bbox = {.lat_btm_left = 55.704686,
+                                     .lon_btm_left = 9.213970,
+                                     .lat_top_right = 55.713671,
+                                     .lon_top_right = 9.22868};
 
     Rng2F32 utm_bb_coords = city::UtmFromBoundingBox(gcs_bbox);
     printf("UTM: %f %f %f %f\n", utm_bb_coords.min.x, utm_bb_coords.min.y, utm_bb_coords.max.x,

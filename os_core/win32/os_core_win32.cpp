@@ -669,33 +669,33 @@ os_file_map_open(OS_AccessFlags flags, OS_Handle file)
         {
             switch (flags)
             {
-            default:
-            {
-            }
-            break;
-            case OS_AccessFlag_Read:
-            {
-                protect_flags = PAGE_READONLY;
-            }
-            break;
-            case OS_AccessFlag_Write:
-            case OS_AccessFlag_Read | OS_AccessFlag_Write:
-            {
-                protect_flags = PAGE_READWRITE;
-            }
-            break;
-            case OS_AccessFlag_Execute:
-            case OS_AccessFlag_Read | OS_AccessFlag_Execute:
-            {
-                protect_flags = PAGE_EXECUTE_READ;
-            }
-            break;
-            case OS_AccessFlag_Execute | OS_AccessFlag_Write | OS_AccessFlag_Read:
-            case OS_AccessFlag_Execute | OS_AccessFlag_Write:
-            {
-                protect_flags = PAGE_EXECUTE_READWRITE;
-            }
-            break;
+                default:
+                {
+                }
+                break;
+                case OS_AccessFlag_Read:
+                {
+                    protect_flags = PAGE_READONLY;
+                }
+                break;
+                case OS_AccessFlag_Write:
+                case OS_AccessFlag_Read | OS_AccessFlag_Write:
+                {
+                    protect_flags = PAGE_READWRITE;
+                }
+                break;
+                case OS_AccessFlag_Execute:
+                case OS_AccessFlag_Read | OS_AccessFlag_Execute:
+                {
+                    protect_flags = PAGE_EXECUTE_READ;
+                }
+                break;
+                case OS_AccessFlag_Execute | OS_AccessFlag_Write | OS_AccessFlag_Read:
+                case OS_AccessFlag_Execute | OS_AccessFlag_Write:
+                {
+                    protect_flags = PAGE_EXECUTE_READWRITE;
+                }
+                break;
             }
         }
         HANDLE map_handle = CreateFileMappingA(file_handle, 0, protect_flags, 0, 0, 0);
@@ -723,33 +723,33 @@ os_file_map_view_open(OS_Handle map, OS_AccessFlags flags, Rng1U64 range)
     {
         switch (flags)
         {
-        default:
-        {
-        }
-        break;
-        case OS_AccessFlag_Read:
-        {
-            access_flags = FILE_MAP_READ;
-        }
-        break;
-        case OS_AccessFlag_Write:
-        {
-            access_flags = FILE_MAP_WRITE;
-        }
-        break;
-        case OS_AccessFlag_Read | OS_AccessFlag_Write:
-        {
-            access_flags = FILE_MAP_ALL_ACCESS;
-        }
-        break;
-        case OS_AccessFlag_Execute:
-        case OS_AccessFlag_Read | OS_AccessFlag_Execute:
-        case OS_AccessFlag_Write | OS_AccessFlag_Execute:
-        case OS_AccessFlag_Read | OS_AccessFlag_Write | OS_AccessFlag_Execute:
-        {
-            access_flags = FILE_MAP_ALL_ACCESS | FILE_MAP_EXECUTE;
-        }
-        break;
+            default:
+            {
+            }
+            break;
+            case OS_AccessFlag_Read:
+            {
+                access_flags = FILE_MAP_READ;
+            }
+            break;
+            case OS_AccessFlag_Write:
+            {
+                access_flags = FILE_MAP_WRITE;
+            }
+            break;
+            case OS_AccessFlag_Read | OS_AccessFlag_Write:
+            {
+                access_flags = FILE_MAP_ALL_ACCESS;
+            }
+            break;
+            case OS_AccessFlag_Execute:
+            case OS_AccessFlag_Read | OS_AccessFlag_Execute:
+            case OS_AccessFlag_Write | OS_AccessFlag_Execute:
+            case OS_AccessFlag_Read | OS_AccessFlag_Write | OS_AccessFlag_Execute:
+            {
+                access_flags = FILE_MAP_ALL_ACCESS | FILE_MAP_EXECUTE;
+            }
+            break;
         }
     }
     void* result = MapViewOfFile(handle, access_flags, off_hi, off_lo, size);
@@ -807,86 +807,86 @@ os_file_iter_next(Arena* arena, OS_FileIter* iter, OS_FileInfo* info_out)
     OS_W32_FileIter* w32_iter = (OS_W32_FileIter*)iter->memory;
     switch (w32_iter->is_volume_iter)
     {
-    //- rjf: file iteration
-    default:
-    case 0:
-    {
-        if (!(flags & OS_FileIterFlag_Done) && w32_iter->handle != INVALID_HANDLE_VALUE)
+        //- rjf: file iteration
+        default:
+        case 0:
         {
-            do
+            if (!(flags & OS_FileIterFlag_Done) && w32_iter->handle != INVALID_HANDLE_VALUE)
             {
-                // check is usable
-                B32 usable_file = 1;
+                do
+                {
+                    // check is usable
+                    B32 usable_file = 1;
 
-                WCHAR* file_name = w32_iter->find_data.cFileName;
-                DWORD attributes = w32_iter->find_data.dwFileAttributes;
-                if (file_name[0] == '.')
-                {
-                    if (flags & OS_FileIterFlag_SkipHiddenFiles)
+                    WCHAR* file_name = w32_iter->find_data.cFileName;
+                    DWORD attributes = w32_iter->find_data.dwFileAttributes;
+                    if (file_name[0] == '.')
                     {
-                        usable_file = 0;
+                        if (flags & OS_FileIterFlag_SkipHiddenFiles)
+                        {
+                            usable_file = 0;
+                        }
+                        else if (file_name[1] == 0)
+                        {
+                            usable_file = 0;
+                        }
+                        else if (file_name[1] == '.' && file_name[2] == 0)
+                        {
+                            usable_file = 0;
+                        }
                     }
-                    else if (file_name[1] == 0)
+                    if (attributes & FILE_ATTRIBUTE_DIRECTORY)
                     {
-                        usable_file = 0;
+                        if (flags & OS_FileIterFlag_SkipFolders)
+                        {
+                            usable_file = 0;
+                        }
                     }
-                    else if (file_name[1] == '.' && file_name[2] == 0)
+                    else
                     {
-                        usable_file = 0;
+                        if (flags & OS_FileIterFlag_SkipFiles)
+                        {
+                            usable_file = 0;
+                        }
                     }
-                }
-                if (attributes & FILE_ATTRIBUTE_DIRECTORY)
-                {
-                    if (flags & OS_FileIterFlag_SkipFolders)
-                    {
-                        usable_file = 0;
-                    }
-                }
-                else
-                {
-                    if (flags & OS_FileIterFlag_SkipFiles)
-                    {
-                        usable_file = 0;
-                    }
-                }
 
-                // emit if usable
-                if (usable_file)
-                {
-                    info_out->name = str8_from_16(arena, str16_cstring((U16*)file_name));
-                    info_out->props.size = (U64)w32_iter->find_data.nFileSizeLow |
-                                           (((U64)w32_iter->find_data.nFileSizeHigh) << 32);
-                    os_w32_dense_time_from_file_time(&info_out->props.created,
-                                                     &w32_iter->find_data.ftCreationTime);
-                    os_w32_dense_time_from_file_time(&info_out->props.modified,
-                                                     &w32_iter->find_data.ftLastWriteTime);
-                    info_out->props.flags =
-                        os_w32_file_property_flags_from_dwFileAttributes(attributes);
-                    result = 1;
-                    if (!FindNextFileW(w32_iter->handle, &w32_iter->find_data))
+                    // emit if usable
+                    if (usable_file)
                     {
-                        iter->flags |= OS_FileIterFlag_Done;
+                        info_out->name = str8_from_16(arena, str16_cstring((U16*)file_name));
+                        info_out->props.size = (U64)w32_iter->find_data.nFileSizeLow |
+                                               (((U64)w32_iter->find_data.nFileSizeHigh) << 32);
+                        os_w32_dense_time_from_file_time(&info_out->props.created,
+                                                         &w32_iter->find_data.ftCreationTime);
+                        os_w32_dense_time_from_file_time(&info_out->props.modified,
+                                                         &w32_iter->find_data.ftLastWriteTime);
+                        info_out->props.flags =
+                            os_w32_file_property_flags_from_dwFileAttributes(attributes);
+                        result = 1;
+                        if (!FindNextFileW(w32_iter->handle, &w32_iter->find_data))
+                        {
+                            iter->flags |= OS_FileIterFlag_Done;
+                        }
+                        break;
                     }
-                    break;
-                }
-            } while (FindNextFileW(w32_iter->handle, &w32_iter->find_data));
+                } while (FindNextFileW(w32_iter->handle, &w32_iter->find_data));
+            }
         }
-    }
-    break;
+        break;
 
-    //- rjf: volume iteration
-    case 1:
-    {
-        result = w32_iter->drive_strings_iter_idx < w32_iter->drive_strings.count;
-        if (result != 0)
+        //- rjf: volume iteration
+        case 1:
         {
-            MemoryZeroStruct(info_out);
-            info_out->name = w32_iter->drive_strings.v[w32_iter->drive_strings_iter_idx];
-            info_out->props.flags |= FilePropertyFlag_IsFolder;
-            w32_iter->drive_strings_iter_idx += 1;
+            result = w32_iter->drive_strings_iter_idx < w32_iter->drive_strings.count;
+            if (result != 0)
+            {
+                MemoryZeroStruct(info_out);
+                info_out->name = w32_iter->drive_strings.v[w32_iter->drive_strings_iter_idx];
+                info_out->props.flags |= FilePropertyFlag_IsFolder;
+                w32_iter->drive_strings_iter_idx += 1;
+            }
         }
-    }
-    break;
+        break;
     }
     if (!result)
     {
@@ -996,7 +996,7 @@ os_now_microseconds(void)
 }
 
 static U32
-os_now_unix(void)
+OS_NowUnix(void)
 {
     FILETIME file_time;
     GetSystemTimeAsFileTime(&file_time);

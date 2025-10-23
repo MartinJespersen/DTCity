@@ -9,8 +9,7 @@ RoadCreate(String8 texture_path, String8 cache_path, GCSBoundingBox* gcs_bbox,
 
     Road* road = PushStruct(arena, Road);
 
-    road->openapi_data_cache_path =
-        Str8PathFromStr8List(arena, {cache_path, S("openapi_node_ways_highway.json")});
+    road->openapi_data_file_name = PushStr8Copy(arena, S("openapi_node_ways_highway.json"));
     road->arena = arena;
     road->road_height = 10.0f;
     road->default_road_width = 2.0f;
@@ -25,7 +24,8 @@ RoadCreate(String8 texture_path, String8 cache_path, GCSBoundingBox* gcs_bbox,
         >;
         out skel qt;
     )");
-    String8 content = DataFetch(scratch.arena, road->openapi_data_cache_path, query, gcs_bbox);
+    String8 content =
+        DataFetch(scratch.arena, cache_path, road->openapi_data_file_name, query, gcs_bbox);
     wrapper::OverpassNodeWayParse(road->arena, content, 100, &road->node_ways);
     NodeWays* node_ways = &road->node_ways;
 
@@ -326,61 +326,195 @@ RoadVertexBufferCreate(Road* road, Buffer<Vertex3D>* out_vertex_buffer,
     *out_vertex_buffer = vertex_buffer;
     *out_index_buffer = index_buffer;
 }
-static String8
-DataFetch(Arena* arena, String8 data_cache_path, String8 query, GCSBoundingBox* gcs_bbox)
+
+static U64
+HashU64FromStr8(String8 str)
 {
+    return HashU128FromStr8(str).u64[1];
+}
+
+static String8
+Str8FromGCSCoordinates(Arena* arena, GCSBoundingBox* bbox)
+{
+    String8 str = {.str = (U8*)bbox, .size = sizeof(GCSBoundingBox)};
+    String8 str_copy = PushStr8Copy(arena, str);
+    return str_copy;
+}
+
+static B32
+CacheNeedsUpdate(String8 cache_data_file, String8 cache_meta_file)
+{
+    ScratchScope scratch = ScratchScope(0, 0);
+    U64 file_hash = 0;
+    U64 file_timestamp = 0;
+    B32 update_needed = false;
+
+    U64 meta_file_size = 0;
+    OS_Handle meta_data_file_handle = OS_FileOpen(OS_AccessFlag_Read, cache_meta_file);
+    FileProperties meta_file_props = OS_PropertiesFromFile(meta_data_file_handle);
+    meta_file_size = meta_file_props.size;
+    if (meta_file_size == 0)
+    {
+        update_needed = true;
+    }
+
+    if (update_needed == false)
+    {
+        Rng1U64 meta_read_range = {0, meta_file_size};
+        String8 meta_data_str = PushStr8FillByte(scratch.arena, meta_file_size, 0);
+        U64 meta_file_bytes_read =
+            OS_FileRead(meta_data_file_handle, meta_read_range, meta_data_str.str);
+
+        if (meta_file_bytes_read != meta_file_size)
+        {
+            DEBUG_LOG("DataFetch: Could not read all data from meta cache file: %s",
+                      cache_meta_file.str);
+            update_needed = true;
+        }
+        U8* cur_byte = meta_data_str.str;
+        if (update_needed == false)
+        {
+            U64 cur_file_hash = HashU64FromStr8(cache_data_file);
+
+            //~mgj: read hash and ttl from file
+            while (*cur_byte != 0 && *cur_byte != '\t')
+            {
+                cur_byte += 1;
+            }
+            Rng1U64 read_range = {0, U64(cur_byte - meta_data_str.str)};
+            String8 u64_str = Str8Substr(meta_data_str, read_range);
+            file_hash = U64FromStr8(u64_str, 10);
+            if (cur_file_hash != file_hash)
+            {
+                update_needed = true;
+            }
+
+            if (update_needed == false)
+            {
+                while (*cur_byte == '\t')
+                {
+                    cur_byte += 1;
+                }
+
+                U64 cur_time = OS_NowUnix();
+                U8* ttl_base = cur_byte;
+                while (*cur_byte != 0)
+                {
+                    cur_byte += 1;
+                }
+
+                Rng1U64 ttl_range = {U64(ttl_base - meta_data_str.str),
+                                     U64(cur_byte - meta_data_str.str)};
+                file_timestamp = U64FromStr8(Str8Substr(meta_data_str, ttl_range), 10);
+                if (cur_time > file_timestamp + 3600) // hard coded ttl of 1 hour
+                {
+                    update_needed = true;
+                }
+            }
+        }
+        OS_FileClose(meta_data_file_handle);
+    }
+
+    return update_needed;
+}
+
+static String8
+DataFetch(Arena* arena, String8 cache_dir, String8 cache_file_name, String8 query,
+          GCSBoundingBox* gcs_bbox)
+{
+    ScratchScope scratch = ScratchScope(&arena, 1);
+
     HTTP_RequestParams params = {};
     params.method = HTTP_Method_Post;
     params.content_type = S("text/html");
 
     String8 query_str =
-        PushStr8F(arena, (char*)query.str, gcs_bbox->lat_btm_left, gcs_bbox->lon_btm_left,
+        PushStr8F(scratch.arena, (char*)query.str, gcs_bbox->lat_btm_left, gcs_bbox->lon_btm_left,
                   gcs_bbox->lat_top_right, gcs_bbox->lon_top_right);
 
-    B32 read_from_cache = 0;
-    String8 content = {0};
-    if (OS_FilePathExists(data_cache_path))
+    B32 read_from_cache = false;
+
+    String8 cache_data_file = Str8PathFromStr8List(scratch.arena, {cache_dir, cache_file_name});
+    String8 cache_meta_file = PushStr8Cat(scratch.arena, cache_data_file, S(".meta"));
+
+    if (OS_FilePathExists(cache_data_file))
     {
-        OS_Handle file_handle = OS_FileOpen(OS_AccessFlag_Read, data_cache_path);
+        read_from_cache = true;
+        if (OS_FilePathExists(cache_meta_file) == false)
+        {
+            read_from_cache = false;
+        }
+    }
+    U8* str = 0;
+    U64 size = 0;
+    if (read_from_cache)
+    {
+        OS_Handle file_handle = OS_FileOpen(OS_AccessFlag_Read, cache_data_file);
         FileProperties file_props = OS_PropertiesFromFile(file_handle);
 
-        content.str = PushArray(arena, U8, file_props.size);
-        content.size = file_props.size;
-        U64 total_read_size =
-            OS_FileRead(file_handle, {.min = 0, .max = file_props.size}, content.str);
+        str = PushArray(arena, U8, file_props.size);
+        size = file_props.size;
+        U64 total_read_size = OS_FileRead(file_handle, {.min = 0, .max = file_props.size}, str);
+
         if (total_read_size != file_props.size)
         {
-            DEBUG_LOG("RoadsBuild: Could not read everything from cache");
-        }
-        else
-        {
-            read_from_cache = 1;
+            DEBUG_LOG("DataFetch: Could not read everything from cache");
         }
         OS_FileClose(file_handle);
+
+        String8 input_str = Str8FromGCSCoordinates(scratch.arena, gcs_bbox);
+        B32 needs_update = CacheNeedsUpdate(input_str, cache_meta_file);
+        read_from_cache = !needs_update;
     }
 
-    if (!read_from_cache)
+    if (read_from_cache == false)
     {
+        DEBUG_LOG("DataFetch: Fetching data from overpass-api.de\n");
         String8 host = S("https://overpass-api.de");
         String8 path = S("/api/interpreter");
         HTTP_Response response = HTTP_Request(arena, host, path, query_str, &params);
-
         if (!response.good)
         {
             exitWithError(
-                "RoadsBuild: http request did not succeed and Road information is not available");
+                "DataFetch: http request did not succeed and Road information is not available\n");
         }
-        content = Str8((U8*)response.body.str, response.body.size);
-
-        OS_Handle file_write_handle = OS_FileOpen(OS_AccessFlag_Write, data_cache_path);
-        U64 bytes_written =
-            OS_FileWrite(file_write_handle, {.min = 0, .max = content.size}, content.str);
-        if (bytes_written != content.size)
+        if (response.code != HTTP_StatusCode_OK)
         {
-            exitWithError("RoadsBuild: Was not able to write all openapi data to cache");
+            printf("%s", (char*)response.body.str);
+            exitWithError("DataFetch: http request did not succeed\n");
+        }
+        str = response.body.str;
+        size = response.body.size;
+
+        // ~mgj: write to cache file
+        OS_Handle file_write_handle = OS_FileOpen(OS_AccessFlag_Write, cache_data_file);
+        U64 bytes_written = OS_FileWrite(file_write_handle, {.min = 0, .max = size}, str);
+        if (bytes_written != size)
+        {
+            exitWithError("DataFetch: Was not able to write all openapi data to cache\n");
         }
         OS_FileClose(file_write_handle);
+
+        // ~mgj: write to cache meta file
+        if (size > 0)
+        {
+            String8 input_str = Str8FromGCSCoordinates(scratch.arena, gcs_bbox);
+            U64 new_hash = HashU64FromStr8(input_str);
+            U64 timestamp = OS_NowUnix();
+            String8 meta_str = PushStr8F(scratch.arena, "%llu\t%llu", new_hash, timestamp);
+
+            OS_Handle file_write_handle_meta = OS_FileOpen(OS_AccessFlag_Write, cache_meta_file);
+            U64 bytes_written_meta = OS_FileWrite(file_write_handle_meta,
+                                                  {.min = 0, .max = meta_str.size}, meta_str.str);
+            if (bytes_written_meta != meta_str.size)
+            {
+                DEBUG_LOG("DataFetch: Was not able to write all openapi meta to cache\n");
+            }
+            OS_FileClose(file_write_handle_meta);
+        }
     }
+
+    String8 content = {str, size};
     return content;
 }
 
@@ -820,11 +954,11 @@ static Buildings*
 BuildingsCreate(String8 cache_path, String8 texture_path, F32 road_height, GCSBoundingBox* gcs_bbox,
                 R_SamplerInfo* sampler_info)
 {
+    ScratchScope scratch = ScratchScope(0, 0);
     Arena* arena = ArenaAlloc();
     Buildings* buildings = PushStruct(arena, Buildings);
     buildings->arena = arena;
-    buildings->data_cache_path =
-        Str8PathFromStr8List(arena, {cache_path, S("openapi_node_ways_buildings.json")});
+    buildings->cache_file_name = PushStr8Copy(arena, S("openapi_node_ways_buildings.json"));
 
     String8 query = S(R"(data=
         [out:json] [timeout:25];
@@ -835,7 +969,8 @@ BuildingsCreate(String8 cache_path, String8 texture_path, F32 road_height, GCSBo
         >;
         out skel qt;
     )");
-    String8 data = DataFetch(arena, buildings->data_cache_path, query, gcs_bbox);
+    String8 data =
+        DataFetch(scratch.arena, cache_path, buildings->cache_file_name, query, gcs_bbox);
     wrapper::OverpassNodeWayParse(arena, data, 100, &buildings->node_ways);
     U64 hashmap_slot_count = 100;
     NodeStructureCreate(arena, &buildings->node_ways, gcs_bbox, hashmap_slot_count,
@@ -917,8 +1052,6 @@ BuildingsBuffersCreate(Arena* arena, Buildings* buildings, F32 road_height,
         U32 way_facade_vertex_count = (way->node_count - 1) * 4;
         total_vertex_count += way_facade_vertex_count + (way->node_count - 1) * 2;
         // ~mgj: count of index for Polyhedron (without ground floor) that makes up the building
-        // facade(roof+sides)
-        // U64 roof_triangle_count = way->node_count - 2;
         U64 sides_triangle_count = (way->node_count - 1) * 2;
         U64 roof_triangle_count = way->node_count - 2;
         U64 total_triangle_count = sides_triangle_count + roof_triangle_count;
@@ -981,71 +1114,75 @@ BuildingsBuffersCreate(Arena* arena, Buildings* buildings, F32 road_height,
     for (U32 way_idx = 0; way_idx < node_ways->ways.size; way_idx++)
     {
         Way* way = &node_ways->ways.data[way_idx];
-        Buffer<NodeUtm*> node_utm_buffer =
+        Buffer<NodeUtm*> buildings_utm_node_buffer =
             BufferAlloc<NodeUtm*>(scratch.arena, way->node_count - 1);
         for (U32 idx = 0; idx < way->node_count - 1; idx += 1)
         {
-            node_utm_buffer.data[idx] = NodeUtmFind(node_utm_structure, way->node_ids[idx]);
-        }
-        // check for repeating nodes
-        for (U32 idx = 0; idx < node_utm_buffer.size; idx += 1)
-        {
-            Vec2F32 ref_node_pos = node_utm_buffer.data[idx]->pos;
-            for (U32 jdx = 0; jdx < node_utm_buffer.size - 1; jdx += 1)
-            {
-                Vec2F32 node_pos =
-                    node_utm_buffer.data[(idx + jdx + 1) % node_utm_buffer.size]->pos;
-                if (ref_node_pos.x == node_pos.x && ref_node_pos.y == node_pos.y)
-                {
-                    // Assert(0);
-                    DEBUG_LOG("BuildingsBuffersCreate: Repetition of a node\n");
-                }
-            }
+            buildings_utm_node_buffer.data[idx] =
+                NodeUtmFind(node_utm_structure, way->node_ids[idx]);
         }
 
-        Buffer<NodeUtm*> final_node_utm_buffer =
-            BufferAlloc<NodeUtm*>(scratch.arena, node_utm_buffer.size);
+        // ~mgj: ignore collinear line segments
+        Buffer<NodeUtm*> final_utm_node_buffer =
+            BufferAlloc<NodeUtm*>(scratch.arena, buildings_utm_node_buffer.size);
         {
             U32 cur_idx = 0;
-            for (U32 idx = 0; idx < node_utm_buffer.size; idx += 1)
+            for (U32 idx = 0; idx < buildings_utm_node_buffer.size; idx += 1)
             {
-                Vec2F32 prev_pos =
-                    node_utm_buffer.data[(node_utm_buffer.size + idx - 1) % node_utm_buffer.size]
-                        ->pos;
-                Vec2F32 cur_pos = node_utm_buffer.data[idx % node_utm_buffer.size]->pos;
-                Vec2F32 next_pos = node_utm_buffer.data[(idx + 1) % node_utm_buffer.size]->pos;
+                Vec2F32 prev_pos = buildings_utm_node_buffer
+                                       .data[(buildings_utm_node_buffer.size + idx - 1) %
+                                             buildings_utm_node_buffer.size]
+                                       ->pos;
+                Vec2F32 cur_pos =
+                    buildings_utm_node_buffer.data[idx % buildings_utm_node_buffer.size]->pos;
+                Vec2F32 next_pos =
+                    buildings_utm_node_buffer.data[(idx + 1) % buildings_utm_node_buffer.size]->pos;
 
                 B32 is_collinear =
                     AreTwoConnectedLineSegmentsCollinear(prev_pos, cur_pos, next_pos);
                 if (!is_collinear)
                 {
-                    final_node_utm_buffer.data[cur_idx++] = node_utm_buffer.data[idx];
+                    final_utm_node_buffer.data[cur_idx++] = buildings_utm_node_buffer.data[idx];
                 }
             }
-            final_node_utm_buffer.size = cur_idx;
+            final_utm_node_buffer.size = cur_idx;
         }
 
-        Buffer<Vec2F32> node_pos_buffer = BufferAlloc<Vec2F32>(scratch.arena, way->node_count - 1);
-        for (U32 idx = 0; idx < final_node_utm_buffer.size; idx += 1)
+        // ~mgj: prepare for ear clipping algo
+        Buffer<Vec2F32> node_pos_buffer =
+            BufferAlloc<Vec2F32>(scratch.arena, final_utm_node_buffer.size);
+        for (U32 idx = 0; idx < final_utm_node_buffer.size; idx += 1)
         {
-            NodeUtm* node_utm = final_node_utm_buffer.data[idx];
-            Vec2U32 id = {.u64 = node_utm->id};
-            vertex_buffer.data[base_vertex_idx + idx] = {
-                .pos = {node_utm->pos.x, road_height + building_height, node_utm->pos.y},
-                .uv = {node_utm->pos.x, node_utm->pos.y},
-                .object_id = id};
+            NodeUtm* node_utm = final_utm_node_buffer.data[idx];
             node_pos_buffer.data[idx] = node_utm->pos;
         }
-        Buffer<U32> polygon_index_buffer = EarClipping(scratch.arena, node_pos_buffer);
-        for (U32 idx = 0; idx < polygon_index_buffer.size; idx += 1)
-        {
-            index_buffer.data[base_index_idx + idx] =
-                polygon_index_buffer.data[idx] + base_vertex_idx;
-        }
 
-        base_vertex_idx += final_node_utm_buffer.size;
-        base_index_idx += polygon_index_buffer.size;
+        Buffer<U32> polygon_index_buffer = EarClipping(scratch.arena, node_pos_buffer);
+        if (polygon_index_buffer.size > 0)
+        {
+            // vertex buffer fill
+            for (U32 idx = 0; idx < final_utm_node_buffer.size; idx += 1)
+            {
+                NodeUtm* node_utm = final_utm_node_buffer.data[idx];
+                Vec2U32 id = {.u64 = node_utm->id};
+                vertex_buffer.data[base_vertex_idx + idx] = {
+                    .pos = {node_utm->pos.x, road_height + building_height, node_utm->pos.y},
+                    .uv = {node_utm->pos.x, node_utm->pos.y},
+                    .object_id = id};
+            }
+
+            // index buffer fill
+            for (U32 idx = 0; idx < polygon_index_buffer.size; idx += 1)
+            {
+                index_buffer.data[base_index_idx + idx] =
+                    polygon_index_buffer.data[idx] + base_vertex_idx;
+            }
+
+            base_vertex_idx += final_utm_node_buffer.size;
+            base_index_idx += polygon_index_buffer.size;
+        }
     }
+
     Buffer<Vertex3D> vertex_buffer_final = BufferAlloc<Vertex3D>(arena, base_vertex_idx);
     Buffer<U32> index_buffer_final = BufferAlloc<U32>(arena, base_index_idx);
     BufferCopy(vertex_buffer_final, vertex_buffer, base_vertex_idx);
@@ -1078,7 +1215,6 @@ ClockWiseTest(Buffer<Vec2F32> node_buffer)
         F32 cross_product_z = Cross2F32ZComponent(a, b);
         total += cross_product_z;
     }
-    AssertAlways(total > 0 || total < 0);
     if (total > 0)
     {
         return Direction_CounterClockwise;
@@ -1137,11 +1273,11 @@ PointInTriangle(Vec2F32 p1, Vec2F32 p2, Vec2F32 p3, Vec2F32 point)
 static void
 NodeBufferPrintDebug(Buffer<Vec2F32> node_buffer)
 {
-    printf("Error in ear clipping algo. Expecting vertex_count-2 number of triangles\n"
-           "The following vertices are the problem: \n");
-    for (U32 i = 0; i < node_buffer.size; i++)
+    DEBUG_LOG("Error in ear clipping algo. Expecting vertex_count-2 number of triangles\n"
+              "The following vertices are the problem: \n");
+    for (U32 pt_idx = 0; pt_idx < node_buffer.size; pt_idx++)
     {
-        printf("%f, %f\n", node_buffer.data[i].x, node_buffer.data[i].y);
+        printf("%d, %f, %f\n", pt_idx, node_buffer.data[pt_idx].x, node_buffer.data[pt_idx].y);
     }
 }
 
@@ -1157,7 +1293,9 @@ EarClipping(Arena* arena, Buffer<Vec2F32> node_buffer)
     Direction direction = ClockWiseTest(node_buffer);
     if (direction == Direction_Undefined)
     {
-        Assert(0);
+        DEBUG_LOG("Cannot determine direction\n");
+        DEBUG_FUNC(NodeBufferPrintDebug(node_buffer));
+        return {0, 0};
     }
     Buffer<U32> index_buffer = IndexBufferCreate(scratch.arena, node_buffer.size, direction);
     Buffer<U32> out_vertex_index_buffer = BufferAlloc<U32>(arena, total_index_count);
