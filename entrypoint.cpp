@@ -104,14 +104,22 @@ MainLoop(void* ptr)
         .address_mode_v = R_SamplerAddressMode_Repeat,
     };
 
-    ctx->road = city::RoadCreate(ctx->texture_path, ctx->cache_path, &input->bbox, &sampler_info);
+    U64 node_hashmap_size = 100;
+    U64 way_hashmap_size = 100;
+    city::NodeUtmStructure* node_utm_structure =
+        city::osm_structure_create(node_hashmap_size, way_hashmap_size, &input->bbox);
+
+    ctx->road = city::RoadCreate(ctx->texture_path, ctx->cache_path, &input->bbox, &sampler_info,
+                                 node_utm_structure);
     city::Road* road = ctx->road;
 
     CameraInit(ctx->camera);
-    ctx->buildings = city::BuildingsCreate(ctx->cache_path, ctx->texture_path,
-                                           ctx->road->road_height, &input->bbox, &sampler_info);
+    ctx->buildings =
+        city::BuildingsCreate(ctx->cache_path, ctx->texture_path, ctx->road->road_height,
+                              &input->bbox, &sampler_info, node_utm_structure);
     city::Buildings* buildings = ctx->buildings;
-    ctx->car_sim = city::CarSimCreate(ctx->asset_path, ctx->texture_path, 100, ctx->road);
+    ctx->car_sim =
+        city::CarSimCreate(ctx->asset_path, ctx->texture_path, 100, ctx->road, node_utm_structure);
     city::CarSim* car_sim = ctx->car_sim;
 
     while (ctx->running)
@@ -127,7 +135,7 @@ MainLoop(void* ptr)
         {
             CameraUpdate(ctx->camera, ctx->io, ctx->time->delta_time_sec, framebuffer_dim);
             U64 hovered_object_id = r_latest_hovered_object_id_get();
-            city::WayNode* way_node = city::way_find(&road->node_utm_structure, hovered_object_id);
+            city::WayNode* way_node = city::way_find(node_utm_structure, hovered_object_id);
 
             if (way_node)
             {
@@ -155,8 +163,9 @@ MainLoop(void* ptr)
                        buildings->index_handle, FALSE, buildings->facade_index_buffer_offset,
                        buildings->facade_index_count);
 
-        Buffer<city::Model3DInstance> instance_buffer = city::CarUpdate(
-            vk_ctx->draw_frame_arena, car_sim, ctx->road, ctx->time->delta_time_sec);
+        Buffer<city::Model3DInstance> instance_buffer =
+            city::CarUpdate(vk_ctx->draw_frame_arena, car_sim, ctx->road, ctx->time->delta_time_sec,
+                            node_utm_structure->utm_node_hashmap);
         R_BufferInfo car_instance_buffer_info =
             R_BufferInfoFromTemplateBuffer(instance_buffer, R_BufferType_Vertex);
         VK_Model3DInstanceDraw(car_sim->texture_handle, car_sim->vertex_handle,

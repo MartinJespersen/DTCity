@@ -2,6 +2,8 @@
 * Show the current road or building name in imgui window
   * Create a hashmap for Ways for quick lookup of index.
   * This requires a centralized place for storing ways and nodes.
+* Move OSM data structure to its own layer
+* Cleanup entrypoint main loop
 * Change the naming convention for functions from PascalCase to snake_case
 * Make the optimized build work and make possible to profile
 * Improve the HTTP library implementation
@@ -12,6 +14,7 @@
     * Should CMake be considered?
 * Documentation
   * Explain the different layers such as render, ui, etc.
+  * Create diagram of interaction between layers
 
 ## TODO: Done
 * Caching of OpenStreetMap data needs to be improved - &#9745;
