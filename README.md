@@ -42,3 +42,10 @@ cl /W4 /std:c++20 /wd4201 /wd4505 /wd4005 /wd4838 /wd4244 /wd4996 /wd4310 /wd424
 # Jpg/png to ktx2
 Use the ktx tool from khronos group. Example with mip map generation:
 ktx create --format R8G8B8A8_SRGB --generate-mipmap brick_wall.jpg brick_wall.ktx2
+
+# Overpass API data structure refactor
+* Node ids should be stored raw in a contiguous array.
+* NodeUTMStructure data should should consist of a hashmap for both nodes and ways.
+* All data from the overpass api should be fetched at the same time or at the same time in parallel.
+  * The tags will help specify the exact data
+  * This picking

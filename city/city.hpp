@@ -37,7 +37,7 @@ struct TagResult
     String8 value;
 };
 
-struct RoadNodeSlot
+struct RoadNodeList
 {
     RoadNode* first;
     RoadNode* last;
@@ -58,18 +58,19 @@ struct Way
 struct WayNode
 {
     WayNode* next;
-    Way* road_way;
+    WayNode* hash_next;
+    Way way;
 };
 
-struct WayQueue
+struct WayList
 {
     WayNode* first;
     WayNode* last;
 };
 
-struct NodeUtm
+struct UtmNode
 {
-    NodeUtm* next;
+    UtmNode* next;
     U64 id;
     union
     {
@@ -77,29 +78,27 @@ struct NodeUtm
         glm::vec2 vec;
     };
     String8 utm_zone;
-    WayQueue way_queue; // Linked list of RoadWays sharing this node
+    WayList way_queue; // Linked list of RoadWays sharing this node
 };
 
-struct NodeUtmSlot
+struct UtmNodeList
 {
-    NodeUtm* first;
-    NodeUtm* last;
+    UtmNode* first;
+    UtmNode* last;
 };
 
 struct NodeWays
 {
-    RoadNodeSlot* nodes;
-    U64 node_slot_count;
-    U64 unique_node_count;
-
+    Buffer<RoadNodeList> node_hashmap;
     Buffer<Way> ways;
 };
 
 struct NodeUtmStructure
 {
-    U64 node_hashmap_size;
-    Buffer<NodeUtmSlot> node_hashmap; // key is the node id
-    Vec2F64 utm_center_offset;        // used for centering utm coordinate based on bounding box
+    Buffer<UtmNodeList> utm_node_hashmap; // key is the node id
+    Vec2F64 utm_center_offset;            // used for centering utm coordinate based on bounding box
+
+    Buffer<WayList> way_hashmap;
 };
 
 union GCSBoundingBox
@@ -157,14 +156,14 @@ enum RoadDirection
 struct AdjacentNodeLL
 {
     AdjacentNodeLL* next;
-    NodeUtm* node;
+    UtmNode* node;
 };
 
 struct RoadCrossSection
 {
     Vec2F32 top;
     Vec2F32 btm;
-    NodeUtm* node;
+    UtmNode* node;
 };
 struct RoadSegment
 {
@@ -175,8 +174,8 @@ struct RoadSegment
 struct Car
 {
     glm::vec3 cur_pos;
-    NodeUtm* source;
-    NodeUtm* target;
+    UtmNode* source;
+    UtmNode* target;
     glm::vec3 dir;
     F32 speed; //
 };
@@ -251,7 +250,7 @@ CacheNeedsUpdate(String8 data_file_str, String8 cache_meta_file_path);
 
 // ~mgj: Globals
 read_only static RoadNode g_road_node = {&g_road_node, 0, 0.0f, 0.0f};
-read_only static NodeUtm g_road_node_utm = {&g_road_node_utm, 0, 0.0f, 0.0f};
+read_only static UtmNode g_road_node_utm = {&g_road_node_utm, 0, 0.0f, 0.0f};
 ///////////////////////
 static Road*
 RoadCreate(String8 texture_path, String8 cache_path, GCSBoundingBox* gcs_bbox,
@@ -264,16 +263,18 @@ DataFetch(Arena* arena, String8 cache_dir, String8 cache_name, String8 query,
 static void
 RoadVertexBufferCreate(Road* road, Buffer<Vertex3D>* out_vertex_buffer,
                        Buffer<U32>* out_index_buffer);
-static void
-NodeStructureCreate(Arena* arena, NodeWays* node_ways, GCSBoundingBox* utm_bbox,
-                    U64 hashmap_slot_count, NodeUtmStructure* out_node_utm_structure);
+static NodeUtmStructure
+NodeStructureCreate(Arena* arena, NodeWays* node_ways, GCSBoundingBox* gcs_bbox,
+                    U64 node_hashmap_size, U64 way_hashmap_size);
 static TagResult
 TagFind(Arena* arena, Buffer<Tag> tags, String8 tag_to_find);
 static inline RoadNode*
 NodeFind(NodeWays* road, U64 node_id);
-static NodeUtm*
+static WayNode*
+WayFind(NodeUtmStructure* structure, U64 way_id);
+static UtmNode*
 UtmNodeFind(NodeUtmStructure* road, U64 node_id);
-static NodeUtm*
+static UtmNode*
 RandomUtmNodeFind(NodeUtmStructure* utm_node_structure);
 static void
 QuadToBufferAdd(RoadSegment* road_segment, Buffer<Vertex3D> buffer, Buffer<U32> indices, U64 way_id,

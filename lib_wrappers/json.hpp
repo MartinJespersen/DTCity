@@ -9,7 +9,6 @@ struct NodeWays;
 
 namespace wrapper
 {
-static void
-OverpassNodeWayParse(Arena* arena, String8 json, U64 hashmap_slot_count,
-                     city::NodeWays* out_node_ways);
+static city::NodeWays
+OverpassNodeWayParse(Arena* arena, String8 json, U64 node_hashmap_size);
 };

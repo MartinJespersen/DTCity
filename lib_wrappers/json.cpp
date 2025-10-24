@@ -1,18 +1,15 @@
 namespace wrapper
 {
-static void
-OverpassNodeWayParse(Arena* arena, String8 json, U64 hashmap_slot_count,
-                     city::NodeWays* out_node_ways)
+static city::NodeWays
+OverpassNodeWayParse(Arena* arena, String8 json, U64 node_hashmap_size)
 {
-    out_node_ways->node_slot_count = hashmap_slot_count;
-
     simdjson::ondemand::parser parser;
     simdjson::padded_string json_padded((char*)json.str,
                                         json.size); // load JSON file 'twitter.json'.
     simdjson::ondemand::document doc =
         parser.iterate(json_padded); // position a pointer at the beginning of the JSON data
 
-    out_node_ways->nodes = PushArray(arena, city::RoadNodeSlot, out_node_ways->node_slot_count);
+    Buffer<city::RoadNodeList> nodes = BufferAlloc<city::RoadNodeList>(arena, node_hashmap_size);
 
     U64 way_count = 0;
     U64 node_count = 0;
@@ -25,9 +22,8 @@ OverpassNodeWayParse(Arena* arena, String8 json, U64 hashmap_slot_count,
             node->lat = item["lat"].get_double();
             node->lon = item["lon"].get_double();
 
-            U64 map_location = node->id % out_node_ways->node_slot_count;
-            SLLQueuePush(out_node_ways->nodes[map_location].first,
-                         out_node_ways->nodes[map_location].last, node);
+            U64 node_slot = node->id % node_hashmap_size;
+            SLLQueuePush(nodes.data[node_slot].first, nodes.data[node_slot].last, node);
             node_count++;
         }
         else if (item["type"] == "way")
@@ -36,17 +32,18 @@ OverpassNodeWayParse(Arena* arena, String8 json, U64 hashmap_slot_count,
         }
     }
 
-    out_node_ways->unique_node_count = node_count;
-    out_node_ways->ways = BufferAlloc<city::Way>(arena, way_count);
+    Buffer<city::Way> way_buffer = BufferAlloc<city::Way>(arena, way_count);
 
     U64 way_index = 0;
     for (auto element : doc["elements"])
     {
         if (element["type"] == "way")
         {
-            city::Way* way = &out_node_ways->ways.data[way_index];
-            way->id = element["id"].get_uint64();
+            // ~mgj: Insert into hashmap
+            U64 way_id = element["id"].get_uint64();
+            city::Way* way = &way_buffer.data[way_index];
 
+            way->id = way_id;
             // Get the nodes array and count elements
             auto nodes_array = element["nodes"].get_array();
             way->node_count = nodes_array.count_elements();
@@ -91,5 +88,8 @@ OverpassNodeWayParse(Arena* arena, String8 json, U64 hashmap_slot_count,
             way_index++;
         }
     }
+
+    city::NodeWays node_ways = {nodes, way_buffer};
+    return node_ways;
 }
 } // namespace wrapper
