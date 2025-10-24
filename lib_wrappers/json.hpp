@@ -4,11 +4,14 @@
 namespace city
 {
 struct Road;
-struct NodeWays;
+struct RoadNodeList;
+struct Way;
 } // namespace city
 
 namespace wrapper
 {
-static city::NodeWays
-OverpassNodeWayParse(Arena* arena, String8 json, U64 node_hashmap_size);
-};
+static Buffer<city::RoadNodeList>
+node_buffer_from_simd_json(Arena* arena, String8 json, U64 node_hashmap_size);
+static Buffer<city::Way>
+way_buffer_from_simd_json(Arena* arena, String8 json);
+}; // namespace wrapper

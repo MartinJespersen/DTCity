@@ -24,16 +24,15 @@ RoadCreate(String8 texture_path, String8 cache_path, GCSBoundingBox* gcs_bbox,
         >;
         out skel qt;
     )");
-    String8 content =
+    String8 json =
         DataFetch(scratch.arena, cache_path, road->openapi_data_file_name, query, gcs_bbox);
-    road->node_ways = wrapper::OverpassNodeWayParse(road->arena, content, 100);
-    NodeWays* node_ways = &road->node_ways;
-
-    // ~mgj: Road Decision tree create
+    Buffer<city::RoadNodeList> node_hashmap =
+        wrapper::node_buffer_from_simd_json(scratch.arena, json, 100);
+    Buffer<city::Way> ways = wrapper::way_buffer_from_simd_json(arena, json);
     U64 node_hashmap_size = 100;
     U64 way_hashmap_size = 100;
-    road->node_utm_structure =
-        NodeStructureCreate(road->arena, node_ways, gcs_bbox, node_hashmap_size, way_hashmap_size);
+    road->node_utm_structure = node_structure_create(arena, node_hashmap, ways, gcs_bbox,
+                                                     node_hashmap_size, way_hashmap_size);
 
     RoadVertexBufferCreate(road, &road->vertex_buffer, &road->index_buffer);
     R_BufferInfo vertex_buffer_info =
@@ -61,9 +60,9 @@ RoadDestroy(Road* road)
 }
 
 static inline RoadNode*
-NodeFind(NodeWays* node_ways, U64 node_id)
+NodeFind(Buffer<RoadNodeList> node_hashmap, U64 node_id)
 {
-    RoadNodeList* node_list = &node_ways->node_hashmap.data[node_id % node_ways->node_hashmap.size];
+    RoadNodeList* node_list = &node_hashmap.data[node_id % node_hashmap.size];
 
     RoadNode* node = node_list->first;
     for (; node <= node_list->last; node = node->next)
@@ -203,8 +202,8 @@ UniqueNodeAndWayInsert(Arena* arena, NodeUtmStructure* structure, U64 node_id, W
 }
 
 static NodeUtmStructure
-NodeStructureCreate(Arena* arena, NodeWays* node_ways, GCSBoundingBox* gcs_bbox,
-                    U64 node_hashmap_size, U64 way_hashmap_size)
+node_structure_create(Arena* arena, Buffer<RoadNodeList> node_hashmap, Buffer<Way> ways,
+                      GCSBoundingBox* gcs_bbox, U64 node_hashmap_size, U64 way_hashmap_size)
 {
     F64 long_low_utm;
     F64 lat_low_utm;
@@ -221,16 +220,16 @@ NodeStructureCreate(Arena* arena, NodeWays* node_ways, GCSBoundingBox* gcs_bbox,
     Vec2F64 utm_center_offset = {center_transform_x, center_transform_y};
     Buffer<UtmNodeList> utm_node_hashmap = BufferAlloc<UtmNodeList>(arena, node_hashmap_size);
     Buffer<WayList> way_hashmap = BufferAlloc<WayList>(arena, way_hashmap_size);
-    NodeUtmStructure node_utm_structure = {utm_node_hashmap, utm_center_offset, way_hashmap};
-    for (U32 way_index = 0; way_index < node_ways->ways.size; way_index++)
+    NodeUtmStructure node_utm_structure = {utm_node_hashmap, utm_center_offset, ways, way_hashmap};
+    for (U32 way_index = 0; way_index < ways.size; way_index++)
     {
-        Way* way = &node_ways->ways.data[way_index];
+        Way* way = &ways.data[way_index];
         for (U32 node_index = 0; node_index < way->node_count; node_index++)
         {
             U64 node_id = way->node_ids[node_index];
             UtmNode* node_utm;
             UniqueNodeAndWayInsert(arena, &node_utm_structure, node_id, way, &node_utm);
-            RoadNode* node_coord = NodeFind(node_ways, node_id);
+            RoadNode* node_coord = NodeFind(node_hashmap, node_id);
             double x, y;
 
             char node_utm_zone[10];
@@ -269,12 +268,12 @@ RoadVertexBufferCreate(Road* road, Buffer<Vertex3D>* out_vertex_buffer,
                        Buffer<U32>* out_index_buffer)
 {
     ScratchScope scratch = ScratchScope(0, 0);
-    NodeWays* node_ways = &road->node_ways;
+    Buffer<Way> ways = road->node_utm_structure.ways;
 
     U64 total_road_segment_count = 0;
-    for (U32 way_index = 0; way_index < node_ways->ways.size; way_index++)
+    for (U32 way_index = 0; way_index < ways.size; way_index++)
     {
-        Way* way = &node_ways->ways.data[way_index];
+        Way* way = &ways.data[way_index];
         // -1 get the number of road segments (because the first and last vertices are shared
         // between segments)
         total_road_segment_count += way->node_count - 1;
@@ -289,9 +288,9 @@ RoadVertexBufferCreate(Road* road, Buffer<Vertex3D>* out_vertex_buffer,
 
     U32 current_vertex_idx = 0;
     U32 current_index_idx = 0;
-    for (U32 way_index = 0; way_index < road->node_ways.ways.size; way_index++)
+    for (U32 way_index = 0; way_index < ways.size; way_index++)
     {
-        Way* way = &road->node_ways.ways.data[way_index];
+        Way* way = &ways.data[way_index];
         //
         // ~mgj: road width calculation
         F32 road_width =
@@ -1013,11 +1012,13 @@ BuildingsCreate(String8 cache_path, String8 texture_path, F32 road_height, GCSBo
     )");
     String8 data =
         DataFetch(scratch.arena, cache_path, buildings->cache_file_name, query, gcs_bbox);
-    buildings->node_ways = wrapper::OverpassNodeWayParse(arena, data, 100);
+    Buffer<city::RoadNodeList> node_hashmap =
+        wrapper::node_buffer_from_simd_json(scratch.arena, data, 100);
+    Buffer<city::Way> ways = wrapper::way_buffer_from_simd_json(arena, data);
     U64 node_hashmap_size = 100;
     U64 way_hashmap_size = 100;
-    buildings->node_utm_structure = NodeStructureCreate(arena, &buildings->node_ways, gcs_bbox,
-                                                        node_hashmap_size, way_hashmap_size);
+    buildings->node_utm_structure = node_structure_create(arena, node_hashmap, ways, gcs_bbox,
+                                                          node_hashmap_size, way_hashmap_size);
 
     buildings->facade_texture_path =
         Str8PathFromStr8List(arena, {texture_path, S("brick_wall.ktx2")});
@@ -1080,7 +1081,7 @@ BuildingsBuffersCreate(Arena* arena, Buildings* buildings, F32 road_height,
                        BuildingRenderInfo* out_render_info)
 {
     ScratchScope scratch = ScratchScope(&arena, 1);
-    NodeWays* node_ways = &buildings->node_ways;
+    Buffer<Way> ways = buildings->node_utm_structure.ways;
     NodeUtmStructure* node_utm_structure = &buildings->node_utm_structure;
     F32 building_height = 3;
 
@@ -1088,9 +1089,9 @@ BuildingsBuffersCreate(Arena* arena, Buildings* buildings, F32 road_height,
     U32 total_vertex_count = 0;
     U32 total_index_count = 0;
 
-    for (U32 i = 0; i < node_ways->ways.size; i++)
+    for (U32 i = 0; i < ways.size; i++)
     {
-        Way* way = &node_ways->ways.data[i];
+        Way* way = &ways.data[i];
         // ~mgj: first and last node id should be the same
         U32 way_facade_vertex_count = (way->node_count - 1) * 4;
         total_vertex_count += way_facade_vertex_count + (way->node_count - 1) * 2;
@@ -1108,9 +1109,9 @@ BuildingsBuffersCreate(Arena* arena, Buildings* buildings, F32 road_height,
 
     U32 base_index_idx = 0;
     U32 base_vertex_idx = 0;
-    for (U32 way_idx = 0; way_idx < node_ways->ways.size; way_idx++)
+    for (U32 way_idx = 0; way_idx < ways.size; way_idx++)
     {
-        Way* way = &node_ways->ways.data[way_idx];
+        Way* way = &ways.data[way_idx];
 
         // ~mgj: Add Vertices and Indices for the sides of building
         for (U32 node_idx = 0, vert_idx = base_vertex_idx, index_idx = base_index_idx;
@@ -1154,9 +1155,9 @@ BuildingsBuffersCreate(Arena* arena, Buildings* buildings, F32 road_height,
     ///////////////////////////////////////////////////////////////////
     // ~mgj: Create roof
     U32 roof_base_index = base_index_idx;
-    for (U32 way_idx = 0; way_idx < node_ways->ways.size; way_idx++)
+    for (U32 way_idx = 0; way_idx < ways.size; way_idx++)
     {
-        Way* way = &node_ways->ways.data[way_idx];
+        Way* way = &ways.data[way_idx];
         Buffer<UtmNode*> buildings_utm_node_buffer =
             BufferAlloc<UtmNode*>(scratch.arena, way->node_count - 1);
         for (U32 idx = 0; idx < way->node_count - 1; idx += 1)

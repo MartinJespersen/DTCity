@@ -1,18 +1,15 @@
 namespace wrapper
 {
-static city::NodeWays
-OverpassNodeWayParse(Arena* arena, String8 json, U64 node_hashmap_size)
+
+static Buffer<city::RoadNodeList>
+node_buffer_from_simd_json(Arena* arena, String8 json, U64 node_hashmap_size)
 {
     simdjson::ondemand::parser parser;
-    simdjson::padded_string json_padded((char*)json.str,
-                                        json.size); // load JSON file 'twitter.json'.
-    simdjson::ondemand::document doc =
-        parser.iterate(json_padded); // position a pointer at the beginning of the JSON data
+    simdjson::padded_string json_padded((char*)json.str, json.size);
+    simdjson::ondemand::document doc = parser.iterate(json_padded);
 
     Buffer<city::RoadNodeList> nodes = BufferAlloc<city::RoadNodeList>(arena, node_hashmap_size);
 
-    U64 way_count = 0;
-    U64 node_count = 0;
     for (auto item : doc["elements"])
     {
         if (item["type"] == "node")
@@ -24,14 +21,27 @@ OverpassNodeWayParse(Arena* arena, String8 json, U64 node_hashmap_size)
 
             U64 node_slot = node->id % node_hashmap_size;
             SLLQueuePush(nodes.data[node_slot].first, nodes.data[node_slot].last, node);
-            node_count++;
-        }
-        else if (item["type"] == "way")
-        {
-            way_count++;
         }
     }
 
+    return nodes;
+}
+
+static Buffer<city::Way>
+way_buffer_from_simd_json(Arena* arena, String8 json)
+{
+    simdjson::ondemand::parser parser;
+    simdjson::padded_string json_padded((char*)json.str, json.size);
+    simdjson::ondemand::document doc = parser.iterate(json_padded);
+
+    U64 way_count = 0;
+    for (auto item : doc["elements"])
+    {
+        if (item["type"] == "way")
+        {
+            way_count += 1;
+        }
+    }
     Buffer<city::Way> way_buffer = BufferAlloc<city::Way>(arena, way_count);
 
     U64 way_index = 0;
@@ -89,7 +99,7 @@ OverpassNodeWayParse(Arena* arena, String8 json, U64 node_hashmap_size)
         }
     }
 
-    city::NodeWays node_ways = {nodes, way_buffer};
-    return node_ways;
+    return way_buffer;
 }
+
 } // namespace wrapper

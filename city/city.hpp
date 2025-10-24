@@ -87,17 +87,12 @@ struct UtmNodeList
     UtmNode* last;
 };
 
-struct NodeWays
-{
-    Buffer<RoadNodeList> node_hashmap;
-    Buffer<Way> ways;
-};
-
 struct NodeUtmStructure
 {
     Buffer<UtmNodeList> utm_node_hashmap; // key is the node id
     Vec2F64 utm_center_offset;            // used for centering utm coordinate based on bounding box
 
+    Buffer<Way> ways; // buffer storage
     Buffer<WayList> way_hashmap;
 };
 
@@ -128,7 +123,6 @@ struct Road
     F32 default_road_width;
     F32 texture_scale;
 
-    NodeWays node_ways;
     ////////////////////////////////
     // UTM coordinates
     NodeUtmStructure node_utm_structure;
@@ -215,7 +209,6 @@ struct Buildings
     Arena* arena;
     String8 cache_file_name;
 
-    NodeWays node_ways;
     NodeUtmStructure node_utm_structure;
 
     String8 roof_texture_path;
@@ -264,12 +257,12 @@ static void
 RoadVertexBufferCreate(Road* road, Buffer<Vertex3D>* out_vertex_buffer,
                        Buffer<U32>* out_index_buffer);
 static NodeUtmStructure
-NodeStructureCreate(Arena* arena, NodeWays* node_ways, GCSBoundingBox* gcs_bbox,
-                    U64 node_hashmap_size, U64 way_hashmap_size);
+node_structure_create(Arena* arena, Buffer<RoadNodeList> node_hashmap, Buffer<Way> ways,
+                      GCSBoundingBox* gcs_bbox, U64 node_hashmap_size, U64 way_hashmap_size);
 static TagResult
 TagFind(Arena* arena, Buffer<Tag> tags, String8 tag_to_find);
-static inline RoadNode*
-NodeFind(NodeWays* road, U64 node_id);
+static WayNode*
+WayFind(NodeUtmStructure* structure, U64 way_id);
 static WayNode*
 WayFind(NodeUtmStructure* structure, U64 way_id);
 static UtmNode*
