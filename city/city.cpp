@@ -1,5 +1,6 @@
 namespace city
 {
+
 static Road*
 RoadCreate(String8 texture_path, String8 cache_path, GCSBoundingBox* gcs_bbox,
            R_SamplerInfo* sampler_info)
@@ -28,10 +29,9 @@ RoadCreate(String8 texture_path, String8 cache_path, GCSBoundingBox* gcs_bbox,
         DataFetch(scratch.arena, cache_path, road->openapi_data_file_name, query, gcs_bbox);
     Buffer<city::RoadNodeList> node_hashmap =
         wrapper::node_buffer_from_simd_json(scratch.arena, json, 100);
-    Buffer<city::Way> ways = wrapper::way_buffer_from_simd_json(arena, json);
     U64 node_hashmap_size = 100;
     U64 way_hashmap_size = 100;
-    road->node_utm_structure = node_structure_create(arena, node_hashmap, ways, gcs_bbox,
+    road->node_utm_structure = node_structure_create(arena, node_hashmap, json, gcs_bbox,
                                                      node_hashmap_size, way_hashmap_size);
 
     RoadVertexBufferCreate(road, &road->vertex_buffer, &road->index_buffer);
@@ -60,12 +60,12 @@ RoadDestroy(Road* road)
 }
 
 static inline RoadNode*
-NodeFind(Buffer<RoadNodeList> node_hashmap, U64 node_id)
+node_find(Buffer<RoadNodeList> node_hashmap, U64 node_id)
 {
     RoadNodeList* node_list = &node_hashmap.data[node_id % node_hashmap.size];
 
     RoadNode* node = node_list->first;
-    for (; node <= node_list->last; node = node->next)
+    for (; node; node = node->next)
     {
         if (node->id == node_id)
         {
@@ -76,12 +76,12 @@ NodeFind(Buffer<RoadNodeList> node_hashmap, U64 node_id)
 }
 
 static WayNode*
-WayFind(NodeUtmStructure* structure, U64 way_id)
+way_find(NodeUtmStructure* structure, U64 way_id)
 {
     WayList* way_list = &structure->way_hashmap.data[way_id % structure->way_hashmap.size];
 
     WayNode* node = way_list->first;
-    for (; node <= way_list->last; node = node->next)
+    for (; node; node = node->hash_next)
     {
         city::Way* way = &node->way;
         if (way->id == way_id)
@@ -202,7 +202,7 @@ UniqueNodeAndWayInsert(Arena* arena, NodeUtmStructure* structure, U64 node_id, W
 }
 
 static NodeUtmStructure
-node_structure_create(Arena* arena, Buffer<RoadNodeList> node_hashmap, Buffer<Way> ways,
+node_structure_create(Arena* arena, Buffer<RoadNodeList> node_hashmap, String8 json,
                       GCSBoundingBox* gcs_bbox, U64 node_hashmap_size, U64 way_hashmap_size)
 {
     F64 long_low_utm;
@@ -217,6 +217,9 @@ node_structure_create(Arena* arena, Buffer<RoadNodeList> node_hashmap, Buffer<Wa
     F64 center_transform_x = -(long_low_utm + long_high_utm) / 2.0;
     F64 center_transform_y = -(lat_low_utm + lat_high_utm) / 2.0;
 
+    // ~mgj: parse OSM way structures
+    Buffer<Way> ways = wrapper::way_buffer_from_simd_json(arena, json);
+
     Vec2F64 utm_center_offset = {center_transform_x, center_transform_y};
     Buffer<UtmNodeList> utm_node_hashmap = BufferAlloc<UtmNodeList>(arena, node_hashmap_size);
     Buffer<WayList> way_hashmap = BufferAlloc<WayList>(arena, way_hashmap_size);
@@ -229,7 +232,7 @@ node_structure_create(Arena* arena, Buffer<RoadNodeList> node_hashmap, Buffer<Wa
             U64 node_id = way->node_ids[node_index];
             UtmNode* node_utm;
             UniqueNodeAndWayInsert(arena, &node_utm_structure, node_id, way, &node_utm);
-            RoadNode* node_coord = NodeFind(node_hashmap, node_id);
+            RoadNode* node_coord = node_find(node_hashmap, node_id);
             double x, y;
 
             char node_utm_zone[10];
@@ -1010,14 +1013,13 @@ BuildingsCreate(String8 cache_path, String8 texture_path, F32 road_height, GCSBo
         >;
         out skel qt;
     )");
-    String8 data =
+    String8 json =
         DataFetch(scratch.arena, cache_path, buildings->cache_file_name, query, gcs_bbox);
     Buffer<city::RoadNodeList> node_hashmap =
-        wrapper::node_buffer_from_simd_json(scratch.arena, data, 100);
-    Buffer<city::Way> ways = wrapper::way_buffer_from_simd_json(arena, data);
+        wrapper::node_buffer_from_simd_json(scratch.arena, json, 100);
     U64 node_hashmap_size = 100;
     U64 way_hashmap_size = 100;
-    buildings->node_utm_structure = node_structure_create(arena, node_hashmap, ways, gcs_bbox,
+    buildings->node_utm_structure = node_structure_create(arena, node_hashmap, json, gcs_bbox,
                                                           node_hashmap_size, way_hashmap_size);
 
     buildings->facade_texture_path =

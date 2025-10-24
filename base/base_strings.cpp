@@ -325,7 +325,7 @@ backslashed_from_str8(Arena* arena, String8 string)
 //~ rjf: String Matching
 
 static B32
-Str8Match(String8 a, String8 b, StringMatchFlags flags)
+str8_match(String8 a, String8 b, StringMatchFlags flags)
 {
     B32 result = 0;
     if (a.size == b.size && flags == 0)
@@ -387,7 +387,7 @@ FindSubstr8(String8 string, String8 needle, U64 start_pos, StringMatchFlags flag
             }
             if (haystack_char_adjusted == needle_first_char_adjusted)
             {
-                if (Str8Match(str8_range(p + 1, string_opl), needle_tail, adjusted_flags))
+                if (str8_match(str8_range(p + 1, string_opl), needle_tail, adjusted_flags))
                 {
                     break;
                 }
@@ -409,7 +409,7 @@ str8_find_needle_reverse(String8 string, U64 start_pos, String8 needle, StringMa
     for (S64 i = string.size - start_pos - needle.size; i >= 0; --i)
     {
         String8 haystack = Str8Substr(string, rng_1u64(i, i + needle.size));
-        if (Str8Match(haystack, needle, flags))
+        if (str8_match(haystack, needle, flags))
         {
             result = (U64)i + needle.size;
             break;
@@ -422,7 +422,7 @@ static B32
 str8_ends_with(String8 string, String8 end, StringMatchFlags flags)
 {
     String8 postfix = str8_postfix(string, end.size);
-    B32 is_match = Str8Match(end, postfix, flags);
+    B32 is_match = str8_match(end, postfix, flags);
     return is_match;
 }
 
@@ -666,12 +666,12 @@ try_u64_from_str8_c_rules(String8 string, U64* x)
     else
     {
         String8 hex_string = Str8Skip(string, 2);
-        if (Str8Match(Str8Prefix(string, 2), Str8Lit("0x"), 0) && str8_is_integer(hex_string, 0x10))
+        if (str8_match(Str8Prefix(string, 2), Str8Lit("0x"), 0) && str8_is_integer(hex_string, 0x10))
         {
             is_integer = 1;
             *x = U64FromStr8(hex_string, 0x10);
         }
-        else if (Str8Match(Str8Prefix(string, 2), Str8Lit("0b"), 0) &&
+        else if (str8_match(Str8Prefix(string, 2), Str8Lit("0b"), 0) &&
                  str8_is_integer(hex_string, 2))
         {
             is_integer = 1;
@@ -680,7 +680,7 @@ try_u64_from_str8_c_rules(String8 string, U64* x)
         else
         {
             String8 oct_string = Str8Skip(string, 1);
-            if (Str8Match(Str8Prefix(string, 1), Str8Lit("0"), 0) &&
+            if (str8_match(Str8Prefix(string, 1), Str8Lit("0"), 0) &&
                 str8_is_integer(hex_string, 010))
             {
                 is_integer = 1;
@@ -1859,7 +1859,7 @@ operating_system_from_string(String8 string)
 {
     for (U64 i = 0; i < ArrayCount(g_os_enum_map); ++i)
     {
-        if (Str8Match(g_os_enum_map[i].string, string, MatchFlag_CaseInsensitive))
+        if (str8_match(g_os_enum_map[i].string, string, MatchFlag_CaseInsensitive))
         {
             return g_os_enum_map[i].os;
         }

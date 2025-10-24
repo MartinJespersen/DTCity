@@ -124,21 +124,27 @@ MainLoop(void* ptr)
         Vec2U32 framebuffer_dim = {.x = (U32)io_ctx->framebuffer_width,
                                    .y = (U32)io_ctx->framebuffer_height};
 
-        bool open = true;
-        ImGui::Begin("Test Window", &open, ImGuiWindowFlags_AlwaysAutoResize);
-        if (ImGui::IsWindowHovered(ImGuiHoveredFlags_AllowWhenBlockedByActiveItem))
-        {
-            ImGui::Text("Window Hovered!");
-        }
-        else
         {
             CameraUpdate(ctx->camera, ctx->io, ctx->time->delta_time_sec, framebuffer_dim);
-            ImGui::Text("Currently Hovered Item ID: %llu", R_LatestHoveredObjectIdGet());
-            ImVec2 window_size = ImGui::GetWindowSize();
-            ImVec2 window_pos = ImVec2((F32)framebuffer_dim.x - window_size.x, 0);
-            ImGui::SetWindowPos(window_pos, ImGuiCond_Always);
+            U64 hovered_object_id = r_latest_hovered_object_id_get();
+            city::WayNode* way_node = city::way_find(&road->node_utm_structure, hovered_object_id);
+
+            if (way_node)
+            {
+                city::Way* way = &way_node->way;
+                bool open = true;
+                ImGui::Begin("Object Info", &open, ImGuiWindowFlags_AlwaysAutoResize);
+                for (U32 tag_idx = 0; tag_idx < way->tags.size; tag_idx += 1)
+                {
+                    city::Tag* tag = &way->tags.data[tag_idx];
+                    ImGui::Text("%s: %s", (char*)tag->key.str, (char*)tag->value.str);
+                }
+                ImVec2 window_size = ImGui::GetWindowSize();
+                ImVec2 window_pos = ImVec2((F32)framebuffer_dim.x - window_size.x, 0);
+                ImGui::SetWindowPos(window_pos, ImGuiCond_Always);
+                ImGui::End();
+            }
         }
-        ImGui::End();
 
         VK_Model3DDraw(road->texture_handle, road->vertex_handle, road->index_handle, TRUE, 0,
                        road->index_buffer.size);

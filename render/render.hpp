@@ -148,7 +148,7 @@ R_GpuWorkDoneWait();
 static void
 R_NewFrame();
 static U64
-R_LatestHoveredObjectIdGet();
+r_latest_hovered_object_id_get();
 
 // ~mgj: Texture loading interface
 static R_Handle

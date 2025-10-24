@@ -59,16 +59,16 @@ static HTTP_Response HTTP_Request(Arena *arena, String8 host, String8 path,
     {
       if (url_port_part.size != 0) {
         port = (U16)U64FromStr8(url_port_part, 10);
-      } else if (Str8Match(url_protocol_part, Str8Lit("https://"),
+      } else if (str8_match(url_protocol_part, Str8Lit("https://"),
                            MatchFlag_CaseInsensitive)) {
         port = INTERNET_DEFAULT_HTTPS_PORT;
-      } else if (Str8Match(url_protocol_part, Str8Lit("http://"),
+      } else if (str8_match(url_protocol_part, Str8Lit("http://"),
                            MatchFlag_CaseInsensitive)) {
         port = INTERNET_DEFAULT_HTTP_PORT;
-      } else if (Str8Match(url_protocol_part, Str8Lit("ftp://"),
+      } else if (str8_match(url_protocol_part, Str8Lit("ftp://"),
                            MatchFlag_CaseInsensitive)) {
         port = 21;
-      } else if (Str8Match(url_protocol_part, Str8Lit("ssh://"),
+      } else if (str8_match(url_protocol_part, Str8Lit("ssh://"),
                            MatchFlag_CaseInsensitive)) {
         port = 22;
       }

@@ -1764,7 +1764,7 @@ R_NewFrame()
 }
 
 static U64
-R_LatestHoveredObjectIdGet()
+r_latest_hovered_object_id_get()
 {
     VK_Context* vk_ctx = VK_CtxGet();
     return vk_ctx->hovered_object_id;

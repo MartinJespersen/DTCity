@@ -644,7 +644,7 @@ os_properties_from_file_path(String8 path)
             off += next_drive_string_16.size + 1;
             String8 next_drive_string = str8_from_16(scratch.arena, next_drive_string_16);
             next_drive_string = str8_chop_last_slash(next_drive_string);
-            if (Str8Match(path_trimmed, next_drive_string, MatchFlag_CaseInsensitive))
+            if (str8_match(path_trimmed, next_drive_string, MatchFlag_CaseInsensitive))
             {
                 props.flags |= FilePropertyFlag_IsFolder;
                 break;
@@ -1834,13 +1834,13 @@ w32_entry_point_caller(int argc, WCHAR** wargv)
     {
         String16 arg16 = str16_cstring((U16*)wargv[i]);
         String8 arg8 = str8_from_16(args_arena, arg16);
-        if (Str8Match(arg8, Str8Lit("--quiet"), MatchFlag_CaseInsensitive) ||
-            Str8Match(arg8, Str8Lit("-quiet"), MatchFlag_CaseInsensitive))
+        if (str8_match(arg8, Str8Lit("--quiet"), MatchFlag_CaseInsensitive) ||
+            str8_match(arg8, Str8Lit("-quiet"), MatchFlag_CaseInsensitive))
         {
             win32_g_is_quiet = 1;
         }
-        if (Str8Match(arg8, Str8Lit("--large_pages"), MatchFlag_CaseInsensitive) ||
-            Str8Match(arg8, Str8Lit("-large_pages"), MatchFlag_CaseInsensitive))
+        if (str8_match(arg8, Str8Lit("--large_pages"), MatchFlag_CaseInsensitive) ||
+            str8_match(arg8, Str8Lit("-large_pages"), MatchFlag_CaseInsensitive))
         {
             arena_default_flags = ArenaFlag_LargePages;
             arena_default_reserve_size = Max(MB(64), os_w32_state.system_info.large_page_size);
