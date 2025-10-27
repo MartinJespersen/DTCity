@@ -1,13 +1,8 @@
 # TODO for the first draft
-* Show the current road or building name in imgui window
-  * Create a hashmap for Ways for quick lookup of index.
-  * This requires a centralized place for storing ways and nodes.
-* Move OSM data structure to its own layer
+
 * Cleanup entrypoint main loop
 * Change the naming convention for functions from PascalCase to snake_case
 * Make the optimized build work and make possible to profile
-* Improve the HTTP library implementation
-  * Probably consider using a cross platform library only instead of a mix
 * Linux integration:
   * How to include linux libraries.
   * Build Script changes.
@@ -21,11 +16,17 @@
 * Bounding Box for OpenStreetMap should be a command line input - &#9745;
 * Error handling:
   * OpenStreetMap information retry &#9745;
+* Move OSM data structure to its own layer &#9745;
+* Show the current road or building name in imgui window &#9745;
+  * Create a hashmap for Ways for quick lookup of index.
+  * This requires a centralized place for storing ways and nodes.
 
 ## Nice to have:
 * Improve the conversion between UTM and WGS84 system
 * Make the optimized build version work
 * Consider testing and how to do it
+* Improve the HTTP library implementation
+  * Probably consider using a cross platform library only instead of a mix
 
 # Future Improvements:
 * Asset Store is currently not thread safe for eviction cases and memory needs to be managed properly.
@@ -50,9 +51,8 @@ cl /W4 /std:c++20 /wd4201 /wd4505 /wd4005 /wd4838 /wd4244 /wd4996 /wd4310 /wd424
 Use the ktx tool from khronos group. Example with mip map generation:
 ktx create --format R8G8B8A8_SRGB --generate-mipmap brick_wall.jpg brick_wall.ktx2
 
-# Overpass API data structure refactor
-* Node ids should be stored raw in a contiguous array.
-* NodeUTMStructure data should should consist of a hashmap for both nodes and ways.
-* All data from the overpass api should be fetched at the same time or at the same time in parallel.
-  * The tags will help specify the exact data
-  * This picking
+# Long Term Features
+* Usage of Aarhus Municipality mesh data.
+  * Shadows
+
+# Diagram of Layers

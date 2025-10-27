@@ -583,7 +583,7 @@ VK_CameraUniformBufferCreate(VK_Context* vk_ctx)
 }
 
 static void
-VK_CameraUniformBufferUpdate(VK_Context* vk_ctx, ui::Camera* camera, Vec2F32 screen_res,
+VK_CameraUniformBufferUpdate(VK_Context* vk_ctx, Camera* camera, Vec2F32 screen_res,
                              U32 current_frame)
 {
     VK_BufferAllocationMapped* buffer = &vk_ctx->camera_buffer_alloc_mapped[current_frame];
@@ -1169,8 +1169,7 @@ VK_Model3DRendering()
 }
 
 static void
-VK_CommandBufferRecord(U32 image_index, U32 current_frame, ui::Camera* camera,
-                       Vec2S64 mouse_cursor_pos)
+VK_CommandBufferRecord(U32 image_index, U32 current_frame, Camera* camera, Vec2S64 mouse_cursor_pos)
 {
     ProfScopeMarker;
     Temp scratch = ScratchBegin(0, 0);
@@ -1651,7 +1650,7 @@ R_RenderCtxDestroy()
 }
 
 static void
-R_RenderFrame(Vec2U32 framebuffer_dim, B32* in_out_framebuffer_resized, ui::Camera* camera,
+R_RenderFrame(Vec2U32 framebuffer_dim, B32* in_out_framebuffer_resized, Camera* camera,
               Vec2S64 mouse_cursor_pos)
 {
     VK_Context* vk_ctx = VK_CtxGet();

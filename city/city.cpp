@@ -576,7 +576,7 @@ RoadIntersectionPointsFind(Road* road, RoadSegment* in_out_segment, osm_Way* cur
                     RoadSegmentFromTwoRoadNodes(&crossing_road_segment, adj_node_item->node, node,
                                                 road_width);
                     // update closest point for the top road
-                    if (ui::LineIntersect(
+                    if (ui_line_intersect(
                             top_of_road_line_segment.p0.x, top_of_road_line_segment.p0.y,
                             top_of_road_line_segment.p1.x, top_of_road_line_segment.p1.y,
                             crossing_road_segment.start.top.x, crossing_road_segment.start.top.y,
@@ -593,7 +593,7 @@ RoadIntersectionPointsFind(Road* road, RoadSegment* in_out_segment, osm_Way* cur
                         }
                     };
 
-                    if (ui::LineIntersect(
+                    if (ui_line_intersect(
                             top_of_road_line_segment.p0.x, top_of_road_line_segment.p0.y,
                             top_of_road_line_segment.p1.x, top_of_road_line_segment.p1.y,
                             crossing_road_segment.start.btm.x, crossing_road_segment.start.btm.y,
@@ -610,7 +610,7 @@ RoadIntersectionPointsFind(Road* road, RoadSegment* in_out_segment, osm_Way* cur
                         }
                     };
                     // update closest point for the btm
-                    if (ui::LineIntersect(
+                    if (ui_line_intersect(
                             btm_of_road_line_segment.p0.x, btm_of_road_line_segment.p0.y,
                             btm_of_road_line_segment.p1.x, btm_of_road_line_segment.p1.y,
                             crossing_road_segment.start.top.x, crossing_road_segment.start.top.y,
@@ -627,7 +627,7 @@ RoadIntersectionPointsFind(Road* road, RoadSegment* in_out_segment, osm_Way* cur
                         }
                     };
 
-                    if (ui::LineIntersect(
+                    if (ui_line_intersect(
                             btm_of_road_line_segment.p0.x, btm_of_road_line_segment.p0.y,
                             btm_of_road_line_segment.p1.x, btm_of_road_line_segment.p1.y,
                             crossing_road_segment.start.btm.x, crossing_road_segment.start.btm.y,

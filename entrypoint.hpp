@@ -39,7 +39,7 @@ struct Context
     Arena* arena_permanent;
 
     IO* io;
-    ui::Camera* camera;
+    Camera* camera;
     DT_Time* time;
     city::Road* road;
     city::CarSim* car_sim;

@@ -1,5 +1,4 @@
-namespace ui
-{
+
 
 glm::vec3
 DirectionNormalFromEulerAngles(F32 yaw, F32 pitch)
@@ -13,7 +12,7 @@ DirectionNormalFromEulerAngles(F32 yaw, F32 pitch)
 }
 
 static void
-CameraInit(Camera* camera)
+ui_camera_init(Camera* camera)
 {
     camera->zoom_sensitivity = 20.0f;
     camera->fov = 45.0;
@@ -24,7 +23,7 @@ CameraInit(Camera* camera)
 }
 
 static void
-CameraUpdate(Camera* camera, IO* input, F32 time, Vec2U32 extent)
+ui_camera_update(Camera* camera, IO* input, F32 time, Vec2U32 extent)
 {
     F32 mouse_sensitivity = 0.1f;
     if (input->mouse_left_clicked & input->is_cursor_inside_win & input->is_window_focused)
@@ -67,7 +66,7 @@ CameraUpdate(Camera* camera, IO* input, F32 time, Vec2U32 extent)
 }
 
 static B32
-LineIntersect(F64 x1, F64 y1, F64 x2, F64 y2, F64 x3, F64 y3, F64 x4, F64 y4, F64* x, F64* y)
+ui_line_intersect(F64 x1, F64 y1, F64 x2, F64 y2, F64 x3, F64 y3, F64 x4, F64 y4, F64* x, F64* y)
 {
     F64 EPS = 0.001;
     F64 mua, mub;
@@ -108,17 +107,15 @@ LineIntersect(F64 x1, F64 y1, F64 x2, F64 y2, F64 x3, F64 y3, F64 x4, F64 y4, F6
 }
 
 static B32
-LineIntersect2F32(Vec2F32 v0, Vec2F32 v1, Vec2F32 v2, Vec2F32 v3, Vec2F32* res)
+ui_line_intersect_2f32(Vec2F32 v0, Vec2F32 v1, Vec2F32 v2, Vec2F32 v3, Vec2F32* res)
 {
     Vec2F64 res_f64 = {};
 
     B32 does_intersect =
-        LineIntersect(v0.x, v0.y, v1.x, v1.y, v2.x, v2.y, v3.x, v3.y, &res_f64.x, &res_f64.y);
+        ui_line_intersect(v0.x, v0.y, v1.x, v1.y, v2.x, v2.y, v3.x, v3.y, &res_f64.x, &res_f64.y);
 
     res->x = (F32)res_f64.x;
     res->y = (F32)res_f64.y;
 
     return does_intersect;
 }
-
-} // namespace ui

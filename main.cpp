@@ -32,7 +32,7 @@ ContextCreate(IO* io_ctx)
     Context* ctx = PushStruct(app_arena, Context);
     ctx->arena_permanent = app_arena;
     ctx->io = PushStruct(app_arena, IO);
-    ctx->camera = PushStruct(app_arena, ui::Camera);
+    ctx->camera = PushStruct(app_arena, Camera);
     ctx->time = PushStruct(app_arena, DT_Time);
 
     ctx->cwd = Str8PathFromStr8List(app_arena,

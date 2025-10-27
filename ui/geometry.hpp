@@ -1,7 +1,5 @@
 #pragma once
 
-namespace ui
-{
 struct Camera
 {
     glm::mat4 view_matrix;
@@ -16,14 +14,12 @@ struct Camera
 };
 
 static void
-CameraInit(Camera* camera);
+ui_camera_init(Camera* camera);
 
 static void
-CameraUpdate(Camera* camera, IO* input, F32 time, Vec2U32 extent);
+ui_camera_update(Camera* camera, IO* input, F32 time, Vec2U32 extent);
 
 static B32
-LineIntersect(F64 x1, F64 y1, F64 x2, F64 y2, F64 x3, F64 y3, F64 x4, F64 y4, F64* x, F64* y);
+ui_line_intersect(F64 x1, F64 y1, F64 x2, F64 y2, F64 x3, F64 y3, F64 x4, F64 y4, F64* x, F64* y);
 static B32
-LineIntersect2F32(Vec2F32 v0, Vec2F32 v1, Vec2F32 v2, Vec2F32 v3, Vec2F32* res);
-
-} // namespace ui
+ui_line_intersect_2f32(Vec2F32 v0, Vec2F32 v1, Vec2F32 v2, Vec2F32 v3, Vec2F32* res);

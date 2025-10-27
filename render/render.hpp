@@ -141,7 +141,7 @@ R_RenderCtxCreate(String8 shader_path, IO* io_ctx, async::Threads* thread_pool);
 static void
 R_RenderCtxDestroy();
 static void
-R_RenderFrame(Vec2U32 framebuffer_dim, B32* in_out_framebuffer_resized, ui::Camera* camera,
+R_RenderFrame(Vec2U32 framebuffer_dim, B32* in_out_framebuffer_resized, Camera* camera,
               Vec2S64 mouse_cursor_pos);
 static void
 R_GpuWorkDoneWait();

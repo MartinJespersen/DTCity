@@ -90,8 +90,8 @@ MainLoop(void* ptr)
     OS_SetThreadName(Str8CString("Entrypoint thread"));
 
     Rng2F32 utm_bb_coords = city::UtmFromBoundingBox(input->bbox);
-    printf("UTM: %f %f %f %f\n", utm_bb_coords.min.x, utm_bb_coords.min.y, utm_bb_coords.max.x,
-           utm_bb_coords.max.y);
+    printf("UTM Coordinates: %f %f %f %f\n", utm_bb_coords.min.x, utm_bb_coords.min.y,
+           utm_bb_coords.max.x, utm_bb_coords.max.y);
     R_RenderCtxCreate(ctx->shader_path, io_ctx, ctx->thread_pool);
     VK_Context* vk_ctx = VK_CtxGet();
     ImguiSetup(vk_ctx, io_ctx);
@@ -112,7 +112,7 @@ MainLoop(void* ptr)
                                  osm_g_network);
     city::Road* road = ctx->road;
 
-    CameraInit(ctx->camera);
+    ui_camera_init(ctx->camera);
     ctx->buildings =
         city::BuildingsCreate(ctx->cache_path, ctx->texture_path, ctx->road->road_height,
                               &input->bbox, &sampler_info, osm_g_network);
@@ -132,7 +132,7 @@ MainLoop(void* ptr)
                                    .y = (U32)io_ctx->framebuffer_height};
 
         {
-            CameraUpdate(ctx->camera, ctx->io, ctx->time->delta_time_sec, framebuffer_dim);
+            ui_camera_update(ctx->camera, ctx->io, ctx->time->delta_time_sec, framebuffer_dim);
             U64 hovered_object_id = r_latest_hovered_object_id_get();
             osm_WayNode* way_node = osm_way_find(hovered_object_id);
 
