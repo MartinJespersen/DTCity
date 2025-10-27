@@ -106,20 +106,19 @@ MainLoop(void* ptr)
 
     U64 node_hashmap_size = 100;
     U64 way_hashmap_size = 100;
-    city::NodeUtmStructure* node_utm_structure =
-        city::osm_structure_create(node_hashmap_size, way_hashmap_size, &input->bbox);
+    osm_structure_init(node_hashmap_size, way_hashmap_size, &input->bbox);
 
     ctx->road = city::RoadCreate(ctx->texture_path, ctx->cache_path, &input->bbox, &sampler_info,
-                                 node_utm_structure);
+                                 osm_g_network);
     city::Road* road = ctx->road;
 
     CameraInit(ctx->camera);
     ctx->buildings =
         city::BuildingsCreate(ctx->cache_path, ctx->texture_path, ctx->road->road_height,
-                              &input->bbox, &sampler_info, node_utm_structure);
+                              &input->bbox, &sampler_info, osm_g_network);
     city::Buildings* buildings = ctx->buildings;
     ctx->car_sim =
-        city::CarSimCreate(ctx->asset_path, ctx->texture_path, 100, ctx->road, node_utm_structure);
+        city::CarSimCreate(ctx->asset_path, ctx->texture_path, 100, ctx->road, osm_g_network);
     city::CarSim* car_sim = ctx->car_sim;
 
     while (ctx->running)
@@ -135,16 +134,16 @@ MainLoop(void* ptr)
         {
             CameraUpdate(ctx->camera, ctx->io, ctx->time->delta_time_sec, framebuffer_dim);
             U64 hovered_object_id = r_latest_hovered_object_id_get();
-            city::WayNode* way_node = city::way_find(node_utm_structure, hovered_object_id);
+            osm_WayNode* way_node = osm_way_find(hovered_object_id);
 
             if (way_node)
             {
-                city::Way* way = &way_node->way;
+                osm_Way* way = &way_node->way;
                 bool open = true;
                 ImGui::Begin("Object Info", &open, ImGuiWindowFlags_AlwaysAutoResize);
                 for (U32 tag_idx = 0; tag_idx < way->tags.size; tag_idx += 1)
                 {
-                    city::Tag* tag = &way->tags.data[tag_idx];
+                    osm_Tag* tag = &way->tags.data[tag_idx];
                     ImGui::Text("%s: %s", (char*)tag->key.str, (char*)tag->value.str);
                 }
                 ImVec2 window_size = ImGui::GetWindowSize();
@@ -165,7 +164,7 @@ MainLoop(void* ptr)
 
         Buffer<city::Model3DInstance> instance_buffer =
             city::CarUpdate(vk_ctx->draw_frame_arena, car_sim, ctx->road, ctx->time->delta_time_sec,
-                            node_utm_structure->utm_node_hashmap);
+                            osm_g_network->utm_node_hashmap);
         R_BufferInfo car_instance_buffer_info =
             R_BufferInfoFromTemplateBuffer(instance_buffer, R_BufferType_Vertex);
         VK_Model3DInstanceDraw(car_sim->texture_handle, car_sim->vertex_handle,

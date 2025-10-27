@@ -10,116 +10,6 @@ struct Vertex3D
     Vec2U32 object_id;
 };
 
-struct RoadNode
-{
-    RoadNode* next;
-    U64 id;
-    F32 lat;
-    F32 lon;
-};
-
-struct Tag
-{
-    Tag* next;
-    String8 key;
-    String8 value;
-};
-
-enum TagResultEnum
-{
-    ROAD_TAG_FOUND = 0,
-    ROAD_TAG_NOT_FOUND = 1,
-};
-
-struct TagResult
-{
-    TagResultEnum result;
-    String8 value;
-};
-
-struct RoadNodeList
-{
-    RoadNode* first;
-    RoadNode* last;
-};
-
-struct Way
-{
-    Way* next;
-
-    U64 id;
-
-    U64* node_ids; // fixed array with node_count lenght and node ids as index
-    U64 node_count;
-
-    Buffer<Tag> tags;
-};
-
-struct WayNode
-{
-    WayNode* next;
-    WayNode* hash_next;
-    Way way;
-};
-
-struct WayList
-{
-    WayNode* first;
-    WayNode* last;
-};
-
-struct UtmNode
-{
-    UtmNode* next;
-    U64 id;
-    union
-    {
-        Vec2F32 pos;
-        glm::vec2 vec;
-    };
-    String8 utm_zone;
-    WayList way_queue; // Linked list of RoadWays sharing this node
-};
-
-struct UtmNodeList
-{
-    UtmNode* first;
-    UtmNode* last;
-};
-
-enum OsmKeyType
-{
-    OsmKeytype_Road,
-    OsmKeyType_Building,
-    OsmKeytype_Count
-};
-
-struct NodeUtmStructure
-{
-    Arena* arena;
-    Buffer<UtmNodeList> utm_node_hashmap; // key is the node id
-    Vec2F64 utm_center_offset;            // used for centering utm coordinate based on bounding box
-
-    Buffer<WayList> way_hashmap;            // view into way buffers
-    Buffer<Way> ways_arr[OsmKeytype_Count]; // buffer storage
-};
-
-union GCSBoundingBox
-{
-    struct
-    {
-        Vec2F64 btm_left;
-        Vec2F64 top_right;
-    };
-    struct
-    {
-        F64 lat_btm_left;
-        F64 lon_btm_left;
-        F64 lat_top_right;
-        F64 lon_top_right;
-    };
-};
-
 struct Road
 {
     Arena* arena;
@@ -145,24 +35,17 @@ struct Road
     /////////////////////////
 };
 
-enum RoadDirection
-{
-    RoadDirection_From,
-    RoadDirection_To,
-    RoadDirection_Count
-};
-
 struct AdjacentNodeLL
 {
     AdjacentNodeLL* next;
-    UtmNode* node;
+    osm_UtmNode* node;
 };
 
 struct RoadCrossSection
 {
     Vec2F32 top;
     Vec2F32 btm;
-    UtmNode* node;
+    osm_UtmNode* node;
 };
 struct RoadSegment
 {
@@ -173,8 +56,8 @@ struct RoadSegment
 struct Car
 {
     glm::vec3 cur_pos;
-    UtmNode* source;
-    UtmNode* target;
+    osm_UtmNode* source;
+    osm_UtmNode* target;
     glm::vec3 dir;
     F32 speed; //
 };
@@ -240,70 +123,51 @@ struct Model3DInstance
 static U64
 HashU64FromStr8(String8 str);
 static String8
-Str8FromGCSCoordinates(Arena* arena, GCSBoundingBox* bbox);
+Str8FromGCSCoordinates(Arena* arena, osm_GCSBoundingBox* bbox);
 static B32
 CacheNeedsUpdate(String8 data_file_str, String8 cache_meta_file_path);
 
-// ~mgj: Globals
-read_only static RoadNode g_road_node = {&g_road_node, 0, 0.0f, 0.0f};
-read_only static UtmNode g_road_node_utm = {&g_road_node_utm, 0, 0.0f, 0.0f};
-///////////////////////
 static Road*
-RoadCreate(String8 texture_path, String8 cache_path, GCSBoundingBox* gcs_bbox,
-           R_SamplerInfo* sampler_info, NodeUtmStructure* node_utm_structure);
+RoadCreate(String8 texture_path, String8 cache_path, osm_GCSBoundingBox* gcs_bbox,
+           R_SamplerInfo* sampler_info, osm_Network* node_utm_structure);
 static void
 RoadDestroy(Road* road);
 static String8
 DataFetch(Arena* arena, String8 cache_dir, String8 cache_name, String8 query,
-          GCSBoundingBox* gcs_bbox);
+          osm_GCSBoundingBox* gcs_bbox);
 static void
 RoadVertexBufferCreate(Road* road, Buffer<Vertex3D>* out_vertex_buffer,
-                       Buffer<U32>* out_index_buffer, NodeUtmStructure* node_utm_structure);
-static NodeUtmStructure*
-osm_structure_create(U64 node_hashmap_size, U64 way_hashmap_size, GCSBoundingBox* gcs_bbox);
-static void
-osm_structure_destroy(NodeUtmStructure* utm_node_structure);
-static void
-osm_structure_add(NodeUtmStructure* node_utm_structure, Buffer<RoadNodeList> node_hashmap,
-                  String8 json, OsmKeyType osm_key_type);
-static TagResult
-TagFind(Arena* arena, Buffer<Tag> tags, String8 tag_to_find);
-static WayNode*
-way_find(NodeUtmStructure* structure, U64 way_id);
-static WayNode*
-way_find(NodeUtmStructure* structure, U64 way_id);
-static UtmNode*
-UtmNodeFind(Buffer<UtmNodeList> utm_node_hashmap, U64 node_id);
-static UtmNode*
-RandomUtmNodeFind(Buffer<UtmNodeList> utm_node_hashmap);
+                       Buffer<U32>* out_index_buffer, osm_Network* node_utm_structure);
+
 static void
 QuadToBufferAdd(RoadSegment* road_segment, Buffer<Vertex3D> buffer, Buffer<U32> indices, U64 way_id,
                 F32 road_height, U32* cur_vertex_idx, U32* cur_index_idx);
 static void
-RoadIntersectionPointsFind(Road* road, RoadSegment* in_out_segment, Way* current_road_way,
-                           NodeUtmStructure* node_utm_structure);
+RoadIntersectionPointsFind(Road* road, RoadSegment* in_out_segment, osm_Way* current_road_way,
+                           osm_Network* node_utm_structure);
 // ~mgj: Cars
 static CarSim*
 CarSimCreate(String8 asset_path, String8 texture_path, U32 car_count, Road* road,
-             NodeUtmStructure* node_utm_structure);
+             osm_Network* node_utm_structure);
 static void
 CarSimDestroy(CarSim* car_sim);
 static Buffer<Model3DInstance>
 CarUpdate(Arena* arena, CarSim* car, Road* road, F32 time_delta,
-          Buffer<UtmNodeList> utm_node_hashmap);
+          Buffer<osm_UtmNodeList> utm_node_hashmap);
 
 // ~mgj: Buildings
 static Buildings*
-BuildingsCreate(String8 cache_path, String8 texture_path, F32 road_height, GCSBoundingBox* gcs_bbox,
-                R_SamplerInfo* sampler_info, NodeUtmStructure* node_utm_structure);
+BuildingsCreate(String8 cache_path, String8 texture_path, F32 road_height,
+                osm_GCSBoundingBox* gcs_bbox, R_SamplerInfo* sampler_info,
+                osm_Network* node_utm_structure);
 static void
 BuildingDestroy(Buildings* building);
 static void
 BuildingsBuffersCreate(Arena* arena, Buildings* buildings, F32 road_height,
-                       BuildingRenderInfo* out_render_info, NodeUtmStructure* node_utm_structure);
+                       BuildingRenderInfo* out_render_info, osm_Network* node_utm_structure);
 static Buffer<U32>
 EarClipping(Arena* arena, Buffer<Vec2F32> node_buffer);
 
 static Rng2F32
-UtmFromBoundingBox(GCSBoundingBox bbox);
+UtmFromBoundingBox(osm_GCSBoundingBox bbox);
 } // namespace city

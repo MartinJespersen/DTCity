@@ -1,20 +1,20 @@
 namespace wrapper
 {
 
-static Buffer<city::RoadNodeList>
+static Buffer<osm_RoadNodeList>
 node_buffer_from_simd_json(Arena* arena, String8 json, U64 node_hashmap_size)
 {
     simdjson::ondemand::parser parser;
     simdjson::padded_string json_padded((char*)json.str, json.size);
     simdjson::ondemand::document doc = parser.iterate(json_padded);
 
-    Buffer<city::RoadNodeList> nodes = BufferAlloc<city::RoadNodeList>(arena, node_hashmap_size);
+    Buffer<osm_RoadNodeList> nodes = BufferAlloc<osm_RoadNodeList>(arena, node_hashmap_size);
 
     for (auto item : doc["elements"])
     {
         if (item["type"] == "node")
         {
-            city::RoadNode* node = PushStruct(arena, city::RoadNode);
+            osm_RoadNode* node = PushStruct(arena, osm_RoadNode);
             node->id = item["id"].get_uint64();
             node->lat = item["lat"].get_double();
             node->lon = item["lon"].get_double();
@@ -27,7 +27,7 @@ node_buffer_from_simd_json(Arena* arena, String8 json, U64 node_hashmap_size)
     return nodes;
 }
 
-static Buffer<city::Way>
+static Buffer<osm_Way>
 way_buffer_from_simd_json(Arena* arena, String8 json)
 {
     simdjson::ondemand::parser parser;
@@ -42,7 +42,7 @@ way_buffer_from_simd_json(Arena* arena, String8 json)
             way_count += 1;
         }
     }
-    Buffer<city::Way> way_buffer = BufferAlloc<city::Way>(arena, way_count);
+    Buffer<osm_Way> way_buffer = BufferAlloc<osm_Way>(arena, way_count);
 
     U64 way_index = 0;
     for (auto element : doc["elements"])
@@ -51,7 +51,7 @@ way_buffer_from_simd_json(Arena* arena, String8 json)
         {
             // ~mgj: Insert into hashmap
             U64 way_id = element["id"].get_uint64();
-            city::Way* way = &way_buffer.data[way_index];
+            osm_Way* way = &way_buffer.data[way_index];
 
             way->id = way_id;
             // Get the nodes array and count elements
@@ -76,7 +76,7 @@ way_buffer_from_simd_json(Arena* arena, String8 json)
 
             // Reset and iterate again to store the tags
             tags_object = element["tags"].get_object();
-            way->tags = BufferAlloc<city::Tag>(arena, tag_count);
+            way->tags = BufferAlloc<osm_Tag>(arena, tag_count);
             U64 tag_cur_index = 0;
             for (auto tag : tags_object)
             {

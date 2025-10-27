@@ -16,6 +16,7 @@
 #include "lib_wrappers/lib_wrappers_inc.cpp"
 #include "render/render_inc.cpp"
 #include "ui/ui.cpp"
+#include "osm/osm.cpp"
 #include "city/city_inc.cpp"
 #include "entrypoint.cpp"
 #include "imgui/imgui_inc.cpp"
@@ -61,7 +62,7 @@ static G_Input
 G_InterpretInput(int argc, char** argv)
 {
     G_Input input = {};
-    city::GCSBoundingBox* bbox = &input.bbox;
+    osm_GCSBoundingBox* bbox = &input.bbox;
     F64* bbox_coords[4] = {&bbox->lon_btm_left, &bbox->lat_btm_left, &bbox->lon_top_right,
                            &bbox->lat_top_right};
 

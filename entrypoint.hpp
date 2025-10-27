@@ -19,11 +19,12 @@ DISABLE_WARNINGS_POP
 #include "render/render_inc.hpp"
 #include "lib_wrappers/lib_wrappers_inc.hpp"
 #include "imgui/imgui_inc.hpp"
+#include "osm/osm.hpp"
 #include "city/city_inc.hpp"
 
 struct G_Input
 {
-    city::GCSBoundingBox bbox;
+    osm_GCSBoundingBox bbox;
 };
 
 struct Context
