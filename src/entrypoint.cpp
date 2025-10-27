@@ -1,13 +1,23 @@
+static void
+dt_ctx_set(Context* ctx)
+{
+    g_ctx = ctx;
+}
 
+static Context*
+dt_ctx_get()
+{
+    return g_ctx;
+}
 
 static void
-TimeInit(DT_Time* time)
+dt_time_init(dt_Time* time)
 {
     time->last_time_ms = os_now_microseconds();
 }
 
 static void
-UpdateTime(DT_Time* time)
+dt_time_update(dt_Time* time)
 {
     U64 cur_time = os_now_microseconds();
     time->delta_time_sec = (F32)(cur_time - time->last_time_ms) / 1'000'000.0;
@@ -15,14 +25,14 @@ UpdateTime(DT_Time* time)
 }
 
 static OS_Handle
-Entrypoint(Context* ctx, G_Input* input)
+dt_render_thread_start(Context* ctx, dt_Input* input)
 {
     ctx->running = 1;
-    return OS_ThreadLaunch(MainLoop, input, NULL);
+    return OS_ThreadLaunch(dt_main_loop, input, NULL);
 }
 
 static void
-Cleanup(OS_Handle thread_handle, Context* ctx)
+dt_render_thread_join(OS_Handle thread_handle, Context* ctx)
 {
     ctx->running = false;
     OS_ThreadJoin(thread_handle, max_U64);
@@ -80,12 +90,52 @@ ImguiSetup(VK_Context* vk_ctx, IO* io_ctx)
     ImGui_ImplVulkan_Init(&init_info);
 }
 
-static void
-MainLoop(void* ptr)
+static dt_Input
+dt_interpret_input(int argc, char** argv)
 {
-    G_Input* input = (G_Input*)ptr;
+    dt_Input input = {};
+    osm_GCSBoundingBox* bbox = &input.bbox;
+    F64* bbox_coords[4] = {&bbox->lon_btm_left, &bbox->lat_btm_left, &bbox->lon_top_right,
+                           &bbox->lat_top_right};
 
-    Context* ctx = GlobalContextGet();
+    if (argc != 1 && argc != 5)
+    {
+        ExitWithError("G_InterpretInput: Invalid number of arguments");
+    }
+
+    if (argc == 1)
+    {
+        DEBUG_LOG(
+            "No command line arguments provided: Using default values\n"
+            "lon_btm_left: %lf\n lat_btm_left: %lf\n lon_top_right: %lf\n lat_top_right: %lf\n",
+            bbox->lon_btm_left, bbox->lat_btm_left, bbox->lon_top_right, bbox->lat_top_right);
+
+        // Initialize default values
+        bbox->lon_btm_left = 9.213970;
+        bbox->lat_btm_left = 55.704686;
+        bbox->lon_top_right = 9.22868;
+        bbox->lat_top_right = 55.713671;
+    }
+
+    if (argc == 5)
+    {
+        for (U32 i = 0; (i < (U64)argc) && (i < ArrayCount(bbox_coords)); ++i)
+        {
+            char* arg = argv[i + 1];
+            String8 arg_str = Str8CString(arg);
+            F64 v = F64FromStr8(arg_str);
+            *bbox_coords[i] = v;
+        }
+    }
+    return input;
+}
+
+static void
+dt_main_loop(void* ptr)
+{
+    dt_Input* input = (dt_Input*)ptr;
+
+    Context* ctx = dt_ctx_get();
     IO* io_ctx = ctx->io;
     OS_SetThreadName(Str8CString("Entrypoint thread"));
 
@@ -123,9 +173,9 @@ MainLoop(void* ptr)
 
     while (ctx->running)
     {
-        UpdateTime(ctx->time);
+        dt_time_update(ctx->time);
 
-        IO_NewFrame(io_ctx);
+        io_new_frame(io_ctx);
         R_NewFrame();
         ImGui::NewFrame();
         Vec2U32 framebuffer_dim = {.x = (U32)io_ctx->framebuffer_width,

@@ -1,0 +1,55 @@
+#pragma once
+
+struct dt_Time
+{
+    F32 delta_time_sec;
+    U64 last_time_ms;
+};
+
+struct dt_Input
+{
+    osm_GCSBoundingBox bbox;
+};
+
+struct Context
+{
+    B32 running;
+    String8 cwd;
+    String8 data_dir;
+    String8 cache_path;
+    String8 asset_path;
+    String8 texture_path;
+    String8 shader_path;
+
+    Arena* arena_permanent;
+
+    IO* io;
+    ui_Camera* camera;
+    dt_Time* time;
+    city::Road* road;
+    city::CarSim* car_sim;
+    city::Buildings* buildings;
+
+    async::Threads* thread_pool;
+};
+
+// ~mgj: Globals
+static Context* g_ctx;
+const U32 MAX_FONTS_IN_USE = 10;
+
+// globals context
+static void
+dt_ctx_set(Context* ctx);
+static Context*
+dt_ctx_get();
+
+static dt_Input
+dt_interpret_input(int argc, char** argv);
+static OS_Handle
+dt_render_thread_start(void* ptr);
+static void
+dt_render_thread_join(OS_Handle thread_handle, void* ptr);
+static void
+dt_imgui_setup(VK_Context* vk_ctx, IO* io_ctx);
+static void
+dt_main_loop(void* ptr);

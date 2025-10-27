@@ -1,3 +1,4 @@
+#pragma once
 struct Context;
 struct IO
 {
@@ -21,24 +22,23 @@ struct IO
 
     Vec2S32 window_size;
     B32 is_window_focused;
+
     // GLFW types
     GLFWwindow* window;
     B32 framebuffer_resized;
 };
 
 static void
-IO_InputStateUpdate(IO* io);
-
+io_input_state_update(IO* io);
 static Vec2S32
-IO_WaitForValidFramebufferSize(IO* io_ctx);
+io_wait_for_valid_framebuffer_size(IO* io_ctx);
 static void
-VK_FramebufferResizeCallback(GLFWwindow* window, int width, int height);
-
+io_framebuffer_resize_callback(GLFWwindow* window, int width, int height);
 static IO*
-WindowCreate(U32 window_width, U32 window_height);
+io_window_create(U32 window_width, U32 window_height);
 static void
-WindowDestroy(IO* io_ctx);
+io_window_destroy(IO* io_ctx);
 static void
-IO_ScrollCallback(GLFWwindow* window, double xoffset, double yoffset);
+io_scroll_callback(GLFWwindow* window, double xoffset, double yoffset);
 static void
-IO_NewFrame(IO* io_ctx);
+io_new_frame(IO* io_ctx);

@@ -12,7 +12,7 @@ DirectionNormalFromEulerAngles(F32 yaw, F32 pitch)
 }
 
 static void
-ui_camera_init(Camera* camera)
+ui_camera_init(ui_Camera* camera)
 {
     camera->zoom_sensitivity = 20.0f;
     camera->fov = 45.0;
@@ -23,7 +23,7 @@ ui_camera_init(Camera* camera)
 }
 
 static void
-ui_camera_update(Camera* camera, IO* input, F32 time, Vec2U32 extent)
+ui_camera_update(ui_Camera* camera, IO* input, F32 time, Vec2U32 extent)
 {
     F32 mouse_sensitivity = 0.1f;
     if (input->mouse_left_clicked & input->is_cursor_inside_win & input->is_window_focused)

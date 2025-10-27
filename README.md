@@ -1,5 +1,4 @@
 # TODO for the first draft
-
 * Cleanup entrypoint main loop
 * Change the naming convention for functions from PascalCase to snake_case
 * Make the optimized build work and make possible to profile
@@ -21,14 +20,13 @@
   * Create a hashmap for Ways for quick lookup of index.
   * This requires a centralized place for storing ways and nodes.
 
-## Nice to have:
+# Future Improvements:
+* Error handling improvements - error handling should not be ExitWithError everywhere
 * Improve the conversion between UTM and WGS84 system
 * Make the optimized build version work
 * Consider testing and how to do it
 * Improve the HTTP library implementation
   * Probably consider using a cross platform library only instead of a mix
-
-# Future Improvements:
 * Asset Store is currently not thread safe for eviction cases and memory needs to be managed properly.
   * When asset getting evicted we have to make sure no other threads are using the resource.
 * Threads in asset store should manage have more than one available command buffer in the thread command pool.
@@ -53,6 +51,23 @@ ktx create --format R8G8B8A8_SRGB --generate-mipmap brick_wall.jpg brick_wall.kt
 
 # Long Term Features
 * Usage of Aarhus Municipality mesh data.
-  * Shadows
 
-# Diagram of Layers
+# Prasad Suggestions
+Thanks for the URL. This is the project I completed in 2020. The only lesson to take away from that repo is to have cppcheck and googletest. If I were to start now, the following order of things could make sense.
+
+* Set project structure. Your favourite nginx could be a good example. Here is another example project structure.
+* Documentation for developers and users. It could either be a single one or separate for developers and users.
+* Use a build system (vcpkg / conan / CMake)
+* Basic documentation (three to ten pages) explaining the use of the software. It could be a markdown file in docs/README.md.
+* Github actions for running through all commands to build software. See an example. Let the action upload build binaries of different platforms on the workflow page.
+* Make the first release
+
+If you could complete these steps before our meeting on 13-Nov-2025, that would be a good milestone.
+
+## Further steps could be
+* Add linting and static analysis checks
+* Add functionality tests for important features of the software.
+* Document the desired system architecture and design. This could either be done using mermaidjs or plantuml. Here is an example.
+* Create a work plan to move the current codebase to the desired design state.
+* Add performance tests in developer workflow and in Github Actions
+* Add unit tests for all new code contributions while updating the functionality tests

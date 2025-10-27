@@ -1,5 +1,5 @@
 static void
-VK_FramebufferResizeCallback(GLFWwindow* window, int width, int height)
+io_framebuffer_resize_callback(GLFWwindow* window, int width, int height)
 {
     (void)width;
     (void)height;
@@ -9,7 +9,7 @@ VK_FramebufferResizeCallback(GLFWwindow* window, int width, int height)
 }
 
 static IO*
-WindowCreate(U32 window_width, U32 window_height)
+io_window_create(U32 window_width, U32 window_height)
 {
     Arena* arena = ArenaAlloc();
     IO* io_ctx = PushStruct(arena, IO);
@@ -20,14 +20,14 @@ WindowCreate(U32 window_width, U32 window_height)
     glfwWindowHint(GLFW_RESIZABLE, GLFW_TRUE);
     io_ctx->window = glfwCreateWindow(window_width, window_height, "Vulkan", nullptr, nullptr);
     glfwSetWindowUserPointer(io_ctx->window, io_ctx);
-    glfwSetFramebufferSizeCallback(io_ctx->window, VK_FramebufferResizeCallback);
-    glfwSetScrollCallback(io_ctx->window, IO_ScrollCallback);
+    glfwSetFramebufferSizeCallback(io_ctx->window, io_framebuffer_resize_callback);
+    glfwSetScrollCallback(io_ctx->window, io_scroll_callback);
 
     return io_ctx;
 }
 
 static void
-WindowDestroy(IO* io_ctx)
+io_window_destroy(IO* io_ctx)
 {
     glfwDestroyWindow(io_ctx->window);
     glfwTerminate();
@@ -35,7 +35,7 @@ WindowDestroy(IO* io_ctx)
 }
 
 static void
-IO_ScrollCallback(GLFWwindow* window, double xoffset, double yoffset)
+io_scroll_callback(GLFWwindow* window, double xoffset, double yoffset)
 {
     IO* io_ctx = (IO*)glfwGetWindowUserPointer(window);
     io_ctx->scroll_x = xoffset;
@@ -49,7 +49,7 @@ IO_ScrollCallback(GLFWwindow* window, double xoffset, double yoffset)
 // to the correct value.
 
 static void
-IO_InputStateUpdate(IO* input)
+io_input_state_update(IO* input)
 {
     glfwPollEvents();
 
@@ -95,7 +95,7 @@ IO_InputStateUpdate(IO* input)
 }
 
 static Vec2S32
-IO_WaitForValidFramebufferSize(IO* io_ctx)
+io_wait_for_valid_framebuffer_size(IO* io_ctx)
 {
     // framebuffer update
     S32 framebuffer_width = 0;
@@ -111,7 +111,7 @@ IO_WaitForValidFramebufferSize(IO* io_ctx)
 }
 
 static void
-IO_NewFrame(IO* io_ctx)
+io_new_frame(IO* io_ctx)
 {
     io_ctx->scroll_x = 0.0;
     io_ctx->scroll_y = 0.0;

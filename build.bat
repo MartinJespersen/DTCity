@@ -1,15 +1,17 @@
 @echo off
 :: Set paths and filenames
 set "cwd=%cd:\=\\%\\"
+set "src_dir=%cwd%src\\"
+set "data_dir=%cwd%data\\"
 set "debug_dir=%cwd%build\\msc\\debug\\"
 set "exec_name=city.exe"
 set "dll_name=entrypoint_temp.dll"
 set "entrypoint_file_name=entrypoint.cpp"
-set "main_file_name=main.cpp"
+set "main_file_name=src\\main.cpp"
 set "exec_full_path=%debug_dir%%exec_name%"
 set "dll_full_path=%debug_dir%%dll_name%"
-set "shader_path=%cwd%shaders\\"
-set "lib_dir=%cwd%third_party\\"
+set "shader_path=%data_dir%shaders\\"
+set "lib_dir=%src_dir%third_party\\"
 set "vulkan_path=%lib_dir%vulkan_sdk_v1_4_309_0\\"
 set "tracy_src=%lib_dir%tracy/TracyClient.cpp"
 
@@ -24,7 +26,7 @@ set "link_dirs=/LIBPATH:%cwd%lib_artifacts\\win32"
 
 if not exist "%shader_path%" mkdir "%shader_path%"
 :: Compile shaders
-pushd shaders
+pushd %shader_path%
 call compile.bat
 popd
 

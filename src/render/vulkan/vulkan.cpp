@@ -583,7 +583,7 @@ VK_CameraUniformBufferCreate(VK_Context* vk_ctx)
 }
 
 static void
-VK_CameraUniformBufferUpdate(VK_Context* vk_ctx, Camera* camera, Vec2F32 screen_res,
+VK_CameraUniformBufferUpdate(VK_Context* vk_ctx, ui_Camera* camera, Vec2F32 screen_res,
                              U32 current_frame)
 {
     VK_BufferAllocationMapped* buffer = &vk_ctx->camera_buffer_alloc_mapped[current_frame];
@@ -1169,7 +1169,7 @@ VK_Model3DRendering()
 }
 
 static void
-VK_CommandBufferRecord(U32 image_index, U32 current_frame, Camera* camera, Vec2S64 mouse_cursor_pos)
+VK_CommandBufferRecord(U32 image_index, U32 current_frame, ui_Camera* camera, Vec2S64 mouse_cursor_pos)
 {
     ProfScopeMarker;
     Temp scratch = ScratchBegin(0, 0);
@@ -1571,7 +1571,7 @@ R_RenderCtxCreate(String8 shader_path, IO* io_ctx, async::Threads* thread_pool)
     vmaCreateAllocator(&allocatorInfo, &vk_ctx->allocator);
     vk_ctx->object_id_format = VK_FORMAT_R32G32_UINT;
 
-    Vec2S32 vk_framebuffer_dim_s32 = IO_WaitForValidFramebufferSize(io_ctx);
+    Vec2S32 vk_framebuffer_dim_s32 = io_wait_for_valid_framebuffer_size(io_ctx);
     Vec2U32 vk_framebuffer_dim_u32 = {(U32)vk_framebuffer_dim_s32.x, (U32)vk_framebuffer_dim_s32.y};
     vk_ctx->swapchain_resources = VK_SwapChainCreate(vk_ctx, vk_framebuffer_dim_u32);
 
@@ -1650,7 +1650,7 @@ R_RenderCtxDestroy()
 }
 
 static void
-R_RenderFrame(Vec2U32 framebuffer_dim, B32* in_out_framebuffer_resized, Camera* camera,
+R_RenderFrame(Vec2U32 framebuffer_dim, B32* in_out_framebuffer_resized, ui_Camera* camera,
               Vec2S64 mouse_cursor_pos)
 {
     VK_Context* vk_ctx = VK_CtxGet();

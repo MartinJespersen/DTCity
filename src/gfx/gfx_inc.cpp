@@ -1,5 +1,4 @@
 // user defined
-#include "globals.cpp"
 #include "geometry.cpp"
 #include "io.cpp"
 
