@@ -22,7 +22,7 @@
  * means that vulkan.h must be included @e before including this file. The
  * alternative is duplicating unattractively large parts of it.
  *
- * @author Mark Callow, Edgewise Consulting
+ * @author Mark Callow, github.com/MarkCallow
  */
 
 #include <ktx.h>
@@ -173,7 +173,7 @@ ktxVulkanTexture_Destruct(ktxVulkanTexture* This, VkDevice device,
  * @code
     ktxVulkanDeviceInfo vdi;
     ktxVulkanTexture texture;
-
+ 
     vdi = ktxVulkanDeviceInfo_create(physicalDevice,
                                      device,
                                      queue,

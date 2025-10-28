@@ -12,9 +12,7 @@ DISABLE_WARNINGS_POP
 
 #if OS_WINDOWS
 
-#pragma comment(lib, "glfw3.lib")
 #pragma comment(lib, "vulkan-1.lib")
-#pragma comment(lib, "ktx_read.lib")
 #endif
 
 #include "third_party/tracy/tracy/TracyVulkan.hpp"

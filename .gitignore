@@ -16,3 +16,4 @@ build
 .raddbg
 compile_commands.json
 cache/**
+libs

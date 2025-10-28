@@ -4,24 +4,21 @@ set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 set(THIRD_PARTY_LIBS_DIR ${CMAKE_CURRENT_SOURCE_DIR}/src/third_party)
 set(BUILD_DEBUG ON)
+set(LIB_ARTIFACT_DIR ${CMAKE_CURRENT_SOURCE_DIR}/lib_artifacts)
 
 add_executable(city)
 
-
 if (MSVC)
-    set_property(TARGET city PROPERTY
-        MSVC_RUNTIME_LIBRARY "MultiThreadedDLL"
-    )
-
     target_compile_options(city PRIVATE
-    /W4
-    /wd4201  /wd4005 /wd4838 /wd4244 /wd4996 /wd4310 /wd4245 /wd4100
-    /EHsc
-    /Z7
-    /FI${CMAKE_SOURCE_DIR}/src/includes.hpp
-    /fsanitize=address
-   )
+        /W4
+        /wd4201  /wd4005 /wd4838 /wd4244 /wd4996 /wd4310 /wd4245 /wd4100
+        /EHsc
+        /Z7
+        /FI${CMAKE_SOURCE_DIR}/src/includes.hpp
+    )
     add_compile_definitions(BUILD_CONSOLE_INTERFACE ON)
+
+    set(PLATFORM_LIB_ARTIFACT_DIR ${LIB_ARTIFACT_DIR}/win)
 
 elseif(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
     target_compile_options(city PRIVATE
@@ -30,7 +27,7 @@ elseif(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
     -msse4
     -fsanitize=address)
 else()
-message(FATAL_ERROR "Unsupported compiler")
+    message(FATAL_ERROR "Unsupported compiler")
 endif()
 
 
@@ -46,7 +43,9 @@ target_include_directories(city
         ${THIRD_PARTY_LIBS_DIR}/vulkan_sdk_v1_4_309_0/Include
 )
 
+
 target_link_directories(city
     PRIVATE
-        ${CMAKE_CURRENT_SOURCE_DIR}/lib_artifacts/win32
+        ${PLATFORM_LIB_ARTIFACT_DIR}
 )
+target_link_libraries(city PRIVATE glfw3 ktx_read)
