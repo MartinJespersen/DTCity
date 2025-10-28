@@ -1,6 +1,6 @@
 #pragma once
 struct Context;
-struct IO
+struct io_IO
 {
     Arena* arena;
 
@@ -29,16 +29,16 @@ struct IO
 };
 
 static void
-io_input_state_update(IO* io);
+io_input_state_update(io_IO* io);
 static Vec2S32
-io_wait_for_valid_framebuffer_size(IO* io_ctx);
+io_wait_for_valid_framebuffer_size(io_IO* io_ctx);
 static void
 io_framebuffer_resize_callback(GLFWwindow* window, int width, int height);
-static IO*
+static io_IO*
 io_window_create(U32 window_width, U32 window_height);
 static void
-io_window_destroy(IO* io_ctx);
+io_window_destroy(io_IO* io_ctx);
 static void
 io_scroll_callback(GLFWwindow* window, double xoffset, double yoffset);
 static void
-io_new_frame(IO* io_ctx);
+io_new_frame(io_IO* io_ctx);

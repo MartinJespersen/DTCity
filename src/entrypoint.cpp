@@ -46,7 +46,7 @@ CheckVkResult(VkResult result)
 }
 
 void
-ImguiSetup(VK_Context* vk_ctx, IO* io_ctx)
+ImguiSetup(VK_Context* vk_ctx, io_IO* io_ctx)
 {
     //~mgj: Initialize ImGui
     IMGUI_CHECKVERSION();
@@ -136,7 +136,7 @@ dt_main_loop(void* ptr)
     dt_Input* input = (dt_Input*)ptr;
 
     Context* ctx = dt_ctx_get();
-    IO* io_ctx = ctx->io;
+    io_IO* io_ctx = ctx->io;
     OS_SetThreadName(Str8CString("Entrypoint thread"));
 
     Rng2F32 utm_bb_coords = city::UtmFromBoundingBox(input->bbox);

@@ -1,6 +1,7 @@
 // user defined
 #include "geometry.cpp"
 #include "io.cpp"
+#include "camera.cpp"
 
 DISABLE_WARNINGS_PUSH
 #define STB_IMAGE_IMPLEMENTATION

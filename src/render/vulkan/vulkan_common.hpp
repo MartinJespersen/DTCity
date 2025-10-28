@@ -249,7 +249,7 @@ VK_CreateInstance(VK_Context* vk_ctx);
 static void
 VK_DebugMessengerSetup(VK_Context* vk_ctx);
 static void
-VK_SurfaceCreate(VK_Context* vk_ctx, IO* io_ctx);
+VK_SurfaceCreate(VK_Context* vk_ctx, io_IO* io_ctx);
 static void
 VK_PhysicalDevicePick(VK_Context* vk_ctx);
 static void

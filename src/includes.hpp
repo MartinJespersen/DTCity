@@ -20,7 +20,7 @@ DISABLE_WARNINGS_POP
 #include "os_core/os_core_inc.hpp"
 #include "async/async.hpp"
 #include "http/http_inc.hpp"
-#include "gfx/gfx_inc.hpp"
+#include "misc/misc_inc.hpp"
 #include "render/render_inc.hpp"
 #include "lib_wrappers/lib_wrappers_inc.hpp"
 #include "imgui/imgui_inc.hpp"

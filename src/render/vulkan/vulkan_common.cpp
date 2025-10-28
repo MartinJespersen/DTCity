@@ -172,7 +172,7 @@ VK_CommandPoolCreate(VkDevice device, VkCommandPoolCreateInfo* poolInfo)
 }
 
 static void
-VK_SurfaceCreate(VK_Context* vk_ctx, IO* io)
+VK_SurfaceCreate(VK_Context* vk_ctx, io_IO* io)
 {
     int supported = glfwVulkanSupported();
     if (supported != GLFW_TRUE)

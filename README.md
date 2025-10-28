@@ -21,6 +21,7 @@
   * This requires a centralized place for storing ways and nodes.
 
 # Future Improvements:
+* Layers should compile as seperate units
 * Error handling improvements - error handling should not be ExitWithError everywhere
 * Improve the conversion between UTM and WGS84 system
 * Make the optimized build version work

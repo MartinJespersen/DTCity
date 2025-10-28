@@ -1169,7 +1169,8 @@ VK_Model3DRendering()
 }
 
 static void
-VK_CommandBufferRecord(U32 image_index, U32 current_frame, ui_Camera* camera, Vec2S64 mouse_cursor_pos)
+VK_CommandBufferRecord(U32 image_index, U32 current_frame, ui_Camera* camera,
+                       Vec2S64 mouse_cursor_pos)
 {
     ProfScopeMarker;
     Temp scratch = ScratchBegin(0, 0);
@@ -1519,7 +1520,7 @@ VK_ProfileBuffersDestroy(VK_Context* vk_ctx)
 }
 // ~mgj: Vulkan Interface
 static void
-R_RenderCtxCreate(String8 shader_path, IO* io_ctx, async::Threads* thread_pool)
+R_RenderCtxCreate(String8 shader_path, io_IO* io_ctx, async::Threads* thread_pool)
 {
     ScratchScope scratch = ScratchScope(0, 0);
 

@@ -2,7 +2,7 @@
 #include "includes.cpp"
 
 static Context*
-ContextCreate(IO* io_ctx)
+ContextCreate(io_IO* io_ctx)
 {
     HTTP_Init();
 
@@ -11,7 +11,7 @@ ContextCreate(IO* io_ctx)
     Arena* app_arena = (Arena*)ArenaAlloc();
     Context* ctx = PushStruct(app_arena, Context);
     ctx->arena_permanent = app_arena;
-    ctx->io = PushStruct(app_arena, IO);
+    ctx->io = PushStruct(app_arena, io_IO);
     ctx->camera = PushStruct(app_arena, ui_Camera);
     ctx->time = PushStruct(app_arena, dt_Time);
     ctx->cwd = Str8PathFromStr8List(app_arena,
@@ -43,7 +43,7 @@ App(int argc, char** argv)
 {
     ScratchScope scratch = ScratchScope(0, 0);
 
-    IO* io_ctx = io_window_create(VK_Context::WIDTH, VK_Context::HEIGHT);
+    io_IO* io_ctx = io_window_create(VK_Context::WIDTH, VK_Context::HEIGHT);
     io_input_state_update(io_ctx);
     Context* ctx = ContextCreate(io_ctx);
     dt_ctx_set(ctx);

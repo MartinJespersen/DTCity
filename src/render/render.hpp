@@ -137,7 +137,7 @@ R_BufferInfoFromTemplateBuffer(Buffer<T> buffer, R_BufferType buffer_type);
 // ~mgj: function declaration to be implemented by backend
 
 static void
-R_RenderCtxCreate(String8 shader_path, IO* io_ctx, async::Threads* thread_pool);
+R_RenderCtxCreate(String8 shader_path, io_IO* io_ctx, async::Threads* thread_pool);
 static void
 R_RenderCtxDestroy();
 static void
