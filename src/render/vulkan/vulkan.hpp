@@ -309,6 +309,7 @@ static void
 VK_PipelineDestroy(VK_Pipeline* draw_ctx);
 
 // Handle Conversions
+#undef VK_CHECK_RESULT
 #define VK_CHECK_RESULT(f)                                                                         \
     {                                                                                              \
         VkResult res = (f);                                                                        \

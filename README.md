@@ -72,3 +72,12 @@ If you could complete these steps before our meeting on 13-Nov-2025, that would 
 * Create a work plan to move the current codebase to the desired design state.
 * Add performance tests in developer workflow and in Github Actions
 * Add unit tests for all new code contributions while updating the functionality tests
+
+# CMake build instructions
+## Create build directory
+Debug:
+cmake -B build
+Release:
+cmake -B build -DCMAKE_BUILD_TYPE=Release
+## Build Project
+cmake --build build

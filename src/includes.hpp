@@ -1,9 +1,13 @@
+#pragma once
+
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+
+#undef APIENTRY
 #define GLFW_INCLUDE_VULKAN
 #include <GLFW/glfw3.h>
-#include <vulkan/vulkan_core.h>
+#undef APIENTRY
 
 #include "base/base_inc.hpp"
 

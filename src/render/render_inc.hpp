@@ -1,6 +1,7 @@
 // ~mgj: Third party includes
 DISABLE_WARNINGS_PUSH
 #include <vulkan/vulkan_core.h>
+#undef VK_CHECK_RESULT
 #define KHRONOS_STATIC
 #include "third_party/ktx/include/ktx.h"
 #define VMA_VULKAN_VERSION 1003000 // Vulkan 1.3

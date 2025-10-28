@@ -14,8 +14,7 @@ ContextCreate(io_IO* io_ctx)
     ctx->io = PushStruct(app_arena, io_IO);
     ctx->camera = PushStruct(app_arena, ui_Camera);
     ctx->time = PushStruct(app_arena, dt_Time);
-    ctx->cwd = Str8PathFromStr8List(app_arena,
-                                    {OS_GetCurrentPath(scratch.arena), S(".."), S(".."), S("..")});
+    ctx->cwd = Str8PathFromStr8List(app_arena, {OS_GetCurrentPath(scratch.arena), S("..")});
     ctx->data_dir = Str8PathFromStr8List(app_arena, {ctx->cwd, S("data")});
     ctx->cache_path = Str8PathFromStr8List(app_arena, {ctx->data_dir, S("cache")});
     ctx->texture_path = Str8PathFromStr8List(app_arena, {ctx->data_dir, S("textures")});
