@@ -1676,7 +1676,7 @@ R_RenderFrame(Vec2U32 framebuffer_dim, B32* in_out_framebuffer_resized, ui_Camer
     if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR ||
         *in_out_framebuffer_resized)
     {
-        *in_out_framebuffer_resized = FALSE;
+        *in_out_framebuffer_resized = false;
         ImGui::EndFrame();
 
         VK_RecreateSwapChain(framebuffer_dim, vk_ctx);

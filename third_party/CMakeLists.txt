@@ -7,6 +7,8 @@ set(LIB_ARTIFACT_DIR ${CMAKE_CURRENT_SOURCE_DIR}/libs)
 
 if (MSVC)
     set(PLATFORM_LIB_ARTIFACT_DIR ${LIB_ARTIFACT_DIR}/win)
+elseif (CMAKE_COMPILER_IS_GNUCXX)
+    set(PLATFORM_LIB_ARTIFACT_DIR ${LIB_ARTIFACT_DIR}/linux)
 else()
     message(FATAL_ERROR "Unsupported compiler")
 endif()

@@ -27,7 +27,7 @@ ui_line_intersect(F64 x1, F64 y1, F64 x2, F64 y2, F64 x3, F64 y3, F64 x4, F64 y4
     {
         *x = (x1 + x2) / 2;
         *y = (y1 + y2) / 2;
-        return (TRUE);
+        return (true);
     }
 
     /* Are the line parallel */
@@ -35,7 +35,7 @@ ui_line_intersect(F64 x1, F64 y1, F64 x2, F64 y2, F64 x3, F64 y3, F64 x4, F64 y4
     {
         *x = 0;
         *y = 0;
-        return (FALSE);
+        return (false);
     }
 
     /* Is the intersection along the the segments */
@@ -45,11 +45,11 @@ ui_line_intersect(F64 x1, F64 y1, F64 x2, F64 y2, F64 x3, F64 y3, F64 x4, F64 y4
     {
         *x = 0;
         *y = 0;
-        return (FALSE);
+        return (false);
     }
     *x = x1 + mua * (x2 - x1);
     *y = y1 + mua * (y2 - y1);
-    return (TRUE);
+    return (true);
 }
 
 static B32

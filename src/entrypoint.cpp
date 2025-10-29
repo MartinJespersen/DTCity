@@ -203,13 +203,13 @@ dt_main_loop(void* ptr)
             }
         }
 
-        VK_Model3DDraw(road->texture_handle, road->vertex_handle, road->index_handle, TRUE, 0,
+        VK_Model3DDraw(road->texture_handle, road->vertex_handle, road->index_handle, true, 0,
                        road->index_buffer.size);
         VK_Model3DDraw(buildings->roof_texture_handle, buildings->vertex_handle,
-                       buildings->index_handle, FALSE, buildings->roof_index_buffer_offset,
+                       buildings->index_handle, false, buildings->roof_index_buffer_offset,
                        buildings->roof_index_count);
         VK_Model3DDraw(buildings->facade_texture_handle, buildings->vertex_handle,
-                       buildings->index_handle, FALSE, buildings->facade_index_buffer_offset,
+                       buildings->index_handle, false, buildings->facade_index_buffer_offset,
                        buildings->facade_index_count);
 
         Buffer<city::Model3DInstance> instance_buffer =

@@ -285,7 +285,7 @@ CacheNeedsUpdate(String8 cache_data_file, String8 cache_meta_file)
                     cur_byte += 1;
                 }
 
-                U64 cur_time = OS_NowUnix();
+                U64 cur_time = os_now_unix();
                 U8* ttl_base = cur_byte;
                 while (*cur_byte != 0)
                 {
@@ -377,7 +377,7 @@ DataFetch(Arena* arena, String8 cache_dir, String8 cache_file_name, String8 quer
             }
 
             DEBUG_LOG("DataFetch: Retrying...");
-            Sleep(retry_time_interval_ms);
+            os_sleep_milliseconds(retry_time_interval_ms);
             max_retries -= 1;
         } while (max_retries >= 0);
 
@@ -406,7 +406,7 @@ DataFetch(Arena* arena, String8 cache_dir, String8 cache_file_name, String8 quer
         {
             String8 input_str = Str8FromGCSCoordinates(scratch.arena, gcs_bbox);
             U64 new_hash = HashU64FromStr8(input_str);
-            U64 timestamp = OS_NowUnix();
+            U64 timestamp = os_now_unix();
             String8 meta_str = PushStr8F(scratch.arena, "%llu\t%llu", new_hash, timestamp);
 
             OS_Handle file_write_handle_meta = OS_FileOpen(OS_AccessFlag_Write, cache_meta_file);
@@ -859,10 +859,10 @@ AreTwoConnectedLineSegmentsCollinear(Vec2F32 prev, Vec2F32 cur, Vec2F32 next)
     Vec2F32 ac = Sub2F32(next, prev);
 
     F32 cross_product_z = Cross2F32ZComponent(ba, ac);
-    B32 is_collinear = FALSE;
+    B32 is_collinear = false;
     if (cross_product_z == 0)
     {
-        is_collinear = TRUE;
+        is_collinear = true;
     }
     return is_collinear;
 }
@@ -1164,7 +1164,7 @@ EarClipping(Arena* arena, Buffer<Vec2F32> node_buffer)
         // negative cross product z component means that the triangle has clockwise orientation.
         if (cross_product_z < 0)
         {
-            B32 is_ear = TRUE;
+            B32 is_ear = true;
             for (U32 test_i = 0; test_i < index_buffer.size - 3; test_i++)
             {
                 U32 test_node_buffer_idx =
@@ -1173,7 +1173,7 @@ EarClipping(Arena* arena, Buffer<Vec2F32> node_buffer)
 
                 if (PointInTriangle(prev, ear, next, test_point))
                 {
-                    is_ear = FALSE;
+                    is_ear = false;
                     break;
                 }
             }

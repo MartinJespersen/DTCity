@@ -7,7 +7,7 @@
 #define DEBUG_LOG(message, ...)                                                                    \
     do                                                                                             \
     {                                                                                              \
-        fprintf(stdout, message, __VA_ARGS__);                                                     \
+        fprintf(stdout, message, ##__VA_ARGS__);                                                   \
     } while (0)
 #else
 #define DEBUG_LOG(message, ...)
@@ -19,7 +19,7 @@
 #define DEBUG_FUNC(f)
 #endif
 
-#define ERROR_LOG(message, ...) fprintf(stderr, message, __VA_ARGS__)
+#define ERROR_LOG(message, ...) fprintf(stderr, message, ##__VA_ARGS__)
 
 // Push: disable all warnings
 #if COMPILER_MSVC

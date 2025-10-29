@@ -996,7 +996,7 @@ os_now_microseconds(void)
 }
 
 static U32
-OS_NowUnix(void)
+os_now_unix(void)
 {
     FILETIME file_time;
     GetSystemTimeAsFileTime(&file_time);

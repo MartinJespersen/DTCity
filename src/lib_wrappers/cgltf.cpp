@@ -12,112 +12,108 @@ SamplerFromCgltfSampler(CgltfSampler sampler)
 
     switch (sampler.min_filter)
     {
-    case cgltf_filter_type_nearest:
-    {
-        min_filter = R_Filter_Nearest;
-        mag_filter = R_Filter_Nearest;
-        mipmap_mode = R_MipMapMode_Nearest;
-    }
-    break;
-    case cgltf_filter_type_linear:
-    {
-        min_filter = R_Filter_Linear;
-        mag_filter = R_Filter_Linear;
-        mipmap_mode = R_MipMapMode_Nearest;
-    }
-    break;
-    case cgltf_filter_type_nearest_mipmap_nearest:
-    {
-        min_filter = R_Filter_Nearest;
-        mag_filter = R_Filter_Nearest;
-        mipmap_mode = R_MipMapMode_Nearest;
-    }
-    break;
-    case cgltf_filter_type_linear_mipmap_nearest:
-    {
-        min_filter = R_Filter_Linear;
-        mag_filter = R_Filter_Linear;
-        mipmap_mode = R_MipMapMode_Nearest;
-    }
-    break;
-    case cgltf_filter_type_nearest_mipmap_linear:
-    {
-        min_filter = R_Filter_Nearest;
-        mag_filter = R_Filter_Nearest;
-        mipmap_mode = R_MipMapMode_Linear;
-    }
-    break;
-    case cgltf_filter_type_linear_mipmap_linear:
-    {
-        min_filter = R_Filter_Linear;
-        mag_filter = R_Filter_Linear;
-        mipmap_mode = R_MipMapMode_Linear;
-    }
-    break;
+        case cgltf_filter_type_nearest:
+        {
+            min_filter = R_Filter_Nearest;
+            mag_filter = R_Filter_Nearest;
+            mipmap_mode = R_MipMapMode_Nearest;
+        }
+        break;
+        case cgltf_filter_type_linear:
+        {
+            min_filter = R_Filter_Linear;
+            mag_filter = R_Filter_Linear;
+            mipmap_mode = R_MipMapMode_Nearest;
+        }
+        break;
+        case cgltf_filter_type_nearest_mipmap_nearest:
+        {
+            min_filter = R_Filter_Nearest;
+            mag_filter = R_Filter_Nearest;
+            mipmap_mode = R_MipMapMode_Nearest;
+        }
+        break;
+        case cgltf_filter_type_linear_mipmap_nearest:
+        {
+            min_filter = R_Filter_Linear;
+            mag_filter = R_Filter_Linear;
+            mipmap_mode = R_MipMapMode_Nearest;
+        }
+        break;
+        case cgltf_filter_type_nearest_mipmap_linear:
+        {
+            min_filter = R_Filter_Nearest;
+            mag_filter = R_Filter_Nearest;
+            mipmap_mode = R_MipMapMode_Linear;
+        }
+        break;
+        case cgltf_filter_type_linear_mipmap_linear:
+        {
+            min_filter = R_Filter_Linear;
+            mag_filter = R_Filter_Linear;
+            mipmap_mode = R_MipMapMode_Linear;
+        }
+        break;
     }
 
     if (sampler.mag_filter != sampler.min_filter)
     {
         switch (sampler.mag_filter)
         {
-        case cgltf_filter_type_nearest_mipmap_nearest:
-        {
-            mag_filter = R_Filter_Nearest;
-        }
-        break;
-        case cgltf_filter_type_linear_mipmap_nearest:
-        {
-            mag_filter = R_Filter_Linear;
-        }
-        break;
-        case cgltf_filter_type_nearest_mipmap_linear:
-        {
-            mag_filter = R_Filter_Nearest;
-        }
-        break;
-        case cgltf_filter_type_linear_mipmap_linear:
-        {
-            mag_filter = R_Filter_Linear;
-        }
-        break;
-        case cgltf_filter_type_nearest:
-        {
-            mag_filter = R_Filter_Nearest;
-        }
-        break;
-        case cgltf_filter_type_linear:
-        {
-            mag_filter = R_Filter_Linear;
-        }
-        break;
-
+            case cgltf_filter_type_nearest_mipmap_nearest:
+            {
+                mag_filter = R_Filter_Nearest;
+            }
             break;
+            case cgltf_filter_type_linear_mipmap_nearest:
+            {
+                mag_filter = R_Filter_Linear;
+            }
+            break;
+            case cgltf_filter_type_nearest_mipmap_linear:
+            {
+                mag_filter = R_Filter_Nearest;
+            }
+            break;
+            case cgltf_filter_type_linear_mipmap_linear:
+            {
+                mag_filter = R_Filter_Linear;
+            }
+            break;
+            case cgltf_filter_type_nearest:
+            {
+                mag_filter = R_Filter_Nearest;
+            }
+            break;
+            case cgltf_filter_type_linear:
+            {
+                mag_filter = R_Filter_Linear;
+            }
+            break;
+
+                break;
         }
     }
 
     switch (sampler.wrap_s)
     {
-    case cgltf_wrap_mode_clamp_to_edge:
-        address_mode_u = R_SamplerAddressMode_ClampToEdge;
-        break;
-    case cgltf_wrap_mode_repeat:
-        address_mode_u = R_SamplerAddressMode_Repeat;
-        break;
-    case cgltf_wrap_mode_mirrored_repeat:
-        address_mode_u = R_SamplerAddressMode_MirroredRepeat;
-        break;
+        case cgltf_wrap_mode_clamp_to_edge:
+            address_mode_u = R_SamplerAddressMode_ClampToEdge;
+            break;
+        case cgltf_wrap_mode_repeat: address_mode_u = R_SamplerAddressMode_Repeat; break;
+        case cgltf_wrap_mode_mirrored_repeat:
+            address_mode_u = R_SamplerAddressMode_MirroredRepeat;
+            break;
     }
     switch (sampler.wrap_t)
     {
-    case cgltf_wrap_mode_clamp_to_edge:
-        address_mode_v = R_SamplerAddressMode_ClampToEdge;
-        break;
-    case cgltf_wrap_mode_repeat:
-        address_mode_v = R_SamplerAddressMode_Repeat;
-        break;
-    case cgltf_wrap_mode_mirrored_repeat:
-        address_mode_v = R_SamplerAddressMode_MirroredRepeat;
-        break;
+        case cgltf_wrap_mode_clamp_to_edge:
+            address_mode_v = R_SamplerAddressMode_ClampToEdge;
+            break;
+        case cgltf_wrap_mode_repeat: address_mode_v = R_SamplerAddressMode_Repeat; break;
+        case cgltf_wrap_mode_mirrored_repeat:
+            address_mode_v = R_SamplerAddressMode_MirroredRepeat;
+            break;
     }
 
     R_SamplerInfo sampler_info = {.min_filter = min_filter,
@@ -165,7 +161,7 @@ static CgltfResult
 CgltfParse(Arena* arena, String8 gltf_path, String8 root_node_name)
 {
     ScratchScope scratch = ScratchScope(&arena, 1);
-    cgltf_options options = {0};
+    cgltf_options options = {};
     cgltf_data* data = NULL;
 
     cgltf_accessor* accessor_position = NULL;
@@ -224,15 +220,12 @@ CgltfParse(Arena* arena, String8 gltf_path, String8 root_node_name)
 
                     switch (attr->type)
                     {
-                    case cgltf_attribute_type_position:
-                        accessor_position = attr->data;
-                        break;
-                    case cgltf_attribute_type_texcoord:
-                        if (attr->index == 0) // TEXCOORD_0
-                            accessor_uv = attr->data;
-                        break;
-                    default:
-                        break;
+                        case cgltf_attribute_type_position: accessor_position = attr->data; break;
+                        case cgltf_attribute_type_texcoord:
+                            if (attr->index == 0) // TEXCOORD_0
+                                accessor_uv = attr->data;
+                            break;
+                        default: break;
                     }
                 }
 

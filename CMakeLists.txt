@@ -20,12 +20,20 @@ if (MSVC)
 
     set(PLATFORM_LIB_ARTIFACT_DIR ${LIB_ARTIFACT_DIR}/win)
 
-elseif(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+elseif(CMAKE_COMPILER_IS_GNUCXX)
+    #-Wall -Wextra -pedantic -pedantic -Wno-unused-function  -Wno-missing-field-initializers -Wno-sign-conversion -Wno-write-strings -Wno-class-memaccess -Wno-comment -Wno-pedantic
     target_compile_options(city PRIVATE
-    -Wall -Wextra -pedantic -Werror -pedantic -Wno-unused-function -Wno-missing-field-initializers -Wno-sign-conversion -Wno-write-strings -Wno-class-memaccess -Wno-comment -Wno-pedantic
+    -w
     -maes
     -msse4
-    -fsanitize=address)
+    --include ${CMAKE_SOURCE_DIR}/src/includes.hpp
+    )
+
+
+    target_include_directories(city PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src ${CMAKE_CURRENT_SOURCE_DIR}/src/imgui)
+
+    set(PLATFORM_LIB_ARTIFACT_DIR ${LIB_ARTIFACT_DIR}/linux)
+
 else()
     message(FATAL_ERROR "Unsupported compiler")
 endif()
@@ -48,4 +56,4 @@ target_link_directories(city
     PRIVATE
         ${PLATFORM_LIB_ARTIFACT_DIR}
 )
-target_link_libraries(city PRIVATE glfw3 ktx_read)
+target_link_libraries(city PRIVATE glfw3 ktx_read vulkan)

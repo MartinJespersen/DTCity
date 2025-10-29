@@ -306,7 +306,7 @@ os_shared_memory_view_close(OS_Handle handle, void* ptr, Rng1U64 range);
 static U64
 os_now_microseconds(void);
 static U32
-OS_NowUnix(void);
+os_now_unix(void);
 static DateTime
 os_now_universal_time(void);
 static DateTime
