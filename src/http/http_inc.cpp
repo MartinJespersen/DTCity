@@ -1,6 +1,10 @@
 // The Digital Grove Codebase
 // Copyright (c) 2024 Ryan Fleury. All rights reserved.
 
+// Undefine X11 macros that conflict with httplib
+#ifdef Success
+#undef Success
+#endif
 #include "http.c"
 
 #if OS_WINDOWS

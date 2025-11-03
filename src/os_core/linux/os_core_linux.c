@@ -472,6 +472,7 @@ static B32
 os_move_file_path(String8 dst, String8 src)
 {
     // TODO(rjf)
+    return false;
 }
 
 static String8

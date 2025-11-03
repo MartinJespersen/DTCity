@@ -515,7 +515,7 @@ static void
 VK_Model3DInstanceRendering()
 {
     VK_Context* vk_ctx = VK_CtxGet();
-    VK_SwapchainResources* swapchain_resources = vk_ctx->swapchain_resources;
+    vk_SwapchainResources* swapchain_resources = vk_ctx->swapchain_resources;
     VkExtent2D swapchain_extent = swapchain_resources->swapchain_extent;
     VkCommandBuffer cmd_buffer = vk_ctx->command_buffers.data[vk_ctx->current_frame];
     VK_Pipeline* pipeline = &vk_ctx->model_3D_instance_pipeline;
@@ -702,9 +702,6 @@ VK_AssetManagerCreate(VkDevice device, U32 queue_family_index, async::Threads* t
         BufferAlloc<VK_AssetManagerCommandPool>(arena, threads->thread_handles.size);
     asset_store->texture_free_list = nullptr;
 
-    VkFenceCreateInfo fence_info{};
-    fence_info.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
-
     VkCommandPoolCreateInfo cmd_pool_info{};
     cmd_pool_info.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
     cmd_pool_info.queueFamilyIndex = queue_family_index;
@@ -745,7 +742,7 @@ VK_AssetCmdQueueItemEnqueue(U32 thread_id, VkCommandBuffer cmd, R_ThreadInput* t
 
     VK_CmdQueueItem item = {
         .thread_input = thread_input, .thread_id = thread_id, .cmd_buffer = cmd};
-    DEBUG_LOG("Asset ID: %llu - Cmd Getting Queued\n", thread_input->asset_info.handle.u64[0]);
+    DEBUG_LOG("Asset ID: %lu - Cmd Getting Queued\n", thread_input->asset_info.handle.u64[0]);
     async::QueuePush(asset_manager->cmd_queue, &item);
 }
 
@@ -771,7 +768,7 @@ VK_AssetManagerExecuteCmds()
 
             VK_CHECK_RESULT(vkQueueSubmit(vk_ctx->graphics_queue, 1, &submit_info, item.fence));
 
-            DEBUG_LOG("Asset ID: %llu - Submitted Command Buffer\n",
+            DEBUG_LOG("Asset ID: %lu - Submitted Command Buffer\n",
                       item.thread_input->asset_info.handle.u64[0]);
             VK_AssetManagerCmdListAdd(asset_store->cmd_wait_list, item);
         }
@@ -884,7 +881,7 @@ VK_AssetManagerCmdDoneCheck()
                 asset->is_loaded = 1;
             }
             Assert(asset_load_info->type != R_AssetItemType_Undefined);
-            DEBUG_LOG("Asset: %llu - Finished loading\n", asset_load_info->handle.u64[0]);
+            DEBUG_LOG("Asset: %lu - Finished loading\n", asset_load_info->handle.u64[0]);
             vkDestroyFence(vk_ctx->device, cmd_queue_item->fence, 0);
             VK_ThreadInputDestroy(cmd_queue_item->thread_input);
             VK_AssetManagerCmdListItemRemove(asset_manager->cmd_wait_list, cmd_queue_item);
@@ -1103,7 +1100,7 @@ VK_Model3DRendering()
     VK_Pipeline* model_3D_pipeline = &vk_ctx->model_3D_pipeline;
     VK_DrawFrame* draw_frame = vk_ctx->draw_frame;
 
-    VK_SwapchainResources* swapchain_resources = vk_ctx->swapchain_resources;
+    vk_SwapchainResources* swapchain_resources = vk_ctx->swapchain_resources;
     VkExtent2D swapchain_extent = swapchain_resources->swapchain_extent;
     VkCommandBuffer cmd_buffer = vk_ctx->command_buffers.data[vk_ctx->current_frame];
 
@@ -1182,7 +1179,7 @@ VK_CommandBufferRecord(U32 image_index, U32 current_frame, ui_Camera* camera,
     beginInfo.flags = 0;                  // Optional
     beginInfo.pInheritanceInfo = nullptr; // Optional
 
-    VK_SwapchainResources* swapchain_resource = vk_ctx->swapchain_resources;
+    vk_SwapchainResources* swapchain_resource = vk_ctx->swapchain_resources;
 
     // object id color attachment image
     VK_ImageResource* object_id_image_resource =
@@ -1281,11 +1278,6 @@ VK_CommandBufferRecord(U32 image_index, U32 current_frame, ui_Camera* camera,
 
             VkClearColorValue clear_color = {0.0f, 0.0f, 0.0f, 1.0f};
             VkClearDepthStencilValue clear_depth = {1.0f, 0};
-            VkImageSubresourceRange image_range = {.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
-                                                   .baseMipLevel = 0,
-                                                   .levelCount = 1,
-                                                   .baseArrayLayer = 0,
-                                                   .layerCount = 1};
 
             // ~mgj: Transition color attachment image layout to
             // VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL to render into
@@ -1584,7 +1576,7 @@ R_RenderCtxCreate(String8 shader_path, io_IO* io_ctx, async::Threads* thread_poo
 
     VK_CommandBuffersCreate(vk_ctx);
 
-    VK_SyncObjectsCreate(vk_ctx);
+    vk_sync_objects_create(vk_ctx);
 
     VK_DescriptorPoolCreate(vk_ctx);
     VK_CameraUniformBufferCreate(vk_ctx);
@@ -1626,8 +1618,6 @@ R_RenderCtxDestroy()
     vkDestroySurfaceKHR(vk_ctx->instance, vk_ctx->surface, nullptr);
     for (U32 i = 0; i < VK_MAX_FRAMES_IN_FLIGHT; i++)
     {
-        vkDestroySemaphore(vk_ctx->device, vk_ctx->render_finished_semaphores.data[i], nullptr);
-        vkDestroySemaphore(vk_ctx->device, vk_ctx->image_available_semaphores.data[i], nullptr);
         vkDestroyFence(vk_ctx->device, vk_ctx->in_flight_fences.data[i], nullptr);
     }
 
@@ -1658,20 +1648,24 @@ R_RenderFrame(Vec2U32 framebuffer_dim, B32* in_out_framebuffer_resized, ui_Camer
 
     VK_AssetManagerExecuteCmds();
     VK_AssetManagerCmdDoneCheck();
-    VkSemaphore image_available_semaphore =
-        vk_ctx->image_available_semaphores.data[vk_ctx->current_frame];
-    VkSemaphore render_finished_semaphore =
-        vk_ctx->render_finished_semaphores.data[vk_ctx->current_frame];
+    vk_SwapchainResources* swapchain_resources = vk_ctx->swapchain_resources;
+
     VkFence* in_flight_fence = &vk_ctx->in_flight_fences.data[vk_ctx->current_frame];
     {
         ProfScopeMarkerNamed("Wait for frame");
         VK_CHECK_RESULT(vkWaitForFences(vk_ctx->device, 1, in_flight_fence, VK_TRUE, 1000000000));
     }
+    VkSemaphore image_available_semaphore =
+        swapchain_resources->image_available_semaphores.data[vk_ctx->cur_img_idx];
 
-    uint32_t imageIndex;
+    uint32_t image_idx;
     VkResult result =
         vkAcquireNextImageKHR(vk_ctx->device, vk_ctx->swapchain_resources->swapchain, UINT64_MAX,
-                              image_available_semaphore, VK_NULL_HANDLE, &imageIndex);
+                              image_available_semaphore, VK_NULL_HANDLE, &image_idx);
+    vk_ctx->cur_img_idx = (vk_ctx->cur_img_idx + 1) % swapchain_resources->image_count;
+
+    VkSemaphore render_finished_semaphore =
+        swapchain_resources->render_finished_semaphores.data[image_idx];
 
     if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR ||
         *in_out_framebuffer_resized)
@@ -1692,7 +1686,7 @@ R_RenderFrame(Vec2U32 framebuffer_dim, B32* in_out_framebuffer_resized, ui_Camer
     VK_CHECK_RESULT(vkResetFences(vk_ctx->device, 1, in_flight_fence));
     VK_CHECK_RESULT(vkResetCommandBuffer(cmd_buffer, 0));
 
-    VK_CommandBufferRecord(imageIndex, vk_ctx->current_frame, camera, mouse_cursor_pos);
+    VK_CommandBufferRecord(image_idx, vk_ctx->current_frame, camera, mouse_cursor_pos);
 
     VkSemaphoreSubmitInfo waitSemaphoreInfo{};
     waitSemaphoreInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO;
@@ -1728,7 +1722,7 @@ R_RenderFrame(Vec2U32 framebuffer_dim, B32* in_out_framebuffer_resized, ui_Camer
     VkSwapchainKHR swapChains[] = {vk_ctx->swapchain_resources->swapchain};
     presentInfo.swapchainCount = 1;
     presentInfo.pSwapchains = swapChains;
-    presentInfo.pImageIndices = &imageIndex;
+    presentInfo.pImageIndices = &image_idx;
     presentInfo.pResults = nullptr; // Optional
 
     result = vkQueuePresentKHR(vk_ctx->present_queue, &presentInfo);
@@ -1856,7 +1850,7 @@ R_BufferLoad(R_BufferInfo* buffer_info)
     VmaAllocationCreateInfo vma_info = {0};
     vma_info.usage = VMA_MEMORY_USAGE_AUTO;
     vma_info.requiredFlags = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
-    VkBufferUsageFlags usage_flags = NULL;
+    VkBufferUsageFlags usage_flags = {};
     switch (buffer_info->buffer_type)
     {
         case R_BufferType_Vertex: usage_flags = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT; break;

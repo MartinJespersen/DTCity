@@ -33,7 +33,8 @@ ContextCreate(io_IO* io_ctx)
 static void
 ContextDestroy(Context* ctx)
 {
-    async::WorkerThreadDestroy(ctx->thread_pool);
+    // TODO: This should probably be uncommented
+    // async::WorkerThreadDestroy(ctx->thread_pool);
     ArenaRelease(ctx->arena_permanent);
 }
 

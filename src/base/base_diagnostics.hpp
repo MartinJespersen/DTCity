@@ -30,7 +30,9 @@
 #elif COMPILER_GCC
 #define DISABLE_WARNINGS_PUSH                                                                      \
     _Pragma("GCC diagnostic push") _Pragma("GCC diagnostic ignored \"-Wall\"")                     \
-        _Pragma("GCC diagnostic ignored \"-Wextra\"")
+        _Pragma("GCC diagnostic ignored \"-Wextra\"")                                              \
+            _Pragma("GCC diagnostic ignored \"-Wunused-variable\"")                                \
+                _Pragma("GCC diagnostic ignored \"-Wimplicit-fallthrough\"")
 #else
 #define DISABLE_WARNINGS_PUSH
 #endif

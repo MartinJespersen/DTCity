@@ -132,7 +132,6 @@ RoadVertexBufferCreate(Road* road, Buffer<Vertex3D>* out_vertex_buffer,
 {
     ScratchScope scratch = ScratchScope(0, 0);
     Buffer<osm_Way> ways = node_utm_structure->ways_arr[OsmKeytype_Road];
-    Buffer<osm_UtmNodeList> utm_node_hashmap = node_utm_structure->utm_node_hashmap;
 
     U64 total_road_segment_count = 0;
     for (U32 way_index = 0; way_index < ways.size; way_index++)
@@ -359,10 +358,10 @@ DataFetch(Arena* arena, String8 cache_dir, String8 cache_file_name, String8 quer
     if (read_from_cache == false)
     {
         DEBUG_LOG("DataFetch: Fetching data from overpass-api.de\n");
-        String8 host = S("https://overpass-api.de");
+        String8 host = S("http://overpass-api.de");
         String8 path = S("/api/interpreter");
 
-        U32 max_retries = 3;
+        S32 max_retries = 3;
         B32 http_success = false;
         U32 retry_time_interval_ms = 2000;
         HTTP_Response response;
@@ -657,13 +656,13 @@ static Rng1F32
 CarCenterHeightOffset(Buffer<Vertex3D> vertices)
 {
     F32 highest_value = 0;
-    for (int i = 0; i < vertices.size; i++)
+    for (U64 i = 0; i < vertices.size; i++)
     {
         highest_value = Max(highest_value, vertices.data[i].pos.z);
     }
 
     F32 lowest_value = highest_value;
-    for (int i = 0; i < vertices.size; i++)
+    for (U64 i = 0; i < vertices.size; i++)
     {
         lowest_value = Min(lowest_value, vertices.data[i].pos.z);
     }

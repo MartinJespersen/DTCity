@@ -59,7 +59,7 @@ struct VK_SwapChainSupportDetails
     Buffer<VkPresentModeKHR> presentModes;
 };
 
-struct VK_SwapchainResources
+struct vk_SwapchainResources
 {
     Arena* arena;
     VkSwapchainKHR swapchain;
@@ -81,6 +81,10 @@ struct VK_SwapchainResources
     Buffer<VK_ImageResource> object_id_image_resources;
     Buffer<VK_ImageResource> object_id_image_resolve_resources;
     VK_BufferReadback object_id_buffer_readback;
+
+    // sync objects
+    Buffer<VkSemaphore> image_available_semaphores;
+    Buffer<VkSemaphore> render_finished_semaphores;
 };
 
 struct VK_QueueFamilyIndices
@@ -155,7 +159,7 @@ VK_ImageAllocationCreate(VmaAllocator allocator, U32 width, U32 height,
                          VkImageUsageFlags usage, U32 mipmap_level,
                          VmaAllocationCreateInfo vma_info);
 static void
-VK_SwapChainImageResourceCreate(VkDevice device, VK_SwapchainResources* swapchain_resources,
+VK_SwapChainImageResourceCreate(VkDevice device, vk_SwapchainResources* swapchain_resources,
                                 U32 image_count);
 static VK_ImageViewResource
 VK_ImageViewResourceCreate(VkDevice device, VkImage image, VkFormat format,
@@ -170,8 +174,8 @@ VK_ImageResourceDestroy(VmaAllocator allocator, VK_ImageResource image);
 
 // ~mgj: Swapchain functions
 static U32
-VK_SwapChainImageCountGet(VkDevice device, VK_SwapchainResources* swapchain_resources);
-static VK_SwapchainResources*
+VK_SwapChainImageCountGet(VkDevice device, vk_SwapchainResources* swapchain_resources);
+static vk_SwapchainResources*
 VK_SwapChainCreate(VK_Context* vk_ctx, Vec2U32 framebuffer_dim);
 
 static VK_ShaderModuleInfo
@@ -202,7 +206,7 @@ static void
 VK_FrustumPlanesCalculate(VK_Frustum* out_frustum, const glm::mat4 matrix);
 
 static void
-VK_ColorResourcesCreate(VK_Context* vk_ctx, VK_SwapchainResources* swapchain_resources);
+VK_ColorResourcesCreate(VK_Context* vk_ctx, vk_SwapchainResources* swapchain_resources);
 
 // sampler helpers
 static VkSampler
@@ -225,13 +229,13 @@ VK_DescriptorSetLayoutCreate(VkDevice device, VkDescriptorSetLayoutBinding* bind
 // queue family
 
 static void
-VK_DepthResourcesCreate(VK_Context* vk_context, VK_SwapchainResources* swapchain_resources);
+VK_DepthResourcesCreate(VK_Context* vk_context, vk_SwapchainResources* swapchain_resources);
 
 static void
 VK_RecreateSwapChain(Vec2U32 framebuffer_dim, VK_Context* vk_ctx);
 
 static void
-VK_SyncObjectsCreate(VK_Context* vk_ctx);
+vk_sync_objects_create(VK_Context* vk_ctx);
 
 static void
 VK_SyncObjectsDestroy(VK_Context* vk_ctx);
@@ -243,7 +247,7 @@ static void
 VK_ColorResourcesCleanup(VK_Context* vk_ctx);
 static void
 VK_SwapChainCleanup(VkDevice device, VmaAllocator allocator,
-                    VK_SwapchainResources* swapchain_resources);
+                    vk_SwapchainResources* swapchain_resources);
 static void
 VK_CreateInstance(VK_Context* vk_ctx);
 static void

@@ -1,24 +1,33 @@
 # TODO for the first draft
+* error: refetch json from osm if error happens in json parsing.
+  * terminate called after throwing an instance of 'simdjson::simdjson_error'
+    what():  INCORRECT_TYPE: The JSON element does not have the requested type.
 * Cleanup entrypoint main loop
 * Change the naming convention for functions from PascalCase to snake_case
 * Make the optimized build work and make possible to profile
-* Linux integration:
-  * How to include linux libraries.
-  * Build Script changes.
-    * Should CMake be considered?
+* CMake
+  * compile shaders
+
+* Make executable stand alone:
+  * What to do about shaders
+    * compiled directly into executable?
+  * What to do about assets and textures that are not part of executable
 * Documentation
   * Explain the different layers such as render, ui, etc.
   * Create diagram of interaction between layers
 
 ## TODO: Done
-* Caching of OpenStreetMap data needs to be improved - &#9745;
-* Bounding Box for OpenStreetMap should be a command line input - &#9745;
+* Caching of OpenStreetMap data needs to be improved
+* Bounding Box for OpenStreetMap should be a command line input
 * Error handling:
-  * OpenStreetMap information retry &#9745;
-* Move OSM data structure to its own layer &#9745;
-* Show the current road or building name in imgui window &#9745;
+  * OpenStreetMap information retry
+* Move OSM data structure to its own layer
+* Show the current road or building name in imgui window
   * Create a hashmap for Ways for quick lookup of index.
   * This requires a centralized place for storing ways and nodes.
+* Linux integration:
+  * Make ASAN work
+  * Have warnings
 
 # Future Improvements:
 * Layers should compile as seperate units
@@ -38,8 +47,8 @@
   * Base library fixes
 
 # Linux Info
-* For Khronos validation layer support (enabled if DEBUG_BUILD macro is defined) remember to install it:
-  * sudo apt install vulkan-validationlayers (Ubuntu)
+* For Khronos validation layer support (enabled if DEBUG_BUILD macro is defined) remember to install it
+  * The validation layer are part of the lunarg sdk that can be down loaded from the site: https://vulkan.lunarg.com/doc/sdk/1.4.328.1/linux/getting_started.html
 * Compiling (incl. linking) takes a very long time at the moment.
 * remember to link crypto and ssl libraries when using https and define the macro CPPHTTPLIB_OPENSSL_SUPPORT in httplib
 
@@ -76,7 +85,7 @@ If you could complete these steps before our meeting on 13-Nov-2025, that would 
 # CMake build instructions
 ## Create build directory
 Debug:
-cmake -B build
+cmake -B build -DCMAKE_BUILD_TYPE=Debug
 Release:
 cmake -B build -DCMAKE_BUILD_TYPE=Release
 ## Build Project

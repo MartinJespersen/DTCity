@@ -1,6 +1,13 @@
+#!/bin/zsh
 set -e
 
-pushd road
-glslc road.frag -o road_frag.spv
-glslc road.vert -o road_vert.spv
+
+pushd model_3d
+glslc model_3d.vert -o model_3d_vert.spv
+glslc model_3d.frag -o model_3d_frag.spv
+popd
+
+pushd model_3d_instancing
+glslc model_3d_instancing.vert -o model_3d_instancing_vert.spv
+glslc model_3d_instancing.frag -o model_3d_instancing_frag.spv
 popd

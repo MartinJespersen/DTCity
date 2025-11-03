@@ -23,12 +23,23 @@ if (MSVC)
 elseif(CMAKE_COMPILER_IS_GNUCXX)
     #-Wall -Wextra -pedantic -pedantic -Wno-unused-function  -Wno-missing-field-initializers -Wno-sign-conversion -Wno-write-strings -Wno-class-memaccess -Wno-comment -Wno-pedantic
     target_compile_options(city PRIVATE
-    -w
     -maes
     -msse4
     --include ${CMAKE_SOURCE_DIR}/src/includes.hpp
     )
 
+    if(BUILD_DEBUG)
+        target_compile_options(city PRIVATE
+            -fsanitize=address
+            -Wall -Wextra -Wno-attributes -Wno-unused-function -Wno-unused-parameter -Wno-narrowing -Wno-missing-field-initializers -Wno-sign-conversion -Wno-write-strings -Wno-class-memaccess -Wno-comment -Wno-pedantic
+        )
+        TARGET_LINK_OPTIONS(city PRIVATE
+            -fsanitize=address
+        )
+    else()
+
+        target_compile_options(city PRIVATE -w)
+    endif()
 
     target_include_directories(city PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src ${CMAKE_CURRENT_SOURCE_DIR}/src/imgui)
 

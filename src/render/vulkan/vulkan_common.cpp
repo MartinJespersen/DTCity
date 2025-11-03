@@ -58,7 +58,7 @@ VK_SupportedFormat(VkPhysicalDevice physical_device, VkFormat* candidates, U32 c
 }
 
 static void
-VK_DepthResourcesCreate(VK_Context* vk_ctx, VK_SwapchainResources* swapchain_resources)
+VK_DepthResourcesCreate(VK_Context* vk_ctx, vk_SwapchainResources* swapchain_resources)
 {
     VkFormat depth_formats[3] = {
         VK_FORMAT_D32_SFLOAT,
@@ -89,7 +89,7 @@ VK_DepthResourcesCreate(VK_Context* vk_ctx, VK_SwapchainResources* swapchain_res
 }
 
 static void
-ObjectIdImageResourceCreate(VK_SwapchainResources* swapchain_resources, U32 image_count)
+ObjectIdImageResourceCreate(vk_SwapchainResources* swapchain_resources, U32 image_count)
 {
     VkImageTiling tiling = VK_IMAGE_TILING_OPTIMAL;
     VK_Context* vk_ctx = VK_CtxGet();
@@ -107,9 +107,6 @@ ObjectIdImageResourceCreate(VK_SwapchainResources* swapchain_resources, U32 imag
         BufferAlloc<VK_ImageResource>(swapchain_resources->arena, image_count);
     Buffer<VK_ImageResource> object_id_image_resolve_resources =
         BufferAlloc<VK_ImageResource>(swapchain_resources->arena, image_count);
-
-    Buffer<void*> object_id_buffer_handles =
-        BufferAlloc<void*>(swapchain_resources->arena, image_count);
 
     U32 buffer_size = 0;
     for (U32 i = 0; i < image_count; i++)
@@ -402,6 +399,7 @@ VK_CheckValidationLayerSupport(VK_Context* vk_ctx)
 
         if (!layerFound)
         {
+            printf("Could not find validation layer %s\n", vk_ctx->validation_layers.data[i].str);
             break;
         }
     }
@@ -525,7 +523,7 @@ static void
 ObjectIdResourcesCleanup()
 {
     VK_Context* vk_ctx = VK_CtxGet();
-    VK_SwapchainResources* swapchain_resources = vk_ctx->swapchain_resources;
+    vk_SwapchainResources* swapchain_resources = vk_ctx->swapchain_resources;
     for (U32 i = 0; i < swapchain_resources->object_id_image_resources.size; i++)
     {
         VK_ImageResourceDestroy(vk_ctx->allocator,
@@ -538,16 +536,9 @@ ObjectIdResourcesCleanup()
 }
 
 static void
-VK_SyncObjectsCreate(VK_Context* vk_ctx)
+vk_sync_objects_create(VK_Context* vk_ctx)
 {
-    vk_ctx->image_available_semaphores =
-        BufferAlloc<VkSemaphore>(vk_ctx->arena, VK_MAX_FRAMES_IN_FLIGHT);
-    vk_ctx->render_finished_semaphores =
-        BufferAlloc<VkSemaphore>(vk_ctx->arena, VK_MAX_FRAMES_IN_FLIGHT);
     vk_ctx->in_flight_fences = BufferAlloc<VkFence>(vk_ctx->arena, VK_MAX_FRAMES_IN_FLIGHT);
-
-    VkSemaphoreCreateInfo semaphoreInfo{};
-    semaphoreInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
 
     VkFenceCreateInfo fenceInfo{};
     fenceInfo.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
@@ -555,14 +546,10 @@ VK_SyncObjectsCreate(VK_Context* vk_ctx)
 
     for (U32 i = 0; i < VK_MAX_FRAMES_IN_FLIGHT; i++)
     {
-        if ((vkCreateSemaphore(vk_ctx->device, &semaphoreInfo, nullptr,
-                               &vk_ctx->image_available_semaphores.data[i]) != VK_SUCCESS) ||
-            (vkCreateSemaphore(vk_ctx->device, &semaphoreInfo, nullptr,
-                               &vk_ctx->render_finished_semaphores.data[i]) != VK_SUCCESS) ||
-            (vkCreateFence(vk_ctx->device, &fenceInfo, nullptr,
+        if ((vkCreateFence(vk_ctx->device, &fenceInfo, nullptr,
                            &vk_ctx->in_flight_fences.data[i]) != VK_SUCCESS))
         {
-            ExitWithError("failed to create synchronization objects for a frame!");
+            ExitWithError("failed to fences synchronization objects for a frame!");
         }
     }
 }
@@ -572,8 +559,6 @@ VK_SyncObjectsDestroy(VK_Context* vk_ctx)
 {
     for (size_t i = 0; i < VK_MAX_FRAMES_IN_FLIGHT; i++)
     {
-        vkDestroySemaphore(vk_ctx->device, vk_ctx->image_available_semaphores.data[i], nullptr);
-        vkDestroySemaphore(vk_ctx->device, vk_ctx->render_finished_semaphores.data[i], nullptr);
         vkDestroyFence(vk_ctx->device, vk_ctx->in_flight_fences.data[i], nullptr);
     }
 }
@@ -1070,7 +1055,7 @@ VK_ImageAllocationCreate(VmaAllocator allocator, U32 width, U32 height,
 }
 
 static void
-VK_ColorResourcesCreate(VK_Context* vk_ctx, VK_SwapchainResources* swapchain_resources)
+VK_ColorResourcesCreate(VK_Context* vk_ctx, vk_SwapchainResources* swapchain_resources)
 {
     VkFormat colorFormat = swapchain_resources->color_format;
 
@@ -1091,7 +1076,7 @@ VK_ColorResourcesCreate(VK_Context* vk_ctx, VK_SwapchainResources* swapchain_res
                                                  .image_view_resource = color_image_view};
 }
 static void
-VK_SwapChainImageResourceCreate(VkDevice device, VK_SwapchainResources* swapchain_resources,
+VK_SwapChainImageResourceCreate(VkDevice device, vk_SwapchainResources* swapchain_resources,
                                 U32 image_count)
 {
     ScratchScope scratch = ScratchScope(0, 0);
@@ -1201,7 +1186,7 @@ VK_MaxUsableSampleCountGet(VkPhysicalDevice device)
     return VK_SAMPLE_COUNT_1_BIT;
 }
 static U32
-VK_SwapChainImageCountGet(VkDevice device, VK_SwapchainResources* swapchain_resources)
+VK_SwapChainImageCountGet(VkDevice device, vk_SwapchainResources* swapchain_resources)
 {
     U32 imageCount = {0};
     if (vkGetSwapchainImagesKHR(device, swapchain_resources->swapchain, &imageCount, nullptr) !=
@@ -1212,11 +1197,11 @@ VK_SwapChainImageCountGet(VkDevice device, VK_SwapchainResources* swapchain_reso
     return imageCount;
 }
 
-static VK_SwapchainResources*
+static vk_SwapchainResources*
 VK_SwapChainCreate(VK_Context* vk_ctx, Vec2U32 framebuffer_dim)
 {
     Arena* arena = ArenaAlloc();
-    VK_SwapchainResources* swapchain_resources = PushStruct(arena, VK_SwapchainResources);
+    vk_SwapchainResources* swapchain_resources = PushStruct(arena, vk_SwapchainResources);
     swapchain_resources->arena = arena;
 
     VK_SwapChainSupportDetails swapchain_details =
@@ -1272,7 +1257,7 @@ VK_SwapChainCreate(VK_Context* vk_ctx, Vec2U32 framebuffer_dim)
     VkSwapchainKHR swapchain;
     VK_CHECK_RESULT(vkCreateSwapchainKHR(vk_ctx->device, &createInfo, nullptr, &swapchain));
     swapchain_resources->swapchain = swapchain;
-    swapchain_resources->swapchain_extent = swapchain_details.capabilities.currentExtent;
+    swapchain_resources->swapchain_extent = swapchain_extent;
     swapchain_resources->swapchain_image_format = surface_format.format;
     swapchain_resources->color_format = surface_format.format;
     swapchain_resources->swapchain_support = swapchain_details;
@@ -1287,13 +1272,42 @@ VK_SwapChainCreate(VK_Context* vk_ctx, Vec2U32 framebuffer_dim)
     VK_DepthResourcesCreate(vk_ctx, swapchain_resources);
     ObjectIdImageResourceCreate(swapchain_resources, image_count);
 
+    swapchain_resources->image_available_semaphores =
+        BufferAlloc<VkSemaphore>(vk_ctx->arena, image_count);
+    swapchain_resources->render_finished_semaphores =
+        BufferAlloc<VkSemaphore>(vk_ctx->arena, image_count);
+
+    VkSemaphoreCreateInfo semaphoreInfo{};
+    semaphoreInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
+
+    for (U32 i = 0; i < image_count; i++)
+    {
+        if ((vkCreateSemaphore(vk_ctx->device, &semaphoreInfo, nullptr,
+                               &swapchain_resources->image_available_semaphores.data[i]) !=
+             VK_SUCCESS) ||
+            (vkCreateSemaphore(vk_ctx->device, &semaphoreInfo, nullptr,
+                               &swapchain_resources->render_finished_semaphores.data[i]) !=
+             VK_SUCCESS))
+        {
+            ExitWithError("failed to create semaphores for swapchain images!");
+        }
+    }
+
     return swapchain_resources;
 }
 
 static void
 VK_SwapChainCleanup(VkDevice device, VmaAllocator allocator,
-                    VK_SwapchainResources* swapchain_resources)
+                    vk_SwapchainResources* swapchain_resources)
 {
+    for (U32 i = 0; i < swapchain_resources->image_count; i++)
+    {
+        vkDestroySemaphore(device, swapchain_resources->image_available_semaphores.data[i],
+                           nullptr);
+        vkDestroySemaphore(device, swapchain_resources->render_finished_semaphores.data[i],
+                           nullptr);
+    }
+
     VK_ColorResourcesCleanup(allocator, swapchain_resources->color_image_resource);
     VK_DepthResourcesCleanup(allocator, swapchain_resources->depth_image_resource);
     ObjectIdResourcesCleanup();
@@ -1319,7 +1333,7 @@ VK_RecreateSwapChain(Vec2U32 framebuffer_dim, VK_Context* vk_ctx)
     VK_SwapChainCleanup(vk_ctx->device, vk_ctx->allocator, vk_ctx->swapchain_resources);
     vk_ctx->swapchain_resources = 0;
     vk_ctx->swapchain_resources = VK_SwapChainCreate(vk_ctx, framebuffer_dim);
-    VK_SyncObjectsCreate(vk_ctx);
+    vk_sync_objects_create(vk_ctx);
 }
 // Samplers helpers
 //

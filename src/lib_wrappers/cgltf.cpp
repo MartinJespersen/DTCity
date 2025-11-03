@@ -12,6 +12,7 @@ SamplerFromCgltfSampler(CgltfSampler sampler)
 
     switch (sampler.min_filter)
     {
+        default: ExitWithError("Invalid min filter type"); break;
         case cgltf_filter_type_nearest:
         {
             min_filter = R_Filter_Nearest;
@@ -60,6 +61,7 @@ SamplerFromCgltfSampler(CgltfSampler sampler)
     {
         switch (sampler.mag_filter)
         {
+            default: ExitWithError("Invalid mag filter type"); break;
             case cgltf_filter_type_nearest_mipmap_nearest:
             {
                 mag_filter = R_Filter_Nearest;

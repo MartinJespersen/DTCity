@@ -69,8 +69,9 @@ way_buffer_from_simd_json(Arena* arena, String8 json)
             // Count tags by iterating through the object
             auto tags_object = element["tags"].get_object();
             U64 tag_count = 0;
-            for (auto tag : tags_object)
+            for (auto _ : tags_object)
             {
+                (void)_;
                 tag_count++;
             }
 

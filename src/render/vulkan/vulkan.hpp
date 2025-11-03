@@ -165,14 +165,13 @@ struct VK_Context
     VkCommandPool command_pool;
     Buffer<VkCommandBuffer> command_buffers;
 
-    Buffer<VkSemaphore> image_available_semaphores;
-    Buffer<VkSemaphore> render_finished_semaphores;
     Buffer<VkFence> in_flight_fences;
-    U32 current_frame = 0;
+    U32 current_frame;
+    U32 cur_img_idx;
 
     VkFormat object_id_format;
     U64 hovered_object_id;
-    VK_SwapchainResources* swapchain_resources;
+    vk_SwapchainResources* swapchain_resources;
 
     VkSampleCountFlagBits msaa_samples = VK_SAMPLE_COUNT_1_BIT;
 
