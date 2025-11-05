@@ -1,14 +1,11 @@
 # TODO for the first draft
-* error: refetch json from osm if error happens in json parsing.
-  * terminate called after throwing an instance of 'simdjson::simdjson_error'
-    what():  INCORRECT_TYPE: The JSON element does not have the requested type.
+
 * Imgui -> third_party dir
 * Cleanup entrypoint main loop
 * Change the naming convention for functions from PascalCase to snake_case
 * Make the optimized build work and make possible to profile
 * CMake
   * compile shaders
-
 * Make executable stand alone:
   * What to do about shaders
     * compiled directly into executable?
@@ -29,6 +26,9 @@
 * Linux integration:
   * Make ASAN work
   * Have warnings
+* error: refetch json from osm if error happens in json parsing.
+  * terminate called after throwing an instance of 'simdjson::simdjson_error'
+    what():  INCORRECT_TYPE: The JSON element does not have the requested type.
 
 # Future Improvements:
 * Layers should compile as seperate units

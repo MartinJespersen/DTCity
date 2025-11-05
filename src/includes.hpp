@@ -18,7 +18,7 @@ DISABLE_WARNINGS_PUSH
 #define GLM_FORCE_DEFAULT_ALIGNED_GENTYPES
 #include "third_party/glm/glm.hpp"
 #include "third_party/glm/gtc/matrix_transform.hpp"
-#include "imgui/imgui_inc.hpp"
+#include "third_party/imgui/imgui_inc.hpp"
 //////////////////////////////////////////////
 #include "os_core/os_core_inc.hpp"
 DISABLE_WARNINGS_POP
