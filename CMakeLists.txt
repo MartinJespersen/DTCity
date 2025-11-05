@@ -4,9 +4,11 @@ set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 set(THIRD_PARTY_LIBS_DIR ${CMAKE_CURRENT_SOURCE_DIR}/src/third_party)
 set(BUILD_DEBUG ON)
+
 set(LIB_ARTIFACT_DIR ${CMAKE_CURRENT_SOURCE_DIR}/lib_artifacts)
 
 add_executable(city)
+
 
 if (MSVC)
     target_compile_options(city PRIVATE
@@ -27,7 +29,7 @@ elseif(CMAKE_COMPILER_IS_GNUCXX)
     --include ${CMAKE_SOURCE_DIR}/src/includes.hpp
     )
 
-    if(BUILD_DEBUG)
+    if(BUILD_DEBUG AND NOT NDEBUG)
         target_compile_options(city PRIVATE
             -fsanitize=address
             -Wall -Wextra -Wno-attributes -Wno-unused-function -Wno-unused-parameter -Wno-narrowing -Wno-missing-field-initializers -Wno-sign-conversion -Wno-write-strings -Wno-class-memaccess -Wno-comment -Wno-pedantic
@@ -35,10 +37,13 @@ elseif(CMAKE_COMPILER_IS_GNUCXX)
         TARGET_LINK_OPTIONS(city PRIVATE
             -fsanitize=address
         )
+
     else()
 
         target_compile_options(city PRIVATE -w)
     endif()
+
+
 
     target_include_directories(city PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src ${CMAKE_CURRENT_SOURCE_DIR}/src/imgui)
 
@@ -48,6 +53,11 @@ else()
     message(FATAL_ERROR "Unsupported compiler")
 endif()
 
+option(TRACY_PROFILE_ENABLE "Enable Tracy profiler" OFF)
+if (TRACY_PROFILE_ENABLE)
+    add_compile_definitions(TRACY_ENABLE)
+    target_link_libraries(city PRIVATE TracyClient)
+endif()
 
 target_sources(city
     PRIVATE
