@@ -16,10 +16,13 @@ ContextCreate(io_IO* io_ctx)
     ctx->time = PushStruct(app_arena, dt_Time);
     ctx->cwd = Str8PathFromStr8List(app_arena, {OS_GetCurrentPath(scratch.arena), S("..")});
     ctx->data_dir = Str8PathFromStr8List(app_arena, {ctx->cwd, S("data")});
-    ctx->cache_path = Str8PathFromStr8List(app_arena, {ctx->data_dir, S("cache")});
-    ctx->texture_path = Str8PathFromStr8List(app_arena, {ctx->data_dir, S("textures")});
-    ctx->shader_path = Str8PathFromStr8List(app_arena, {ctx->data_dir, S("shaders")});
-    ctx->asset_path = Str8PathFromStr8List(app_arena, {ctx->data_dir, S("assets")});
+
+    // ctx->sub_paths = Str8PathFromStr8List(app_arena, {ctx->data_dir, S("sub")});
+    dt_DataDirPair subdirs[] = {{dt_DataDirType::Cache, S("cache")},
+                                {dt_DataDirType::Texture, S("textures")},
+                                {dt_DataDirType::Shaders, S("shaders")},
+                                {dt_DataDirType::Assets, S("assets")}};
+    ctx->data_subdir = dt_dir_create(app_arena, ctx->data_dir, subdirs, ArrayCount(subdirs));
     ctx->io = io_ctx;
 
     // ~mgj: -2 as 2 are used for Main thread and IO thread

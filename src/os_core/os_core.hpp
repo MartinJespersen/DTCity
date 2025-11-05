@@ -258,7 +258,7 @@ os_move_file_path(String8 dst, String8 src);
 static String8
 os_full_path_from_path(Arena* arena, String8 path);
 static B32
-OS_FilePathExists(String8 path);
+os_file_path_exists(String8 path);
 static B32
 os_folder_path_exists(String8 path);
 static FileProperties

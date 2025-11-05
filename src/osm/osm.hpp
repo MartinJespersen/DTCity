@@ -33,6 +33,12 @@ struct osm_RoadNodeList
     osm_RoadNode* last;
 };
 
+struct osm_RoadNodeParseResult
+{
+    Buffer<osm_RoadNodeList> road_nodes;
+    B32 error;
+};
+
 union osm_GCSBoundingBox
 {
     struct
@@ -72,6 +78,12 @@ struct osm_WayList
 {
     osm_WayNode* first;
     osm_WayNode* last;
+};
+
+struct osm_WayParseResult
+{
+    Buffer<osm_Way> ways;
+    B32 error;
 };
 
 struct osm_UtmNode

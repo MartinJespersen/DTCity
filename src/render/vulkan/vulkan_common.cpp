@@ -53,7 +53,7 @@ VK_SupportedFormat(VkPhysicalDevice physical_device, VkFormat* candidates, U32 c
         }
     }
 
-    ExitWithError("failed to find supported format!");
+    exit_with_error("failed to find supported format!");
     return VK_FORMAT_UNDEFINED;
 }
 
@@ -163,7 +163,7 @@ VK_CommandPoolCreate(VkDevice device, VkCommandPoolCreateInfo* poolInfo)
     VkCommandPool cmd_pool;
     if (vkCreateCommandPool(device, poolInfo, nullptr, &cmd_pool) != VK_SUCCESS)
     {
-        ExitWithError("failed to create command pool!");
+        exit_with_error("failed to create command pool!");
     }
     return cmd_pool;
 }
@@ -174,14 +174,14 @@ VK_SurfaceCreate(VK_Context* vk_ctx, io_IO* io)
     int supported = glfwVulkanSupported();
     if (supported != GLFW_TRUE)
     {
-        ExitWithError("Vulkan loader or ICD loading failed!");
+        exit_with_error("Vulkan loader or ICD loading failed!");
     }
 
     VkResult result =
         glfwCreateWindowSurface(vk_ctx->instance, io->window, nullptr, &vk_ctx->surface);
     if (result != VK_SUCCESS)
     {
-        ExitWithError("failed to create window surface!");
+        exit_with_error("failed to create window surface!");
     }
 }
 
@@ -191,7 +191,7 @@ VK_CreateInstance(VK_Context* vk_ctx)
     Temp scratch = ScratchBegin(0, 0);
     if (vk_ctx->enable_validation_layers && !VK_CheckValidationLayerSupport(vk_ctx))
     {
-        ExitWithError("validation layers requested, but not available!");
+        exit_with_error("validation layers requested, but not available!");
     }
 
     VkApplicationInfo appInfo{};
@@ -229,7 +229,7 @@ VK_CreateInstance(VK_Context* vk_ctx)
 
     if (vkCreateInstance(&createInfo, nullptr, &vk_ctx->instance) != VK_SUCCESS)
     {
-        ExitWithError("failed to create instance!");
+        exit_with_error("failed to create instance!");
     }
 
     ScratchEnd(scratch);
@@ -314,7 +314,7 @@ VK_LogicalDeviceCreate(Arena* arena, VK_Context* vk_ctx)
     if (vkCreateDevice(vk_ctx->physical_device, &createInfo, nullptr, &vk_ctx->device) !=
         VK_SUCCESS)
     {
-        ExitWithError("failed to create logical device!");
+        exit_with_error("failed to create logical device!");
     }
 
     vkGetDeviceQueue(vk_ctx->device, queueFamilyIndicies.graphicsFamilyIndex, 0,
@@ -325,7 +325,7 @@ VK_LogicalDeviceCreate(Arena* arena, VK_Context* vk_ctx)
         vk_ctx->device, "vkCmdSetColorWriteEnableEXT");
     if (!vkCmdSetColorWriteEnableExt)
     {
-        ExitWithError("Could not load vkCmdSetColorWriteEnableEXT");
+        exit_with_error("Could not load vkCmdSetColorWriteEnableEXT");
     }
 }
 
@@ -341,7 +341,7 @@ VK_PhysicalDevicePick(VK_Context* vk_ctx)
 
     if (deviceCount == 0)
     {
-        ExitWithError("failed to find GPUs with Vulkan support!");
+        exit_with_error("failed to find GPUs with Vulkan support!");
     }
 
     VkPhysicalDevice* devices = PushArray(scratch.arena, VkPhysicalDevice, deviceCount);
@@ -367,7 +367,7 @@ VK_PhysicalDevicePick(VK_Context* vk_ctx)
 
     if (vk_ctx->physical_device == VK_NULL_HANDLE)
     {
-        ExitWithError("failed to find a suitable GPU!");
+        exit_with_error("failed to find a suitable GPU!");
     }
 
     ScratchEnd(scratch);
@@ -460,7 +460,7 @@ VK_DebugMessengerSetup(VK_Context* vk_ctx)
     if (VK_CreateDebugUtilsMessengerEXT(vk_ctx->instance, &createInfo, nullptr,
                                         &vk_ctx->debug_messenger) != VK_SUCCESS)
     {
-        ExitWithError("failed to set up debug messenger!");
+        exit_with_error("failed to set up debug messenger!");
     }
 }
 
@@ -549,7 +549,7 @@ vk_sync_objects_create(VK_Context* vk_ctx)
         if ((vkCreateFence(vk_ctx->device, &fenceInfo, nullptr,
                            &vk_ctx->in_flight_fences.data[i]) != VK_SUCCESS))
         {
-            ExitWithError("failed to fences synchronization objects for a frame!");
+            exit_with_error("failed to fences synchronization objects for a frame!");
         }
     }
 }
@@ -576,7 +576,7 @@ VK_CommandBuffersCreate(VK_Context* vk_ctx)
     if (vkAllocateCommandBuffers(vk_ctx->device, &allocInfo, vk_ctx->command_buffers.data) !=
         VK_SUCCESS)
     {
-        ExitWithError("failed to allocate command buffers!");
+        exit_with_error("failed to allocate command buffers!");
     }
 }
 
@@ -606,7 +606,7 @@ VK_ShaderModuleCreate(VkDevice device, Buffer<U8> buffer)
     VkShaderModule shaderModule;
     if (vkCreateShaderModule(device, &createInfo, nullptr, &shaderModule) != VK_SUCCESS)
     {
-        ExitWithError("failed to create shader module!");
+        exit_with_error("failed to create shader module!");
     }
 
     return shaderModule;
@@ -662,8 +662,8 @@ VK_QueueFamilyIndicesFromBitFields(VK_QueueFamilyIndexBits queueFamilyBits)
 {
     if (!VK_QueueFamilyIsComplete(queueFamilyBits))
     {
-        ExitWithError("Queue family is not complete either graphics or present "
-                      "queue is not supported");
+        exit_with_error("Queue family is not complete either graphics or present "
+                        "queue is not supported");
     }
 
     VK_QueueFamilyIndices indices = {0};
@@ -847,15 +847,23 @@ VK_BufferAllocationCreate(VmaAllocator allocator, VkDeviceSize size,
 {
     VK_BufferAllocation buffer = {};
     buffer.size = size;
+    if (size == 0)
+    {
+        buffer.size = 64; // this avoids errors when creating buffers with zero size
+    }
 
     VkBufferCreateInfo bufferInfo = {};
     bufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
-    bufferInfo.size = size;
+    bufferInfo.size = buffer.size;
     bufferInfo.usage = buffer_usage;
     bufferInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
 
-    VK_CHECK_RESULT(vmaCreateBuffer(allocator, &bufferInfo, &vma_info, &buffer.buffer,
-                                    &buffer.allocation, nullptr));
+    VkResult res = vmaCreateBuffer(allocator, &bufferInfo, &vma_info, &buffer.buffer,
+                                   &buffer.allocation, nullptr);
+    if (res != VK_SUCCESS)
+    {
+        exit_with_error("Failed to create buffer");
+    }
 
     return buffer;
 }
@@ -964,7 +972,7 @@ VK_BufferMappedUpdate(VkCommandBuffer cmd_buffer, VmaAllocator allocator,
                                       mapped_buffer.staging_buffer_alloc.allocation, 0,
                                       mapped_buffer.buffer_alloc.size))
         {
-            ExitWithError("BufferMappedUpdate: Could not copy data to staging buffer");
+            exit_with_error("BufferMappedUpdate: Could not copy data to staging buffer");
         }
 
         VkBufferMemoryBarrier bufMemBarrier = {VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER};
@@ -1088,7 +1096,7 @@ VK_SwapChainImageResourceCreate(VkDevice device, vk_SwapchainResources* swapchai
     if (vkGetSwapchainImagesKHR(device, swapchain_resources->swapchain, &image_count, images) !=
         VK_SUCCESS)
     {
-        ExitWithError("failed to get swapchain images!");
+        exit_with_error("failed to get swapchain images!");
     }
 
     for (uint32_t i = 0; i < image_count; i++)
@@ -1192,7 +1200,7 @@ VK_SwapChainImageCountGet(VkDevice device, vk_SwapchainResources* swapchain_reso
     if (vkGetSwapchainImagesKHR(device, swapchain_resources->swapchain, &imageCount, nullptr) !=
         VK_SUCCESS)
     {
-        ExitWithError("failed to get swapchain image count!");
+        exit_with_error("failed to get swapchain image count!");
     }
     return imageCount;
 }
@@ -1289,7 +1297,7 @@ VK_SwapChainCreate(VK_Context* vk_ctx, Vec2U32 framebuffer_dim)
                                &swapchain_resources->render_finished_semaphores.data[i]) !=
              VK_SUCCESS))
         {
-            ExitWithError("failed to create semaphores for swapchain images!");
+            exit_with_error("failed to create semaphores for swapchain images!");
         }
     }
 
@@ -1343,7 +1351,7 @@ VK_SamplerCreate(VkDevice device, VkSamplerCreateInfo* sampler_info)
     VkSampler sampler;
     if (vkCreateSampler(device, sampler_info, nullptr, &sampler) != VK_SUCCESS)
     {
-        ExitWithError("failed to create texture sampler!");
+        exit_with_error("failed to create texture sampler!");
     }
     return sampler;
 }
@@ -1369,7 +1377,7 @@ VK_DescriptorPoolCreate(VK_Context* vk_ctx)
     if (vkCreateDescriptorPool(vk_ctx->device, &poolInfo, nullptr, &vk_ctx->descriptor_pool) !=
         VK_SUCCESS)
     {
-        ExitWithError("failed to create descriptor pool!");
+        exit_with_error("failed to create descriptor pool!");
     }
 }
 static VkDescriptorSetLayout
@@ -1384,7 +1392,7 @@ VK_DescriptorSetLayoutCreate(VkDevice device, VkDescriptorSetLayoutBinding* bind
     VkDescriptorSetLayout desc_set_layout;
     if (vkCreateDescriptorSetLayout(device, &layoutInfo, nullptr, &desc_set_layout) != VK_SUCCESS)
     {
-        ExitWithError("failed to create descriptor set layout!");
+        exit_with_error("failed to create descriptor set layout!");
     }
 
     return desc_set_layout;
@@ -1407,7 +1415,7 @@ VK_DescriptorSetCreate(Arena* arena, VkDevice device, VkDescriptorPool desc_pool
     VkDescriptorSet desc_set;
     if (vkAllocateDescriptorSets(device, &allocInfo, &desc_set) != VK_SUCCESS)
     {
-        ExitWithError("DescriptorSetCreate: failed to allocate descriptor sets!");
+        exit_with_error("DescriptorSetCreate: failed to allocate descriptor sets!");
     }
 
     VkDescriptorImageInfo image_info{};

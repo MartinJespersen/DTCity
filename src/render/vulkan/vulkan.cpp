@@ -308,7 +308,7 @@ VK_Model3DInstancePipelineCreate(VK_Context* vk_ctx, String8 shader_path)
     if (vkCreatePipelineLayout(vk_ctx->device, &pipelineLayoutInfo, nullptr, &pipeline_layout) !=
         VK_SUCCESS)
     {
-        ExitWithError("failed to create pipeline layout!");
+        exit_with_error("failed to create pipeline layout!");
     }
 
     VkFormat color_attachment_formats[] = {vk_ctx->swapchain_resources->color_format,
@@ -339,7 +339,7 @@ VK_Model3DInstancePipelineCreate(VK_Context* vk_ctx, String8 shader_path)
     if (vkCreateGraphicsPipelines(vk_ctx->device, VK_NULL_HANDLE, 1, &pipeline_create_info, nullptr,
                                   &pipeline) != VK_SUCCESS)
     {
-        ExitWithError("failed to create graphics pipeline!");
+        exit_with_error("failed to create graphics pipeline!");
     }
 
     VK_Pipeline pipeline_info = {.pipeline = pipeline,
@@ -472,7 +472,7 @@ VK_Model3DPipelineCreate(VK_Context* vk_ctx, String8 shader_path)
     if (vkCreatePipelineLayout(vk_ctx->device, &pipelineLayoutInfo, nullptr, &pipeline_layout) !=
         VK_SUCCESS)
     {
-        ExitWithError("failed to create pipeline layout!");
+        exit_with_error("failed to create pipeline layout!");
     }
 
     VkFormat color_attachment_formats[] = {vk_ctx->swapchain_resources->color_format,
@@ -502,7 +502,7 @@ VK_Model3DPipelineCreate(VK_Context* vk_ctx, String8 shader_path)
     if (vkCreateGraphicsPipelines(vk_ctx->device, VK_NULL_HANDLE, 1, &pipeline_create_info, nullptr,
                                   &pipeline) != VK_SUCCESS)
     {
-        ExitWithError("failed to create graphics pipeline!");
+        exit_with_error("failed to create graphics pipeline!");
     }
 
     VK_Pipeline pipeline_info = {.pipeline = pipeline,
@@ -619,7 +619,7 @@ VK_CameraDescriptorSetLayoutCreate(VK_Context* vk_ctx)
     if (vkCreateDescriptorSetLayout(vk_ctx->device, &layoutInfo, nullptr,
                                     &vk_ctx->camera_descriptor_set_layout) != VK_SUCCESS)
     {
-        ExitWithError("failed to create camera descriptor set layout!");
+        exit_with_error("failed to create camera descriptor set layout!");
     }
 }
 
@@ -646,7 +646,7 @@ VK_CameraDescriptorSetCreate(VK_Context* vk_ctx)
     if (vkAllocateDescriptorSets(vk_ctx->device, &allocInfo, vk_ctx->camera_descriptor_sets) !=
         VK_SUCCESS)
     {
-        ExitWithError("CameraDescriptorSetCreate: failed to allocate descriptor sets!");
+        exit_with_error("CameraDescriptorSetCreate: failed to allocate descriptor sets!");
     }
 
     for (size_t i = 0; i < VK_MAX_FRAMES_IN_FLIGHT; i++)
@@ -742,7 +742,7 @@ VK_AssetCmdQueueItemEnqueue(U32 thread_id, VkCommandBuffer cmd, R_ThreadInput* t
 
     VK_CmdQueueItem item = {
         .thread_input = thread_input, .thread_id = thread_id, .cmd_buffer = cmd};
-    DEBUG_LOG("Asset ID: %lu - Cmd Getting Queued\n", thread_input->asset_info.handle.u64[0]);
+    DEBUG_LOG("Asset ID: %llu - Cmd Getting Queued\n", thread_input->asset_info.handle.u64[0]);
     async::QueuePush(asset_manager->cmd_queue, &item);
 }
 
@@ -768,7 +768,7 @@ VK_AssetManagerExecuteCmds()
 
             VK_CHECK_RESULT(vkQueueSubmit(vk_ctx->graphics_queue, 1, &submit_info, item.fence));
 
-            DEBUG_LOG("Asset ID: %lu - Submitted Command Buffer\n",
+            DEBUG_LOG("Asset ID: %llu - Submitted Command Buffer\n",
                       item.thread_input->asset_info.handle.u64[0]);
             VK_AssetManagerCmdListAdd(asset_store->cmd_wait_list, item);
         }
@@ -881,7 +881,7 @@ VK_AssetManagerCmdDoneCheck()
                 asset->is_loaded = 1;
             }
             Assert(asset_load_info->type != R_AssetItemType_Undefined);
-            DEBUG_LOG("Asset: %lu - Finished loading\n", asset_load_info->handle.u64[0]);
+            DEBUG_LOG("Asset: %llu - Finished loading\n", asset_load_info->handle.u64[0]);
             vkDestroyFence(vk_ctx->device, cmd_queue_item->fence, 0);
             VK_ThreadInputDestroy(cmd_queue_item->thread_input);
             VK_AssetManagerCmdListItemRemove(asset_manager->cmd_wait_list, cmd_queue_item);
@@ -1205,7 +1205,7 @@ VK_CommandBufferRecord(U32 image_index, U32 current_frame, ui_Camera* camera,
         VkResult result_vk = vkBeginCommandBuffer(current_cmd_buf, &beginInfo);
         if (result_vk)
         {
-            ExitWithError("failed to begin recording command buffer!");
+            exit_with_error("failed to begin recording command buffer!");
         }
         VkImageMemoryBarrier2 pre_render_swapchain_barrier{};
         pre_render_swapchain_barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2;
@@ -1481,7 +1481,7 @@ VK_CommandBufferRecord(U32 image_index, U32 current_frame, ui_Camera* camera,
         VkResult result = vkEndCommandBuffer(current_cmd_buf);
         if (result)
         {
-            ExitWithError("failed to record command buffer!");
+            exit_with_error("failed to record command buffer!");
         }
     }
     ScratchEnd(scratch);
@@ -1553,7 +1553,7 @@ R_RenderCtxCreate(String8 shader_path, io_IO* io_ctx, async::Threads* thread_poo
     if (!(formatProperties.optimalTilingFeatures &
           VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT))
     {
-        ExitWithError("texture image format does not support linear blitting!");
+        exit_with_error("texture image format does not support linear blitting!");
     }
 
     VmaAllocatorCreateInfo allocatorInfo = {};
@@ -1679,7 +1679,7 @@ R_RenderFrame(Vec2U32 framebuffer_dim, B32* in_out_framebuffer_resized, ui_Camer
     }
     else if (result != VK_SUCCESS)
     {
-        ExitWithError("failed to acquire swap chain image!");
+        exit_with_error("failed to acquire swap chain image!");
     }
 
     VkCommandBuffer cmd_buffer = vk_ctx->command_buffers.data[vk_ctx->current_frame];
@@ -1735,7 +1735,7 @@ R_RenderFrame(Vec2U32 framebuffer_dim, B32* in_out_framebuffer_resized, ui_Camer
     }
     else if (result != VK_SUCCESS)
     {
-        ExitWithError("failed to present swap chain image!");
+        exit_with_error("failed to present swap chain image!");
     }
 
     vk_ctx->current_frame = (vk_ctx->current_frame + 1) % VK_MAX_FRAMES_IN_FLIGHT;

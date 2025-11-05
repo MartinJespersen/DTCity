@@ -2,6 +2,7 @@
 * error: refetch json from osm if error happens in json parsing.
   * terminate called after throwing an instance of 'simdjson::simdjson_error'
     what():  INCORRECT_TYPE: The JSON element does not have the requested type.
+* Imgui -> third_party dir
 * Cleanup entrypoint main loop
 * Change the naming convention for functions from PascalCase to snake_case
 * Make the optimized build work and make possible to profile
@@ -83,10 +84,10 @@ If you could complete these steps before our meeting on 13-Nov-2025, that would 
 * Add unit tests for all new code contributions while updating the functionality tests
 
 # CMake build instructions
-## Create build directory
+## 1. Create build directory
 Debug:
 cmake -B build -DCMAKE_BUILD_TYPE=Debug
 Release:
 cmake -B build -DCMAKE_BUILD_TYPE=Release
-## Build Project
+## 2. Build Project
 cmake --build build

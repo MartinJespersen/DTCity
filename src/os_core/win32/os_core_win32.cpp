@@ -590,7 +590,7 @@ os_full_path_from_path(Arena* arena, String8 path)
 }
 
 static B32
-OS_FilePathExists(String8 path)
+os_file_path_exists(String8 path)
 {
     Temp scratch = ScratchBegin(0, 0);
     String16 path16 = Str16From8(scratch.arena, path);

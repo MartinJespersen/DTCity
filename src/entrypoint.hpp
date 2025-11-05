@@ -11,15 +11,27 @@ struct dt_Input
     osm_GCSBoundingBox bbox;
 };
 
+enum dt_DataDirType
+{
+    Cache,
+    Texture,
+    Shaders,
+    Assets,
+    Count
+};
+
+struct dt_DataDirPair
+{
+    dt_DataDirType type;
+    String8 name;
+};
+
 struct Context
 {
     B32 running;
     String8 cwd;
     String8 data_dir;
-    String8 cache_path;
-    String8 asset_path;
-    String8 texture_path;
-    String8 shader_path;
+    Buffer<String8> data_subdir;
 
     Arena* arena_permanent;
 
@@ -53,3 +65,6 @@ static void
 dt_imgui_setup(VK_Context* vk_ctx, io_IO* io_ctx);
 static void
 dt_main_loop(void* ptr);
+
+static Buffer<String8>
+dt_dir_create(Arena* arena, String8 parent, dt_DataDirPair* dirs, U32 count);

@@ -25,11 +25,48 @@ RoadCreate(String8 texture_path, String8 cache_path, osm_GCSBoundingBox* gcs_bbo
         >;
         out skel qt;
     )");
-    String8 json =
-        DataFetch(scratch.arena, cache_path, road->openapi_data_file_name, query, gcs_bbox);
-    Buffer<osm_RoadNodeList> node_hashmap =
-        wrapper::node_buffer_from_simd_json(scratch.arena, json, 100);
-    osm_structure_add(node_utm_structure, node_hashmap, json, OsmKeytype_Road);
+    HTTP_RequestParams params = {};
+    params.method = HTTP_Method_Post;
+    params.content_type = S("text/html");
+
+    String8 query_str =
+        PushStr8F(scratch.arena, (char*)query.str, gcs_bbox->lat_btm_left, gcs_bbox->lon_btm_left,
+                  gcs_bbox->lat_top_right, gcs_bbox->lon_top_right);
+    String8 cache_data_file =
+        Str8PathFromStr8List(scratch.arena, {cache_path, road->openapi_data_file_name});
+    String8 cache_meta_file = PushStr8Cat(scratch.arena, cache_data_file, S(".meta"));
+
+    String8 input_str = Str8FromGCSCoordinates(scratch.arena, gcs_bbox);
+
+    Result<String8> cache_read_result =
+        city_cache_read(scratch.arena, cache_data_file, cache_meta_file, input_str);
+    String8 http_data = cache_read_result.v;
+    if (cache_read_result.err)
+    {
+        http_data = city_http_call_wrapper(scratch.arena, query_str, &params, gcs_bbox);
+        city_cache_write(cache_data_file, cache_meta_file, http_data, input_str);
+    }
+    osm_RoadNodeParseResult json_result =
+        wrapper::node_buffer_from_simd_json(scratch.arena, http_data, 100);
+
+    B8 error = true;
+    while (error && json_result.error)
+    {
+        ERROR_LOG("RoadCreate: Failed to create Road Data Structure\n Retrying...\n");
+        http_data = city_http_call_wrapper(scratch.arena, query_str, &params, gcs_bbox);
+        if (http_data.size)
+        {
+            json_result = wrapper::node_buffer_from_simd_json(scratch.arena, http_data, 100);
+            if (json_result.error == false)
+            {
+                city_cache_write(cache_data_file, cache_meta_file, http_data, input_str);
+                error = false;
+            }
+        }
+    }
+
+    Buffer<osm_RoadNodeList> node_hashmap = json_result.road_nodes;
+    osm_structure_add(node_utm_structure, node_hashmap, http_data, OsmKeytype_Road);
 
     RoadVertexBufferCreate(road, &road->vertex_buffer, &road->index_buffer, node_utm_structure);
     R_BufferInfo vertex_buffer_info =
@@ -162,7 +199,7 @@ RoadVertexBufferCreate(Road* road, Buffer<Vertex3D>* out_vertex_buffer,
 
         if (way->node_count < 2)
         {
-            ExitWithError("expected at least one road segment comprising of two nodes");
+            exit_with_error("expected at least one road segment comprising of two nodes");
         }
 
         U64 node_first_id = way->node_ids[0];
@@ -230,7 +267,7 @@ Str8FromGCSCoordinates(Arena* arena, osm_GCSBoundingBox* bbox)
 }
 
 static B32
-CacheNeedsUpdate(String8 cache_data_file, String8 cache_meta_file)
+city_cache_needs_update(String8 cache_data_file, String8 cache_meta_file)
 {
     ScratchScope scratch = ScratchScope(0, 0);
     U64 file_hash = 0;
@@ -249,7 +286,7 @@ CacheNeedsUpdate(String8 cache_data_file, String8 cache_meta_file)
     if (update_needed == false)
     {
         Rng1U64 meta_read_range = {0, meta_file_size};
-        String8 meta_data_str = PushStr8FillByte(scratch.arena, meta_file_size, 0);
+        String8 meta_data_str = push_str8_fill_byte(scratch.arena, meta_file_size, 0);
         U64 meta_file_bytes_read =
             OS_FileRead(meta_data_file_handle, meta_read_range, meta_data_str.str);
 
@@ -307,120 +344,112 @@ CacheNeedsUpdate(String8 cache_data_file, String8 cache_meta_file)
 }
 
 static String8
-DataFetch(Arena* arena, String8 cache_dir, String8 cache_file_name, String8 query,
-          osm_GCSBoundingBox* gcs_bbox)
+city_http_call_wrapper(Arena* arena, String8 query_str, HTTP_RequestParams* params,
+                       osm_GCSBoundingBox* bbox)
+{
+    DEBUG_LOG("DataFetch: Fetching data from overpass-api.de\n");
+    String8 host = S("https://overpass-api.de");
+    String8 path = S("/api/interpreter");
+
+    const U32 retry_count = 3;
+    S32 retries_left = retry_count;
+    B32 http_success = false;
+    U32 retry_time_interval_ms = 2000;
+    HTTP_Response response;
+    do
+    {
+        response = HTTP_Request(arena, host, path, query_str, params);
+
+        if (response.good && response.code == HTTP_StatusCode_OK)
+        {
+            http_success = true;
+            break;
+        }
+
+        DEBUG_LOG("DataFetch: Retrying...\n");
+        os_sleep_milliseconds(retry_time_interval_ms);
+        retries_left -= 1;
+    } while (retries_left >= 0);
+
+    if (http_success == false)
+    {
+        exit_with_error("DataFetch: http request did not succeed after %d retries\n"
+                        "Failed with error code: %d\n"
+                        "Error message: %s\n",
+                        retry_count, response.code, response.body.str);
+    }
+
+    return response.body;
+}
+
+static void
+city_cache_write(String8 cache_file, String8 cache_meta_file, String8 content, String8 hash_content)
+{
+    ScratchScope scratch = ScratchScope(0, 0);
+    // ~mgj: write to cache file
+    OS_Handle file_write_handle = OS_FileOpen(OS_AccessFlag_Write, cache_file);
+    U64 bytes_written =
+        OS_FileWrite(file_write_handle, {.min = 0, .max = content.size}, content.str);
+    if (bytes_written != content.size)
+    {
+        DEBUG_LOG("DataFetch: Was not able to write OSM data to cache\n");
+    }
+    OS_FileClose(file_write_handle);
+
+    // ~mgj: write to cache meta file
+    if (content.size > 0)
+    {
+        U64 new_hash = HashU64FromStr8(hash_content);
+        U64 timestamp = os_now_unix();
+        String8 meta_str = PushStr8F(scratch.arena, "%llu\t%llu", new_hash, timestamp);
+
+        OS_Handle file_write_handle_meta = OS_FileOpen(OS_AccessFlag_Write, cache_meta_file);
+        U64 bytes_written_meta =
+            OS_FileWrite(file_write_handle_meta, {.min = 0, .max = meta_str.size}, meta_str.str);
+        if (bytes_written_meta != meta_str.size)
+        {
+            DEBUG_LOG("DataFetch: Was not able to write meta data to cache\n");
+        }
+        OS_FileClose(file_write_handle_meta);
+    }
+}
+
+static Result<String8>
+city_cache_read(Arena* arena, String8 cache_file, String8 cache_meta_file, String8 hash_input)
 {
     ScratchScope scratch = ScratchScope(&arena, 1);
-
-    HTTP_RequestParams params = {};
-    params.method = HTTP_Method_Post;
-    params.content_type = S("text/html");
-
-    String8 query_str =
-        PushStr8F(scratch.arena, (char*)query.str, gcs_bbox->lat_btm_left, gcs_bbox->lon_btm_left,
-                  gcs_bbox->lat_top_right, gcs_bbox->lon_top_right);
-
     B32 read_from_cache = false;
+    String8 str = {};
 
-    String8 cache_data_file = Str8PathFromStr8List(scratch.arena, {cache_dir, cache_file_name});
-    String8 cache_meta_file = PushStr8Cat(scratch.arena, cache_data_file, S(".meta"));
-
-    if (OS_FilePathExists(cache_data_file))
+    if (os_file_path_exists(cache_file))
     {
         read_from_cache = true;
-        if (OS_FilePathExists(cache_meta_file) == false)
+        if (os_file_path_exists(cache_meta_file) == false)
         {
             read_from_cache = false;
         }
     }
-    U8* str = 0;
-    U64 size = 0;
+
     if (read_from_cache)
     {
-        OS_Handle file_handle = OS_FileOpen(OS_AccessFlag_Read, cache_data_file);
+        OS_Handle file_handle = OS_FileOpen(OS_AccessFlag_Read, cache_file);
         FileProperties file_props = OS_PropertiesFromFile(file_handle);
 
-        str = PushArray(arena, U8, file_props.size);
-        size = file_props.size;
-        U64 total_read_size = OS_FileRead(file_handle, {.min = 0, .max = file_props.size}, str);
+        str = push_str8_fill_byte(arena, file_props.size, 0);
+        U64 total_read_size = OS_FileRead(file_handle, {.min = 0, .max = file_props.size}, str.str);
 
         if (total_read_size != file_props.size)
         {
-            DEBUG_LOG("DataFetch: Could not read everything from cache");
+            DEBUG_LOG("DataFetch: Could not read everything from cache\n");
         }
         OS_FileClose(file_handle);
 
-        String8 input_str = Str8FromGCSCoordinates(scratch.arena, gcs_bbox);
-        B32 needs_update = CacheNeedsUpdate(input_str, cache_meta_file);
+        B32 needs_update = city_cache_needs_update(hash_input, cache_meta_file);
         read_from_cache = !needs_update;
     }
 
-    if (read_from_cache == false)
-    {
-        DEBUG_LOG("DataFetch: Fetching data from overpass-api.de\n");
-        String8 host = S("http://overpass-api.de");
-        String8 path = S("/api/interpreter");
-
-        S32 max_retries = 3;
-        B32 http_success = false;
-        U32 retry_time_interval_ms = 2000;
-        HTTP_Response response;
-        do
-        {
-            response = HTTP_Request(arena, host, path, query_str, &params);
-
-            if (response.good && response.code == HTTP_StatusCode_OK)
-            {
-                http_success = true;
-                break;
-            }
-
-            DEBUG_LOG("DataFetch: Retrying...");
-            os_sleep_milliseconds(retry_time_interval_ms);
-            max_retries -= 1;
-        } while (max_retries >= 0);
-
-        if (http_success == false)
-        {
-            ExitWithError("DataFetch: http request did not succeed after %d retries\n"
-                          "Failed with error code: %d\n"
-                          "Error message: %s\n",
-                          max_retries, response.code, response.body.str);
-        }
-
-        str = response.body.str;
-        size = response.body.size;
-
-        // ~mgj: write to cache file
-        OS_Handle file_write_handle = OS_FileOpen(OS_AccessFlag_Write, cache_data_file);
-        U64 bytes_written = OS_FileWrite(file_write_handle, {.min = 0, .max = size}, str);
-        if (bytes_written != size)
-        {
-            DEBUG_LOG("DataFetch: Was not able to write OSM data to cache\n");
-        }
-        OS_FileClose(file_write_handle);
-
-        // ~mgj: write to cache meta file
-        if (size > 0)
-        {
-            String8 input_str = Str8FromGCSCoordinates(scratch.arena, gcs_bbox);
-            U64 new_hash = HashU64FromStr8(input_str);
-            U64 timestamp = os_now_unix();
-            String8 meta_str = PushStr8F(scratch.arena, "%llu\t%llu", new_hash, timestamp);
-
-            OS_Handle file_write_handle_meta = OS_FileOpen(OS_AccessFlag_Write, cache_meta_file);
-            U64 bytes_written_meta = OS_FileWrite(file_write_handle_meta,
-                                                  {.min = 0, .max = meta_str.size}, meta_str.str);
-            if (bytes_written_meta != meta_str.size)
-            {
-                DEBUG_LOG("DataFetch: Was not able to write meta data to cache\n");
-            }
-            OS_FileClose(file_write_handle_meta);
-        }
-    }
-
-    String8 content = {str, size};
-    return content;
+    Result<String8> res = {str, !read_from_cache};
+    return res;
 }
 
 static Vec3F32
@@ -796,7 +825,12 @@ BuildingsCreate(String8 cache_path, String8 texture_path, F32 road_height,
     buildings->arena = arena;
     buildings->cache_file_name = PushStr8Copy(arena, S("openapi_node_ways_buildings.json"));
 
-    String8 query = S(R"(data=
+    {
+        HTTP_RequestParams params = {};
+        params.method = HTTP_Method_Post;
+        params.content_type = S("text/html");
+
+        String8 query = S(R"(data=
         [out:json] [timeout:25];
         (
           way["building"](%f, %f, %f, %f);
@@ -805,11 +839,46 @@ BuildingsCreate(String8 cache_path, String8 texture_path, F32 road_height,
         >;
         out skel qt;
     )");
-    String8 json =
-        DataFetch(scratch.arena, cache_path, buildings->cache_file_name, query, gcs_bbox);
-    Buffer<osm_RoadNodeList> node_hashmap =
-        wrapper::node_buffer_from_simd_json(scratch.arena, json, 100);
-    osm_structure_add(node_utm_structure, node_hashmap, json, OsmKeyType_Building);
+
+        String8 query_str =
+            PushStr8F(scratch.arena, (char*)query.str, gcs_bbox->lat_btm_left,
+                      gcs_bbox->lon_btm_left, gcs_bbox->lat_top_right, gcs_bbox->lon_top_right);
+        String8 cache_data_file =
+            Str8PathFromStr8List(scratch.arena, {cache_path, buildings->cache_file_name});
+        String8 cache_meta_file = PushStr8Cat(scratch.arena, cache_data_file, S(".meta"));
+
+        String8 input_str = Str8FromGCSCoordinates(scratch.arena, gcs_bbox);
+
+        Result<String8> cache_read_result =
+            city_cache_read(scratch.arena, cache_data_file, cache_meta_file, input_str);
+        String8 http_data = cache_read_result.v;
+        if (cache_read_result.err)
+        {
+            http_data = city_http_call_wrapper(scratch.arena, query_str, &params, gcs_bbox);
+            city_cache_write(cache_data_file, cache_meta_file, http_data, input_str);
+        }
+        osm_RoadNodeParseResult json_result =
+            wrapper::node_buffer_from_simd_json(scratch.arena, http_data, 100);
+
+        B8 error = true;
+        while (error && json_result.error)
+        {
+            ERROR_LOG("BuildingsCreate: Failed to parse OSM node data from json file\n");
+            http_data = city_http_call_wrapper(scratch.arena, query_str, &params, gcs_bbox);
+            if (http_data.size)
+            {
+                json_result = wrapper::node_buffer_from_simd_json(scratch.arena, http_data, 100);
+                if (json_result.error == false)
+                {
+                    city_cache_write(cache_data_file, cache_meta_file, http_data, input_str);
+                    error = false;
+                }
+            }
+        }
+
+        osm_structure_add(node_utm_structure, json_result.road_nodes, http_data,
+                          OsmKeyType_Building);
+    }
 
     buildings->facade_texture_path =
         Str8PathFromStr8List(arena, {texture_path, S("brick_wall.ktx2")});

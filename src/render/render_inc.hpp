@@ -10,11 +10,6 @@ DISABLE_WARNINGS_PUSH
 #include "third_party/vk_mem_alloc.h"
 DISABLE_WARNINGS_POP
 
-#if OS_WINDOWS
-
-#pragma comment(lib, "vulkan-1.lib")
-#endif
-
 #include "third_party/tracy/tracy/TracyVulkan.hpp"
 #include "third_party/tracy/tracy/Tracy.hpp"
 

@@ -119,22 +119,11 @@ struct Model3DInstance
     glm::vec4 w_basis;
 };
 
-// ~mgj: File Cache
-static U64
-HashU64FromStr8(String8 str);
-static String8
-Str8FromGCSCoordinates(Arena* arena, osm_GCSBoundingBox* bbox);
-static B32
-CacheNeedsUpdate(String8 data_file_str, String8 cache_meta_file_path);
-
 static Road*
 RoadCreate(String8 texture_path, String8 cache_path, osm_GCSBoundingBox* gcs_bbox,
            R_SamplerInfo* sampler_info, osm_Network* node_utm_structure);
 static void
 RoadDestroy(Road* road);
-static String8
-DataFetch(Arena* arena, String8 cache_dir, String8 cache_name, String8 query,
-          osm_GCSBoundingBox* gcs_bbox);
 static void
 RoadVertexBufferCreate(Road* road, Buffer<Vertex3D>* out_vertex_buffer,
                        Buffer<U32>* out_index_buffer, osm_Network* node_utm_structure);
@@ -170,4 +159,23 @@ EarClipping(Arena* arena, Buffer<Vec2F32> node_buffer);
 
 static Rng2F32
 UtmFromBoundingBox(osm_GCSBoundingBox bbox);
+
+// ~mgj: HTTP and caching
+static String8
+city_http_call_wrapper(Arena* arena, String8 query_str, HTTP_RequestParams* params,
+                       osm_GCSBoundingBox* bbox);
+static Result<String8>
+city_cache_read(Arena* arena, String8 cache_file, String8 cache_meta_file, String8 hash_input);
+static void
+city_cache_write(String8 cache_file, String8 cache_meta_file, String8 content,
+                 String8 hash_content);
+
+static U64
+HashU64FromStr8(String8 str);
+static String8
+Str8FromGCSCoordinates(Arena* arena, osm_GCSBoundingBox* bbox);
+static B32
+city_cache_needs_update(String8 data_file_str, String8 cache_meta_file_path);
+static B32
+city_cache_needs_update(String8 data_file_str, String8 cache_meta_file_path);
 } // namespace city

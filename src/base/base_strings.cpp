@@ -666,7 +666,8 @@ try_u64_from_str8_c_rules(String8 string, U64* x)
     else
     {
         String8 hex_string = Str8Skip(string, 2);
-        if (str8_match(Str8Prefix(string, 2), Str8Lit("0x"), 0) && str8_is_integer(hex_string, 0x10))
+        if (str8_match(Str8Prefix(string, 2), Str8Lit("0x"), 0) &&
+            str8_is_integer(hex_string, 0x10))
         {
             is_integer = 1;
             *x = U64FromStr8(hex_string, 0x10);
@@ -2727,7 +2728,7 @@ PushStr8F(Arena* arena, const char* fmt, ...)
 }
 
 static String8
-PushStr8FillByte(Arena* arena, U64 size, U8 byte)
+push_str8_fill_byte(Arena* arena, U64 size, U8 byte)
 {
     String8 result = {0};
     result.str = PushArrayNoZero(arena, U8, size + 1);
@@ -2765,7 +2766,7 @@ HashU128FromStr8(String8 str)
 
 // ~mgj: Errors
 static void
-ExitWithError(const char* msg, ...)
+exit_with_error(const char* msg, ...)
 {
     ScratchScope scratch = ScratchScope(0, 0);
     String8 result = {0};

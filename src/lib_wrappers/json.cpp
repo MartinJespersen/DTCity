@@ -1,62 +1,125 @@
 namespace wrapper
 {
 
-static Buffer<osm_RoadNodeList>
+static osm_RoadNodeParseResult
 node_buffer_from_simd_json(Arena* arena, String8 json, U64 node_hashmap_size)
 {
     simdjson::ondemand::parser parser;
+    simdjson::ondemand::document doc;
     simdjson::padded_string json_padded((char*)json.str, json.size);
-    simdjson::ondemand::document doc = parser.iterate(json_padded);
+    simdjson::error_code error = parser.iterate(json_padded).get(doc);
+    U32 error_num = 0;
+    bool error_ret = false;
 
-    Buffer<osm_RoadNodeList> nodes = BufferAlloc<osm_RoadNodeList>(arena, node_hashmap_size);
-
-    for (auto item : doc["elements"])
+    Buffer<osm_RoadNodeList> nodes = {};
+    if (error)
     {
-        if (item["type"] == "node")
-        {
-            osm_RoadNode* node = PushStruct(arena, osm_RoadNode);
-            node->id = item["id"].get_uint64();
-            node->lat = item["lat"].get_double();
-            node->lon = item["lon"].get_double();
-
-            U64 node_slot = node->id % node_hashmap_size;
-            SLLQueuePush(nodes.data[node_slot].first, nodes.data[node_slot].last, node);
-        }
+        goto early_ret;
     }
 
-    return nodes;
+    nodes = BufferAlloc<osm_RoadNodeList>(arena, node_hashmap_size);
+    {
+        simdjson::ondemand::array elements;
+        error = doc["elements"].get(elements);
+        if (error)
+        {
+            goto early_ret;
+        }
+
+        for (auto item : elements)
+        {
+            auto item_object = item.get_object();
+            std::string_view node_key;
+            error = item_object.find_field("type").get(node_key);
+            if (error)
+            {
+                goto early_ret;
+            }
+
+            if (node_key == "node")
+            {
+                osm_RoadNode* node = PushStruct(arena, osm_RoadNode);
+                U64 id;
+                F64 lat, lon;
+                auto item_value = item.value();
+                error_num |= item_value["id"].get(id);
+                error_num |= item_value["lat"].get_double().get(lat);
+                error_num |= item_value["lon"].get_double().get(lon);
+                if (error_num)
+                {
+                    goto early_ret;
+                }
+                node->id = id;
+                node->lat = lat;
+                node->lon = lon;
+
+                U64 node_slot = node->id % node_hashmap_size;
+                SLLQueuePush(nodes.data[node_slot].first, nodes.data[node_slot].last, node);
+            }
+        }
+    }
+early_ret:
+    if (error || error_num)
+    {
+        DEBUG_LOG("Error in node buffer parsing\n");
+        error_ret = true;
+    }
+    osm_RoadNodeParseResult res = {nodes, error_ret};
+    return res;
 }
 
-static Buffer<osm_Way>
+static osm_WayParseResult
 way_buffer_from_simd_json(Arena* arena, String8 json)
 {
-    simdjson::ondemand::parser parser;
+    simdjson::dom::parser parser;
+    simdjson::dom::array elements;
     simdjson::padded_string json_padded((char*)json.str, json.size);
-    simdjson::ondemand::document doc = parser.iterate(json_padded);
+    auto error = parser.parse(json_padded).get_object()["elements"].get(elements);
+    U32 error_num = 0;
+    bool error_ret = false;
 
+    Buffer<osm_Way> way_buffer = {};
+    U64 way_index = 0;
     U64 way_count = 0;
-    for (auto item : doc["elements"])
+
+    if (error)
     {
-        if (item["type"] == "way")
+        goto early_ret;
+    }
+
+    for (auto item : elements)
+    {
+        std::string_view node_key;
+        error = item.get_object().at_key("type").get(node_key);
+        if (error)
+        {
+            goto early_ret;
+        }
+        if (node_key == "way")
         {
             way_count += 1;
         }
     }
-    Buffer<osm_Way> way_buffer = BufferAlloc<osm_Way>(arena, way_count);
 
-    U64 way_index = 0;
-    for (auto element : doc["elements"])
+    way_buffer = BufferAlloc<osm_Way>(arena, way_count);
+    for (auto elem : elements)
     {
-        if (element["type"] == "way")
+        std::string_view elem_key;
+        error = elem.get_object()["type"].get(elem_key);
+        if (error)
+        {
+            goto early_ret;
+        }
+        if (elem_key == "way")
         {
             // ~mgj: Insert into hashmap
-            U64 way_id = element["id"].get_uint64();
+            U64 way_id = elem["id"].get_uint64();
             osm_Way* way = &way_buffer.data[way_index];
 
             way->id = way_id;
             // Get the nodes array and count elements
-            auto nodes_array = element["nodes"].get_array();
-            way->node_count = nodes_array.count_elements();
+            auto nodes_array = elem["nodes"].get_array();
+            way->node_count = nodes_array.size();
 
             way->node_ids = PushArray(arena, U64, way->node_count);
             U32 node_index = 0;
@@ -67,7 +130,7 @@ way_buffer_from_simd_json(Arena* arena, String8 json)
             }
 
             // Count tags by iterating through the object
-            auto tags_object = element["tags"].get_object();
+            auto tags_object = elem["tags"].get_object();
             U64 tag_count = 0;
             for (auto _ : tags_object)
             {
@@ -76,18 +139,19 @@ way_buffer_from_simd_json(Arena* arena, String8 json)
             }
 
             // Reset and iterate again to store the tags
-            tags_object = element["tags"].get_object();
+            tags_object = elem["tags"].get_object();
             way->tags = BufferAlloc<osm_Tag>(arena, tag_count);
             U64 tag_cur_index = 0;
             for (auto tag : tags_object)
             {
                 // Get key and value as string_view
-                std::string_view key_view = tag.unescaped_key();
-                std::string_view value_view = tag.value().get_string();
+                auto key_view = tag.value.get_string();
+                auto value_view = tag.value.get_string();
 
                 // Convert to String8
-                String8 temp_key = Str8((U8*)key_view.data(), key_view.size());
-                String8 temp_value = Str8((U8*)value_view.data(), value_view.size());
+                String8 temp_key = Str8((U8*)key_view.value().data(), key_view.value().size());
+                String8 temp_value =
+                    Str8((U8*)value_view.value().data(), value_view.value().size());
 
                 // Copy to arena
                 way->tags.data[tag_cur_index].key = PushStr8Copy(arena, temp_key);
@@ -99,8 +163,15 @@ way_buffer_from_simd_json(Arena* arena, String8 json)
             way_index++;
         }
     }
+early_ret:
+    if (error || error_num)
+    {
+        DEBUG_LOG("Error in way buffer parsing\n");
+        error_ret = true;
+    }
 
-    return way_buffer;
+    osm_WayParseResult res = {way_buffer, error_ret};
+    return res;
 }
 
 } // namespace wrapper

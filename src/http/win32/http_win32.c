@@ -60,16 +60,16 @@ static HTTP_Response HTTP_Request(Arena *arena, String8 host, String8 path,
       if (url_port_part.size != 0) {
         port = (U16)U64FromStr8(url_port_part, 10);
       } else if (str8_match(url_protocol_part, Str8Lit("https://"),
-                           MatchFlag_CaseInsensitive)) {
+                            MatchFlag_CaseInsensitive)) {
         port = INTERNET_DEFAULT_HTTPS_PORT;
       } else if (str8_match(url_protocol_part, Str8Lit("http://"),
-                           MatchFlag_CaseInsensitive)) {
+                            MatchFlag_CaseInsensitive)) {
         port = INTERNET_DEFAULT_HTTP_PORT;
       } else if (str8_match(url_protocol_part, Str8Lit("ftp://"),
-                           MatchFlag_CaseInsensitive)) {
+                            MatchFlag_CaseInsensitive)) {
         port = 21;
       } else if (str8_match(url_protocol_part, Str8Lit("ssh://"),
-                           MatchFlag_CaseInsensitive)) {
+                            MatchFlag_CaseInsensitive)) {
         port = 22;
       }
       hostname16 = Str16From8(scratch.arena, url_hostname_part);
@@ -160,9 +160,14 @@ static HTTP_Response HTTP_Request(Arena *arena, String8 host, String8 path,
     //- rjf: open request
     HINTERNET hRequest = 0;
     if (good) {
+      DWORD flags = 0;
+      if (str8_match(url_protocol_part, Str8Lit("https://"),
+                     MatchFlag_CaseInsensitive)) {
+        flags = WINHTTP_FLAG_SECURE;
+      }
       hRequest =
           WinHttpOpenRequest(hConnect, verb, path_name, 0, WINHTTP_NO_REFERER,
-                             WINHTTP_DEFAULT_ACCEPT_TYPES, WINHTTP_FLAG_SECURE);
+                             WINHTTP_DEFAULT_ACCEPT_TYPES, flags);
       good = (hRequest != 0);
     }
 
@@ -193,7 +198,7 @@ static HTTP_Response HTTP_Request(Arena *arena, String8 host, String8 path,
       if (!good || bytes_to_read == 0) {
         break;
       }
-      String8 data = PushStr8FillByte(scratch.arena, bytes_to_read, 0);
+      String8 data = push_str8_fill_byte(scratch.arena, bytes_to_read, 0);
       DWORD bytes_read = 0;
       good = WinHttpReadData(hRequest, data.str, data.size, &bytes_read);
       if (good) {

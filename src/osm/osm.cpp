@@ -36,8 +36,15 @@ osm_structure_add(osm_Network* node_utm_structure, Buffer<osm_RoadNodeList> node
 {
     Arena* arena = node_utm_structure->arena;
     // ~mgj: parse OSM way structures
-    Buffer<osm_Way> ways = wrapper::way_buffer_from_simd_json(node_utm_structure->arena, json);
+    osm_WayParseResult osm_way_parse_result =
+        wrapper::way_buffer_from_simd_json(node_utm_structure->arena, json);
 
+    if (osm_way_parse_result.error)
+    {
+        DEBUG_LOG("Failed to parse OSM way structures\n");
+    }
+
+    Buffer<osm_Way> ways = osm_way_parse_result.ways;
     for (U32 way_index = 0; way_index < ways.size; way_index++)
     {
         osm_Way* way = &ways.data[way_index];
@@ -45,17 +52,20 @@ osm_structure_add(osm_Network* node_utm_structure, Buffer<osm_RoadNodeList> node
         {
             U64 node_id = way->node_ids[node_index];
             osm_UtmNode* node_utm;
-            osm_node_hashmap_insert(node_id, way, &node_utm);
-            osm_RoadNode* node_coord = osm_node_find(node_hashmap, node_id);
-            double x, y;
+            B8 inserted = osm_node_hashmap_insert(node_id, way, &node_utm);
 
-            char node_utm_zone[10];
-            UTM::LLtoUTM(node_coord->lat, node_coord->lon, y, x, node_utm_zone);
+            if (inserted)
+            {
+                osm_RoadNode* node_coord = osm_node_find(node_hashmap, node_id);
+                double x, y;
+                char node_utm_zone[10];
+                UTM::LLtoUTM(node_coord->lat, node_coord->lon, y, x, node_utm_zone);
 
-            String8 utm_zone_str = Str8CString(node_utm_zone);
-            node_utm->utm_zone = PushStr8Copy(arena, utm_zone_str);
-            node_utm->pos.x = x + node_utm_structure->utm_center_offset.x;
-            node_utm->pos.y = y + node_utm_structure->utm_center_offset.y;
+                String8 utm_zone_str = Str8CString(node_utm_zone);
+                node_utm->utm_zone = PushStr8Copy(arena, utm_zone_str);
+                node_utm->pos.x = x + node_utm_structure->utm_center_offset.x;
+                node_utm->pos.y = y + node_utm_structure->utm_center_offset.y;
+            }
         }
     }
 
@@ -201,6 +211,11 @@ osm_random_neighbour_node_get(osm_UtmNode* node, Buffer<osm_UtmNodeList> utm_nod
 
     // Find random roadway
     U32 rand_num = RandomU32();
+    if (roadway_count == 0)
+    {
+        return &osm_g_road_node_utm;
+    }
+
     U32 rand_roadway_idx = rand_num % roadway_count;
     for (U32 i = 0; i < rand_roadway_idx; ++i)
     {

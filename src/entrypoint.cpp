@@ -1,3 +1,24 @@
+
+static Buffer<String8>
+dt_dir_create(Arena* arena, String8 parent, dt_DataDirPair* dirs, U32 count)
+{
+    Buffer<String8> buffer = BufferAlloc<String8>(arena, count);
+    for (U32 i = 0; i < count; i++)
+    {
+        String8 dir = Str8PathFromStr8List(arena, {parent, dirs[i].name});
+        if (os_file_path_exists(dir) == false)
+        {
+            B32 dir_created = os_make_directory(dir);
+            if (dir_created == false)
+            {
+                ERROR_LOG("Failed to create directory: %s", dir.str);
+            }
+        }
+        buffer.data[dirs[i].type] = dir;
+    }
+    return buffer;
+}
+
 static void
 dt_ctx_set(Context* ctx)
 {
@@ -100,7 +121,7 @@ dt_interpret_input(int argc, char** argv)
 
     if (argc != 1 && argc != 5)
     {
-        ExitWithError("G_InterpretInput: Invalid number of arguments");
+        exit_with_error("G_InterpretInput: Invalid number of arguments");
     }
 
     if (argc == 1)
@@ -142,7 +163,7 @@ dt_main_loop(void* ptr)
     Rng2F32 utm_bb_coords = city::UtmFromBoundingBox(input->bbox);
     printf("UTM Coordinates: %f %f %f %f\n", utm_bb_coords.min.x, utm_bb_coords.min.y,
            utm_bb_coords.max.x, utm_bb_coords.max.y);
-    R_RenderCtxCreate(ctx->shader_path, io_ctx, ctx->thread_pool);
+    R_RenderCtxCreate(ctx->data_subdir.data[dt_DataDirType::Shaders], io_ctx, ctx->thread_pool);
     VK_Context* vk_ctx = VK_CtxGet();
     ImguiSetup(vk_ctx, io_ctx);
 
@@ -158,17 +179,19 @@ dt_main_loop(void* ptr)
     U64 way_hashmap_size = 100;
     osm_structure_init(node_hashmap_size, way_hashmap_size, &input->bbox);
 
-    ctx->road = city::RoadCreate(ctx->texture_path, ctx->cache_path, &input->bbox, &sampler_info,
-                                 osm_g_network);
+    String8 cache_dir = ctx->data_subdir.data[dt_DataDirType::Cache];
+    String8 texture_dir = ctx->data_subdir.data[dt_DataDirType::Texture];
+    String8 asset_dir = ctx->data_subdir.data[dt_DataDirType::Assets];
+
+    ctx->road =
+        city::RoadCreate(texture_dir, cache_dir, &input->bbox, &sampler_info, osm_g_network);
     city::Road* road = ctx->road;
 
     ui_camera_init(ctx->camera);
-    ctx->buildings =
-        city::BuildingsCreate(ctx->cache_path, ctx->texture_path, ctx->road->road_height,
-                              &input->bbox, &sampler_info, osm_g_network);
+    ctx->buildings = city::BuildingsCreate(cache_dir, texture_dir, ctx->road->road_height,
+                                           &input->bbox, &sampler_info, osm_g_network);
     city::Buildings* buildings = ctx->buildings;
-    ctx->car_sim =
-        city::CarSimCreate(ctx->asset_path, ctx->texture_path, 100, ctx->road, osm_g_network);
+    ctx->car_sim = city::CarSimCreate(asset_dir, texture_dir, 100, ctx->road, osm_g_network);
     city::CarSim* car_sim = ctx->car_sim;
 
     while (ctx->running)

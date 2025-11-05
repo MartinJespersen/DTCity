@@ -3,6 +3,13 @@
 // ~mgj: foreign includes
 #include <initializer_list>
 
+// ~mgj: Result type
+template <typename T> struct Result
+{
+    T v;
+    B32 err;
+};
+
 //~ mgj: Container
 template <typename T> struct Buffer
 {

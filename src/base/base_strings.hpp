@@ -569,7 +569,7 @@ PushStr8FV(Arena* arena, const char* fmt, va_list args);
 static String8
 PushStr8F(Arena* arena, const char* fmt, ...);
 static String8
-PushStr8FillByte(Arena* arena, U64 size, U8 byte);
+push_str8_fill_byte(Arena* arena, U64 size, U8 byte);
 
 // ~mgj: String <==> float/double copy
 B32
@@ -581,7 +581,7 @@ HashU128FromStr8(String8 str);
 
 // ~mgj: Errors
 static void
-ExitWithError(const char* msg, ...);
+exit_with_error(const char* msg, ...);
 
 // string manipulation helpers
 #define CStrEqual(a, b) (!strcmp((a), (b)))

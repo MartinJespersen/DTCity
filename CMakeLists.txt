@@ -11,7 +11,7 @@ add_executable(city)
 if (MSVC)
     target_compile_options(city PRIVATE
         /W4
-        /wd4201  /wd4005 /wd4838 /wd4244 /wd4996 /wd4310 /wd4245 /wd4100
+        /wd4201  /wd4005 /wd4838 /wd4244 /wd4996 /wd4310 /wd4245 /wd4100 /wd4505
         /EHsc
         /Z7
         /FI${CMAKE_SOURCE_DIR}/src/includes.hpp
@@ -21,7 +21,6 @@ if (MSVC)
     set(PLATFORM_LIB_ARTIFACT_DIR ${LIB_ARTIFACT_DIR}/win)
 
 elseif(CMAKE_COMPILER_IS_GNUCXX)
-    #-Wall -Wextra -pedantic -pedantic -Wno-unused-function  -Wno-missing-field-initializers -Wno-sign-conversion -Wno-write-strings -Wno-class-memaccess -Wno-comment -Wno-pedantic
     target_compile_options(city PRIVATE
     -maes
     -msse4
