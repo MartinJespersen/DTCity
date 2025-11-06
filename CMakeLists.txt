@@ -7,6 +7,7 @@ set(BUILD_DEBUG ON)
 set(SHADER_DIR ${CMAKE_CURRENT_SOURCE_DIR}/data/shaders)
 set(SHADER_BINARY_DIR ${CMAKE_CURRENT_SOURCE_DIR}/data/shaders/bin)
 set(LIB_ARTIFACT_DIR ${CMAKE_CURRENT_SOURCE_DIR}/lib_artifacts)
+set(THIRD_PARTY_TOOLS_DIR ${CMAKE_CURRENT_SOURCE_DIR}/tools)
 
 add_executable(city)
 
@@ -22,6 +23,7 @@ if (MSVC)
     add_compile_definitions(BUILD_CONSOLE_INTERFACE ON)
 
     set(PLATFORM_LIB_ARTIFACT_DIR ${LIB_ARTIFACT_DIR}/win)
+    set(PLATFORM_THIRD_PARTY_TOOLS_DIR ${THIRD_PARTY_TOOLS_DIR}/win)
 
 elseif(CMAKE_COMPILER_IS_GNUCXX)
     target_compile_options(city PRIVATE
@@ -48,7 +50,10 @@ elseif(CMAKE_COMPILER_IS_GNUCXX)
 
     target_include_directories(city PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src ${CMAKE_CURRENT_SOURCE_DIR}/src/imgui)
 
-    set(PLATFORM_LIB_ARTIFACT_DIR ${LIB_ARTIFACT_DIR}/linux)
+    set(PLATFORM_LIB_ARTIFACT_DIR ${LIB_ARTIFACT_DIR}/linux/win)
+    set(PLATFORM_THIRD_PARTY_TOOLS_DIR ${THIRD_PARTY_TOOLS_DIR}/linux)
+
+
 
 else()
     message(FATAL_ERROR "Unsupported compiler")
@@ -65,7 +70,7 @@ file(GLOB_RECURSE GLSL_SOURCE_FILES
     "${SHADER_DIR}/*.frag"
 )
 
-find_program(GLSL_VALIDATOR glslangValidator)
+find_program(GLSL_VALIDATOR glslangValidator HINTS ${PLATFORM_THIRD_PARTY_TOOLS_DIR})
 if (NOT GLSL_VALIDATOR)
     message(FATAL_ERROR "glslangValidator not found!")
 endif()
