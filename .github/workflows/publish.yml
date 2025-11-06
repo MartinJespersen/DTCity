@@ -36,7 +36,7 @@ jobs:
         if: matrix.os == 'ubuntu-22.04'
         shell: bash
         run: |
-          cmake -B build -G Unix-Makefiles -DCMAKE_BUILD_TYPE=Release
+          cmake -B build -G "Unix Makefiles" -DCMAKE_BUILD_TYPE=Release
           cmake --build build --config Release
           tar -czf ${{ env.ZIP_NAME }} build/city data/*
 
