@@ -9,6 +9,7 @@ build
 *.pdb
 */BROWSE.VC.DB*
 *.zip
+*.tar.gz
 out
 .cache
 .venv

@@ -35,7 +35,7 @@ elseif(CMAKE_COMPILER_IS_GNUCXX)
     if(BUILD_DEBUG AND NOT NDEBUG)
         target_compile_options(city PRIVATE
             -fsanitize=address
-            -Wall -Wextra -Wno-attributes -Wno-unused-function -Wno-unused-parameter -Wno-narrowing -Wno-missing-field-initializers -Wno-sign-conversion -Wno-write-strings -Wno-class-memaccess -Wno-comment -Wno-pedantic
+            -Wall -Wextra -Wno-attributes -Wno-format -Wno-unused-function -Wno-unused-parameter -Wno-narrowing -Wno-missing-field-initializers -Wno-sign-conversion -Wno-write-strings -Wno-class-memaccess -Wno-comment -Wno-pedantic
         )
         TARGET_LINK_OPTIONS(city PRIVATE
             -fsanitize=address
@@ -48,9 +48,9 @@ elseif(CMAKE_COMPILER_IS_GNUCXX)
 
 
 
-    target_include_directories(city PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src ${CMAKE_CURRENT_SOURCE_DIR}/src/imgui)
+    target_include_directories(city PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src ${CMAKE_CURRENT_SOURCE_DIR}/src/third_party/imgui)
 
-    set(PLATFORM_LIB_ARTIFACT_DIR ${LIB_ARTIFACT_DIR}/linux/win)
+    set(PLATFORM_LIB_ARTIFACT_DIR ${LIB_ARTIFACT_DIR}/linux)
     set(PLATFORM_THIRD_PARTY_TOOLS_DIR ${THIRD_PARTY_TOOLS_DIR}/linux)
 
 

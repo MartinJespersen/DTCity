@@ -13,18 +13,18 @@ jobs:
         os: [ubuntu-22.04, windows-2022]
         include:
           - os: ubuntu-22.04
-            zip_type: linux-x64
+            zip_type: linux-x64.tar.gz
           - os: windows-2022
-            zip_type: windows-x64
+            zip_type: windows-x64.zip
     env:
-      ZIP_NAME: DTCity-${{ github.ref_name }}-${{ matrix.zip_type }}.zip
+      ZIP_NAME: DTCity-${{ github.ref_name }}-${{ matrix.zip_type }}
     runs-on: ${{ matrix.os}}
     permissions:
       contents: write
     steps:
       - name: Checkout code
         uses: actions/checkout@v2
-      - name: CMake Build
+      - name: Build Windows
         if: matrix.os == 'windows-2022'
         shell: cmd
         run: |
@@ -32,6 +32,14 @@ jobs:
           cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
           cmake --build build --config Release
           %SystemRoot%\System32\tar.exe -a -c -f ${{ env.ZIP_NAME }} build/city.exe data/*
+      - name: Build Linux
+        if: matrix.os == 'ubuntu-22.04'
+        shell: bash
+        run: |
+          cmake -B build -G Unix-Makefiles -DCMAKE_BUILD_TYPE=Release
+          cmake --build build --config Release
+          tar -czf ${{ env.ZIP_NAME }} build/city data/*
+
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         if: github.ref_type == 'tag'

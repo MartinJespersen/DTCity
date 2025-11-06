@@ -25,8 +25,8 @@ HTTP_Request(Arena* arena, String8 host, String8 path, String8 body, HTTP_Reques
                        (char*)params->content_type.str);
     else
     {
-        ExitWithError("Only Get requests have been implemented for linux (works in windows but "
-                      "left out for cross-platform support)");
+        exit_with_error("Only Get requests have been implemented for linux (works in windows but "
+                        "left out for cross-platform support)");
     }
     HTTP_Response response;
     response.good = (res.error() == httplib::Error::Success) ? 1 : 0;
