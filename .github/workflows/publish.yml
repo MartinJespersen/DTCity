@@ -1,0 +1,17 @@
+name: publish
+
+on:
+  push:
+    branches:
+      - release_tests
+jobs:
+  windows:
+    runs-on: windows-2022
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
+      - name: CMake Build
+        run: |
+          call "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Auxiliary\Build\vcvarsall.bat" x64
+          cmake -B build -DCMAKE_BUILD_TYPE=Release
+          cmake --build build --config Release

@@ -5,7 +5,8 @@
 * Documentation
   * Explain the different layers such as render, ui, etc.
   * Create diagram of interaction between layers
-  *
+  * Explain how to navigate in the application
+  * Explain how to run the application with different bounding boxes.
 * Change the naming convention for functions from PascalCase to snake_case
 
 
