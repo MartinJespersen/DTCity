@@ -1,8 +1,5 @@
 name: publish
 
-env:
-  APP_NAME: DTCity
-
 on:
   push:
     branches:
@@ -20,6 +17,7 @@ jobs:
           - os: windows-2022
             zip_type: windows-x64
     env:
+      APP_NAME: DTCity
       ZIP_NAME: ${{env.APP_NAME}}-${{ github.ref_name }}-${{ matrix.zip_type }}.zip
     runs-on: ${{ matrix.os}}
     permissions:
