@@ -18,11 +18,11 @@ jobs:
           call "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Auxiliary\Build\vcvarsall.bat" x64
           cmake -B build -DCMAKE_BUILD_TYPE=Release
           cmake --build build --config Release
-          tar -a -c -f out.zip build/city.exe data/*
+          tar.exe -a -c -f out.zip build/city.exe data/*
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           files: out.zip
           draft: false
-          prerelease: false
+          prerelease: true
           generate_release_notes: true
