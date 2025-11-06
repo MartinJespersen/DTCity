@@ -7,25 +7,37 @@ on:
     tags:
       - "*"
 jobs:
-  windows:
-    runs-on: windows-2022
+  build:
+    strategy:
+      matrix:
+        os: [ubuntu-22.04, windows-2022]
+        include:
+          - os: ubuntu-22.04
+            zip: -linux-x64
+          - os: windows-2022
+            zip: -windows-x64
+
+    runs-on: ${{ matrix.os}}
     permissions:
       contents: write
     steps:
       - name: Checkout code
         uses: actions/checkout@v2
       - name: CMake Build
+        if: matrix.os == 'windows-2022'
         shell: cmd
         run: |
           call "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Auxiliary\Build\vcvarsall.bat" x64
           cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
           cmake --build build --config Release
-          %SystemRoot%\System32\tar.exe -a -c -f out.zip build/city.exe data/*
+          set "ZIP_NAME=DTCity-${{ matrix.zip }}.zip"
+          echo ZIP_NAME=%ZIP_NAME%>> "%GITHUB_ENV%"
+          %SystemRoot%\System32\tar.exe -a -c -f ${{ matrix.zip }}.zip build/city.exe data/*
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         if: github.ref_type == 'tag'
         with:
-          tag_name: ${{ github.ref_name }}
+          tag_name: ${{env.ZIP_NAME}}
           files: out.zip
           draft: false
           prerelease: true
