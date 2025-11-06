@@ -4,6 +4,8 @@ on:
   push:
     branches:
       - release_tests
+    tags:
+      - "*"
 jobs:
   windows:
     runs-on: windows-2022
