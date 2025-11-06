@@ -4,7 +4,8 @@ set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 set(THIRD_PARTY_LIBS_DIR ${CMAKE_CURRENT_SOURCE_DIR}/src/third_party)
 set(BUILD_DEBUG ON)
-
+set(SHADER_DIR ${CMAKE_CURRENT_SOURCE_DIR}/data/shaders)
+set(SHADER_BINARY_DIR ${CMAKE_CURRENT_SOURCE_DIR}/data/shaders/bin)
 set(LIB_ARTIFACT_DIR ${CMAKE_CURRENT_SOURCE_DIR}/lib_artifacts)
 
 add_executable(city)
@@ -58,6 +59,33 @@ if (TRACY_PROFILE_ENABLE)
     add_compile_definitions(TRACY_ENABLE)
     target_link_libraries(city PRIVATE TracyClient)
 endif()
+
+file(GLOB_RECURSE GLSL_SOURCE_FILES
+    "${SHADER_DIR}/*.vert"
+    "${SHADER_DIR}/*.frag"
+)
+
+find_program(GLSL_VALIDATOR glslangValidator)
+if (NOT GLSL_VALIDATOR)
+    message(FATAL_ERROR "glslangValidator not found!")
+endif()
+
+foreach(GLSL ${GLSL_SOURCE_FILES})
+    get_filename_component(FILE_NAME ${GLSL} NAME_WE)
+    get_filename_component(EXT_WITH_DOT ${GLSL} EXT)
+    string(SUBSTRING ${EXT_WITH_DOT} 1 -1 EXT)
+    set(SPIRV "${SHADER_BINARY_DIR}/${FILE_NAME}_${EXT}.spv")
+    add_custom_command(
+        OUTPUT ${SPIRV}
+        COMMAND ${CMAKE_COMMAND} -E make_directory "${SHADER_BINARY_DIR}"
+        COMMAND ${GLSL_VALIDATOR} -V ${GLSL} -o ${SPIRV}
+        DEPENDS ${GLSL}
+        COMMENT "Compiling ${FILE_NAME} to SPIR-V"
+    )
+    list(APPEND SPIRV_BINARY_FILES ${SPIRV})
+endforeach()
+add_custom_target(CompileShaders ALL DEPENDS ${SPIRV_BINARY_FILES})
+add_dependencies(city CompileShaders)
 
 target_sources(city
     PRIVATE

@@ -184,13 +184,11 @@ VK_Model3DInstancePipelineCreate(VK_Context* vk_ctx, String8 shader_path)
         VK_DescriptorSetLayoutCreate(vk_ctx->device, &desc_set_layout_info, 1);
 
     String8 vert_path = CreatePathFromStrings(
-        scratch.arena,
-        Str8BufferFromCString(scratch.arena, {(char*)shader_path.str, "model_3d_instancing",
-                                              "model_3d_instancing_vert.spv"}));
+        scratch.arena, Str8BufferFromCString(scratch.arena, {(char*)shader_path.str, "bin",
+                                                             "model_3d_instancing_vert.spv"}));
     String8 frag_path = CreatePathFromStrings(
-        scratch.arena,
-        Str8BufferFromCString(scratch.arena, {(char*)shader_path.str, "model_3d_instancing",
-                                              "model_3d_instancing_frag.spv"}));
+        scratch.arena, Str8BufferFromCString(scratch.arena, {(char*)shader_path.str, "bin",
+                                                             "model_3d_instancing_frag.spv"}));
 
     VK_ShaderModuleInfo vert_shader_stage_info = VK_ShaderStageFromSpirv(
         scratch.arena, vk_ctx->device, VK_SHADER_STAGE_VERTEX_BIT, vert_path);
@@ -364,11 +362,11 @@ VK_Model3DPipelineCreate(VK_Context* vk_ctx, String8 shader_path)
         VK_DescriptorSetLayoutCreate(vk_ctx->device, &desc_set_layout_info, 1);
 
     String8 vert_path = CreatePathFromStrings(
-        scratch.arena, Str8BufferFromCString(scratch.arena, {(char*)shader_path.str, "model_3d",
-                                                             "model_3d_vert.spv"}));
+        scratch.arena,
+        Str8BufferFromCString(scratch.arena, {(char*)shader_path.str, "bin", "model_3d_vert.spv"}));
     String8 frag_path = CreatePathFromStrings(
-        scratch.arena, Str8BufferFromCString(scratch.arena, {(char*)shader_path.str, "model_3d",
-                                                             "model_3d_frag.spv"}));
+        scratch.arena,
+        Str8BufferFromCString(scratch.arena, {(char*)shader_path.str, "bin", "model_3d_frag.spv"}));
 
     VK_ShaderModuleInfo vert_shader_stage_info = VK_ShaderStageFromSpirv(
         scratch.arena, vk_ctx->device, VK_SHADER_STAGE_VERTEX_BIT, vert_path);
@@ -1593,6 +1591,7 @@ R_RenderCtxCreate(String8 shader_path, io_IO* io_ctx, async::Threads* thread_poo
     vk_ctx->model_3D_pipeline = VK_Model3DPipelineCreate(vk_ctx, shader_path);
     vk_ctx->model_3D_instance_pipeline = VK_Model3DInstancePipelineCreate(vk_ctx, shader_path);
 }
+
 static void
 R_RenderCtxDestroy()
 {

@@ -1,17 +1,13 @@
 # TODO for the first draft
 
 * Cleanup entrypoint main loop
-* Change the naming convention for functions from PascalCase to snake_case
-
-* CMake
-  * compile shaders
-* Make executable stand alone:
-  * What to do about shaders
-    * compiled directly into executable?
-  * What to do about assets and textures that are not part of executable
+* Create github action to build system for linux and windows
 * Documentation
   * Explain the different layers such as render, ui, etc.
   * Create diagram of interaction between layers
+  *
+* Change the naming convention for functions from PascalCase to snake_case
+
 
 ## TODO: Done
 * Caching of OpenStreetMap data needs to be improved
@@ -30,6 +26,8 @@
     what():  INCORRECT_TYPE: The JSON element does not have the requested type.
 * Imgui -> third_party dir
 * Make the optimized build work and make possible to profile
+* CMake
+  * compile shaders
 
 # Future Improvements:
 * Layers should compile as seperate units
@@ -47,6 +45,10 @@
   * HTTP client implementation improvements on linux (move away from httplib)
   * hot reloading refactor to simplify the implementation for linux
   * Base library fixes
+* Make executable stand alone:
+  * What to do about shaders
+    * compiled directly into executable?
+  * What to do about assets and textures that are not part of executable
 
 # Linux Info
 * For Khronos validation layer support (enabled if DEBUG_BUILD macro is defined) remember to install it

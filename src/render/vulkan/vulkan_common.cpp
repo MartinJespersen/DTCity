@@ -54,7 +54,6 @@ VK_SupportedFormat(VkPhysicalDevice physical_device, VkFormat* candidates, U32 c
     }
 
     exit_with_error("failed to find supported format!");
-    return VK_FORMAT_UNDEFINED;
 }
 
 static void
