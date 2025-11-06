@@ -1,14 +1,15 @@
 # TODO for the first draft
 
-* Cleanup entrypoint main loop
 * Create github action to build system for linux and windows
+* Avoid validation layers in release builds
+* Linux glslangValidator executable should be added to tools directory
 * Documentation
   * Explain the different layers such as render, ui, etc.
   * Create diagram of interaction between layers
   * Explain how to navigate in the application
   * Explain how to run the application with different bounding boxes.
 * Change the naming convention for functions from PascalCase to snake_case
-
+* Cleanup entrypoint main loop
 
 ## TODO: Done
 * Caching of OpenStreetMap data needs to be improved
