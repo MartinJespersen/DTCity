@@ -12,7 +12,7 @@ jobs:
       matrix:
         os: [ubuntu-24.04, windows-2022]
         include:
-          - os: ubuntu-22.04
+          - os: ubuntu-24.04
             zip_type: linux-x64.tar.gz
           - os: windows-2022
             zip_type: windows-x64.zip
