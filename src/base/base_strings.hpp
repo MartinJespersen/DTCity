@@ -239,7 +239,7 @@ backslashed_from_str8(Arena* arena, String8 string);
 //~ rjf: String Matching
 
 #define str8_match_lit(a_lit, b, flags) str8_match(str8_lit(a_lit), (b), (flags))
-#define str8_match_cstr(a_cstr, b, flags) str8_match(Str8CString(a_cstr), (b), (flags))
+#define str8_match_cstr(a_cstr, b, flags) str8_match(str8_c_string(a_cstr), (b), (flags))
 static B32
 str8_match(String8 a, String8 b, StringMatchFlags flags);
 static U64

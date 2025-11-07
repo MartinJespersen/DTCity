@@ -40,7 +40,7 @@ HTTP_Request(Arena* arena, String8 host, String8 path, String8 body, HTTP_Reques
             response.good
                 ? 200
                 : 418; // TODO: convert error string from httplib::Error to HTTP_Status_Code
-        response.body = PushStr8Copy(arena, Str8CString(res.value().body.c_str()));
+        response.body = PushStr8Copy(arena, str8_c_string(res.value().body.c_str()));
     }
     return response;
 }

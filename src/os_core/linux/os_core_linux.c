@@ -119,7 +119,7 @@ static OS_ProcessInfo *os_get_process_info(void) {
 
 static String8 OS_GetCurrentPath(Arena *arena) {
   char *cwdir = getcwd(0, 0);
-  String8 string = PushStr8Copy(arena, Str8CString(cwdir));
+  String8 string = PushStr8Copy(arena, str8_c_string(cwdir));
   free(cwdir);
   return string;
 }
@@ -376,7 +376,7 @@ static String8 os_full_path_from_path(Arena *arena, String8 path) {
   String8 path_copy = PushStr8Copy(scratch.arena, path);
   char buffer[PATH_MAX] = {0};
   realpath((char *)path_copy.str, buffer);
-  String8 result = PushStr8Copy(arena, Str8CString(buffer));
+  String8 result = PushStr8Copy(arena, str8_c_string(buffer));
   ScratchEnd(scratch);
   return result;
 }
@@ -506,7 +506,7 @@ static B32 os_file_iter_next(Arena *arena, OS_FileIter *iter,
 
     // rjf: output & exit, if good & unfiltered
     if (good && !filtered) {
-      info_out->name = PushStr8Copy(arena, Str8CString(lnx_iter->dp->d_name));
+      info_out->name = PushStr8Copy(arena, str8_c_string(lnx_iter->dp->d_name));
       if (stat_result != -1) {
         info_out->props = os_lnx_file_properties_from_stat(&st);
       }
@@ -1172,7 +1172,7 @@ int main(int argc, char **argv) {
       // rjf: grab home directory
       {
         char *home = getenv("HOME");
-        info->user_program_data_path = Str8CString(home);
+        info->user_program_data_path = str8_c_string(home);
       }
 
       ScratchEnd(scratch);
