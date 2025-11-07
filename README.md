@@ -1,8 +1,5 @@
 # TODO for the first draft
 
-* Create github action to build system for linux and windows
-* Avoid validation layers in release builds
-* Linux glslangValidator executable should be added to tools directory
 * Documentation
   * Explain the different layers such as render, ui, etc.
   * Create diagram of interaction between layers
@@ -30,12 +27,14 @@
 * Make the optimized build work and make possible to profile
 * CMake
   * compile shaders
+* Create github action to build system for linux and windows
+* Linux glslangValidator executable should be added to tools directory
+* Avoid validation layers in release builds
 
 # Future Improvements:
 * Layers should compile as seperate units
 * Error handling improvements - error handling should not be ExitWithError everywhere
 * Improve the conversion between UTM and WGS84 system
-* Make the optimized build version work
 * Consider testing and how to do it
 * Improve the HTTP library implementation
   * Probably consider using a cross platform library only instead of a mix
@@ -83,7 +82,7 @@ If you could complete these steps before our meeting on 13-Nov-2025, that would 
 ## Further steps could be
 * Add linting and static analysis checks
 * Add functionality tests for important features of the software.
-* Document the desired system architecture and design. This could either be done using mermaidjs or plantuml. Here is an example.
+* Document the desired system architecture and design. This could either be done using mermaidjs or plantuml.
 * Create a work plan to move the current codebase to the desired design state.
 * Add performance tests in developer workflow and in Github Actions
 * Add unit tests for all new code contributions while updating the functionality tests
@@ -92,7 +91,13 @@ If you could complete these steps before our meeting on 13-Nov-2025, that would 
 ## 1. Create build directory
 Debug:
 cmake -B build -DCMAKE_BUILD_TYPE=Debug
+Additional define macros:
+* -DBUILD_DEBUG=1
+
 Release:
 cmake -B build -DCMAKE_BUILD_TYPE=Release
 ## 2. Build Project
-cmake --build build
+Debug:
+cmake --build build --config Debug
+Release:
+cmake --build build --config Release

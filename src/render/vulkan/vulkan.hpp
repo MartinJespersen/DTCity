@@ -139,7 +139,7 @@ struct VK_Context
     static const U32 WIDTH = 800;
     static const U32 HEIGHT = 600;
 
-#ifdef BUILD_DEBUG
+#if BUILD_DEBUG
     static const U8 enable_validation_layers = 1;
 #else
     static const U8 enable_validation_layers = 0;

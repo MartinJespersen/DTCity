@@ -3,27 +3,46 @@ project(DTCity)
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 set(THIRD_PARTY_LIBS_DIR ${CMAKE_CURRENT_SOURCE_DIR}/src/third_party)
-set(BUILD_DEBUG ON)
 set(SHADER_DIR ${CMAKE_CURRENT_SOURCE_DIR}/data/shaders)
 set(SHADER_BINARY_DIR ${CMAKE_CURRENT_SOURCE_DIR}/data/shaders/bin)
 set(LIB_ARTIFACT_DIR ${CMAKE_CURRENT_SOURCE_DIR}/lib_artifacts)
 set(THIRD_PARTY_TOOLS_DIR ${CMAKE_CURRENT_SOURCE_DIR}/tools)
 
+option(BUILD_DEBUG "Enable Additional Debugging Information (e.g Vulkan Validation Layers)" OFF)
+option(ASAN_ENABLED "Enable Address Sanitizer" OFF)
+
+# cmake macro -> compiler macro
+if(BUILD_DEBUG)
+    add_compile_definitions(BUILD_DEBUG=1)
+endif()
+
+if(ASAN_ENABLED)
+    add_compile_definitions(ASAN_ENABLED=1)
+endif()
+
 add_executable(city)
 
-
+# Compiler specific options
 if (MSVC)
     target_compile_options(city PRIVATE
         /W4
         /wd4201  /wd4005 /wd4838 /wd4244 /wd4996 /wd4310 /wd4245 /wd4100 /wd4505
         /EHsc
-        /Z7
         /FI${CMAKE_SOURCE_DIR}/src/includes.hpp
     )
+
+    if (BUILD_DEBUG)
+        target_compile_options(city PRIVATE /Z7)
+    endif()
+
     add_compile_definitions(BUILD_CONSOLE_INTERFACE ON)
 
     set(PLATFORM_LIB_ARTIFACT_DIR ${LIB_ARTIFACT_DIR}/win)
     set(PLATFORM_THIRD_PARTY_TOOLS_DIR ${THIRD_PARTY_TOOLS_DIR}/win)
+
+    if(ASAN_ENABLED)
+        target_compile_options(city PRIVATE /fsanitize=address)
+    endif()
 
 elseif(CMAKE_COMPILER_IS_GNUCXX)
     target_compile_options(city PRIVATE
@@ -34,18 +53,18 @@ elseif(CMAKE_COMPILER_IS_GNUCXX)
 
     if(BUILD_DEBUG AND NOT NDEBUG)
         target_compile_options(city PRIVATE
-            -fsanitize=address
             -Wall -Wextra -Wno-attributes -Wno-format -Wno-unused-function -Wno-unused-parameter -Wno-narrowing -Wno-missing-field-initializers -Wno-sign-conversion -Wno-write-strings -Wno-class-memaccess -Wno-comment -Wno-pedantic
         )
-        TARGET_LINK_OPTIONS(city PRIVATE
-            -fsanitize=address
-        )
+        TARGET_LINK_OPTIONS(city PRIVATE)
 
     else()
 
         target_compile_options(city PRIVATE -w)
     endif()
 
+    if(ASAN_ENABLED)
+        target_compile_options(city PRIVATE -fsanitize=address)
+    endif()
 
 
     target_include_directories(city PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src ${CMAKE_CURRENT_SOURCE_DIR}/src/third_party/imgui)

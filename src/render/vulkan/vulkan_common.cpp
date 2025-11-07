@@ -213,6 +213,7 @@ VK_CreateInstance(VK_Context* vk_ctx)
     VkDebugUtilsMessengerCreateInfoEXT debugCreateInfo{};
     if (vk_ctx->enable_validation_layers)
     {
+        printf("Validation layers enabled\n");
         createInfo.enabledLayerCount = (U32)vk_ctx->validation_layers.size;
         createInfo.ppEnabledLayerNames =
             CStrArrFromStr8Buffer(scratch.arena, vk_ctx->validation_layers);
