@@ -121,32 +121,49 @@ dt_interpret_input(int argc, char** argv)
 
     if (argc != 1 && argc != 5)
     {
-        exit_with_error("G_InterpretInput: Invalid number of arguments");
+        exit_with_error("Invalid number of command line arguments");
+    }
+
+    B8 use_default = true;
+    if (argc == 5)
+    {
+        B8 is_input_malformed = false;
+        for (U32 i = 0; (i < (U64)argc) && (i < ArrayCount(bbox_coords)); ++i)
+        {
+            char* arg = argv[i + 1];
+            String8 arg_str = str8_c_string(arg);
+            F64 v = f64_from_str8(arg_str);
+            if (v == 0.0)
+            {
+                ERROR_LOG("Invalid input %s passed as cmd line argument\n", arg);
+                is_input_malformed = true;
+                break;
+            }
+            *bbox_coords[i] = v;
+        }
+
+        if (!is_input_malformed)
+        {
+            use_default = false;
+        }
     }
 
     if (argc == 1)
     {
-        DEBUG_LOG(
-            "No command line arguments provided: Using default values\n"
-            "lon_btm_left: %lf\n lat_btm_left: %lf\n lon_top_right: %lf\n lat_top_right: %lf\n",
-            bbox->lon_btm_left, bbox->lat_btm_left, bbox->lon_top_right, bbox->lat_top_right);
+        DEBUG_LOG("No command line arguments provided\n");
+        use_default = true;
+    }
 
+    if (use_default)
+    {
         // Initialize default values
         bbox->lon_btm_left = 9.213970;
         bbox->lat_btm_left = 55.704686;
         bbox->lon_top_right = 9.22868;
         bbox->lat_top_right = 55.713671;
-    }
-
-    if (argc == 5)
-    {
-        for (U32 i = 0; (i < (U64)argc) && (i < ArrayCount(bbox_coords)); ++i)
-        {
-            char* arg = argv[i + 1];
-            String8 arg_str = Str8CString(arg);
-            F64 v = F64FromStr8(arg_str);
-            *bbox_coords[i] = v;
-        }
+        INFO_LOG("Using default values:\nlon_btm_left=%lf, lat_btm_left=%lf, lon_top_right=%lf, "
+                 "lat_top_right=%lf\n",
+                 bbox->lon_btm_left, bbox->lat_btm_left, bbox->lon_top_right, bbox->lat_top_right);
     }
     return input;
 }
@@ -158,7 +175,7 @@ dt_main_loop(void* ptr)
 
     Context* ctx = dt_ctx_get();
     io_IO* io_ctx = ctx->io;
-    OS_SetThreadName(Str8CString("Entrypoint thread"));
+    OS_SetThreadName(str8_c_string("Entrypoint thread"));
 
     Rng2F32 utm_bb_coords = city::UtmFromBoundingBox(input->bbox);
     printf("UTM Coordinates: %f %f %f %f\n", utm_bb_coords.min.x, utm_bb_coords.min.y,

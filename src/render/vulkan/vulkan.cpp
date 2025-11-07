@@ -1525,7 +1525,7 @@ R_RenderCtxCreate(String8 shader_path, io_IO* io_ctx, async::Threads* thread_poo
     vk_ctx->validation_layers = BufferAlloc<String8>(vk_ctx->arena, ArrayCount(validation_layers));
     for (U32 i = 0; i < ArrayCount(validation_layers); i++)
     {
-        vk_ctx->validation_layers.data[i] = {Str8CString(validation_layers[i])};
+        vk_ctx->validation_layers.data[i] = {str8_c_string(validation_layers[i])};
     }
 
     const char* device_extensions[] = {VK_KHR_SWAPCHAIN_EXTENSION_NAME,
@@ -1534,7 +1534,7 @@ R_RenderCtxCreate(String8 shader_path, io_IO* io_ctx, async::Threads* thread_poo
     vk_ctx->device_extensions = BufferAlloc<String8>(vk_ctx->arena, ArrayCount(device_extensions));
     for (U32 i = 0; i < ArrayCount(device_extensions); i++)
     {
-        vk_ctx->device_extensions.data[i] = {Str8CString(device_extensions[i])};
+        vk_ctx->device_extensions.data[i] = {str8_c_string(device_extensions[i])};
     }
 
     VK_CreateInstance(vk_ctx);

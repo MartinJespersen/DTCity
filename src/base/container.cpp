@@ -55,7 +55,7 @@ Str8BufferFromCString(Arena* arena, std::initializer_list<const char*> strings)
     U32 index = 0;
     for (const char* const* str = strings.begin(); str != strings.end(); ++str)
     {
-        buffer.data[index++] = PushStr8Copy(arena, Str8CString(*str));
+        buffer.data[index++] = PushStr8Copy(arena, str8_c_string(*str));
     }
     return buffer;
 }

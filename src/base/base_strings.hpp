@@ -213,7 +213,7 @@ str32_range(U32* first, U32* one_past_last);
 static String32
 str32_zero(void);
 static String8
-Str8CString(const char* c);
+str8_c_string(const char* c);
 static String16
 str16_cstring(U16* c);
 static String32
@@ -321,7 +321,7 @@ str8_from_s64(Arena* arena, S64 s64, U32 radix, U8 min_digits, U8 digit_group_se
 //~ rjf: String <=> Float Conversions
 
 static F64
-F64FromStr8(String8 string);
+f64_from_str8(String8 string);
 
 ////////////////////////////////
 //~ rjf: String List Construction Functions

@@ -61,7 +61,7 @@ osm_structure_add(osm_Network* node_utm_structure, Buffer<osm_RoadNodeList> node
                 char node_utm_zone[10];
                 UTM::LLtoUTM(node_coord->lat, node_coord->lon, y, x, node_utm_zone);
 
-                String8 utm_zone_str = Str8CString(node_utm_zone);
+                String8 utm_zone_str = str8_c_string(node_utm_zone);
                 node_utm->utm_zone = PushStr8Copy(arena, utm_zone_str);
                 node_utm->pos.x = x + node_utm_structure->utm_center_offset.x;
                 node_utm->pos.y = y + node_utm_structure->utm_center_offset.y;

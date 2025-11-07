@@ -58,7 +58,7 @@ os_string_list_from_argcv(Arena* arena, int argc, char** argv)
     String8List result = {0};
     for (int i = 0; i < argc; i += 1)
     {
-        String8 str = Str8CString(argv[i]);
+        String8 str = str8_c_string(argv[i]);
         Str8ListPush(arena, &result, str);
     }
     return result;

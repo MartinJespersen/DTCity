@@ -11,9 +11,9 @@ QueueInit(Arena* arena, U32 queue_size, U32 thread_count)
     queue->queue_size = queue_size;
     queue->items = PushArray(arena, T, queue_size);
     queue->mutex = OS_RWMutexAlloc();
-    queue->semaphore_empty = OS_SemaphoreAlloc(0, thread_count, Str8CString(""));
+    queue->semaphore_empty = OS_SemaphoreAlloc(0, thread_count, str8_c_string(""));
     queue->semaphore_full =
-        OS_SemaphoreAlloc(semaphore_full_size, semaphore_full_size, Str8CString(""));
+        OS_SemaphoreAlloc(semaphore_full_size, semaphore_full_size, str8_c_string(""));
     return queue;
 }
 

@@ -222,7 +222,7 @@ str32_zero(void)
 }
 
 static String8
-Str8CString(const char* c)
+str8_c_string(const char* c)
 {
     String8 result = {(U8*)c, cstring8_length((U8*)c)};
     return (result);
@@ -956,7 +956,7 @@ str8_from_s64(Arena* arena, S64 s64, U32 radix, U8 min_digits, U8 digit_group_se
 //~ rjf: String <=> Float Conversions
 
 static F64
-F64FromStr8(String8 string)
+f64_from_str8(String8 string)
 {
     // TODO(rjf): crappy implementation for now that just uses atof.
     F64 result = 0;

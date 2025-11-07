@@ -54,6 +54,7 @@ VK_SupportedFormat(VkPhysicalDevice physical_device, VkFormat* candidates, U32 c
     }
 
     exit_with_error("failed to find supported format!");
+    return VK_FORMAT_UNDEFINED;
 }
 
 static void
@@ -188,7 +189,7 @@ static void
 VK_CreateInstance(VK_Context* vk_ctx)
 {
     Temp scratch = ScratchBegin(0, 0);
-    if (vk_ctx->enable_validation_layers && !VK_CheckValidationLayerSupport(vk_ctx))
+    if constexpr (vk_ctx->enable_validation_layers && !VK_CheckValidationLayerSupport(vk_ctx))
     {
         exit_with_error("validation layers requested, but not available!");
     }
@@ -213,7 +214,6 @@ VK_CreateInstance(VK_Context* vk_ctx)
     VkDebugUtilsMessengerCreateInfoEXT debugCreateInfo{};
     if (vk_ctx->enable_validation_layers)
     {
-        printf("Validation layers enabled\n");
         createInfo.enabledLayerCount = (U32)vk_ctx->validation_layers.size;
         createInfo.ppEnabledLayerNames =
             CStrArrFromStr8Buffer(scratch.arena, vk_ctx->validation_layers);
