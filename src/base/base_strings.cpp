@@ -217,7 +217,7 @@ str32_range(U32* first, U32* one_past_last)
 static String32
 str32_zero(void)
 {
-    String32 result = {0};
+    String32 result = {};
     return (result);
 }
 
@@ -334,8 +334,8 @@ str8_match(String8 a, String8 b, StringMatchFlags flags)
     }
     else if (a.size == b.size || (flags & MatchFlag_RightSideSloppy))
     {
-        B32 case_insensitive = (flags & MatchFlag_RightSideSloppy);
-        B32 slash_insensitive = (flags & MatchFlag_RightSideSloppy);
+        U32 case_insensitive = (flags & MatchFlag_RightSideSloppy);
+        U32 slash_insensitive = (flags & MatchFlag_RightSideSloppy);
         U64 size = Min(a.size, b.size);
         result = 1;
         for (U64 i = 0; i < size; i += 1)
@@ -543,7 +543,7 @@ push_str8fv(Arena* arena, const char* fmt, va_list args)
     va_list args2;
     va_copy(args2, args);
     U32 needed_bytes = vsnprintf(0, 0, fmt, args) + 1;
-    String8 result = {0};
+    String8 result = {};
     result.str = PushArrayNoZero(arena, U8, needed_bytes);
     result.size = vsnprintf((char*)result.str, needed_bytes, fmt, args2);
     result.str[result.size] = 0;
@@ -695,7 +695,7 @@ try_u64_from_str8_c_rules(String8 string, U64* x)
 static B32
 try_s64_from_str8_c_rules(String8 string, S64* x)
 {
-    String8 string_tail = {0};
+    String8 string_tail = {};
     S64 sign = sign_from_str8(string, &string_tail);
     U64 x_u64 = 0;
     B32 is_integer = try_u64_from_str8_c_rules(string_tail, &x_u64);
@@ -825,10 +825,10 @@ str8_from_bits_u64(Arena* arena, U64 x)
 static String8
 str8_from_u64(Arena* arena, U64 u64, U32 radix, U8 min_digits, U8 digit_group_separator)
 {
-    String8 result = {0};
+    String8 result = {};
     {
         // rjf: prefix
-        String8 prefix = {0};
+        String8 prefix = {};
         switch (radix)
         {
             case 16:
@@ -935,7 +935,7 @@ str8_from_u64(Arena* arena, U64 u64, U32 radix, U8 min_digits, U8 digit_group_se
 static String8
 str8_from_s64(Arena* arena, S64 s64, U32 radix, U8 min_digits, U8 digit_group_separator)
 {
-    String8 result = {0};
+    String8 result = {};
     // TODO(rjf): preeeeetty sloppy...
     if (s64 < 0)
     {
@@ -1126,7 +1126,7 @@ str8_list_push_frontf(Arena* arena, String8List* list, char* fmt, ...)
 static String8List
 str8_list_copy(Arena* arena, String8List* list)
 {
-    String8List result = {0};
+    String8List result = {};
     for (String8Node* node = list->first; node != 0; node = node->next)
     {
         String8Node* new_node = PushArrayNoZero(arena, String8Node, 1);
@@ -1140,7 +1140,7 @@ static String8List
 str8_split(Arena* arena, String8 string, U8* split_chars, U64 split_char_count,
            StringSplitFlags flags)
 {
-    String8List list = {0};
+    String8List list = {};
 
     B32 keep_empties = (flags & StringSplitFlag_KeepEmpties);
 
@@ -1190,7 +1190,7 @@ static String8List
 str8_list_split_by_string_chars(Arena* arena, String8List list, String8 split_chars,
                                 StringSplitFlags flags)
 {
-    String8List result = {0};
+    String8List result = {};
     for (String8Node* node = list.first; node != 0; node = node->next)
     {
         String8List split = str8_split_by_string_chars(arena, node->string, split_chars, flags);
@@ -1202,7 +1202,7 @@ str8_list_split_by_string_chars(Arena* arena, String8List list, String8 split_ch
 static String8
 Str8ListJoin(Arena* arena, String8List* list, StringJoin* optional_params)
 {
-    StringJoin join = {0};
+    StringJoin join = {};
     if (optional_params != 0)
     {
         MemoryCopyStruct(&join, optional_params);
@@ -1258,7 +1258,7 @@ str8_list_from_flags(Arena* arena, String8List* list, U32 flags, String8* flag_s
 static String8Array
 str8_array_zero(void)
 {
-    String8Array result = {0};
+    String8Array result = {};
     return result;
 }
 
@@ -1288,7 +1288,7 @@ str8_array_reserve(Arena* arena, U64 count)
 static String8Array
 str8_array_copy(Arena* arena, String8Array array)
 {
-    String8Array result = {0};
+    String8Array result = {};
     result.count = array.count;
     result.v = PushArray(arena, String8, result.count);
   for
@@ -1500,7 +1500,7 @@ str8_path_list_resolve_dots_in_place(String8List* path, PathStyle style)
 static String8
 str8_path_list_join_by_style(Arena* arena, String8List* path, PathStyle style)
 {
-    StringJoin params = {0};
+    StringJoin params = {};
     switch (style)
     {
         case PathStyle_Null:
@@ -1528,11 +1528,11 @@ str8_path_list_join_by_style(Arena* arena, String8List* path, PathStyle style)
 static String8TxtPtPair
 str8_txt_pt_pair_from_string(String8 string)
 {
-    String8TxtPtPair pair = {0};
+    String8TxtPtPair pair = {};
     {
-        String8 file_part = {0};
-        String8 line_part = {0};
-        String8 col_part = {0};
+        String8 file_part = {};
+        String8 line_part = {};
+        String8 col_part = {};
 
         // rjf: grab file part
         for (U64 idx = 0; idx <= string.size; idx += 1)
@@ -1996,7 +1996,7 @@ static String8
 string_from_elapsed_time(Arena* arena, DateTime dt)
 {
     Temp scratch = ScratchBegin(&arena, 1);
-    String8List list = {0};
+    String8List list = {};
     if (dt.year)
     {
         Str8ListPushF(scratch.arena, &list, "%dy", dt.year);
@@ -2074,7 +2074,7 @@ try_guid_from_string(String8 string, Guid* guid_out)
 static Guid
 guid_from_string(String8 string)
 {
-    Guid guid = {0};
+    Guid guid = {};
     try_guid_from_string(string, &guid);
     return guid;
 }
@@ -2090,7 +2090,7 @@ indented_from_string(Arena* arena, String8 string)
         "                                                                        "
         "                  "
         "                                      ";
-    String8List indented_strings = {0};
+    String8List indented_strings = {};
     S64 depth = 0;
     S64 next_depth = 0;
     U64 line_begin_off = 0;
@@ -2152,13 +2152,13 @@ static String8
 escaped_from_raw_str8(Arena* arena, String8 string)
 {
     Temp scratch = ScratchBegin(&arena, 1);
-    String8List parts = {0};
+    String8List parts = {};
     U64 start_split_idx = 0;
     for (U64 idx = 0; idx <= string.size; idx += 1)
     {
         U8 byte = (idx < string.size) ? string.str[idx] : 0;
         B32 split = 1;
-        String8 separator_replace = {0};
+        String8 separator_replace = {};
         switch (byte)
         {
             default:
@@ -2227,7 +2227,7 @@ escaped_from_raw_str8(Arena* arena, String8 string)
             }
         }
     }
-    StringJoin join = {0};
+    StringJoin join = {};
     String8 result = Str8ListJoin(arena, &parts, &join);
     ScratchEnd(scratch);
     return result;
@@ -2237,7 +2237,7 @@ static String8
 raw_from_escaped_str8(Arena* arena, String8 string)
 {
     Temp scratch = ScratchBegin(&arena, 1);
-    String8List strs = {0};
+    String8List strs = {};
     U64 start = 0;
     for (U64 idx = 0; idx <= string.size; idx += 1)
     {
@@ -2291,7 +2291,7 @@ static String8List
 wrapped_lines_from_string(Arena* arena, String8 string, U64 first_line_max_width, U64 max_width,
                           U64 wrap_indent)
 {
-    String8List list = {0};
+    String8List list = {};
     Rng1U64 line_range = r1u64(0, 0);
     U64 wrapped_indent_level = 0;
     static const char* spaces = "                                                                ";
@@ -2394,7 +2394,7 @@ rgba_from_hex_string_4f32(String8 hex_string)
 static FuzzyMatchRangeList
 fuzzy_match_find(Arena* arena, String8 needle, String8 haystack)
 {
-    FuzzyMatchRangeList result = {0};
+    FuzzyMatchRangeList result = {};
     Temp scratch = ScratchBegin(&arena, 1);
     String8List needles = str8_split(scratch.arena, needle, (U8*)" ", 1, 0);
     result.needle_part_count = needles.node_count;
@@ -2436,7 +2436,7 @@ fuzzy_match_find(Arena* arena, String8 needle, String8 haystack)
 static FuzzyMatchRangeList
 fuzzy_match_range_list_copy(Arena* arena, FuzzyMatchRangeList* src)
 {
-    FuzzyMatchRangeList dst = {0};
+    FuzzyMatchRangeList dst = {};
     for (FuzzyMatchRangeNode* src_n = src->first; src_n != 0; src_n = src_n->next)
     {
         FuzzyMatchRangeNode* dst_n = PushArray(arena, FuzzyMatchRangeNode, 1);
@@ -2706,7 +2706,7 @@ PushStr8Copy(Arena* arena, String8 string)
 static String8
 PushStr8FV(Arena* arena, const char* fmt, va_list args)
 {
-    String8 result = {0};
+    String8 result = {};
     va_list args2;
     va_copy(args2, args);
     U64 needed_bytes = vsnprintf(0, 0, fmt, args) + 1;
@@ -2730,7 +2730,7 @@ PushStr8F(Arena* arena, const char* fmt, ...)
 static String8
 push_str8_fill_byte(Arena* arena, U64 size, U8 byte)
 {
-    String8 result = {0};
+    String8 result = {};
     result.str = PushArrayNoZero(arena, U8, size + 1);
     MemorySet(result.str, byte, size);
     result.size = size;
@@ -2769,7 +2769,7 @@ static void
 exit_with_error(const char* msg, ...)
 {
     ScratchScope scratch = ScratchScope(0, 0);
-    String8 result = {0};
+    String8 result = {};
     va_list args;
     va_start(args, msg);
     result = PushStr8FV(scratch.arena, msg, args);

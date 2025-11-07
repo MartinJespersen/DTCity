@@ -15,7 +15,6 @@ out
 .venv
 .zed/**
 .vscode
-.clangd
 .raddbg
 compile_commands.json
 **/cache/**

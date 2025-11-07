@@ -189,7 +189,7 @@ static void
 VK_CreateInstance(VK_Context* vk_ctx)
 {
     Temp scratch = ScratchBegin(0, 0);
-    if constexpr (vk_ctx->enable_validation_layers && !VK_CheckValidationLayerSupport(vk_ctx))
+    if (vk_ctx->enable_validation_layers && !VK_CheckValidationLayerSupport(vk_ctx))
     {
         exit_with_error("validation layers requested, but not available!");
     }

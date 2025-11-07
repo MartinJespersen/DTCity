@@ -92,12 +92,12 @@ If you could complete these steps before our meeting on 13-Nov-2025, that would 
 Debug:
 cmake -B build -DCMAKE_BUILD_TYPE=Debug
 Additional define macros:
-* -DBUILD_DEBUG=1
+* -DBUILD_DEBUG (Additional debug information e.g vulkan validation layer support)
+* -DASAN_ENABLE=ON (enable address sanitizer support)
+* -DTRACY_PROFILE_ENABLE (Enable tracy profiling)
 
 Release:
 cmake -B build -DCMAKE_BUILD_TYPE=Release
 ## 2. Build Project
-Debug:
-cmake --build build --config Debug
-Release:
-cmake --build build --config Release
+Debug/Release:
+cmake --build build
