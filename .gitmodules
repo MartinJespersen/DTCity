@@ -5,3 +5,6 @@
 [submodule "third_party/ktx"]
 	path = third_party/ktx
 	url = https://github.com/KhronosGroup/KTX-Software.git
+[submodule "third_party/cesium-native"]
+	path = third_party/cesium-native
+	url = https://github.com/CesiumGS/cesium-native.git

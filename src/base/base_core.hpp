@@ -17,6 +17,7 @@
 //~ rjf: Codebase Keywords
 
 #define local_persist static
+#define g_internal static
 
 #if COMPILER_MSVC || (COMPILER_CLANG && OS_WINDOWS)
 #pragma section(".rdata$", read)

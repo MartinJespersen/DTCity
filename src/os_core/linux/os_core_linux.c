@@ -207,7 +207,7 @@ static void os_abort(S32 exit_code) { exit(exit_code); }
 
 //- rjf: files
 
-static OS_Handle OS_FileOpen(OS_AccessFlags flags, String8 path) {
+static OS_Handle os_file_open(OS_AccessFlags flags, String8 path) {
   Temp scratch = ScratchBegin(0, 0);
   String8 path_copy = PushStr8Copy(scratch.arena, path);
   int lnx_flags = 0;
@@ -339,8 +339,8 @@ static B32 os_delete_file_at_path(String8 path) {
 
 static B32 os_copy_file_path(String8 dst, String8 src) {
   B32 result = 0;
-  OS_Handle src_h = OS_FileOpen(OS_AccessFlag_Read, src);
-  OS_Handle dst_h = OS_FileOpen(OS_AccessFlag_Write, dst);
+  OS_Handle src_h = os_file_open(OS_AccessFlag_Read, src);
+  OS_Handle dst_h = os_file_open(OS_AccessFlag_Write, dst);
   if (!OS_HandleMatch(src_h, OS_HandleIsZero()) &&
       !OS_HandleMatch(dst_h, OS_HandleIsZero())) {
     int src_fd = (int)src_h.u64[0];

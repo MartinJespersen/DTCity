@@ -323,7 +323,7 @@ os_abort(S32 exit_code)
 //- rjf: files
 
 static OS_Handle
-OS_FileOpen(OS_AccessFlags flags, String8 path)
+os_file_open(OS_AccessFlags flags, String8 path)
 {
     OS_Handle result = {0};
     Temp scratch = ScratchBegin(0, 0);
@@ -376,7 +376,7 @@ OS_FileOpen(OS_AccessFlags flags, String8 path)
 }
 
 static void
-OS_FileClose(OS_Handle file)
+os_file_close(OS_Handle file)
 {
     if (OS_HandleMatch(file, OS_HandleIsZero()))
     {
@@ -388,7 +388,7 @@ OS_FileClose(OS_Handle file)
 }
 
 static U64
-OS_FileRead(OS_Handle file, Rng1U64 rng, void* out_data)
+os_file_read(OS_Handle file, Rng1U64 rng, void* out_data)
 {
     if (OS_HandleMatch(file, OS_HandleIsZero()))
     {
@@ -479,7 +479,7 @@ os_file_set_time(OS_Handle file, DateTime time)
 }
 
 static FileProperties
-OS_PropertiesFromFile(OS_Handle file)
+os_properties_from_file(OS_Handle file)
 {
     if (OS_HandleMatch(file, OS_HandleIsZero()))
     {

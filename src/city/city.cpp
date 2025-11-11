@@ -275,8 +275,8 @@ city_cache_needs_update(String8 cache_data_file, String8 cache_meta_file)
     B32 update_needed = false;
 
     U64 meta_file_size = 0;
-    OS_Handle meta_data_file_handle = OS_FileOpen(OS_AccessFlag_Read, cache_meta_file);
-    FileProperties meta_file_props = OS_PropertiesFromFile(meta_data_file_handle);
+    OS_Handle meta_data_file_handle = os_file_open(OS_AccessFlag_Read, cache_meta_file);
+    FileProperties meta_file_props = os_properties_from_file(meta_data_file_handle);
     meta_file_size = meta_file_props.size;
     if (meta_file_size == 0)
     {
@@ -288,7 +288,7 @@ city_cache_needs_update(String8 cache_data_file, String8 cache_meta_file)
         Rng1U64 meta_read_range = {0, meta_file_size};
         String8 meta_data_str = push_str8_fill_byte(scratch.arena, meta_file_size, 0);
         U64 meta_file_bytes_read =
-            OS_FileRead(meta_data_file_handle, meta_read_range, meta_data_str.str);
+            os_file_read(meta_data_file_handle, meta_read_range, meta_data_str.str);
 
         if (meta_file_bytes_read != meta_file_size)
         {
@@ -337,7 +337,7 @@ city_cache_needs_update(String8 cache_data_file, String8 cache_meta_file)
                 }
             }
         }
-        OS_FileClose(meta_data_file_handle);
+        os_file_close(meta_data_file_handle);
     }
 
     return update_needed;
@@ -387,14 +387,14 @@ city_cache_write(String8 cache_file, String8 cache_meta_file, String8 content, S
 {
     ScratchScope scratch = ScratchScope(0, 0);
     // ~mgj: write to cache file
-    OS_Handle file_write_handle = OS_FileOpen(OS_AccessFlag_Write, cache_file);
+    OS_Handle file_write_handle = os_file_open(OS_AccessFlag_Write, cache_file);
     U64 bytes_written =
         OS_FileWrite(file_write_handle, {.min = 0, .max = content.size}, content.str);
     if (bytes_written != content.size)
     {
         DEBUG_LOG("DataFetch: Was not able to write OSM data to cache\n");
     }
-    OS_FileClose(file_write_handle);
+    os_file_close(file_write_handle);
 
     // ~mgj: write to cache meta file
     if (content.size > 0)
@@ -403,14 +403,14 @@ city_cache_write(String8 cache_file, String8 cache_meta_file, String8 content, S
         U64 timestamp = os_now_unix();
         String8 meta_str = PushStr8F(scratch.arena, "%llu\t%llu", new_hash, timestamp);
 
-        OS_Handle file_write_handle_meta = OS_FileOpen(OS_AccessFlag_Write, cache_meta_file);
+        OS_Handle file_write_handle_meta = os_file_open(OS_AccessFlag_Write, cache_meta_file);
         U64 bytes_written_meta =
             OS_FileWrite(file_write_handle_meta, {.min = 0, .max = meta_str.size}, meta_str.str);
         if (bytes_written_meta != meta_str.size)
         {
             DEBUG_LOG("DataFetch: Was not able to write meta data to cache\n");
         }
-        OS_FileClose(file_write_handle_meta);
+        os_file_close(file_write_handle_meta);
     }
 }
 
@@ -432,17 +432,18 @@ city_cache_read(Arena* arena, String8 cache_file, String8 cache_meta_file, Strin
 
     if (read_from_cache)
     {
-        OS_Handle file_handle = OS_FileOpen(OS_AccessFlag_Read, cache_file);
-        FileProperties file_props = OS_PropertiesFromFile(file_handle);
+        OS_Handle file_handle = os_file_open(OS_AccessFlag_Read, cache_file);
+        FileProperties file_props = os_properties_from_file(file_handle);
 
         str = push_str8_fill_byte(arena, file_props.size, 0);
-        U64 total_read_size = OS_FileRead(file_handle, {.min = 0, .max = file_props.size}, str.str);
+        U64 total_read_size =
+            os_file_read(file_handle, {.min = 0, .max = file_props.size}, str.str);
 
         if (total_read_size != file_props.size)
         {
             DEBUG_LOG("DataFetch: Could not read everything from cache\n");
         }
-        OS_FileClose(file_handle);
+        os_file_close(file_handle);
 
         B32 needs_update = city_cache_needs_update(hash_input, cache_meta_file);
         read_from_cache = !needs_update;

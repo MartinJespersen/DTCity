@@ -2,14 +2,7 @@ If:
   PathMatch: .*
 CompileFlags:
   CompilationDatabase: build
-  Add:
-    - -IC:/repos/DTCity
-    - -IC:/repos/DTCity/src
-    - -include=C:/repos/DTCity/src/includes.hpp
-    - -IC:/repos/DTCity/src/third_party/glfw/include
-    - -IC:/repos/DTCity/src/third_party/ktx/include
-    - -IC:/repos/DTCity/src/third_party/freetype_v2_14_1/include
-    - -IC:/repos/DTCity/src/third_party/vulkan_sdk_v1_4_309_0/Include
+  Add: [/FI../src/includes.hpp]
 
 Index:
   Background: Build

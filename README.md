@@ -87,7 +87,11 @@ If you could complete these steps before our meeting on 13-Nov-2025, that would 
 * Add performance tests in developer workflow and in Github Actions
 * Add unit tests for all new code contributions while updating the functionality tests
 
-# CMake build instructions
+# Build instructions
+## Windows Prerequisites
+* Install the Microsoft C/C++ Build Tools to install the MSVC compiler, CMake and vcpkg.
+* Setup environment by running the script: ```vcvarsall.bat x64``` or ```use the x64 Native Tools Command Prompt``` that will automatically run the script when started.
+
 ## 1. Create build directory
 Debug:
 cmake -B build -DCMAKE_BUILD_TYPE=Debug

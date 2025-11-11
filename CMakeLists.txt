@@ -7,9 +7,13 @@ set(SHADER_DIR ${CMAKE_CURRENT_SOURCE_DIR}/data/shaders)
 set(SHADER_BINARY_DIR ${CMAKE_CURRENT_SOURCE_DIR}/data/shaders/bin)
 set(LIB_ARTIFACT_DIR ${CMAKE_CURRENT_SOURCE_DIR}/lib_artifacts)
 set(THIRD_PARTY_TOOLS_DIR ${CMAKE_CURRENT_SOURCE_DIR}/tools)
+set(ASAN_LINK_FLAGS "")
+set(ASAN_COMPILE_FLAGS "")
 
 option(BUILD_DEBUG "Enable Additional Debugging Information (e.g Vulkan Validation Layers)" OFF)
 option(ASAN_ENABLED "Enable Address Sanitizer" OFF)
+
+set(ALL_TARGETS tile_streaming city)
 
 # cmake macro -> compiler macro
 if(BUILD_DEBUG)
@@ -20,19 +24,19 @@ if(ASAN_ENABLED)
     add_compile_definitions(ASAN_ENABLED=1)
 endif()
 
+add_executable(tile_streaming)
 add_executable(city)
 
 # Compiler specific options
 if (MSVC)
-    target_compile_options(city PRIVATE
+    add_compile_options(
         /W4
         /wd4201  /wd4005 /wd4838 /wd4244 /wd4996 /wd4310 /wd4245 /wd4100 /wd4505
         /EHsc
-        /FI${CMAKE_SOURCE_DIR}/src/includes.hpp
     )
 
     if (BUILD_DEBUG)
-        target_compile_options(city PRIVATE /Z7)
+        add_compile_options(/Z7)
     endif()
 
     add_compile_definitions(BUILD_CONSOLE_INTERFACE ON)
@@ -40,60 +44,59 @@ if (MSVC)
     set(PLATFORM_LIB_ARTIFACT_DIR ${LIB_ARTIFACT_DIR}/win)
     set(PLATFORM_THIRD_PARTY_TOOLS_DIR ${THIRD_PARTY_TOOLS_DIR}/win)
 
-    if(ASAN_ENABLED)
-        target_compile_options(city PRIVATE /fsanitize=address)
-    endif()
-
+    string(APPEND ASAN_LINK_FLAGS "/INCREMENTAL:NO")
+    string(APPEND ASAN_COMPILE_FLAGS "/fsanitize=address")
 elseif(CMAKE_COMPILER_IS_GNUCXX)
     target_compile_options(city PRIVATE
     -maes
     -msse4
-    --include ${CMAKE_SOURCE_DIR}/src/includes.hpp
     )
-
     if(BUILD_DEBUG AND NOT NDEBUG)
         target_compile_options(city PRIVATE
-            -Wall -Wextra -Wno-attributes -Wno-format -Wno-unused-function -Wno-unused-parameter -Wno-narrowing -Wno-missing-field-initializers -Wno-sign-conversion -Wno-write-strings -Wno-class-memaccess -Wno-comment -Wno-pedantic
-        )
-        TARGET_LINK_OPTIONS(city PRIVATE)
+        -Wall -Wextra -Wno-attributes -Wno-format -Wno-unused-function -Wno-unused-parameter -Wno-narrowing -Wno-missing-field-initializers -Wno-sign-conversion -Wno-write-strings -Wno-class-memaccess -Wno-comment -Wno-pedantic
+    )
 
     else()
 
         target_compile_options(city PRIVATE -w)
     endif()
-
-    if(ASAN_ENABLED)
-        target_compile_options(city PRIVATE -fsanitize=address)
-    endif()
-
-
-    target_include_directories(city PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src ${CMAKE_CURRENT_SOURCE_DIR}/src/third_party/imgui)
-
     set(PLATFORM_LIB_ARTIFACT_DIR ${LIB_ARTIFACT_DIR}/linux)
     set(PLATFORM_THIRD_PARTY_TOOLS_DIR ${THIRD_PARTY_TOOLS_DIR}/linux)
 
-
-
+    string(APPEND ASAN_LINK_FLAGS "-fsanitize=address")
+    string(APPEND ASAN_COMPILE_FLAGS "-fsanitize=address")
 else()
     message(FATAL_ERROR "Unsupported compiler")
 endif()
 
+include_directories(${CMAKE_CURRENT_SOURCE_DIR}/src ${CMAKE_CURRENT_SOURCE_DIR}/src/third_party/imgui)
+
+
+# address sanitizer
+if(ASAN_ENABLED)
+    foreach(target ${ALL_TARGETS})
+        target_compile_options(${target} PRIVATE ${ASAN_COMPILE_FLAGS})
+        target_link_options(${target} PRIVATE ${ASAN_LINK_FLAGS})
+    endforeach()
+endif()
+
+
+# tracy profiler
 option(TRACY_PROFILE_ENABLE "Enable Tracy profiler" OFF)
 if (TRACY_PROFILE_ENABLE)
     add_compile_definitions(TRACY_ENABLE)
-    target_link_libraries(city PRIVATE TracyClient)
+    link_libraries(TracyClient)
 endif()
 
+# compile shaders
 file(GLOB_RECURSE GLSL_SOURCE_FILES
     "${SHADER_DIR}/*.vert"
     "${SHADER_DIR}/*.frag"
 )
-
 find_program(GLSL_VALIDATOR glslangValidator HINTS ${PLATFORM_THIRD_PARTY_TOOLS_DIR})
 if (NOT GLSL_VALIDATOR)
     message(FATAL_ERROR "glslangValidator not found!")
 endif()
-
 foreach(GLSL ${GLSL_SOURCE_FILES})
     get_filename_component(FILE_NAME ${GLSL} NAME_WE)
     get_filename_component(EXT_WITH_DOT ${GLSL} EXT)
@@ -109,14 +112,13 @@ foreach(GLSL ${GLSL_SOURCE_FILES})
     list(APPEND SPIRV_BINARY_FILES ${SPIRV})
 endforeach()
 add_custom_target(CompileShaders ALL DEPENDS ${SPIRV_BINARY_FILES})
-add_dependencies(city CompileShaders)
 
 target_sources(city
     PRIVATE
     src/main.cpp
 )
-target_include_directories(city
-    PRIVATE
+
+include_directories(
         ${THIRD_PARTY_LIBS_DIR}
         ${THIRD_PARTY_LIBS_DIR}/glfw/include
         ${THIRD_PARTY_LIBS_DIR}/ktx/include
@@ -124,8 +126,31 @@ target_include_directories(city
 )
 
 
-target_link_directories(city
-    PRIVATE
+# Cesium native dependencies
+find_package(zlib-ng REQUIRED)
+find_package(spdlog REQUIRED)
+find_package(glm REQUIRED)
+find_package(ada REQUIRED)
+file(GLOB_RECURSE CMAKE_HELPERS "${CMAKE_CURRENT_SOURCE_DIR}/third_party/cesium-native/cmake/*.cmake")
+foreach(helper ${CMAKE_HELPERS})
+    include(${helper})
+endforeach()
+
+add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/third_party/cesium-native/CesiumUtility)
+
+# city executable specifics
+add_dependencies(city CompileShaders)
+
+target_link_directories(city PRIVATE
         ${PLATFORM_LIB_ARTIFACT_DIR}
 )
-target_link_libraries(city PRIVATE glfw3 ktx_read vulkan)
+target_link_libraries(city PRIVATE glfw3 ktx_read vulkan CesiumUtility)
+
+# tile streaming specifics
+add_dependencies(tile_streaming CompileShaders)
+target_link_directories(tile_streaming PRIVATE
+        ${PLATFORM_LIB_ARTIFACT_DIR}
+)
+target_include_directories(tile_streaming PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
+target_sources(tile_streaming PRIVATE src/tile_streaming/tile_streaming.cpp)
+target_link_libraries(tile_streaming PRIVATE glfw3 ktx_read vulkan CesiumUtility)
