@@ -1,3 +1,17 @@
 {
-  "dependencies": ["ktx"]
+  "dependencies": ["ktx", "vulkan-loader", "glfw3"],
+  "overrides": [
+    {
+      "name": "ktx",
+      "version": "4.3.2#2"
+    },
+    {
+      "name": "vulkan-loader",
+      "version": "1.4.309.0#2"
+    },
+    {
+      "name": "glfw3",
+      "version": "3.4#1"
+    }
+  ]
 }

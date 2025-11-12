@@ -5,7 +5,6 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 set(THIRD_PARTY_LIBS_DIR ${CMAKE_CURRENT_SOURCE_DIR}/src/third_party)
 set(SHADER_DIR ${CMAKE_CURRENT_SOURCE_DIR}/data/shaders)
 set(SHADER_BINARY_DIR ${CMAKE_CURRENT_SOURCE_DIR}/data/shaders/bin)
-set(LIB_ARTIFACT_DIR ${CMAKE_CURRENT_SOURCE_DIR}/lib_artifacts)
 set(THIRD_PARTY_TOOLS_DIR ${CMAKE_CURRENT_SOURCE_DIR}/tools)
 set(ASAN_LINK_FLAGS "")
 set(ASAN_COMPILE_FLAGS "")
@@ -45,9 +44,6 @@ if (MSVC)
 
     add_compile_definitions(BUILD_CONSOLE_INTERFACE ON)
 
-    set(PLATFORM_LIB_ARTIFACT_DIR ${LIB_ARTIFACT_DIR}/win)
-    set(PLATFORM_THIRD_PARTY_TOOLS_DIR ${THIRD_PARTY_TOOLS_DIR}/win)
-
     string(APPEND ASAN_LINK_FLAGS "/INCREMENTAL:NO")
     string(APPEND ASAN_COMPILE_FLAGS "/fsanitize=address")
 elseif(CMAKE_COMPILER_IS_GNUCXX)
@@ -64,8 +60,6 @@ elseif(CMAKE_COMPILER_IS_GNUCXX)
 
         target_compile_options(city PRIVATE -w)
     endif()
-    set(PLATFORM_LIB_ARTIFACT_DIR ${LIB_ARTIFACT_DIR}/linux)
-    set(PLATFORM_THIRD_PARTY_TOOLS_DIR ${THIRD_PARTY_TOOLS_DIR}/linux)
 
     string(APPEND ASAN_LINK_FLAGS "-fsanitize=address")
     string(APPEND ASAN_COMPILE_FLAGS "-fsanitize=address")
@@ -124,11 +118,11 @@ target_sources(city
 
 include_directories(
         ${THIRD_PARTY_LIBS_DIR}
-        ${THIRD_PARTY_LIBS_DIR}/glfw/include
-        ${THIRD_PARTY_LIBS_DIR}/vulkan_sdk_v1_4_309_0/Include
 )
 
 find_package(Ktx CONFIG REQUIRED)
+find_package(glfw3 CONFIG REQUIRED)
+find_package(Vulkan REQUIRED)
 
 # city executable specifics
 add_dependencies(city CompileShaders)
@@ -136,13 +130,11 @@ add_dependencies(city CompileShaders)
 target_link_directories(city PRIVATE
         ${PLATFORM_LIB_ARTIFACT_DIR}
 )
-target_link_libraries(city PRIVATE glfw3 KTX::ktx vulkan )
+target_link_libraries(city PRIVATE glfw KTX::ktx Vulkan::Vulkan )
 
 # tile streaming specifics
 add_dependencies(tile_streaming CompileShaders)
-target_link_directories(tile_streaming PRIVATE
-        ${PLATFORM_LIB_ARTIFACT_DIR}
-)
+
 target_include_directories(tile_streaming PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
 target_sources(tile_streaming PRIVATE src/tile_streaming/tile_streaming.cpp)
-target_link_libraries(tile_streaming PRIVATE glfw3 vulkan KTX::ktx)
+target_link_libraries(tile_streaming PRIVATE glfw Vulkan::Vulkan KTX::ktx)
