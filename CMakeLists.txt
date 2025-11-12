@@ -29,15 +29,19 @@ add_executable(city)
 
 # Compiler specific options
 if (MSVC)
+    if(BUILD_DEBUG)
+        message(DEBUG "Setting MSVC flags to /Z7 for ccache compatibility.  Current flags: ${CMAKE_CXX_FLAGS_DEBUG}")
+        string(REPLACE "/Zi" "/Z7" CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG}")
+        string(REPLACE "/Zi" "/Z7" CMAKE_C_FLAGS_DEBUG "${CMAKE_C_FLAGS_DEBUG}")
+        string(REPLACE "/Zi" "/Z7" CMAKE_CXX_FLAGS_RELWITHDEBINFO "${CMAKE_CXX_FLAGS_RELWITHDEBINFO}")
+        string(REPLACE "/Zi" "/Z7" CMAKE_C_FLAGS_RELWITHDEBINFO "${CMAKE_C_FLAGS_RELWITHDEBINFO}")
+        message(DEBUG "New flags: ${CMAKE_CXX_FLAGS_DEBUG}")
+    endif()
     add_compile_options(
         /W4
         /wd4201  /wd4005 /wd4838 /wd4244 /wd4996 /wd4310 /wd4245 /wd4100 /wd4505
         /EHsc
     )
-
-    if (BUILD_DEBUG)
-        add_compile_options(/Z7)
-    endif()
 
     add_compile_definitions(BUILD_CONSOLE_INTERFACE ON)
 
@@ -121,22 +125,10 @@ target_sources(city
 include_directories(
         ${THIRD_PARTY_LIBS_DIR}
         ${THIRD_PARTY_LIBS_DIR}/glfw/include
-        ${THIRD_PARTY_LIBS_DIR}/ktx/include
         ${THIRD_PARTY_LIBS_DIR}/vulkan_sdk_v1_4_309_0/Include
 )
 
-
-# Cesium native dependencies
-find_package(zlib-ng REQUIRED)
-find_package(spdlog REQUIRED)
-find_package(glm REQUIRED)
-find_package(ada REQUIRED)
-file(GLOB_RECURSE CMAKE_HELPERS "${CMAKE_CURRENT_SOURCE_DIR}/third_party/cesium-native/cmake/*.cmake")
-foreach(helper ${CMAKE_HELPERS})
-    include(${helper})
-endforeach()
-
-add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/third_party/cesium-native/CesiumUtility)
+find_package(Ktx CONFIG REQUIRED)
 
 # city executable specifics
 add_dependencies(city CompileShaders)
@@ -144,7 +136,7 @@ add_dependencies(city CompileShaders)
 target_link_directories(city PRIVATE
         ${PLATFORM_LIB_ARTIFACT_DIR}
 )
-target_link_libraries(city PRIVATE glfw3 ktx_read vulkan CesiumUtility)
+target_link_libraries(city PRIVATE glfw3 KTX::ktx vulkan )
 
 # tile streaming specifics
 add_dependencies(tile_streaming CompileShaders)
@@ -153,4 +145,4 @@ target_link_directories(tile_streaming PRIVATE
 )
 target_include_directories(tile_streaming PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
 target_sources(tile_streaming PRIVATE src/tile_streaming/tile_streaming.cpp)
-target_link_libraries(tile_streaming PRIVATE glfw3 ktx_read vulkan CesiumUtility)
+target_link_libraries(tile_streaming PRIVATE glfw3 vulkan KTX::ktx)
