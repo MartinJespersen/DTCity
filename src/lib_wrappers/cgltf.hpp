@@ -35,6 +35,7 @@ struct BufferNode
     Buffer<city::Vertex3D> vertex_buffer;
     Buffer<U32> index_buffer;
 };
+
 static CgltfNode*
 ChildrenNodesDepthFirstPreOrder(Arena* arena, CgltfNode** stack, CgltfNode* node);
 static R_SamplerInfo

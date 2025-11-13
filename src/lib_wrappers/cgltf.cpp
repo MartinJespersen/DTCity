@@ -159,7 +159,8 @@ ChildrenNodesDepthFirstPreOrder(Arena* arena, CgltfNode** stack, CgltfNode* node
         }
     return next;
 }
-static CgltfResult
+
+g_internal CgltfResult
 CgltfParse(Arena* arena, String8 gltf_path, String8 root_node_name)
 {
     ScratchScope scratch = ScratchScope(&arena, 1);
@@ -266,6 +267,223 @@ CgltfParse(Arena* arena, String8 gltf_path, String8 root_node_name)
         .wrap_s = sampler->wrap_s,
         .wrap_t = sampler->wrap_t,
     };
+
+    cgltf_free(data);
+
+    U32 total_vertex_buffer_count = 0;
+    U32 total_index_buffer_count = 0;
+    for (BufferNode* buffer_node = buffer_node_list.first; buffer_node;
+         buffer_node = buffer_node->next)
+    {
+        total_vertex_buffer_count += buffer_node->vertex_buffer.size;
+        total_index_buffer_count += buffer_node->index_buffer.size;
+    }
+
+    Buffer<city::Vertex3D> vertex_buffer =
+        BufferAlloc<city::Vertex3D>(arena, total_vertex_buffer_count);
+    Buffer<U32> index_buffer = BufferAlloc<U32>(arena, total_index_buffer_count);
+
+    U32 cur_vertex_buffer_idx = 0;
+    U32 cur_index_buffer_idx = 0;
+    for (BufferNode* buffer_node = buffer_node_list.first; buffer_node;
+         buffer_node = buffer_node->next)
+    {
+        for (U32 i = 0; i < buffer_node->index_buffer.size; ++i)
+        {
+            buffer_node->index_buffer.data[i] =
+                buffer_node->index_buffer.data[i] + cur_index_buffer_idx;
+        }
+        BufferCopy(vertex_buffer, buffer_node->vertex_buffer, cur_vertex_buffer_idx, 0,
+                   buffer_node->vertex_buffer.size);
+        BufferCopy(index_buffer, buffer_node->index_buffer, cur_index_buffer_idx, 0,
+                   buffer_node->index_buffer.size);
+
+        cur_vertex_buffer_idx += buffer_node->vertex_buffer.size;
+        cur_index_buffer_idx += buffer_node->index_buffer.size;
+    }
+    return CgltfResult{vertex_buffer, index_buffer, cgltf_sampler};
+}
+
+struct gltfw_Primitive
+{
+    gltfw_Primitive* next;
+    Buffer<city::Vertex3D> vertices;
+    Buffer<U32> indices;
+    U32 tex_idx;
+};
+
+g_internal gltfw_Primitive*
+gltfw_primitive_create(Arena* arena, cgltf_data* data, cgltf_primitive* in_prim)
+{
+    gltfw_Primitive* primitive = PushStruct(arena, gltfw_Primitive);
+
+    cgltf_accessor* accessor_position = {};
+    cgltf_accessor* accessor_uv = {};
+
+    U32 expected_count = (U32)in_prim->attributes[0].data->count;
+    for (size_t i = 1; i < in_prim->attributes_count; ++i)
+    {
+        Assert(in_prim->attributes[i].data->count == expected_count);
+    }
+
+    for (size_t i = 0; i < in_prim->attributes_count; ++i)
+    {
+        cgltf_attribute* attr = &in_prim->attributes[i];
+
+        switch (attr->type)
+        {
+            case cgltf_attribute_type_position: accessor_position = attr->data; break;
+            case cgltf_attribute_type_texcoord:
+                if (attr->index == 0) // TEXCOORD_0
+                    accessor_uv = attr->data;
+                break;
+            default: break;
+        }
+    }
+
+    // get texture
+    cgltf_material* material = in_prim->material;
+    cgltf_pbr_metallic_roughness* pbr_material = &material->pbr_metallic_roughness;
+    cgltf_texture_view* texture_view = &pbr_material->base_color_texture;
+    primitive->tex_idx = cgltf_texture_index(data, texture_view->texture);
+
+    cgltf_accessor* accessor_indices = in_prim->indices;
+    primitive->indices = BufferAlloc<U32>(arena, accessor_indices->count);
+    primitive->vertices = BufferAlloc<city::Vertex3D>(arena, expected_count);
+    for (U32 indice_idx = 0; indice_idx < accessor_indices->count; indice_idx++)
+    {
+        U32 index = (U32)cgltf_accessor_read_index(accessor_indices, indice_idx);
+        primitive->indices.data[indice_idx] = index;
+    }
+
+    for (U32 vertex_idx = 0; vertex_idx < primitive->vertices.size; vertex_idx++)
+    {
+        if (accessor_position)
+            cgltf_accessor_read_float(accessor_position, vertex_idx,
+                                      primitive->vertices.data[vertex_idx].pos.v, 3);
+        if (accessor_uv)
+            cgltf_accessor_read_float(accessor_uv, vertex_idx,
+                                      primitive->vertices.data[vertex_idx].uv.v, 2);
+    }
+
+    return primitive;
+}
+
+struct gltfw_PrimitiveList
+{
+    gltfw_Primitive* first;
+    gltfw_Primitive* last;
+};
+
+struct gltfw_Texture
+{
+    Buffer<U8> tex_buf;
+    CgltfSampler sampler;
+};
+
+struct gltfw_GlbResult
+{
+    gltfw_PrimitiveList primitives;
+    Buffer<gltfw_Texture> samplers;
+};
+
+void
+gltfw_materials_read(Arena* arena, cgltf_data* data)
+{
+    Buffer<gltfw_Texture> textures = BufferAlloc<gltfw_Texture>(arena, data->textures_count);
+    for (U32 tex_idx = 0; tex_idx < textures.size; ++tex_idx)
+    {
+        gltfw_Texture* tex = &textures.data[tex_idx];
+        cgltf_texture* cgltf_tex = &data->textures[tex_idx];
+        cgltf_sampler* cgltf_sampler = cgltf_tex->sampler;
+
+        tex->sampler = {
+            .mag_filter = cgltf_sampler->mag_filter,
+            .min_filter = cgltf_sampler->min_filter,
+            .wrap_s = cgltf_sampler->wrap_s,
+            .wrap_t = cgltf_sampler->wrap_t,
+        };
+        tex->
+    }
+    // if (texture)
+    // {
+    //     if (texture->image)
+    //     {
+    //         cgltf_image* image = texture->image;
+    //         primitive->texture_idx = cgltf_image_index(data, image);
+    //     }
+
+    //     cgltf_sampler* sampler = texture->sampler;
+    //     if (sampler)
+    //     {
+    //         primitive->sampler_idx = cgltf_sampler_index(data, sampler);
+    //     }
+    // }
+}
+
+void
+glftw_glb_read(Arena* arena, String8 glb_path)
+{
+    ScratchScope scratch = ScratchScope(&arena, 1);
+    cgltf_options options = {};
+    cgltf_data* data = NULL;
+
+    cgltf_accessor* accessor_position = NULL;
+    cgltf_accessor* accessor_uv = NULL;
+
+    cgltf_result result = cgltf_parse_file(&options, (char*)glb_path.str, &data);
+    Assert(result == cgltf_result_success);
+    result = cgltf_load_buffers(&options, data, (char*)glb_path.str);
+    Assert(result == cgltf_result_success);
+
+    struct BufferNodeList
+    {
+        BufferNode* first;
+        BufferNode* last;
+    };
+
+    gltfw_Primitive* prim_list;
+
+    for (U32 scene_idx = 0; scene_idx < data->scenes_count; ++scene_idx)
+    {
+        cgltf_scene* scene = &data->scenes[scene_idx];
+        CgltfNode* first_node = PushStruct(scratch.arena, CgltfNode);
+        for (U32 root_node_idx = 0; root_node_idx < scene->nodes_count; ++root_node_idx)
+        {
+            first_node->node = scene->nodes[root_node_idx];
+            first_node->cur_child_index = 0;
+            CgltfNode* node_stack = {0};
+
+            for (CgltfNode* cur_node = first_node; cur_node;
+                 cur_node = ChildrenNodesDepthFirstPreOrder(scratch.arena, &node_stack, cur_node))
+            {
+                cgltf_node* node = cur_node->node;
+                cgltf_mesh* mesh = node->mesh;
+                if (mesh)
+                {
+                    for (U32 prim_idx = 0; prim_idx < mesh->primitives_count; ++prim_idx)
+                    {
+                        cgltf_primitive* primitive = &mesh->primitives[prim_idx];
+                        gltfw_Primitive* primitive_w =
+                            gltfw_primitive_create(arena, data, primitive);
+                        SLLStackPush(prim_list, primitive_w);
+                    }
+                }
+            }
+        }
+    }
+
+    Buffer<CgltfSampler> samplers = BufferAlloc<CgltfSampler>(scratch.arena, data->samplers_count);
+    cgltf_sampler* sampler = data->samplers;
+    for (U32 sampler_idx = 0; sampler_idx < data->samplers_count; ++sampler_idx)
+    {
+        samplers.data[sampler_idx] = {
+            .mag_filter = sampler->mag_filter,
+            .min_filter = sampler->min_filter,
+            .wrap_s = sampler->wrap_s,
+            .wrap_t = sampler->wrap_t,
+        };
+    }
 
     cgltf_free(data);
 
