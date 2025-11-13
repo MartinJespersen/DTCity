@@ -18,8 +18,6 @@ Diagnostics:
     ]
   ClangTidy:
     FastCheckFilter: Strict
-    Add:
-      ["clang-analyzer-deadcode.*", "misc-definitions-in-headers", "bugprone*"]
 Hover:
   ShowAKA: true
 ---

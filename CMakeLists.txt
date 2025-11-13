@@ -12,6 +12,13 @@ set(ASAN_COMPILE_FLAGS "")
 option(BUILD_DEBUG "Enable Additional Debugging Information (e.g Vulkan Validation Layers)" OFF)
 option(ASAN_ENABLED "Enable Address Sanitizer" OFF)
 
+# file(GLOB_RECURSE NO_CLANG_TIDY_SOURCES
+#      LIST_DIRECTORIES false
+#      RELATIVE "${CMAKE_CURRENT_SOURCE_DIR}"
+#      "src/third_party/**/*.cpp"
+# )
+# list(REMOVE_ITEM SOURCES ${NO_CLANG_TIDY_SOURCES})
+# set(CMAKE_CXX_CLANG_TIDY clang-tidy)
 set(ALL_TARGETS tile_streaming city)
 
 # cmake macro -> compiler macro
@@ -117,7 +124,7 @@ target_sources(city
 )
 
 include_directories(
-        ${THIRD_PARTY_LIBS_DIR}
+    ${THIRD_PARTY_LIBS_DIR}
 )
 
 find_package(Ktx CONFIG REQUIRED)
@@ -130,7 +137,8 @@ add_dependencies(city CompileShaders)
 target_link_directories(city PRIVATE
         ${PLATFORM_LIB_ARTIFACT_DIR}
 )
-target_link_libraries(city PRIVATE glfw KTX::ktx Vulkan::Vulkan )
+target_sources(city PRIVATE src/third_party/simdjson/simdjson.cpp src/third_party/imgui/imgui_inc.cpp)
+target_link_libraries(city PRIVATE glfw KTX::ktx Vulkan::Vulkan)
 
 # tile streaming specifics
 add_dependencies(tile_streaming CompileShaders)
