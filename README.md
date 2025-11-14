@@ -1,10 +1,27 @@
-# TODO for the first draft
+# Build instructions
 
-* Documentation
-  * Explain the different layers such as render, ui, etc.
-  * Create diagram of interaction between layers
-  * Explain how to navigate in the application
-  * Explain how to run the application with different bounding boxes.
+## Windows Prerequisites
+* Install the Microsoft C/C++ Build Tools to install the MSVC compiler, CMake and vcpkg.
+* Setup environment by running the script: ```vcvarsall.bat x64``` or ```use the x64 Native Tools Command Prompt``` that will automatically run the script when started.
+
+## 1. Create build directory
+
+The different cmake preset and its configuration can be found in CMakePreset.json file in the project root. It currently consist of 3 different presets or build configurations. These are Debug, Release and profile.
+
+An example of setting up the build for the Debug preset is shown below.
+- cmake --preset=Debug
+
+To build simply run:
+- cmake --build build
+
+### C Macros
+The following application specific macros are used to enable address sanitization, build tools and profiling:
+* -DBUILD_DEBUG (Additional debug information e.g vulkan validation layer support)
+* -DASAN_ENABLE=ON (enable address sanitizer support)
+* -DTRACY_PROFILE_ENABLE (Enable tracy profiling)
+
+# TODO along the way
+* Add linting and static analysis checks
 * Change the naming convention for functions from PascalCase to snake_case
 * Cleanup entrypoint main loop
 
@@ -30,6 +47,11 @@
 * Create github action to build system for linux and windows
 * Linux glslangValidator executable should be added to tools directory
 * Avoid validation layers in release builds
+* Documentation
+  * Explain the different layers such as render, ui, etc.
+  * Create diagram of interaction between layers
+  * Explain how to navigate in the application
+  * Explain how to run the application with different bounding boxes.
 
 # Future Improvements:
 * Layers should compile as seperate units
@@ -50,58 +72,19 @@
   * What to do about shaders
     * compiled directly into executable?
   * What to do about assets and textures that are not part of executable
+* Add performance tests in developer workflow and in Github Actions
 
 # Linux Info
-* For Khronos validation layer support (enabled if DEBUG_BUILD macro is defined) remember to install it
-  * The validation layer are part of the lunarg sdk that can be down loaded from the site: https://vulkan.lunarg.com/doc/sdk/1.4.328.1/linux/getting_started.html
 * Compiling (incl. linking) takes a very long time at the moment.
 * remember to link crypto and ssl libraries when using https and define the macro CPPHTTPLIB_OPENSSL_SUPPORT in httplib
 
-# Mule Test Program
-cl /W4 /std:c++20 /wd4201 /wd4505 /wd4005 /wd4838 /wd4244 /wd4996 /wd4310 /wd4245 /wd4100 /EHsc /Z7 mule.cpp /DBUILD_CONSOLE_INTERFACE
-
-# Jpg/png to ktx2
+# Helpers
+## Jpg/png to ktx2
 Use the ktx tool from khronos group. Example with mip map generation:
 ktx create --format R8G8B8A8_SRGB --generate-mipmap brick_wall.jpg brick_wall.ktx2
 
-# Long Term Features
-* Usage of Aarhus Municipality mesh data.
-
-# Prasad Suggestions
-Thanks for the URL. This is the project I completed in 2020. The only lesson to take away from that repo is to have cppcheck and googletest. If I were to start now, the following order of things could make sense.
-
-* Set project structure. Your favourite nginx could be a good example. Here is another example project structure.
-* Documentation for developers and users. It could either be a single one or separate for developers and users.
-* Use a build system (vcpkg / conan / CMake)
-* Basic documentation (three to ten pages) explaining the use of the software. It could be a markdown file in docs/README.md.
-* Github actions for running through all commands to build software. See an example. Let the action upload build binaries of different platforms on the workflow page.
-* Make the first release
-
-If you could complete these steps before our meeting on 13-Nov-2025, that would be a good milestone.
 
 ## Further steps could be
-* Add linting and static analysis checks
 * Add functionality tests for important features of the software.
-* Document the desired system architecture and design. This could either be done using mermaidjs or plantuml.
 * Create a work plan to move the current codebase to the desired design state.
-* Add performance tests in developer workflow and in Github Actions
 * Add unit tests for all new code contributions while updating the functionality tests
-
-# Build instructions
-## Windows Prerequisites
-* Install the Microsoft C/C++ Build Tools to install the MSVC compiler, CMake and vcpkg.
-* Setup environment by running the script: ```vcvarsall.bat x64``` or ```use the x64 Native Tools Command Prompt``` that will automatically run the script when started.
-
-## 1. Create build directory
-Debug:
-cmake -B build -DCMAKE_BUILD_TYPE=Debug
-Additional define macros:
-* -DBUILD_DEBUG (Additional debug information e.g vulkan validation layer support)
-* -DASAN_ENABLE=ON (enable address sanitizer support)
-* -DTRACY_PROFILE_ENABLE (Enable tracy profiling)
-
-Release:
-cmake -B build -DCMAKE_BUILD_TYPE=Release
-## 2. Build Project
-Debug/Release:
-cmake --build build
