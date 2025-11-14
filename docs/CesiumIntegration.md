@@ -1,4 +1,5 @@
 # Cesium Integration
+Cesium Native is currently being looked at as a library for showing 3D geospatial.
 
 ## Important functions
 ### updateView
