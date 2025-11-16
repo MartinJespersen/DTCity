@@ -1,8 +1,9 @@
 {
-  "version": 2,
+  "version": 3,
   "configurePresets": [
     {
-      "name": "Debug",
+      "name": "debug-base",
+      "hidden": true,
       "binaryDir": "${sourceDir}/build",
       "cacheVariables": {
         "CMAKE_TOOLCHAIN_FILE": "$env{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake",
@@ -12,7 +13,18 @@
       }
     },
     {
+      "name": "debug-ninja",
+      "inherits": "debug-base",
+      "generator": "Ninja"
+    },
+    {
+      "name": "debug-makefiles",
+      "inherits": "debug-base",
+      "generator": "Unix Makefiles"
+    },
+    {
       "name": "Release",
+      "generator": "Ninja",
       "binaryDir": "${sourceDir}/build",
       "cacheVariables": {
         "CMAKE_TOOLCHAIN_FILE": "$env{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake",
@@ -21,6 +33,7 @@
     },
     {
       "name": "Profile",
+      "generator": "Ninja",
       "binaryDir": "${sourceDir}/build",
       "cacheVariables": {
         "CMAKE_TOOLCHAIN_FILE": "$env{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake",
