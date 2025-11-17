@@ -39,7 +39,7 @@ struct BufferNode
 static CgltfNode*
 ChildrenNodesDepthFirstPreOrder(Arena* arena, CgltfNode** stack, CgltfNode* node);
 static R_SamplerInfo
-SamplerFromCgltfSampler(CgltfSampler sampler);
+gltfw_sampler_from_cgltf_sampler(CgltfSampler sampler);
 static CgltfResult
 CgltfParse(Arena* arena, String8 gltf_path, String8 root_node_name);
 } // namespace wrapper

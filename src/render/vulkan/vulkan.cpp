@@ -11,7 +11,7 @@ VK_CtxSet(VK_Context* vk_ctx)
     g_vk_ctx = vk_ctx;
 }
 
-static VK_Context*
+inline static VK_Context*
 VK_CtxGet()
 {
     Assert(g_vk_ctx);
@@ -800,8 +800,12 @@ VK_AssetManagerTextureItemGet(R_Handle handle)
 
 template <typename T>
 static R_AssetItem<T>*
-VK_AssetManagerItemCreate(Arena* arena, R_AssetItemList<T>* list, R_AssetItem<T>** free_list)
+VK_AssetManagerItemCreate(R_AssetItemList<T>* list, R_AssetItem<T>** free_list)
 {
+    VK_Context* vk_ctx = VK_CtxGet();
+    VK_AssetManager* asset_mng = vk_ctx->asset_manager;
+    Arena* arena = asset_mng->arena;
+
     R_AssetItem<T>* asset_item = {0};
     if (*free_list)
     {
@@ -1764,13 +1768,13 @@ r_latest_hovered_object_id_get()
 }
 
 // ~mgj: Texture interface functions
-static R_Handle
-R_TextureLoad(R_SamplerInfo* sampler_info, String8 texture_path,
-              R_PipelineUsageType pipeline_usage_type)
+
+g_internal R_Handle
+r_texture_handle_create(R_SamplerInfo* sampler_info, R_PipelineUsageType pipeline_usage_type,
+                        r_TextureCreateInfo* tex_create_info)
 {
     VK_Context* vk_ctx = VK_CtxGet();
     VK_AssetManager* asset_manager = vk_ctx->asset_manager;
-
     // ~mgj: Create sampler
     VkSamplerCreateInfo sampler_create_info = {};
     VK_SamplerCreateInfoFromSamplerInfo(sampler_info, &sampler_create_info);
@@ -1778,24 +1782,18 @@ R_TextureLoad(R_SamplerInfo* sampler_info, String8 texture_path,
     sampler_create_info.maxAnisotropy = (F32)vk_ctx->msaa_samples;
     VkSampler vk_sampler = VK_SamplerCreate(vk_ctx->device, &sampler_create_info);
 
-    // Get texture dimensions
-    ktxTexture2* ktx_texture;
-    ktx_error_code_e ktxresult = ktxTexture2_CreateFromNamedFile(
-        (char*)texture_path.str, KTX_TEXTURE_CREATE_NO_STORAGE, &ktx_texture);
-    Assert(ktxresult == KTX_SUCCESS);
-
     // ~mgj: Create Image and Image View
     VmaAllocationCreateInfo vma_info = {.usage = VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE};
     VK_ImageAllocation image_alloc = VK_ImageAllocationCreate(
-        vk_ctx->allocator, ktx_texture->baseWidth, ktx_texture->baseHeight, VK_SAMPLE_COUNT_1_BIT,
-        VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_TILING_OPTIMAL,
+        vk_ctx->allocator, tex_create_info->base_width, tex_create_info->base_height,
+        VK_SAMPLE_COUNT_1_BIT, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_TILING_OPTIMAL,
         VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT |
             VK_IMAGE_USAGE_SAMPLED_BIT,
-        ktx_texture->numLevels, vma_info);
+        tex_create_info->mip_level_count, vma_info);
 
     VK_ImageViewResource image_view_resource =
         VK_ImageViewResourceCreate(vk_ctx->device, image_alloc.image, VK_FORMAT_R8G8B8A8_SRGB,
-                                   VK_IMAGE_ASPECT_COLOR_BIT, ktx_texture->numLevels);
+                                   VK_IMAGE_ASPECT_COLOR_BIT, tex_create_info->mip_level_count);
 
     // ~mgj: Choose Descriptor Set Layout and Create Descriptor Set
     VkDescriptorSetLayout desc_set_layout = NULL;
@@ -1814,14 +1812,33 @@ R_TextureLoad(R_SamplerInfo* sampler_info, String8 texture_path,
                                desc_set_layout, image_view_resource.image_view, vk_sampler);
 
     // ~mgj: Assign values to texture
-    R_AssetItem<VK_Texture>* asset_item = VK_AssetManagerItemCreate(
-        asset_manager->arena, &asset_manager->texture_list, &asset_manager->texture_free_list);
+    R_AssetItem<VK_Texture>* asset_item =
+        VK_AssetManagerItemCreate(&asset_manager->texture_list, &asset_manager->texture_free_list);
     VK_Texture* texture = &asset_item->item;
     texture->image_resource = {.image_alloc = image_alloc,
                                .image_view_resource = image_view_resource};
     texture->desc_set = desc_set;
     texture->sampler = vk_sampler;
     R_Handle texture_handle = {.u64 = (U64)asset_item};
+
+    return texture_handle;
+}
+
+static R_Handle
+r_texture_load(R_SamplerInfo* sampler_info, String8 texture_path,
+               R_PipelineUsageType pipeline_usage_type)
+{
+    VK_Context* vk_ctx = VK_CtxGet();
+    VK_AssetManager* asset_manager = vk_ctx->asset_manager;
+
+    // Get texture dimensions
+    ktxTexture2* ktx_texture;
+    ktx_error_code_e ktxresult = ktxTexture2_CreateFromNamedFile(
+        (char*)texture_path.str, KTX_TEXTURE_CREATE_NO_STORAGE, &ktx_texture);
+    Assert(ktxresult == KTX_SUCCESS);
+
+    R_Handle texture_handle =
+        r_texture_handle_create(sampler_info, pipeline_usage_type, ktx_texture);
 
     // ~mgj: make input ready for texture loading on thread
     R_ThreadInput* thread_input = VK_ThreadInputCreate();
@@ -1842,8 +1859,8 @@ R_BufferLoad(R_BufferInfo* buffer_info)
 {
     VK_Context* vk_ctx = VK_CtxGet();
     VK_AssetManager* asset_manager = vk_ctx->asset_manager;
-    R_AssetItem<VK_Buffer>* asset_item = VK_AssetManagerItemCreate(
-        asset_manager->arena, &asset_manager->buffer_list, &asset_manager->buffer_free_list);
+    R_AssetItem<VK_Buffer>* asset_item =
+        VK_AssetManagerItemCreate(&asset_manager->buffer_list, &asset_manager->buffer_free_list);
 
     // ~mgj: Create buffer allocation
     VmaAllocationCreateInfo vma_info = {0};

@@ -76,7 +76,7 @@ RoadCreate(String8 texture_path, String8 cache_path, osm_GCSBoundingBox* gcs_bbo
 
     road->texture_path = Str8PathFromStr8List(road->arena, {texture_path, S("road_texture.ktx2")});
 
-    road->texture_handle = R_TextureLoad(sampler_info, road->texture_path, R_PipelineUsageType_3D);
+    road->texture_handle = r_texture_load(sampler_info, road->texture_path, R_PipelineUsageType_3D);
     road->vertex_handle = R_BufferLoad(&vertex_buffer_info);
     road->index_handle = R_BufferLoad(&index_buffer_info);
 
@@ -713,7 +713,7 @@ CarSimCreate(String8 asset_path, String8 texture_path, U32 car_count, Road* road
     // parse gltf file
     String8 gltf_path = Str8PathFromStr8List(scratch.arena, {asset_path, S("cars/scene.gltf")});
     wrapper::CgltfResult parsed_result = wrapper::CgltfParse(arena, gltf_path, S("Car.013"));
-    R_SamplerInfo sampler_info = SamplerFromCgltfSampler(parsed_result.sampler);
+    R_SamplerInfo sampler_info = gltfw_sampler_from_cgltf_sampler(parsed_result.sampler);
     car_sim->vertex_buffer = parsed_result.vertex_buffer;
     car_sim->index_buffer = parsed_result.index_buffer;
     car_sim->sampler_info = sampler_info;
@@ -725,7 +725,7 @@ CarSimCreate(String8 asset_path, String8 texture_path, U32 car_count, Road* road
 
     car_sim->texture_path = Str8PathFromStr8List(arena, {texture_path, S("car_collection.ktx2")});
     car_sim->texture_handle =
-        R_TextureLoad(&sampler_info, car_sim->texture_path, R_PipelineUsageType_3DInstanced);
+        r_texture_load(&sampler_info, car_sim->texture_path, R_PipelineUsageType_3DInstanced);
     car_sim->vertex_handle = R_BufferLoad(&vertex_buffer_info);
     car_sim->index_handle = R_BufferLoad(&index_buffer_info);
 
@@ -886,9 +886,9 @@ BuildingsCreate(String8 cache_path, String8 texture_path, F32 road_height,
     buildings->roof_texture_path =
         Str8PathFromStr8List(arena, {texture_path, S("concrete042A.ktx2")});
     buildings->facade_texture_handle =
-        R_TextureLoad(sampler_info, buildings->facade_texture_path, R_PipelineUsageType_3D);
+        r_texture_load(sampler_info, buildings->facade_texture_path, R_PipelineUsageType_3D);
     buildings->roof_texture_handle =
-        R_TextureLoad(sampler_info, buildings->roof_texture_path, R_PipelineUsageType_3D);
+        r_texture_load(sampler_info, buildings->roof_texture_path, R_PipelineUsageType_3D);
 
     BuildingRenderInfo render_info;
     city::BuildingsBuffersCreate(arena, buildings, road_height, &render_info, node_utm_structure);

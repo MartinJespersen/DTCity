@@ -1,8 +1,10 @@
-
+#include "base/base_core.hpp"
+#include "render/vulkan/vulkan.hpp"
+#include <ktx.h>
 namespace wrapper
 {
 static R_SamplerInfo
-SamplerFromCgltfSampler(CgltfSampler sampler)
+gltfw_sampler_from_cgltf_sampler(CgltfSampler sampler)
 {
     R_Filter min_filter = R_Filter_Nearest;
     R_Filter mag_filter = R_Filter_Nearest;
@@ -378,7 +380,7 @@ struct gltfw_PrimitiveList
 struct gltfw_Texture
 {
     Buffer<U8> tex_buf;
-    CgltfSampler sampler;
+    R_SamplerInfo sampler;
 };
 
 struct gltfw_GlbResult
@@ -387,8 +389,31 @@ struct gltfw_GlbResult
     Buffer<gltfw_Texture> samplers;
 };
 
-void
-gltfw_materials_read(Arena* arena, cgltf_data* data)
+g_internal bool
+ktx2_check(U8* buf, U64 size)
+{
+    bool result = false;
+    const unsigned char ktx2_magic[12] = {0xab, 0x4b, 0x54, 0x58, 0x20, 0x32,
+                                          0x30, 0xbb, 0x0d, 0x0a, 0x1a, 0x0a};
+    if (size >= ArrayCount(ktx2_magic) && MemoryMatch(ktx2_magic, buf, ArrayCount(ktx2_magic)))
+    {
+        result = true;
+    }
+    return result;
+}
+
+g_internal void
+r_texture_load(ktxTexture2* ktx2)
+{
+    VK_Context* vk_ctx = VK_CtxGet();
+    VK_AssetManager* asset_mng = vk_ctx->asset_manager;
+
+    R_AssetItem<VK_Texture>* asset =
+        VK_AssetManagerItemCreate(&asset_mng->texture_list, &asset_mng->texture_free_list);
+}
+
+g_internal Buffer<gltfw_Texture>
+gltfw_textures_read(Arena* arena, cgltf_data* data, R_PipelineUsageType usage_type)
 {
     Buffer<gltfw_Texture> textures = BufferAlloc<gltfw_Texture>(arena, data->textures_count);
     for (U32 tex_idx = 0; tex_idx < textures.size; ++tex_idx)
@@ -397,28 +422,29 @@ gltfw_materials_read(Arena* arena, cgltf_data* data)
         cgltf_texture* cgltf_tex = &data->textures[tex_idx];
         cgltf_sampler* cgltf_sampler = cgltf_tex->sampler;
 
-        tex->sampler = {
+        CgltfSampler gltfw_sampler = {
             .mag_filter = cgltf_sampler->mag_filter,
             .min_filter = cgltf_sampler->min_filter,
             .wrap_s = cgltf_sampler->wrap_s,
             .wrap_t = cgltf_sampler->wrap_t,
         };
-        tex->
-    }
-    // if (texture)
-    // {
-    //     if (texture->image)
-    //     {
-    //         cgltf_image* image = texture->image;
-    //         primitive->texture_idx = cgltf_image_index(data, image);
-    //     }
 
-    //     cgltf_sampler* sampler = texture->sampler;
-    //     if (sampler)
-    //     {
-    //         primitive->sampler_idx = cgltf_sampler_index(data, sampler);
-    //     }
-    // }
+        tex->sampler = gltfw_sampler_from_cgltf_sampler(gltfw_sampler);
+        cgltf_buffer_view* buf_view = cgltf_tex->image->buffer_view;
+        cgltf_buffer* c_buf = buf_view->buffer;
+        U8* buf = (U8*)c_buf->data + buf_view->offset;
+        if (ktx2_check(buf, buf_view->size))
+        {
+            ktxTexture2* ktx;
+            ktx_error_code_e err = ktxTexture2_CreateFromMemory(buf, buf_view->size, NULL, &ktx);
+            if ((err == false) && ktx)
+            {
+                R_Handle handle = r_texture_handle_create(&tex->sampler, usage_type, ktx);
+            }
+        }
+    }
+
+    return textures;
 }
 
 void

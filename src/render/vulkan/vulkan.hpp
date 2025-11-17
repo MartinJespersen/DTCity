@@ -236,7 +236,7 @@ static R_AssetItem<VK_Texture>*
 VK_AssetManagerTextureItemGet(R_Handle handle);
 template <typename T>
 static R_AssetItem<T>*
-VK_AssetManagerItemCreate(Arena* arena, R_AssetItemList<T>* list, R_AssetItem<T>** free_list);
+VK_AssetManagerItemCreate(R_AssetItemList<T>* list, R_AssetItem<T>** free_list);
 template <typename T>
 static R_AssetItem<T>*
 VK_AssetManagerItemGet(R_AssetItemList<T>* list, R_Handle handle);
