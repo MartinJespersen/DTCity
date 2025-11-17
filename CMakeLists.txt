@@ -5,7 +5,6 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 set(THIRD_PARTY_LIBS_DIR ${CMAKE_CURRENT_SOURCE_DIR}/src/third_party)
 set(SHADER_DIR ${CMAKE_CURRENT_SOURCE_DIR}/data/shaders)
 set(SHADER_BINARY_DIR ${CMAKE_CURRENT_SOURCE_DIR}/data/shaders/bin)
-set(THIRD_PARTY_TOOLS_DIR ${CMAKE_CURRENT_SOURCE_DIR}/tools)
 set(ASAN_LINK_FLAGS "")
 set(ASAN_COMPILE_FLAGS "")
 
@@ -92,7 +91,7 @@ file(GLOB_RECURSE GLSL_SOURCE_FILES
     "${SHADER_DIR}/*.frag"
 )
 
-find_program(GLSL_VALIDATOR glslangValidator HINTS ${PLATFORM_THIRD_PARTY_TOOLS_DIR})
+find_program(GLSL_VALIDATOR glslangValidator)
 if (NOT GLSL_VALIDATOR)
     message(FATAL_ERROR "glslangValidator not found!")
 endif()
