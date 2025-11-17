@@ -4,8 +4,6 @@ on:
   push:
     branches:
       - releases
-    tags:
-      - "*"
 jobs:
   build:
     strategy:
@@ -30,12 +28,11 @@ jobs:
         shell: cmd
         run: |
           call "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Auxiliary\Build\vcvarsall.bat" x64
-          set "VCPKG_ROOT=.\vcpkg"
+          set "VCPKG_ROOT=%GITHUB_WORKSPACE%\vcpkg"
           git clone https://github.com/microsoft/vcpkg.git %VCPKG_ROOT%
           cd %VCPKG_ROOT%
           call bootstrap-vcpkg.bat
-          cd ..
-
+          cd %GITHUB_WORKSPACE%
           cmake --preset=release-windows
           cmake --build build
           %SystemRoot%\System32\tar.exe -a -c -f ${{ env.ZIP_NAME }} build/city.exe data/*
