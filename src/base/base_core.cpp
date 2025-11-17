@@ -409,26 +409,17 @@ bit_size_from_arch(Arch arch)
     U64 arch_bitsize = 0;
     switch (arch)
     {
-    case Arch_x64:
-        arch_bitsize = 64;
-        break;
-    case Arch_x86:
-        arch_bitsize = 32;
-        break;
-    case Arch_arm64:
-        arch_bitsize = 64;
-        break;
-    case Arch_arm32:
-        arch_bitsize = 32;
-        break;
-    default:
-        break;
+        case Arch_x64: arch_bitsize = 64; break;
+        case Arch_x86: arch_bitsize = 32; break;
+        case Arch_arm64: arch_bitsize = 64; break;
+        case Arch_arm32: arch_bitsize = 32; break;
+        default: break;
     }
     return arch_bitsize;
 }
 
 static U64
-max_instruction_size_from_arch(Arch arch)
+max_instruction_size_from_arch(Arch arch) // NOLINT(misc-unused-parameters)
 {
     // TODO(rjf): make this real
     return 64;
@@ -545,6 +536,7 @@ date_time_from_micro_seconds(U64 time)
     return (result);
 }
 
+// NOLINTBEGIN(bugprone-branch-clone)
 static DateTime
 date_time_from_unix_time(U64 unix_time)
 {
@@ -562,53 +554,30 @@ date_time_from_unix_time(U64 unix_time)
             U64 c = 0;
             switch (date.month)
             {
-            case Month_Jan:
-                c = 31;
-                break;
-            case Month_Feb:
-            {
-                if ((date.year % 4 == 0) && ((date.year % 100) != 0 || (date.year % 400) == 0))
+                case Month_Jan: c = 31; break;
+                case Month_Feb:
                 {
-                    c = 29;
+                    if ((date.year % 4 == 0) && ((date.year % 100) != 0 || (date.year % 400) == 0))
+                    {
+                        c = 29;
+                    }
+                    else
+                    {
+                        c = 28;
+                    }
                 }
-                else
-                {
-                    c = 28;
-                }
-            }
-            break;
-            case Month_Mar:
-                c = 31;
                 break;
-            case Month_Apr:
-                c = 30;
-                break;
-            case Month_May:
-                c = 31;
-                break;
-            case Month_Jun:
-                c = 30;
-                break;
-            case Month_Jul:
-                c = 31;
-                break;
-            case Month_Aug:
-                c = 31;
-                break;
-            case Month_Sep:
-                c = 30;
-                break;
-            case Month_Oct:
-                c = 31;
-                break;
-            case Month_Nov:
-                c = 30;
-                break;
-            case Month_Dec:
-                c = 31;
-                break;
-            default:
-                InvalidPath;
+                case Month_Mar: c = 31; break;
+                case Month_Apr: c = 30; break;
+                case Month_May: c = 31; break;
+                case Month_Jun: c = 30; break;
+                case Month_Jul: c = 31; break;
+                case Month_Aug: c = 31; break;
+                case Month_Sep: c = 30; break;
+                case Month_Oct: c = 31; break;
+                case Month_Nov: c = 30; break;
+                case Month_Dec: c = 31; break;
+                default: InvalidPath;
             }
             if (date.day <= c)
             {
@@ -622,7 +591,8 @@ exit:;
 
     return date;
 }
-
+// NOLINTEND(bugprone-branch-clone)
+//
 ////////////////////////////////
 //~ rjf: Non-Fancy Ring Buffer Reads/Writes
 

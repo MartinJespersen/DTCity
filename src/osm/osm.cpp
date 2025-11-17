@@ -198,7 +198,7 @@ osm_node_hashmap_insert(U64 node_id, osm_Way* way, osm_UtmNode** out)
 }
 
 static osm_UtmNode*
-osm_random_neighbour_node_get(osm_UtmNode* node, Buffer<osm_UtmNodeList> utm_node_hashmap)
+osm_random_neighbour_node_get(osm_UtmNode* node)
 {
     // Calculate roadway count for the node
     U32 roadway_count = 0;

@@ -208,28 +208,31 @@ VK_Model3DInstancePipelineCreate(VK_Context* vk_ctx, String8 shader_path)
     VkPipelineVertexInputStateCreateInfo vertex_input_info{};
     vertex_input_info.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
 
+    U32 uv_offset = (U32)offsetof(city::Vertex3D, uv);
+    U32 x_basis_offset = (U32)offsetof(city::Model3DInstance, x_basis);
+    U32 y_basis_offset = (U32)offsetof(city::Model3DInstance, y_basis);
+    U32 z_basis_offset = (U32)offsetof(city::Model3DInstance, z_basis);
+    U32 w_basis_offset = (U32)offsetof(city::Model3DInstance, w_basis);
+
     VkVertexInputAttributeDescription attr_desc[] = {
         {.location = 0, .binding = 0, .format = VK_FORMAT_R32G32B32_SFLOAT},
-        {.location = 1,
-         .binding = 0,
-         .format = VK_FORMAT_R32G32_SFLOAT,
-         .offset = offsetof(city::Vertex3D, uv)},
+        {.location = 1, .binding = 0, .format = VK_FORMAT_R32G32_SFLOAT, .offset = uv_offset},
         {.location = 2,
          .binding = 1,
          .format = VK_FORMAT_R32G32B32A32_SFLOAT,
-         .offset = (U32)offsetof(city::Model3DInstance, x_basis)},
+         .offset = x_basis_offset},
         {.location = 3,
          .binding = 1,
          .format = VK_FORMAT_R32G32B32A32_SFLOAT,
-         .offset = (U32)offsetof(city::Model3DInstance, y_basis)},
+         .offset = y_basis_offset},
         {.location = 4,
          .binding = 1,
          .format = VK_FORMAT_R32G32B32A32_SFLOAT,
-         .offset = (U32)offsetof(city::Model3DInstance, z_basis)},
+         .offset = z_basis_offset},
         {.location = 5,
          .binding = 1,
          .format = VK_FORMAT_R32G32B32A32_SFLOAT,
-         .offset = (U32)offsetof(city::Model3DInstance, w_basis)},
+         .offset = w_basis_offset},
     };
     VkVertexInputBindingDescription input_desc[] = {
         {.binding = 0, .stride = sizeof(city::Vertex3D), .inputRate = VK_VERTEX_INPUT_RATE_VERTEX},
@@ -388,16 +391,16 @@ VK_Model3DPipelineCreate(VK_Context* vk_ctx, String8 shader_path)
     VkPipelineVertexInputStateCreateInfo vertex_input_info{};
     vertex_input_info.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
 
+    U32 uv_offset = offsetof(city::Vertex3D, uv);
+    U32 object_id_offset = offsetof(city::Vertex3D, object_id);
+
     VkVertexInputAttributeDescription attr_desc[] = {
         {.location = 0, .binding = 0, .format = VK_FORMAT_R32G32B32_SFLOAT},
-        {.location = 1,
-         .binding = 0,
-         .format = VK_FORMAT_R32G32_SFLOAT,
-         .offset = offsetof(city::Vertex3D, uv)},
+        {.location = 1, .binding = 0, .format = VK_FORMAT_R32G32_SFLOAT, .offset = uv_offset},
         {.location = 2,
          .binding = 0,
          .format = vk_ctx->object_id_format,
-         .offset = offsetof(city::Vertex3D, object_id)}};
+         .offset = object_id_offset}};
     VkVertexInputBindingDescription input_desc[] = {
         {.binding = 0, .stride = sizeof(city::Vertex3D), .inputRate = VK_VERTEX_INPUT_RATE_VERTEX}};
 
@@ -1056,7 +1059,7 @@ VK_Model3DDraw(R_Handle texture_handle, R_Handle vertex_buffer_handle, R_Handle 
         VK_AssetManagerItemGet(&asset_manager->buffer_list, index_buffer_handle);
     R_AssetItem<VK_Texture>* asset_texture = VK_AssetManagerTextureItemGet(texture_handle);
 
-    if (asset_index_buffer->is_loaded && asset_index_buffer->is_loaded && asset_texture->is_loaded)
+    if (asset_index_buffer->is_loaded && asset_texture->is_loaded)
     {
         VK_Model3DBucketAdd(&asset_vertex_buffer->item.buffer_alloc,
                             &asset_index_buffer->item.buffer_alloc, asset_texture->item.desc_set,
@@ -1076,7 +1079,7 @@ VK_Model3DInstanceDraw(R_Handle texture_handle, R_Handle vertex_buffer_handle,
         VK_AssetManagerItemGet(&asset_manager->buffer_list, index_buffer_handle);
     R_AssetItem<VK_Texture>* asset_texture = VK_AssetManagerTextureItemGet(texture_handle);
 
-    if (asset_index_buffer->is_loaded && asset_index_buffer->is_loaded && asset_texture->is_loaded)
+    if (asset_index_buffer->is_loaded && asset_texture->is_loaded)
     {
         VK_Model3DInstanceBucketAdd(&asset_vertex_buffer->item.buffer_alloc,
                                     &asset_index_buffer->item.buffer_alloc,
@@ -1805,7 +1808,7 @@ R_TextureLoad(R_SamplerInfo* sampler_info, String8 texture_path,
             desc_set_layout = vk_ctx->model_3D_pipeline.descriptor_set_layout;
             break;
         case R_PipelineUsageType_3DInstanced:
-            desc_set_layout = vk_ctx->model_3D_pipeline.descriptor_set_layout;
+            desc_set_layout = vk_ctx->model_3D_instance_pipeline.descriptor_set_layout;
             break;
         default: InvalidPath;
     }

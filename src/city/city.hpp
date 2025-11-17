@@ -136,13 +136,11 @@ RoadIntersectionPointsFind(Road* road, RoadSegment* in_out_segment, osm_Way* cur
                            osm_Network* node_utm_structure);
 // ~mgj: Cars
 static CarSim*
-CarSimCreate(String8 asset_path, String8 texture_path, U32 car_count, Road* road,
-             osm_Network* node_utm_structure);
+CarSimCreate(String8 asset_path, String8 texture_path, U32 car_count, Road* road);
 static void
 CarSimDestroy(CarSim* car_sim);
 static Buffer<Model3DInstance>
-CarUpdate(Arena* arena, CarSim* car, Road* road, F32 time_delta,
-          Buffer<osm_UtmNodeList> utm_node_hashmap);
+CarUpdate(Arena* arena, CarSim* car, F32 time_delta);
 
 // ~mgj: Buildings
 static Buildings*
@@ -152,8 +150,8 @@ BuildingsCreate(String8 cache_path, String8 texture_path, F32 road_height,
 static void
 BuildingDestroy(Buildings* building);
 static void
-BuildingsBuffersCreate(Arena* arena, Buildings* buildings, F32 road_height,
-                       BuildingRenderInfo* out_render_info, osm_Network* node_utm_structure);
+BuildingsBuffersCreate(Arena* arena, F32 road_height, BuildingRenderInfo* out_render_info,
+                       osm_Network* node_utm_structure);
 static Buffer<U32>
 EarClipping(Arena* arena, Buffer<Vec2F32> node_buffer);
 
@@ -162,8 +160,7 @@ UtmFromBoundingBox(osm_GCSBoundingBox bbox);
 
 // ~mgj: HTTP and caching
 static String8
-city_http_call_wrapper(Arena* arena, String8 query_str, HTTP_RequestParams* params,
-                       osm_GCSBoundingBox* bbox);
+city_http_call_wrapper(Arena* arena, String8 query_str, HTTP_RequestParams* params);
 static Result<String8>
 city_cache_read(Arena* arena, String8 cache_file, String8 cache_meta_file, String8 hash_input);
 static void

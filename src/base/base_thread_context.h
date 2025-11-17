@@ -50,7 +50,7 @@ LogMsgF(LogMsgKind kind, char* fmt, ...);
 #define log_user_error(s) LogMsg(LogMsgKind_UserError, (s))
 #define log_user_errorf(...) LogMsgF(LogMsgKind_UserError, __VA_ARGS__)
 
-#define LogInfoNamedBlock(s) DeferLoop(LogInfoF("%s:\n{\n", (s.str)), LogInfoF("}\n"))
+#define LogInfoNamedBlock(s) DeferLoop(LogInfoF("%s:\n{\n", ((s).str)), LogInfoF("}\n"))
 #define LogInfoNamedBlockF(...)                                                                    \
     DeferLoop((LogInfoF(__VA_ARGS__), LogInfoF(":\n{\n")), LogInfoF("}\n"))
 

@@ -586,6 +586,6 @@ exit_with_error(const char* msg, ...);
 // string manipulation helpers
 #define CStrEqual(a, b) (!strcmp((a), (b)))
 // ~mgj: String Macros
-#define Str8Cmp(a, b) (!strcmp(((char*)a.str), ((char*)b.str)))
-#define S(str) Str8((U8*)str, sizeof(str) - 1)
+#define Str8Cmp(a, b) (!strcmp(((char*)(a).str), ((char*)(b).str)))
+#define S(str) Str8((U8*)(str), sizeof(str) - 1)
 #endif // BASE_STRINGS_H

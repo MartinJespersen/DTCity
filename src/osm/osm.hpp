@@ -148,4 +148,4 @@ static osm_RoadNode*
 osm_node_find(Buffer<osm_RoadNodeList> node_hashmap, U64 node_id);
 
 static osm_UtmNode*
-osm_random_neighbour_node_get(osm_UtmNode* node, Buffer<osm_UtmNodeList> utm_node_hashmap);
+osm_random_neighbour_node_get(osm_UtmNode* node);

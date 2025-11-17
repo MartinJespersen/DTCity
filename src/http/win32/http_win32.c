@@ -77,6 +77,7 @@ static HTTP_Response HTTP_Request(Arena *arena, String8 host, String8 path,
 
     //- rjf: convert method to verb wchar
     const WCHAR *verb = L"GET";
+    (void)verb;
     switch (params->method) {
     default:
     case HTTP_Method_Get: {

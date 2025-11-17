@@ -2,7 +2,7 @@ If:
   PathMatch: .*
 CompileFlags:
   CompilationDatabase: build
-  Add: [/FI../src/includes.hpp]
+  Add: [/FI../src/includes.hpp, -std=c++20]
 
 Index:
   Background: Build
@@ -10,12 +10,6 @@ Index:
 
 Diagnostics:
   UnusedIncludes: None
-  Suppress:
-    [
-      "unused-function",
-      "redefinition_different_kind",
-      "too_many_args_in_macro_invoc",
-    ]
   ClangTidy:
     FastCheckFilter: Strict
 Hover:

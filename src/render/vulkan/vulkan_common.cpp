@@ -33,28 +33,26 @@ VK_DestroyDebugUtilsMessengerEXT(VkInstance instance, VkDebugUtilsMessengerEXT d
 }
 
 // queue family
-VkFormat
+static VkFormat
 VK_SupportedFormat(VkPhysicalDevice physical_device, VkFormat* candidates, U32 candidate_count,
                    VkImageTiling tiling, VkFormatFeatureFlags features)
 {
+    VkFormat format = VK_FORMAT_UNDEFINED;
     for (U32 i = 0; i < candidate_count; i++)
     {
         VkFormatProperties props;
         vkGetPhysicalDeviceFormatProperties(physical_device, candidates[i], &props);
 
-        if (tiling == VK_IMAGE_TILING_LINEAR && (props.linearTilingFeatures & features) == features)
-        {
-            return candidates[i];
-        }
-        else if (tiling == VK_IMAGE_TILING_OPTIMAL &&
-                 (props.optimalTilingFeatures & features) == features)
+        if (tiling == VK_IMAGE_TILING_LINEAR &&
+                ((props.linearTilingFeatures & features) == features) ||
+            ((props.optimalTilingFeatures & features) == features))
         {
             return candidates[i];
         }
     }
 
     exit_with_error("failed to find supported format!");
-    return VK_FORMAT_UNDEFINED;
+    return format;
 }
 
 static void
@@ -235,7 +233,7 @@ VK_CreateInstance(VK_Context* vk_ctx)
     ScratchEnd(scratch);
 }
 
-PFN_vkCmdSetColorWriteEnableEXT vkCmdSetColorWriteEnableExt = VK_NULL_HANDLE;
+static PFN_vkCmdSetColorWriteEnableEXT vkCmdSetColorWriteEnableExt = VK_NULL_HANDLE;
 static void
 VK_LogicalDeviceCreate(Arena* arena, VK_Context* vk_ctx)
 {
@@ -442,6 +440,7 @@ VK_DebugCallback(VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity,
                  VkDebugUtilsMessageTypeFlagsEXT messageType,
                  const VkDebugUtilsMessengerCallbackDataEXT* pCallbackData, void* pUserData)
 {
+    (void)pCallbackData;
     (void)pUserData;
     (void)messageType;
     (void)messageSeverity;

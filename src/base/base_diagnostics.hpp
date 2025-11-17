@@ -1,7 +1,7 @@
 #pragma once
 #include <stdlib.h>
 
-#define ASSERT(condition, msg) assert(((void)msg, condition))
+#define ASSERT(condition, msg) assert(((void)(msg), (condition)))
 
 #if defined(BUILD_DEBUG)
 #define DEBUG_LOG(message, ...)                                                                    \

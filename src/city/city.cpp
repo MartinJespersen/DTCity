@@ -43,7 +43,7 @@ RoadCreate(String8 texture_path, String8 cache_path, osm_GCSBoundingBox* gcs_bbo
     String8 http_data = cache_read_result.v;
     if (cache_read_result.err)
     {
-        http_data = city_http_call_wrapper(scratch.arena, query_str, &params, gcs_bbox);
+        http_data = city_http_call_wrapper(scratch.arena, query_str, &params);
         city_cache_write(cache_data_file, cache_meta_file, http_data, input_str);
     }
     osm_RoadNodeParseResult json_result =
@@ -53,7 +53,7 @@ RoadCreate(String8 texture_path, String8 cache_path, osm_GCSBoundingBox* gcs_bbo
     while (error && json_result.error)
     {
         ERROR_LOG("RoadCreate: Failed to create Road Data Structure\n Retrying...\n");
-        http_data = city_http_call_wrapper(scratch.arena, query_str, &params, gcs_bbox);
+        http_data = city_http_call_wrapper(scratch.arena, query_str, &params);
         if (http_data.size)
         {
             json_result = wrapper::node_buffer_from_simd_json(scratch.arena, http_data, 100);
@@ -344,8 +344,7 @@ city_cache_needs_update(String8 cache_data_file, String8 cache_meta_file)
 }
 
 static String8
-city_http_call_wrapper(Arena* arena, String8 query_str, HTTP_RequestParams* params,
-                       osm_GCSBoundingBox* bbox)
+city_http_call_wrapper(Arena* arena, String8 query_str, HTTP_RequestParams* params)
 {
     DEBUG_LOG("DataFetch: Fetching data from overpass-api.de\n");
     String8 host = S("https://overpass-api.de");
@@ -701,8 +700,7 @@ CarCenterHeightOffset(Buffer<Vertex3D> vertices)
 }
 
 static CarSim*
-CarSimCreate(String8 asset_path, String8 texture_path, U32 car_count, Road* road,
-             osm_Network* node_utm_structure)
+CarSimCreate(String8 asset_path, String8 texture_path, U32 car_count, Road* road)
 {
     ScratchScope scratch = ScratchScope(0, 0);
     Arena* arena = ArenaAlloc();
@@ -735,8 +733,7 @@ CarSimCreate(String8 asset_path, String8 texture_path, U32 car_count, Road* road
     for (U32 i = 0; i < car_count; ++i)
     {
         osm_UtmNode* source_node = osm_random_utm_node_get();
-        osm_UtmNode* target_node =
-            osm_random_neighbour_node_get(source_node, node_utm_structure->utm_node_hashmap);
+        osm_UtmNode* target_node = osm_random_neighbour_node_get(source_node);
         city::Car* car = &car_sim->cars.data[i];
         car->source = source_node;
         car->target = target_node;
@@ -761,8 +758,7 @@ CarSimDestroy(CarSim* car_sim)
 }
 
 static Buffer<Model3DInstance>
-CarUpdate(Arena* arena, CarSim* car, Road* road, F32 time_delta,
-          Buffer<osm_UtmNodeList> utm_node_hashmap)
+CarUpdate(Arena* arena, CarSim* car, F32 time_delta)
 {
     Buffer<Model3DInstance> instance_buffer = BufferAlloc<Model3DInstance>(arena, car->cars.size);
     Model3DInstance* instance;
@@ -789,8 +785,7 @@ CarUpdate(Arena* arena, CarSim* car, Road* road, F32 time_delta,
         if ((target_pos.x >= min_x && target_pos.x <= max_x) &&
             (target_pos.y >= min_y && target_pos.y <= max_y))
         {
-            osm_UtmNode* new_target =
-                osm_random_neighbour_node_get(car_info->target, utm_node_hashmap);
+            osm_UtmNode* new_target = osm_random_neighbour_node_get(car_info->target);
             glm::vec3 new_target_pos =
                 glm::vec3(new_target->pos.x, car_info->cur_pos.y, new_target->pos.y);
             glm::vec3 new_dir = glm::normalize(new_target_pos - new_pos);
@@ -855,7 +850,7 @@ BuildingsCreate(String8 cache_path, String8 texture_path, F32 road_height,
         String8 http_data = cache_read_result.v;
         if (cache_read_result.err)
         {
-            http_data = city_http_call_wrapper(scratch.arena, query_str, &params, gcs_bbox);
+            http_data = city_http_call_wrapper(scratch.arena, query_str, &params);
             city_cache_write(cache_data_file, cache_meta_file, http_data, input_str);
         }
         osm_RoadNodeParseResult json_result =
@@ -865,7 +860,7 @@ BuildingsCreate(String8 cache_path, String8 texture_path, F32 road_height,
         while (error && json_result.error)
         {
             ERROR_LOG("BuildingsCreate: Failed to parse OSM node data from json file\n");
-            http_data = city_http_call_wrapper(scratch.arena, query_str, &params, gcs_bbox);
+            http_data = city_http_call_wrapper(scratch.arena, query_str, &params);
             if (http_data.size)
             {
                 json_result = wrapper::node_buffer_from_simd_json(scratch.arena, http_data, 100);
@@ -891,7 +886,7 @@ BuildingsCreate(String8 cache_path, String8 texture_path, F32 road_height,
         R_TextureLoad(sampler_info, buildings->roof_texture_path, R_PipelineUsageType_3D);
 
     BuildingRenderInfo render_info;
-    city::BuildingsBuffersCreate(arena, buildings, road_height, &render_info, node_utm_structure);
+    city::BuildingsBuffersCreate(arena, road_height, &render_info, node_utm_structure);
     R_BufferInfo vertex_buffer_info =
         R_BufferInfoFromTemplateBuffer(render_info.vertex_buffer, R_BufferType_Vertex);
     R_BufferInfo index_buffer_info =
@@ -938,8 +933,8 @@ AreTwoConnectedLineSegmentsCollinear(Vec2F32 prev, Vec2F32 cur, Vec2F32 next)
 // TODO: Built the roof, which requires a way to divide the concave polygons (that are the
 // buildings) and divide it into convex parts
 static void
-BuildingsBuffersCreate(Arena* arena, Buildings* buildings, F32 road_height,
-                       BuildingRenderInfo* out_render_info, osm_Network* node_utm_structure)
+BuildingsBuffersCreate(Arena* arena, F32 road_height, BuildingRenderInfo* out_render_info,
+                       osm_Network* node_utm_structure)
 {
     ScratchScope scratch = ScratchScope(&arena, 1);
     Buffer<osm_Way> ways = node_utm_structure->ways_arr[OsmKeyType_Building];

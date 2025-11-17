@@ -116,8 +116,8 @@
 
 #define Member(T, m) (((T*)0)->m)
 #define OffsetOf(T, m) IntFromPtr(&Member(T, m))
-#define MemberFromOffset(T, ptr, off) (T)((((U8*)ptr) + (off)))
-#define CastFromMember(T, m, ptr) (T*)(((U8*)ptr) - OffsetOf(T, m))
+#define MemberFromOffset(T, ptr, off) (T)((((U8*)(ptr)) + (off)))
+#define CastFromMember(T, m, ptr) (T*)(((U8*)(ptr)) - OffsetOf(T, m))
 
 ////////////////////////////////
 //~ rjf: For-Loop Construct Macros
@@ -126,10 +126,11 @@
 #define DeferLoopChecked(begin, end)                                                               \
     for (int _i_ = 2 * !(begin); (_i_ == 2 ? ((end), 0) : !_i_); _i_ += 1, (end))
 
-#define EachIndex(it, count) (U64 it = 0; it < (count); it += 1)
-#define EachElement(it, array) (U64 it = 0; it < ArrayCount(array); it += 1)
-#define EachEnumVal(type, it) (type it = (type)0; it < type##_COUNT; it = (type)(it + 1))
-#define EachNonZeroEnumVal(type, it) (type it = (type)1; it < type##_COUNT; it = (type)(it + 1))
+#define EachIndex(it, count) (U64 it = 0; (it) < (count); (it) += 1)
+#define EachElement(it, array) (U64 it = 0; (it) < ArrayCount(array); (it) += 1)
+#define EachEnumVal(type, it) (type it = (type)0; (it) < type##_COUNT; (it) = (type)((it) + 1))
+#define EachNonZeroEnumVal(type, it)                                                               \
+    (type(it) = (type)1; (it) < type##_COUNT; (it) = (type)((it) + 1))
 
 ////////////////////////////////
 //~ rjf: Memory Operation Macros
@@ -242,13 +243,13 @@
     (void*)ins_atomic_u64_eval_cond_assign((volatile U64*)(x), (U64)(k), (U64)(c))
 #define ins_atomic_ptr_eval_assign(x, c)                                                           \
     (void*)ins_atomic_u64_eval_assign((volatile U64*)(x), (U64)(c))
-#define ins_atomic_ptr_eval(x) (void*)ins_atomic_u64_eval((volatile U64*)x)
+#define ins_atomic_ptr_eval(x) (void*)ins_atomic_u64_eval((volatile U64*)(x))
 #elif ARCH_32BIT
 #define ins_atomic_ptr_eval_cond_assign(x, k, c)                                                   \
     (void*)ins_atomic_u32_eval_cond_assign((volatile U32*)(x), (U32)(k), (U32)(c))
 #define ins_atomic_ptr_eval_assign(x, c)                                                           \
     (void*)ins_atomic_u32_eval_assign((volatile U32*)(x), (U32)(c))
-#define ins_atomic_ptr_eval(x) (void*)ins_atomic_u32_eval((volatile U32*)x)
+#define ins_atomic_ptr_eval(x) (void*)ins_atomic_u32_eval((volatile U32*)(x))
 #else
 #error Atomic intrinsics for pointers not defined for this architecture.
 #endif
@@ -257,8 +258,8 @@
 //~ rjf: Linked List Building Macros
 
 //- rjf: linked list macro helpers
-#define CheckNil(nil, p) ((p) == 0 || (p) == nil)
-#define SetNil(nil, p) ((p) = nil)
+#define CheckNil(nil, p) ((p) == 0 || (p) == (nil))
+#define SetNil(nil, p) ((p) = (nil))
 
 //- rjf: doubly-linked-lists
 #define DLLInsert_NPZ(nil, f, l, p, n, next, prev)                                                 \
@@ -362,8 +363,8 @@ __asan_unpoison_memory_region(void const volatile* addr, size_t size);
     do                                                                                             \
     {                                                                                              \
         T t__ = a;                                                                                 \
-        a = b;                                                                                     \
-        b = t__;                                                                                   \
+        (a) = b;                                                                                   \
+        (b) = t__;                                                                                 \
     } while (0)
 
 #if ARCH_64BIT
@@ -375,7 +376,7 @@ __asan_unpoison_memory_region(void const volatile* addr, size_t size);
 #endif
 #define PtrFromInt(i) (void*)((U8*)0 + (i))
 
-#define Compose64Bit(a, b) ((((U64)a) << 32) | ((U64)b));
+#define Compose64Bit(a, b) ((((U64)(a)) << 32) | ((U64)(b)));
 #define AlignPow2(x, b) (((x) + (b) - 1) & (~((b) - 1)))
 #define AlignDownPow2(x, b) ((x) & (~((b) - 1)))
 #define AlignPadPow2(x, b) ((0 - (x)) & ((b) - 1))

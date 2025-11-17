@@ -739,7 +739,7 @@ str8_from_count(Arena* arena, U64 count)
 {
     String8 result;
 
-    if (count < 1 * 1000)
+    if (count < (U64)(1 * 1000))
     {
         result = push_str8f(arena, "%llu", count);
     }
@@ -985,7 +985,6 @@ f64_from_str8(String8 string)
             {
                 buffer[num_valid_chars] = string.str[idx];
                 num_valid_chars += 1;
-                exp = 0;
                 exp = (string.str[idx] == 'e');
             }
         }

@@ -1741,6 +1741,7 @@ win32_exception_filter(EXCEPTION_POINTERS* exception_ptrs)
 
     buflen += wnsprintfW(buffer + buflen, ArrayCount(buffer) - buflen, L"\nVersion: %S%S",
                          BUILD_VERSION_STRING_LITERAL, BUILD_GIT_HASH_STRING_LITERAL_APPEND);
+    (void)buflen;
 
 #if BUILD_CONSOLE_INTERFACE
     fwprintf(stderr, L"\n--- Fatal Exception ---\n");
