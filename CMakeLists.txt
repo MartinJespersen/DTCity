@@ -92,11 +92,9 @@ file(GLOB_RECURSE GLSL_SOURCE_FILES
     "${SHADER_DIR}/*.frag"
 )
 
-if (BUILD_DEBUG)
 find_program(GLSL_VALIDATOR glslangValidator HINTS ${PLATFORM_THIRD_PARTY_TOOLS_DIR})
 if (NOT GLSL_VALIDATOR)
     message(FATAL_ERROR "glslangValidator not found!")
-endif()
 endif()
 
 foreach(GLSL ${GLSL_SOURCE_FILES})

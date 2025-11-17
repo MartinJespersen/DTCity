@@ -2,7 +2,8 @@
   "version": 3,
   "configurePresets": [
     {
-      "name": "debug-base",
+      "name": "debug",
+      "generator": "Ninja",
       "hidden": true,
       "binaryDir": "${sourceDir}/build",
       "cacheVariables": {
@@ -13,18 +14,16 @@
       }
     },
     {
-      "name": "debug-ninja",
-      "inherits": "debug-base",
-      "generator": "Ninja"
-    },
-    {
-      "name": "debug-makefiles",
-      "inherits": "debug-base",
-      "generator": "Unix Makefiles"
-    },
-    {
-      "name": "Release",
+      "name": "profile",
       "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build",
+      "cacheVariables": {
+        "CMAKE_TOOLCHAIN_FILE": "$env{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake",
+        "CMAKE_BUILD_TYPE": "RelWithDebInfo"
+      }
+    },
+    {
+      "name": "release-base",
       "binaryDir": "${sourceDir}/build",
       "cacheVariables": {
         "CMAKE_TOOLCHAIN_FILE": "$env{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake",
@@ -32,13 +31,14 @@
       }
     },
     {
-      "name": "Profile",
-      "generator": "Ninja",
-      "binaryDir": "${sourceDir}/build",
-      "cacheVariables": {
-        "CMAKE_TOOLCHAIN_FILE": "$env{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake",
-        "CMAKE_BUILD_TYPE": "RelWithDebInfo"
-      }
+      "name": "release-windows",
+      "inherits": "release-base",
+      "generator": "Ninja"
+    },
+    {
+      "name": "release-linux",
+      "inherits": "release-base",
+      "generator": "Unix Makefiles"
     }
   ]
 }
