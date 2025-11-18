@@ -102,6 +102,7 @@ Checks:
   - "modernize-use-starts-ends-with"
   - "-clang-diagnostic-tautological-pointer-compare"
   - "-clang-diagnostic-c99-designator"
+  - "-clang-diagnostic-c++11-narrowing"
   - "performance-*"
   - "-performance-enum-size"
   - "-clang-analyzer-*"

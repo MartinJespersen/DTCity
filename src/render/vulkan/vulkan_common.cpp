@@ -233,7 +233,6 @@ VK_CreateInstance(VK_Context* vk_ctx)
     ScratchEnd(scratch);
 }
 
-static PFN_vkCmdSetColorWriteEnableEXT vk_cmd_set_color_write_enable_ext = VK_NULL_HANDLE;
 static void
 VK_LogicalDeviceCreate(Arena* arena, VK_Context* vk_ctx)
 {

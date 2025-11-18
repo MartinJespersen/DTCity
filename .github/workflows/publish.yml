@@ -31,6 +31,7 @@ jobs:
           call "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Auxiliary\Build\vcvarsall.bat" x64
           cmake --preset=release-windows
           cmake --build build
+          "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Tools\Llvm\x64\bin\clang-tidy.exe" -p build src/main.cpp
           %SystemRoot%\System32\tar.exe -a -c -f ${{ env.ZIP_NAME }} build/city.exe data/*
       # - name: Build Linux
       #   if: matrix.os == 'ubuntu-24.04'

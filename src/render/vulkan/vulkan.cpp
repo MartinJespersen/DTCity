@@ -1269,7 +1269,7 @@ VK_CommandBufferRecord(U32 image_index, U32 current_frame, ui_Camera* camera,
         // validation layer: vkDestroyQueryPool(): can't be called on VkQueryPool 0x9638f80000000036
         // that is currently in use by VkCommandBuffer 0x121e6955ed50.
         {
-            TracyVkZone(vk_ctx->tracy_ctx[current_frame], current_cmd_buf, "Render");
+            TracyVkZone(vk_ctx->tracy_ctx[current_frame], current_cmd_buf, "Render"); // NOLINT
 
             VkExtent2D swapchain_extent = swapchain_resource->swapchain_extent;
             VkImageView color_image_view =

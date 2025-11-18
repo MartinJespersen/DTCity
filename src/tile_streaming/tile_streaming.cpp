@@ -9,6 +9,9 @@
 void
 App(int argc, char** argv)
 {
+    (void)argc;
+    (void)argv;
+
     Arena* arena = ArenaAlloc();
     String8 file_name = S("../data/a.glb");
     OS_Handle file = os_file_open(OS_AccessFlag_Read, file_name);
