@@ -28,7 +28,7 @@
 #include <unistd.h>
 
 pid_t
-gettid(void);
+gettid();
 int
 pthread_setname_np(pthread_t thread, const char* name);
 int

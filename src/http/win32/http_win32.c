@@ -4,7 +4,7 @@
 ////////////////////////////////////////////////////////////////
 //~ rjf: Main Layer Initialization
 
-static void HTTP_Init(void) {
+static void HTTP_Init() {
   if (http_w32_state == 0) {
     Arena *arena = ArenaAlloc();
     http_w32_state = PushArray(arena, HTTP_W32_State, 1);

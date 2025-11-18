@@ -5,7 +5,7 @@
 //~ rjf: Main Layer Initialization
 
 static void
-HTTP_Init(void)
+HTTP_Init()
 {
 }
 

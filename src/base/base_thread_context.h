@@ -37,7 +37,7 @@ struct Log
 //~ mgj: Log Creation/Selection
 
 static Log*
-LogAlloc(void);
+LogAlloc();
 static void
 LogRelease(Log* log);
 
@@ -55,7 +55,7 @@ LogMsgF(LogMsgKind kind, char* fmt, ...);
     DeferLoop((LogInfoF(__VA_ARGS__), LogInfoF(":\n{\n")), LogInfoF("}\n"))
 
 static void
-LogScopeBegin(void);
+LogScopeBegin();
 static LogScopeResult
 LogScopeEnd(Arena* arena);
 
@@ -82,9 +82,9 @@ struct TCTX
 static void
 TCTX_InitAndEquip(TCTX* tctx);
 static void
-TCTX_Release(void);
+TCTX_Release();
 static TCTX*
-tctx_get_equipped(void);
+tctx_get_equipped();
 
 static Arena*
 TCTX_ScratchGet(Arena** conflicts, U64 countt);
@@ -92,7 +92,7 @@ TCTX_ScratchGet(Arena** conflicts, U64 countt);
 static void
 tctx_set_thread_name(String8 name);
 static String8
-tctx_get_thread_name(void);
+tctx_get_thread_name();
 
 static void
 tctx_write_srcloc(char* file_name, U64 line_number);

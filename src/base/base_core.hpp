@@ -420,7 +420,7 @@ typedef S64 B64;
 typedef float F32;
 typedef double F64;
 typedef void
-VoidProc(void);
+VoidProc();
 typedef union U128 U128;
 union U128
 {
@@ -852,7 +852,7 @@ safe_cast_s32(S64 x);
 //~ rjf: Large Base Type Functions
 
 static U128
-u128_zero(void);
+u128_zero();
 static U128
 u128_make(U64 v0, U64 v1);
 static B32
@@ -871,9 +871,9 @@ static S64
 extend_sign64(U64 x, U64 size);
 
 static F32
-inf32(void);
+inf32();
 static F32
-neg_inf32(void);
+neg_inf32();
 
 static U16
 bswap_u16(U16 x);
@@ -951,11 +951,11 @@ static U64
 max_instruction_size_from_arch(Arch arch);
 
 static OperatingSystem
-operating_system_from_context(void);
+operating_system_from_context();
 static Arch
-arch_from_context(void);
+arch_from_context();
 static Compiler
-compiler_from_context(void);
+compiler_from_context();
 
 ////////////////////////////////
 //~ rjf: Time Functions

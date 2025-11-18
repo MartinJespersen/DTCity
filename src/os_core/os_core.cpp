@@ -6,7 +6,7 @@
 
 #include "os_core/os_core.hpp"
 static OS_Handle
-OS_HandleIsZero(void)
+OS_HandleIsZero()
 {
     OS_Handle handle = {0};
     return handle;

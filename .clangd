@@ -2,7 +2,7 @@ If:
   PathMatch: .*
 CompileFlags:
   CompilationDatabase: build
-  Add: [/FI../src/includes.hpp, -std=c++20]
+  Add: [/FI../src/includes.hpp]
 
 Index:
   Background: Build

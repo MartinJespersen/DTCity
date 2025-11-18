@@ -1,5 +1,5 @@
 static U64
-CpuTimerFreqEstimate(void)
+CpuTimerFreqEstimate()
 {
     U64 ms_to_wait = 100;
     U64 os_freq = OS_SystemTimerFreqGet();

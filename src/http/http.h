@@ -156,7 +156,7 @@ HTTP_StatusKindFromCode(HTTP_StatusCode code);
 //~ rjf: Main Layer Initialization
 
 static void
-HTTP_Init(void);
+HTTP_Init();
 
 ////////////////////////////////////////////////////////////////
 //~ rjf: Low-Level Request Functions
