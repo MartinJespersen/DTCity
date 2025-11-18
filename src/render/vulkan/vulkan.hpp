@@ -278,7 +278,7 @@ VK_ImageFromKtx2file(VkCommandBuffer cmd, VkImage image, VK_BufferAllocation sta
 // ~mgj: Vulkan Lifetime
 static void
 VK_CtxSet(VK_Context* vk_ctx);
-VK_Context*
+g_internal VK_Context*
 VK_CtxGet();
 
 // ~mgj: Building
