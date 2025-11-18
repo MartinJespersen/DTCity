@@ -17,7 +17,6 @@ ContextCreate(io_IO* io_ctx)
     ctx->cwd = Str8PathFromStr8List(app_arena, {OS_GetCurrentPath(scratch.arena), S("..")});
     ctx->data_dir = Str8PathFromStr8List(app_arena, {ctx->cwd, S("data")});
 
-    // ctx->sub_paths = Str8PathFromStr8List(app_arena, {ctx->data_dir, S("sub")});
     dt_DataDirPair subdirs[] = {{dt_DataDirType::Cache, S("cache")},
                                 {dt_DataDirType::Texture, S("textures")},
                                 {dt_DataDirType::Shaders, S("shaders")},

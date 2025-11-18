@@ -231,7 +231,7 @@ static OS_Handle os_file_open(OS_AccessFlags flags, String8 path) {
   return handle;
 }
 
-static void OS_FileClose(OS_Handle file) {
+static void os_file_close(OS_Handle file) {
   if (OS_HandleMatch(file, OS_HandleIsZero())) {
     return;
   }
@@ -239,7 +239,7 @@ static void OS_FileClose(OS_Handle file) {
   close(fd);
 }
 
-static U64 OS_FileRead(OS_Handle file, Rng1U64 rng, void *out_data) {
+static U64 os_file_read(OS_Handle file, Rng1U64 rng, void *out_data) {
   if (OS_HandleMatch(file, OS_HandleIsZero())) {
     return 0;
   }
@@ -295,7 +295,7 @@ static B32 os_file_set_times(OS_Handle file, DateTime date_time) {
   return good;
 }
 
-static FileProperties OS_PropertiesFromFile(OS_Handle file) {
+static FileProperties os_properties_from_file(OS_Handle file) {
   if (OS_HandleMatch(file, OS_HandleIsZero())) {
     return (FileProperties){0};
   }
@@ -343,7 +343,7 @@ static B32 os_copy_file_path(String8 dst, String8 src) {
       !OS_HandleMatch(dst_h, OS_HandleIsZero())) {
     int src_fd = (int)src_h.u64[0];
     int dst_fd = (int)dst_h.u64[0];
-    FileProperties src_props = OS_PropertiesFromFile(src_h);
+    FileProperties src_props = os_properties_from_file(src_h);
     U64 size = src_props.size;
     U64 total_bytes_copied = 0;
     U64 bytes_left_to_copy = size;
@@ -359,8 +359,8 @@ static B32 os_copy_file_path(String8 dst, String8 src) {
       total_bytes_copied += bytes_copied;
     }
   }
-  OS_FileClose(src_h);
-  OS_FileClose(dst_h);
+  os_file_close(src_h);
+  os_file_close(dst_h);
   return result;
 }
 
