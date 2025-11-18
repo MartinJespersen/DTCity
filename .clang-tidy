@@ -107,7 +107,8 @@ Checks:
   - "-performance-enum-size"
   - "-clang-analyzer-*"
 HeaderFileExtensions: ["", "h", "hh", "hpp", "hxx", "cpp", "c"]
-ExcludeHeaderFilterRegex: "(src\/third_party|third_party|base|os_core)\/.*"
+ExcludeHeaderFilterRegex: "(third_party|base|os_core)"
 HeaderFilterRegex: ".*"
+WarningsAsErrors: "*"
 ExtraArgs:
   - -std:c++20

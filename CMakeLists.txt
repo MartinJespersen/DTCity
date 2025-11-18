@@ -115,7 +115,7 @@ target_sources(city
     PRIVATE
     src/main.cpp
 )
-set_source
+
 
 include_directories(
     ${THIRD_PARTY_LIBS_DIR}
@@ -140,3 +140,9 @@ add_dependencies(tile_streaming CompileShaders)
 target_include_directories(tile_streaming PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
 target_sources(tile_streaming PRIVATE src/tile_streaming/tile_streaming.cpp)
 target_link_libraries(tile_streaming PRIVATE glfw Vulkan::Vulkan KTX::ktx)
+
+add_custom_target(clang-tidy-check
+    COMMAND clang-tidy -p ${CMAKE_BINARY_DIR} "src/main.cpp"
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+    COMMENT "Running clang-tidy on"
+)
