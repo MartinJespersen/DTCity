@@ -55,11 +55,13 @@ enum R_SamplerAddressMode
     R_SamplerAddressMode_ClampToBorder,
 };
 
-struct r_TextureCreateInfo
+struct r_TextureInfo
 {
     U32 base_width;
     U32 base_height;
+    U32 base_depth;
     U32 mip_level_count;
+    U8* data;
 };
 
 struct R_SamplerInfo
@@ -160,7 +162,7 @@ r_latest_hovered_object_id_get();
 // ~mgj: Texture loading interface
 g_internal R_Handle
 r_texture_handle_create(R_SamplerInfo* sampler_info, R_PipelineUsageType pipeline_usage_type,
-                        r_TextureCreateInfo* tex_create_info);
+                        r_TextureInfo* tex_create_info);
 g_internal R_Handle
 r_texture_load(R_SamplerInfo* sampler_info, String8 texture_path,
                R_PipelineUsageType pipeline_usage_type);

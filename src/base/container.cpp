@@ -91,7 +91,7 @@ CreatePathFromStrings(Arena* arena, Buffer<String8> path_elements)
 }
 
 static Buffer<U8>
-IO_ReadFile(Arena* arena, String8 filename)
+io_file_read(Arena* arena, String8 filename)
 {
     Buffer<U8> buffer = {0};
     FILE* file = fopen((const char*)filename.str, "rb");

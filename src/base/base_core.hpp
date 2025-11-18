@@ -18,6 +18,7 @@
 
 #define local_persist static
 #define g_internal static
+#define g_inline static inline
 
 #if COMPILER_MSVC || (COMPILER_CLANG && OS_WINDOWS)
 #pragma section(".rdata$", read)

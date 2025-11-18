@@ -585,7 +585,7 @@ VK_ShaderStageFromSpirv(Arena* arena, VkDevice device, VkShaderStageFlagBits fla
 {
     VK_ShaderModuleInfo shader_module_info = {};
     shader_module_info.device = device;
-    Buffer<U8> shader_buffer = IO_ReadFile(arena, path);
+    Buffer<U8> shader_buffer = io_file_read(arena, path);
 
     shader_module_info.info.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
     shader_module_info.info.stage = flag;

@@ -146,6 +146,21 @@ VK_ThreadSetup(async::ThreadInfo thread_info, void* input)
     VK_AssetCmdQueueItemEnqueue(thread_info.thread_id, cmd, thread_input);
 }
 
+g_inline r_TextureInfo
+vk_texture_info_from_ktx(U8* data, U64 size)
+{
+    ktxTexture2* ktx_texture;
+    ktx_error_code_e ktxresult = ktxTexture2_CreateFromMemory(data, size, NULL, &ktx_texture);
+    Assert(ktxresult == KTX_SUCCESS);
+
+    r_TextureInfo tex_info = {.base_width = ktx_texture->baseWidth,
+                              .base_height = ktx_texture->baseHeight,
+                              .base_depth = ktx_texture->baseDepth,
+                              .mip_level_count = ktx_texture->numLayers,
+                              .data = ktx_texture->pData};
+    return tex_info;
+}
+
 static void
 VK_TextureCreate(VkCommandBuffer cmd_buffer, R_Handle handle, String8 texture_path)
 {
@@ -1828,17 +1843,16 @@ static R_Handle
 r_texture_load(R_SamplerInfo* sampler_info, String8 texture_path,
                R_PipelineUsageType pipeline_usage_type)
 {
+    ScratchScope scratch = ScratchScope(0, 0);
     VK_Context* vk_ctx = VK_CtxGet();
     VK_AssetManager* asset_manager = vk_ctx->asset_manager;
 
     // Get texture dimensions
-    ktxTexture2* ktx_texture;
-    ktx_error_code_e ktxresult = ktxTexture2_CreateFromNamedFile(
-        (char*)texture_path.str, KTX_TEXTURE_CREATE_NO_STORAGE, &ktx_texture);
-    Assert(ktxresult == KTX_SUCCESS);
+    Buffer<U8> tex_data = io_file_read(scratch.arena, texture_path);
 
-    R_Handle texture_handle =
-        r_texture_handle_create(sampler_info, pipeline_usage_type, ktx_texture);
+    r_TextureInfo tex_info = vk_texture_info_from_ktx(tex_data.data, tex_data.size);
+
+    R_Handle texture_handle = r_texture_handle_create(sampler_info, pipeline_usage_type, &tex_info);
 
     // ~mgj: make input ready for texture loading on thread
     R_ThreadInput* thread_input = VK_ThreadInputCreate();
@@ -1895,4 +1909,9 @@ R_BufferLoad(R_BufferInfo* buffer_info)
 
     R_Handle handle = {.u64 = (U64)asset_item};
     return handle;
+}
+
+g_internal void
+r_texture_upload(R_Handle tex_handle)
+{
 }

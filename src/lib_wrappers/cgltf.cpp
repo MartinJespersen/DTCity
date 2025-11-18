@@ -439,7 +439,11 @@ gltfw_textures_read(Arena* arena, cgltf_data* data, R_PipelineUsageType usage_ty
             ktx_error_code_e err = ktxTexture2_CreateFromMemory(buf, buf_view->size, NULL, &ktx);
             if ((err == false) && ktx)
             {
-                R_Handle handle = r_texture_handle_create(&tex->sampler, usage_type, ktx);
+                r_TextureInfo info = {.base_width = ktx->baseWidth,
+                                      .base_height = ktx->baseHeight,
+                                      .base_depth = ktx->baseDepth,
+                                      .mip_level_count = ktx->numLevels};
+                R_Handle handle = r_texture_handle_create(&tex->sampler, usage_type, &info);
             }
         }
     }
