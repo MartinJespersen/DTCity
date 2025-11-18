@@ -347,7 +347,7 @@ static String8
 city_http_call_wrapper(Arena* arena, String8 query_str, HTTP_RequestParams* params)
 {
     DEBUG_LOG("DataFetch: Fetching data from overpass-api.de\n");
-    String8 host = S("https://overpass-api.de");
+    String8 host = S("http://overpass-api.de");
     String8 path = S("/api/interpreter");
 
     const U32 retry_count = 3;
