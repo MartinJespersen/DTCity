@@ -10,13 +10,18 @@ Index:
 
 Diagnostics:
   UnusedIncludes: None
+  Suppress:
+    - undefined-internal
+    - tautological-pointer-compare
+    - c99-designator
+    - c++11-narrowing
   ClangTidy:
     FastCheckFilter: Strict
 Hover:
   ShowAKA: true
 ---
 If:
-  PathMatch: (src/third_party/.*|src/os_core/linux/.*|src/http/linux/.*)
+  PathMatch: (src\/third_party|src\/os_core|src\/http)\/.*
 Diagnostics:
   Suppress: "*"
 CompileFlags:

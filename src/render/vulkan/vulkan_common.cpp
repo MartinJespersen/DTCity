@@ -233,7 +233,7 @@ VK_CreateInstance(VK_Context* vk_ctx)
     ScratchEnd(scratch);
 }
 
-static PFN_vkCmdSetColorWriteEnableEXT vkCmdSetColorWriteEnableExt = VK_NULL_HANDLE;
+static PFN_vkCmdSetColorWriteEnableEXT vk_cmd_set_color_write_enable_ext = VK_NULL_HANDLE;
 static void
 VK_LogicalDeviceCreate(Arena* arena, VK_Context* vk_ctx)
 {
@@ -319,9 +319,9 @@ VK_LogicalDeviceCreate(Arena* arena, VK_Context* vk_ctx)
                      &vk_ctx->graphics_queue);
     vkGetDeviceQueue(vk_ctx->device, queueFamilyIndicies.presentFamilyIndex, 0,
                      &vk_ctx->present_queue);
-    vkCmdSetColorWriteEnableExt = (PFN_vkCmdSetColorWriteEnableEXT)vkGetDeviceProcAddr(
+    vk_cmd_set_color_write_enable_ext = (PFN_vkCmdSetColorWriteEnableEXT)vkGetDeviceProcAddr(
         vk_ctx->device, "vkCmdSetColorWriteEnableEXT");
-    if (!vkCmdSetColorWriteEnableExt)
+    if (!vk_cmd_set_color_write_enable_ext)
     {
         exit_with_error("Could not load vkCmdSetColorWriteEnableEXT");
     }

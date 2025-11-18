@@ -1143,14 +1143,14 @@ VK_Model3DRendering()
                 if (write_type == WriteType_Color)
                 {
                     vkCmdSetDepthWriteEnable(cmd_buffer, VK_FALSE);
-                    vkCmdSetColorWriteEnableExt(cmd_buffer, ArrayCount(color_write_enabled),
-                                                color_write_enabled);
+                    vk_cmd_set_color_write_enable_ext(cmd_buffer, ArrayCount(color_write_enabled),
+                                                      color_write_enabled);
                 }
                 else if (write_type == WriteType_Depth)
                 {
                     vkCmdSetDepthWriteEnable(cmd_buffer, VK_TRUE);
-                    vkCmdSetColorWriteEnableExt(cmd_buffer, ArrayCount(color_write_disabled),
-                                                color_write_disabled);
+                    vk_cmd_set_color_write_enable_ext(cmd_buffer, ArrayCount(color_write_disabled),
+                                                      color_write_disabled);
                 }
 
                 vkCmdDrawIndexed(cmd_buffer, node->index_count, 1, node->index_buffer_offset, 0, 0);
@@ -1159,8 +1159,8 @@ VK_Model3DRendering()
         else
         {
             vkCmdSetDepthWriteEnable(cmd_buffer, VK_TRUE);
-            vkCmdSetColorWriteEnableExt(cmd_buffer, ArrayCount(color_write_enabled),
-                                        color_write_enabled);
+            vk_cmd_set_color_write_enable_ext(cmd_buffer, ArrayCount(color_write_enabled),
+                                              color_write_enabled);
             vkCmdDrawIndexed(cmd_buffer, node->index_count, 1, node->index_buffer_offset, 0, 0);
         }
     }

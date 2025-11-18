@@ -102,6 +102,9 @@ Checks:
   - "modernize-use-starts-ends-with"
   - "-clang-diagnostic-tautological-pointer-compare"
   - "-clang-diagnostic-c99-designator"
+  - "performance-*"
+  - "-performance-enum-size"
+  - "-clang-analyzer-*"
 HeaderFileExtensions: ["", "h", "hh", "hpp", "hxx", "cpp", "c"]
 ExcludeHeaderFilterRegex: "(src\/third_party|third_party|base|os_core)\/.*"
 HeaderFilterRegex: ".*"
