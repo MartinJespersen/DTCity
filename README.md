@@ -6,10 +6,16 @@
 
 ## 1. Create build directory
 
-The different cmake preset and its configuration can be found in CMakePreset.json file in the project root. It currently consist of 3 different presets or build configurations. These are Debug, Release and profile.
+The different cmake preset and its configuration can be found in CMakePreset.json file in the project root. It currently consist of 3 different presets or build configurations. These are debug, release and profile each having a window and a linux equivalent. So the combinations are:
+* debug-windows
+* debug-linux
+* release-windows
+* release-linux
+* profile-windows
+* profile-linux
 
-An example of setting up the build for the Debug preset is shown below.
-- cmake --preset=Debug
+An example of setting up the build for the debug preset for windows is shown below:
+- cmake --preset=debug-windows
 
 To build simply run:
 - cmake --build build

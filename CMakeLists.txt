@@ -90,6 +90,7 @@ file(GLOB_RECURSE GLSL_SOURCE_FILES
     "${SHADER_DIR}/*.frag"
 )
 
+
 find_program(GLSL_VALIDATOR glslangValidator)
 if (NOT GLSL_VALIDATOR)
     message(FATAL_ERROR "glslangValidator not found!")
