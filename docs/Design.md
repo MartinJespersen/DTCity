@@ -32,7 +32,7 @@ This is the layer responsible for rendering and displaying images. It wraps the 
 Implements a job system using a thread safe FIFO queue. It is currently used by the render layer to stream textures.
 
 # Manual Memory Management
-One important difference between this project and an usual C++ project is in the way memory is allocated. This project does heavy use of memory arenas which is an important concept to become familiar. The overall idea is to simplify memory management by decreasing the number of memory allocations by bundling smaller allocations together that has the same lifetime so that only a single deallocation is need. 
+One important difference between this project and an usual C++ project is in the way memory is managed. This project does heavy use of memory arenas which is an important concept to become familiar. The overall idea is to simplify memory management by decreasing the number of memory allocations by bundling smaller allocations together that has the same lifetime so that only a single deallocation is need. 
 This way of handling resources is a common way of handling memory high performance applications like game engines, where performance is critical and manual memory management is necessary.
 There are resources out there that explains the usage in more detail. 
 These are examples:
