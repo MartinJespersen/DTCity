@@ -1,5 +1,5 @@
 # Design
-The design of the software is based on layers, where each layer is responsible for some functionality and usually manages its own memory. 
+The design of the software is based on layers. Each layer is responsible for some functionality and usually manages its own memory. 
 ```mermaid
 ---
 title: Layer Dependencies
