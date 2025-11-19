@@ -1,6 +1,6 @@
 // layers - [cpp]
 DISABLE_WARNINGS_PUSH
-#include "third_party/imgui/imgui_inc.cpp"
+
 #include "base/base_inc.cpp"
 #include "os_core/os_core_inc.cpp"
 DISABLE_WARNINGS_POP

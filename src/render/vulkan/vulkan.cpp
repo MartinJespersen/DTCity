@@ -223,28 +223,31 @@ VK_Model3DInstancePipelineCreate(VK_Context* vk_ctx, String8 shader_path)
     VkPipelineVertexInputStateCreateInfo vertex_input_info{};
     vertex_input_info.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
 
+    U32 uv_offset = (U32)offsetof(city::Vertex3D, uv);
+    U32 x_basis_offset = (U32)offsetof(city::Model3DInstance, x_basis);
+    U32 y_basis_offset = (U32)offsetof(city::Model3DInstance, y_basis);
+    U32 z_basis_offset = (U32)offsetof(city::Model3DInstance, z_basis);
+    U32 w_basis_offset = (U32)offsetof(city::Model3DInstance, w_basis);
+
     VkVertexInputAttributeDescription attr_desc[] = {
         {.location = 0, .binding = 0, .format = VK_FORMAT_R32G32B32_SFLOAT},
-        {.location = 1,
-         .binding = 0,
-         .format = VK_FORMAT_R32G32_SFLOAT,
-         .offset = offsetof(city::Vertex3D, uv)},
+        {.location = 1, .binding = 0, .format = VK_FORMAT_R32G32_SFLOAT, .offset = uv_offset},
         {.location = 2,
          .binding = 1,
          .format = VK_FORMAT_R32G32B32A32_SFLOAT,
-         .offset = (U32)offsetof(city::Model3DInstance, x_basis)},
+         .offset = x_basis_offset},
         {.location = 3,
          .binding = 1,
          .format = VK_FORMAT_R32G32B32A32_SFLOAT,
-         .offset = (U32)offsetof(city::Model3DInstance, y_basis)},
+         .offset = y_basis_offset},
         {.location = 4,
          .binding = 1,
          .format = VK_FORMAT_R32G32B32A32_SFLOAT,
-         .offset = (U32)offsetof(city::Model3DInstance, z_basis)},
+         .offset = z_basis_offset},
         {.location = 5,
          .binding = 1,
          .format = VK_FORMAT_R32G32B32A32_SFLOAT,
-         .offset = (U32)offsetof(city::Model3DInstance, w_basis)},
+         .offset = w_basis_offset},
     };
     VkVertexInputBindingDescription input_desc[] = {
         {.binding = 0, .stride = sizeof(city::Vertex3D), .inputRate = VK_VERTEX_INPUT_RATE_VERTEX},
@@ -403,16 +406,16 @@ VK_Model3DPipelineCreate(VK_Context* vk_ctx, String8 shader_path)
     VkPipelineVertexInputStateCreateInfo vertex_input_info{};
     vertex_input_info.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
 
+    U32 uv_offset = offsetof(city::Vertex3D, uv);
+    U32 object_id_offset = offsetof(city::Vertex3D, object_id);
+
     VkVertexInputAttributeDescription attr_desc[] = {
         {.location = 0, .binding = 0, .format = VK_FORMAT_R32G32B32_SFLOAT},
-        {.location = 1,
-         .binding = 0,
-         .format = VK_FORMAT_R32G32_SFLOAT,
-         .offset = offsetof(city::Vertex3D, uv)},
+        {.location = 1, .binding = 0, .format = VK_FORMAT_R32G32_SFLOAT, .offset = uv_offset},
         {.location = 2,
          .binding = 0,
          .format = vk_ctx->object_id_format,
-         .offset = offsetof(city::Vertex3D, object_id)}};
+         .offset = object_id_offset}};
     VkVertexInputBindingDescription input_desc[] = {
         {.binding = 0, .stride = sizeof(city::Vertex3D), .inputRate = VK_VERTEX_INPUT_RATE_VERTEX}};
 
@@ -1075,7 +1078,7 @@ VK_Model3DDraw(R_Handle texture_handle, R_Handle vertex_buffer_handle, R_Handle 
         VK_AssetManagerItemGet(&asset_manager->buffer_list, index_buffer_handle);
     R_AssetItem<VK_Texture>* asset_texture = VK_AssetManagerTextureItemGet(texture_handle);
 
-    if (asset_index_buffer->is_loaded && asset_index_buffer->is_loaded && asset_texture->is_loaded)
+    if (asset_index_buffer->is_loaded && asset_texture->is_loaded)
     {
         VK_Model3DBucketAdd(&asset_vertex_buffer->item.buffer_alloc,
                             &asset_index_buffer->item.buffer_alloc, asset_texture->item.desc_set,
@@ -1095,7 +1098,7 @@ VK_Model3DInstanceDraw(R_Handle texture_handle, R_Handle vertex_buffer_handle,
         VK_AssetManagerItemGet(&asset_manager->buffer_list, index_buffer_handle);
     R_AssetItem<VK_Texture>* asset_texture = VK_AssetManagerTextureItemGet(texture_handle);
 
-    if (asset_index_buffer->is_loaded && asset_index_buffer->is_loaded && asset_texture->is_loaded)
+    if (asset_index_buffer->is_loaded && asset_texture->is_loaded)
     {
         VK_Model3DInstanceBucketAdd(&asset_vertex_buffer->item.buffer_alloc,
                                     &asset_index_buffer->item.buffer_alloc,
@@ -1159,14 +1162,14 @@ VK_Model3DRendering()
                 if (write_type == WriteType_Color)
                 {
                     vkCmdSetDepthWriteEnable(cmd_buffer, VK_FALSE);
-                    vkCmdSetColorWriteEnableExt(cmd_buffer, ArrayCount(color_write_enabled),
-                                                color_write_enabled);
+                    vk_cmd_set_color_write_enable_ext(cmd_buffer, ArrayCount(color_write_enabled),
+                                                      color_write_enabled);
                 }
                 else if (write_type == WriteType_Depth)
                 {
                     vkCmdSetDepthWriteEnable(cmd_buffer, VK_TRUE);
-                    vkCmdSetColorWriteEnableExt(cmd_buffer, ArrayCount(color_write_disabled),
-                                                color_write_disabled);
+                    vk_cmd_set_color_write_enable_ext(cmd_buffer, ArrayCount(color_write_disabled),
+                                                      color_write_disabled);
                 }
 
                 vkCmdDrawIndexed(cmd_buffer, node->index_count, 1, node->index_buffer_offset, 0, 0);
@@ -1175,8 +1178,8 @@ VK_Model3DRendering()
         else
         {
             vkCmdSetDepthWriteEnable(cmd_buffer, VK_TRUE);
-            vkCmdSetColorWriteEnableExt(cmd_buffer, ArrayCount(color_write_enabled),
-                                        color_write_enabled);
+            vk_cmd_set_color_write_enable_ext(cmd_buffer, ArrayCount(color_write_enabled),
+                                              color_write_enabled);
             vkCmdDrawIndexed(cmd_buffer, node->index_count, 1, node->index_buffer_offset, 0, 0);
         }
     }
@@ -1285,7 +1288,7 @@ VK_CommandBufferRecord(U32 image_index, U32 current_frame, ui_Camera* camera,
         // validation layer: vkDestroyQueryPool(): can't be called on VkQueryPool 0x9638f80000000036
         // that is currently in use by VkCommandBuffer 0x121e6955ed50.
         {
-            TracyVkZone(vk_ctx->tracy_ctx[current_frame], current_cmd_buf, "Render");
+            TracyVkZone(vk_ctx->tracy_ctx[current_frame], current_cmd_buf, "Render"); // NOLINT
 
             VkExtent2D swapchain_extent = swapchain_resource->swapchain_extent;
             VkImageView color_image_view =
@@ -1818,7 +1821,7 @@ r_texture_handle_create(R_SamplerInfo* sampler_info, R_PipelineUsageType pipelin
             desc_set_layout = vk_ctx->model_3D_pipeline.descriptor_set_layout;
             break;
         case R_PipelineUsageType_3DInstanced:
-            desc_set_layout = vk_ctx->model_3D_pipeline.descriptor_set_layout;
+            desc_set_layout = vk_ctx->model_3D_instance_pipeline.descriptor_set_layout;
             break;
         default: InvalidPath;
     }

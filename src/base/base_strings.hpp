@@ -199,19 +199,19 @@ Str8(U8* str, U64 size);
 static String8
 str8_range(U8* first, U8* one_past_last);
 static String8
-Str8Zero(void);
+Str8Zero();
 static String16
 str16(U16* str, U64 size);
 static String16
 str16_range(U16* first, U16* one_past_last);
 static String16
-str16_zero(void);
+str16_zero();
 static String32
 str32(U32* str, U64 size);
 static String32
 str32_range(U32* first, U32* one_past_last);
 static String32
-str32_zero(void);
+str32_zero();
 static String8
 str8_c_string(const char* c);
 static String16
@@ -372,7 +372,7 @@ str8_list_from_flags(Arena* arena, String8List* list, U32 flags, String8* flag_s
 //~ rjf; String Arrays
 
 static String8Array
-str8_array_zero(void);
+str8_array_zero();
 static String8Array
 str8_array_from_list(Arena* arena, String8List* list);
 static String8Array
@@ -586,6 +586,6 @@ exit_with_error(const char* msg, ...);
 // string manipulation helpers
 #define CStrEqual(a, b) (!strcmp((a), (b)))
 // ~mgj: String Macros
-#define Str8Cmp(a, b) (!strcmp(((char*)a.str), ((char*)b.str)))
-#define S(str) Str8((U8*)str, sizeof(str) - 1)
+#define Str8Cmp(a, b) (!strcmp(((char*)(a).str), ((char*)(b).str)))
+#define S(str) Str8((U8*)(str), sizeof(str) - 1)
 #endif // BASE_STRINGS_H

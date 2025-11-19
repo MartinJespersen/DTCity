@@ -138,7 +138,7 @@ OS_ThreadFunctionType(void* ptr);
 //~ rjf: Handle Type Functions (Helpers, Implemented Once)
 
 static OS_Handle
-OS_HandleIsZero(void);
+OS_HandleIsZero();
 static OS_Handle
 OS_HandleFromPtr(void* ptr);
 static B32
@@ -184,15 +184,15 @@ os_cmd_line_launchf(char* fmt, ...);
 //~ rjf: @os_hooks System/Process Info (Implemented Per-OS)
 
 static OS_SystemInfo*
-OS_GetSystemInfo(void);
+OS_GetSystemInfo();
 static OS_ProcessInfo*
-os_get_process_info(void);
+os_get_process_info();
 static String8
 OS_GetCurrentPath(Arena* arena);
 static U32
-os_get_process_start_time_unix(void);
+os_get_process_start_time_unix();
 static inline String8
-OS_PathDelimiter(void);
+OS_PathDelimiter();
 
 ////////////////////////////////
 //~ rjf: @os_hooks Memory Allocation (Implemented Per-OS)
@@ -217,7 +217,7 @@ os_commit_large(void* ptr, U64 size);
 //~ rjf: @os_hooks Thread Info (Implemented Per-OS)
 
 static U32
-os_tid(void);
+os_tid();
 static void
 OS_SetThreadName(String8 string);
 
@@ -304,11 +304,11 @@ os_shared_memory_view_close(OS_Handle handle, void* ptr, Rng1U64 range);
 //~ rjf: @os_hooks Time (Implemented Per-OS)
 
 static U64
-os_now_microseconds(void);
+os_now_microseconds();
 static U32
-os_now_unix(void);
+os_now_unix();
 static DateTime
-os_now_universal_time(void);
+os_now_universal_time();
 static DateTime
 os_universal_time_from_local(DateTime* local_time);
 static DateTime
@@ -341,7 +341,7 @@ os_thread_detach(OS_Handle handle);
 
 //- rjf: recursive mutexes
 static OS_Handle
-OS_MutexAlloc(void);
+OS_MutexAlloc();
 static void
 OS_MutexRelease(OS_Handle mutex);
 static void
@@ -351,7 +351,7 @@ OS_MutexDrop(OS_Handle mutex);
 
 //- rjf: reader/writer mutexes
 static OS_Handle
-OS_RWMutexAlloc(void);
+OS_RWMutexAlloc();
 static void
 OS_RWMutexRelease(OS_Handle rw_mutex);
 static void
@@ -365,7 +365,7 @@ OS_RWMutexDropW(OS_Handle mutex);
 
 //- rjf: condition variables
 static OS_Handle
-os_condition_variable_alloc(void);
+os_condition_variable_alloc();
 static void
 os_condition_variable_release(OS_Handle cv);
 // returns false on timeout, true on signal, (max_wait_ms = max_U64) -> no timeout
@@ -422,7 +422,7 @@ os_safe_call(OS_ThreadFunctionType* func, OS_ThreadFunctionType* fail_handler, v
 //~ rjf: @os_hooks GUIDs (Implemented Per-OS)
 
 static Guid
-os_make_guid(void);
+os_make_guid();
 
 // ~mgj: OS Timer
 force_inline static U64

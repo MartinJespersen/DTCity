@@ -1,17 +1,15 @@
-cmake_minimum_required(VERSION 3.15)
+cmake_minimum_required(VERSION 3.27)
 project(DTCity)
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 set(THIRD_PARTY_LIBS_DIR ${CMAKE_CURRENT_SOURCE_DIR}/src/third_party)
 set(SHADER_DIR ${CMAKE_CURRENT_SOURCE_DIR}/data/shaders)
 set(SHADER_BINARY_DIR ${CMAKE_CURRENT_SOURCE_DIR}/data/shaders/bin)
-set(THIRD_PARTY_TOOLS_DIR ${CMAKE_CURRENT_SOURCE_DIR}/tools)
 set(ASAN_LINK_FLAGS "")
 set(ASAN_COMPILE_FLAGS "")
 
 option(BUILD_DEBUG "Enable Additional Debugging Information (e.g Vulkan Validation Layers)" OFF)
 option(ASAN_ENABLED "Enable Address Sanitizer" OFF)
-
 set(ALL_TARGETS tile_streaming city)
 
 # cmake macro -> compiler macro
@@ -83,7 +81,7 @@ endif()
 option(TRACY_PROFILE_ENABLE "Enable Tracy profiler" OFF)
 if (TRACY_PROFILE_ENABLE)
     add_compile_definitions(TRACY_ENABLE)
-    link_libraries(TracyClient)
+    target_sources(city PRIVATE ${THIRD_PARTY_LIBS_DIR}/tracy/TracyClient.cpp)
 endif()
 
 # compile shaders
@@ -91,10 +89,13 @@ file(GLOB_RECURSE GLSL_SOURCE_FILES
     "${SHADER_DIR}/*.vert"
     "${SHADER_DIR}/*.frag"
 )
-find_program(GLSL_VALIDATOR glslangValidator HINTS ${PLATFORM_THIRD_PARTY_TOOLS_DIR})
+
+
+find_program(GLSL_VALIDATOR glslangValidator)
 if (NOT GLSL_VALIDATOR)
     message(FATAL_ERROR "glslangValidator not found!")
 endif()
+
 foreach(GLSL ${GLSL_SOURCE_FILES})
     get_filename_component(FILE_NAME ${GLSL} NAME_WE)
     get_filename_component(EXT_WITH_DOT ${GLSL} EXT)
@@ -116,8 +117,9 @@ target_sources(city
     src/main.cpp
 )
 
+
 include_directories(
-        ${THIRD_PARTY_LIBS_DIR}
+    ${THIRD_PARTY_LIBS_DIR}
 )
 
 find_package(Ktx CONFIG REQUIRED)
@@ -130,7 +132,8 @@ add_dependencies(city CompileShaders)
 target_link_directories(city PRIVATE
         ${PLATFORM_LIB_ARTIFACT_DIR}
 )
-target_link_libraries(city PRIVATE glfw KTX::ktx Vulkan::Vulkan )
+target_sources(city PRIVATE src/third_party/simdjson/simdjson.cpp src/third_party/imgui/imgui_inc.cpp)
+target_link_libraries(city PRIVATE glfw KTX::ktx Vulkan::Vulkan)
 
 # tile streaming specifics
 add_dependencies(tile_streaming CompileShaders)
@@ -138,3 +141,9 @@ add_dependencies(tile_streaming CompileShaders)
 target_include_directories(tile_streaming PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
 target_sources(tile_streaming PRIVATE src/tile_streaming/tile_streaming.cpp)
 target_link_libraries(tile_streaming PRIVATE glfw Vulkan::Vulkan KTX::ktx)
+
+add_custom_target(clang-tidy-check
+    COMMAND clang-tidy -p ${CMAKE_BINARY_DIR} "src/main.cpp"
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+    COMMENT "Running clang-tidy on"
+)

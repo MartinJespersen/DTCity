@@ -1,5 +1,10 @@
 {
-  "dependencies": ["ktx", "vulkan-loader", "glfw3"],
+  "dependencies": [
+    "ktx",
+    "vulkan-loader",
+    "glfw3",
+    { "name": "glslang", "features": ["tools"] }
+  ],
   "overrides": [
     {
       "name": "ktx",
@@ -11,7 +16,11 @@
     },
     {
       "name": "glfw3",
-      "version": "3.4#1"
+      "version": "3.4"
+    },
+    {
+      "name": "glslang",
+      "version": "15.1.0"
     }
   ]
 }

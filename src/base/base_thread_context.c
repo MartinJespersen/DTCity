@@ -22,7 +22,7 @@ TCTX_InitAndEquip(TCTX* tctx)
 }
 
 static void
-TCTX_Release(void)
+TCTX_Release()
 {
     for (U64 i = 0; i < ArrayCount(tctx_thread_local->arenas); i += 1)
     {
@@ -33,7 +33,7 @@ TCTX_Release(void)
 }
 
 static TCTX*
-TCTX_Get(void)
+TCTX_Get()
 {
     return (tctx_thread_local);
 }
@@ -77,7 +77,7 @@ tctx_set_thread_name(String8 string)
 }
 
 static String8
-tctx_get_thread_name(void)
+tctx_get_thread_name()
 {
     TCTX* tctx = TCTX_Get();
     String8 result = Str8(tctx->thread_name, tctx->thread_name_size);
@@ -104,7 +104,7 @@ tctx_read_srcloc(char** file_name, U64* line_number)
 //~ mgj: Log Creation/Selection
 
 static Log*
-LogAlloc(void)
+LogAlloc()
 {
     Arena* arena = ArenaAlloc();
     Log* log = PushArray(arena, Log, 1);
@@ -152,7 +152,7 @@ LogMsgF(LogMsgKind kind, char* fmt, ...)
 //~ rjf: Log Scopes
 
 static void
-LogScopeBegin(void)
+LogScopeBegin()
 {
     if (tctx_thread_local != 0 && tctx_thread_local->log)
     {

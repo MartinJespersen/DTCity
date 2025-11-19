@@ -208,7 +208,7 @@ dt_main_loop(void* ptr)
     ctx->buildings = city::BuildingsCreate(cache_dir, texture_dir, ctx->road->road_height,
                                            &input->bbox, &sampler_info, osm_g_network);
     city::Buildings* buildings = ctx->buildings;
-    ctx->car_sim = city::CarSimCreate(asset_dir, texture_dir, 100, ctx->road, osm_g_network);
+    ctx->car_sim = city::CarSimCreate(asset_dir, texture_dir, 100, ctx->road);
     city::CarSim* car_sim = ctx->car_sim;
 
     while (ctx->running)
@@ -253,8 +253,7 @@ dt_main_loop(void* ptr)
                        buildings->facade_index_count);
 
         Buffer<city::Model3DInstance> instance_buffer =
-            city::CarUpdate(vk_ctx->draw_frame_arena, car_sim, ctx->road, ctx->time->delta_time_sec,
-                            osm_g_network->utm_node_hashmap);
+            city::CarUpdate(vk_ctx->draw_frame_arena, car_sim, ctx->time->delta_time_sec);
         R_BufferInfo car_instance_buffer_info =
             R_BufferInfoFromTemplateBuffer(instance_buffer, R_BufferType_Vertex);
         VK_Model3DInstanceDraw(car_sim->texture_handle, car_sim->vertex_handle,

@@ -126,8 +126,8 @@ struct VK_Frustum
     glm::vec4 planes[VK_PlaneType_Count];
 };
 
-// ~mgj: Buffers helpers
-//
+// ~mgj: Globals
+static PFN_vkCmdSetColorWriteEnableEXT vk_cmd_set_color_write_enable_ext = VK_NULL_HANDLE;
 // buffer usage patterns with VMA:
 // https://gpuopen-librariesandsdks.github.io/VulkanMemoryAllocator/html/usage_patterns.html
 static VK_BufferAllocation

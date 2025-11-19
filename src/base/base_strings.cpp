@@ -173,7 +173,7 @@ str8_range(U8* first, U8* one_past_last)
 }
 
 static String8
-Str8Zero(void)
+Str8Zero()
 {
     String8 result = {0};
     return (result);
@@ -194,7 +194,7 @@ str16_range(U16* first, U16* one_past_last)
 }
 
 static String16
-str16_zero(void)
+str16_zero()
 {
     String16 result = {0};
     return (result);
@@ -215,7 +215,7 @@ str32_range(U32* first, U32* one_past_last)
 }
 
 static String32
-str32_zero(void)
+str32_zero()
 {
     String32 result = {};
     return (result);
@@ -739,7 +739,7 @@ str8_from_count(Arena* arena, U64 count)
 {
     String8 result;
 
-    if (count < 1 * 1000)
+    if (count < (U64)(1 * 1000))
     {
         result = push_str8f(arena, "%llu", count);
     }
@@ -985,7 +985,6 @@ f64_from_str8(String8 string)
             {
                 buffer[num_valid_chars] = string.str[idx];
                 num_valid_chars += 1;
-                exp = 0;
                 exp = (string.str[idx] == 'e');
             }
         }
@@ -1256,7 +1255,7 @@ str8_list_from_flags(Arena* arena, String8List* list, U32 flags, String8* flag_s
 //~ rjf; String Arrays
 
 static String8Array
-str8_array_zero(void)
+str8_array_zero()
 {
     String8Array result = {};
     return result;

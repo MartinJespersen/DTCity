@@ -4,7 +4,7 @@
 ////////////////////////////////////////////////////////////////
 //~ rjf: Main Layer Initialization
 
-static void HTTP_Init(void) {
+static void HTTP_Init() {
   if (http_w32_state == 0) {
     Arena *arena = ArenaAlloc();
     http_w32_state = PushArray(arena, HTTP_W32_State, 1);
@@ -77,6 +77,7 @@ static HTTP_Response HTTP_Request(Arena *arena, String8 host, String8 path,
 
     //- rjf: convert method to verb wchar
     const WCHAR *verb = L"GET";
+    (void)verb;
     switch (params->method) {
     default:
     case HTTP_Method_Get: {

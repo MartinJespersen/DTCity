@@ -14,7 +14,7 @@
 #endif
 
 static U64
-CpuTimerFreqEstimate(void);
+CpuTimerFreqEstimate();
 
 struct Profiler
 {

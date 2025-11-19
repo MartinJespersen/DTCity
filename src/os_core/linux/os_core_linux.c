@@ -109,11 +109,9 @@ static void *os_lnx_thread_entry_point(void *ptr) {
 ////////////////////////////////
 //~ rjf: @os_hooks System/Process Info (Implemented Per-OS)
 
-static OS_SystemInfo *OS_GetSystemInfo(void) {
-  return &os_lnx_state.system_info;
-}
+static OS_SystemInfo *OS_GetSystemInfo() { return &os_lnx_state.system_info; }
 
-static OS_ProcessInfo *os_get_process_info(void) {
+static OS_ProcessInfo *os_get_process_info() {
   return &os_lnx_state.process_info;
 }
 
@@ -124,9 +122,9 @@ static String8 OS_GetCurrentPath(Arena *arena) {
   return string;
 }
 
-static inline String8 OS_PathDelimiter(void) { return Str8Lit("/"); }
+static inline String8 OS_PathDelimiter() { return Str8Lit("/"); }
 
-static U32 os_get_process_start_time_unix(void) {
+static U32 os_get_process_start_time_unix() {
   Temp scratch = ScratchBegin(0, 0);
   U64 start_time = 0;
   pid_t pid = getpid();
@@ -184,7 +182,7 @@ static B32 os_commit_large(void *ptr, U64 size) {
 ////////////////////////////////
 //~ rjf: @os_hooks Thread Info (Implemented Per-OS)
 
-static U32 os_tid(void) {
+static U32 os_tid() {
   U32 result = gettid();
   return result;
 }
@@ -233,7 +231,7 @@ static OS_Handle os_file_open(OS_AccessFlags flags, String8 path) {
   return handle;
 }
 
-static void OS_FileClose(OS_Handle file) {
+static void os_file_close(OS_Handle file) {
   if (OS_HandleMatch(file, OS_HandleIsZero())) {
     return;
   }
@@ -241,7 +239,7 @@ static void OS_FileClose(OS_Handle file) {
   close(fd);
 }
 
-static U64 OS_FileRead(OS_Handle file, Rng1U64 rng, void *out_data) {
+static U64 os_file_read(OS_Handle file, Rng1U64 rng, void *out_data) {
   if (OS_HandleMatch(file, OS_HandleIsZero())) {
     return 0;
   }
@@ -297,7 +295,7 @@ static B32 os_file_set_times(OS_Handle file, DateTime date_time) {
   return good;
 }
 
-static FileProperties OS_PropertiesFromFile(OS_Handle file) {
+static FileProperties os_properties_from_file(OS_Handle file) {
   if (OS_HandleMatch(file, OS_HandleIsZero())) {
     return (FileProperties){0};
   }
@@ -345,7 +343,7 @@ static B32 os_copy_file_path(String8 dst, String8 src) {
       !OS_HandleMatch(dst_h, OS_HandleIsZero())) {
     int src_fd = (int)src_h.u64[0];
     int dst_fd = (int)dst_h.u64[0];
-    FileProperties src_props = OS_PropertiesFromFile(src_h);
+    FileProperties src_props = os_properties_from_file(src_h);
     U64 size = src_props.size;
     U64 total_bytes_copied = 0;
     U64 bytes_left_to_copy = size;
@@ -361,8 +359,8 @@ static B32 os_copy_file_path(String8 dst, String8 src) {
       total_bytes_copied += bytes_copied;
     }
   }
-  OS_FileClose(src_h);
-  OS_FileClose(dst_h);
+  os_file_close(src_h);
+  os_file_close(dst_h);
   return result;
 }
 
@@ -593,19 +591,19 @@ static void os_shared_memory_view_close(OS_Handle handle, void *ptr,
 ////////////////////////////////
 //~ rjf: @os_hooks Time (Implemented Per-OS)
 
-static U64 os_now_microseconds(void) {
+static U64 os_now_microseconds() {
   struct timespec t;
   clock_gettime(CLOCK_MONOTONIC, &t);
   U64 result = t.tv_sec * Million(1) + (t.tv_nsec / Thousand(1));
   return result;
 }
 
-static U32 os_now_unix(void) {
+static U32 os_now_unix() {
   time_t t = time(0);
   return (U32)t;
 }
 
-static DateTime os_now_universal_time(void) {
+static DateTime os_now_universal_time() {
   time_t t = 0;
   time(&t);
   struct tm universal_tm = {0};
@@ -697,7 +695,7 @@ static void os_thread_detach(OS_Handle handle) {
 
 //- rjf: mutexes
 
-static OS_Handle OS_MutexAlloc(void) {
+static OS_Handle OS_MutexAlloc() {
   OS_LNX_Entity *entity = os_lnx_entity_alloc(OS_LNX_EntityKind_Mutex);
   pthread_mutexattr_t attr;
   pthread_mutexattr_init(&attr);
@@ -738,7 +736,7 @@ static void OS_MutexDrop(OS_Handle mutex) {
 
 //- rjf: reader/writer mutexes
 
-static OS_Handle OS_RWMutexAlloc(void) {
+static OS_Handle OS_RWMutexAlloc() {
   OS_LNX_Entity *entity = os_lnx_entity_alloc(OS_LNX_EntityKind_RWMutex);
   int init_result = pthread_rwlock_init(&entity->rwmutex_handle, 0);
   if (init_result == -1) {
@@ -792,7 +790,7 @@ static void OS_RWMutexDropW(OS_Handle rw_mutex) {
 
 //- rjf: condition variables
 
-static OS_Handle os_condition_variable_alloc(void) {
+static OS_Handle os_condition_variable_alloc() {
   OS_LNX_Entity *entity =
       os_lnx_entity_alloc(OS_LNX_EntityKind_ConditionVariable);
   int init_result = pthread_cond_init(&entity->cv.cond_handle, 0);
@@ -1066,7 +1064,7 @@ static void os_safe_call(OS_ThreadFunctionType *func,
 ////////////////////////////////
 //~ rjf: @os_hooks GUIDs (Implemented Per-OS)
 
-static Guid os_make_guid(void) {
+static Guid os_make_guid() {
   Guid guid = {0};
   getrandom(guid.v, sizeof(guid.v), 0);
   guid.data3 &= 0x0fff;

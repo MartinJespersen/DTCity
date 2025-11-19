@@ -31,7 +31,7 @@ safe_cast_s32(S64 x)
 //~ rjf: Large Base Type Functions
 
 static U128
-u128_zero(void)
+u128_zero()
 {
     U128 v = {0};
     return v;
@@ -40,7 +40,7 @@ u128_zero(void)
 static U128
 u128_make(U64 v0, U64 v1)
 {
-    U128 v = {v0, v1};
+    U128 v = {.u64 = {v0, v1}};
     return v;
 }
 
@@ -100,7 +100,7 @@ extend_sign64(U64 x, U64 size)
 }
 
 static F32
-inf32(void)
+inf32()
 {
     union
     {
@@ -112,7 +112,7 @@ inf32(void)
 }
 
 static F32
-neg_inf32(void)
+neg_inf32()
 {
     union
     {
@@ -409,33 +409,24 @@ bit_size_from_arch(Arch arch)
     U64 arch_bitsize = 0;
     switch (arch)
     {
-    case Arch_x64:
-        arch_bitsize = 64;
-        break;
-    case Arch_x86:
-        arch_bitsize = 32;
-        break;
-    case Arch_arm64:
-        arch_bitsize = 64;
-        break;
-    case Arch_arm32:
-        arch_bitsize = 32;
-        break;
-    default:
-        break;
+        case Arch_x64: arch_bitsize = 64; break;
+        case Arch_x86: arch_bitsize = 32; break;
+        case Arch_arm64: arch_bitsize = 64; break;
+        case Arch_arm32: arch_bitsize = 32; break;
+        default: break;
     }
     return arch_bitsize;
 }
 
 static U64
-max_instruction_size_from_arch(Arch arch)
+max_instruction_size_from_arch(Arch arch) // NOLINT(misc-unused-parameters)
 {
     // TODO(rjf): make this real
     return 64;
 }
 
 static OperatingSystem
-operating_system_from_context(void)
+operating_system_from_context()
 {
     OperatingSystem os = OperatingSystem_Null;
 #if OS_WINDOWS
@@ -449,7 +440,7 @@ operating_system_from_context(void)
 }
 
 static Arch
-arch_from_context(void)
+arch_from_context()
 {
     Arch arch = Arch_Null;
 #if ARCH_X64
@@ -465,7 +456,7 @@ arch_from_context(void)
 }
 
 static Compiler
-compiler_from_context(void)
+compiler_from_context()
 {
     Compiler compiler = Compiler_Null;
 #if COMPILER_MSVC
@@ -545,6 +536,7 @@ date_time_from_micro_seconds(U64 time)
     return (result);
 }
 
+// NOLINTBEGIN(bugprone-branch-clone)
 static DateTime
 date_time_from_unix_time(U64 unix_time)
 {
@@ -562,53 +554,30 @@ date_time_from_unix_time(U64 unix_time)
             U64 c = 0;
             switch (date.month)
             {
-            case Month_Jan:
-                c = 31;
-                break;
-            case Month_Feb:
-            {
-                if ((date.year % 4 == 0) && ((date.year % 100) != 0 || (date.year % 400) == 0))
+                case Month_Jan: c = 31; break;
+                case Month_Feb:
                 {
-                    c = 29;
+                    if ((date.year % 4 == 0) && ((date.year % 100) != 0 || (date.year % 400) == 0))
+                    {
+                        c = 29;
+                    }
+                    else
+                    {
+                        c = 28;
+                    }
                 }
-                else
-                {
-                    c = 28;
-                }
-            }
-            break;
-            case Month_Mar:
-                c = 31;
                 break;
-            case Month_Apr:
-                c = 30;
-                break;
-            case Month_May:
-                c = 31;
-                break;
-            case Month_Jun:
-                c = 30;
-                break;
-            case Month_Jul:
-                c = 31;
-                break;
-            case Month_Aug:
-                c = 31;
-                break;
-            case Month_Sep:
-                c = 30;
-                break;
-            case Month_Oct:
-                c = 31;
-                break;
-            case Month_Nov:
-                c = 30;
-                break;
-            case Month_Dec:
-                c = 31;
-                break;
-            default:
-                InvalidPath;
+                case Month_Mar: c = 31; break;
+                case Month_Apr: c = 30; break;
+                case Month_May: c = 31; break;
+                case Month_Jun: c = 30; break;
+                case Month_Jul: c = 31; break;
+                case Month_Aug: c = 31; break;
+                case Month_Sep: c = 30; break;
+                case Month_Oct: c = 31; break;
+                case Month_Nov: c = 30; break;
+                case Month_Dec: c = 31; break;
+                default: InvalidPath;
             }
             if (date.day <= c)
             {
@@ -622,7 +591,8 @@ exit:;
 
     return date;
 }
-
+// NOLINTEND(bugprone-branch-clone)
+//
 ////////////////////////////////
 //~ rjf: Non-Fancy Ring Buffer Reads/Writes
 

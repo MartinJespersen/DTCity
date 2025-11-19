@@ -1,5 +1,5 @@
 static U64
-CpuTimerFreqEstimate(void)
+CpuTimerFreqEstimate()
 {
     U64 ms_to_wait = 100;
     U64 os_freq = OS_SystemTimerFreqGet();
@@ -37,5 +37,6 @@ Profiler::~Profiler()
     U64 cpu_freq = CpuTimerFreqEstimate();
     U64 micro = 1'000;
     F64 time_elapsed_us = (F64)(diff * micro) / (F64)cpu_freq;
+    (void)time_elapsed_us;
     DEBUG_LOG("Duration (us): %f\n", time_elapsed_us);
 }

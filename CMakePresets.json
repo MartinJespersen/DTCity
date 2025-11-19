@@ -1,9 +1,14 @@
 {
-  "version": 2,
+  "version": 3,
+  "cmakeMinimumRequired": {
+    "major": 3,
+    "minor": 15,
+    "patch": 0
+  },
   "configurePresets": [
     {
-      "name": "Debug",
-      "generator": "Ninja",
+      "name": "debug-base",
+      "hidden": true,
       "binaryDir": "${sourceDir}/build",
       "cacheVariables": {
         "CMAKE_TOOLCHAIN_FILE": "$env{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake",
@@ -13,8 +18,16 @@
       }
     },
     {
-      "name": "Release",
-      "generator": "Ninja",
+      "name": "profile-base",
+      "binaryDir": "${sourceDir}/build",
+      "cacheVariables": {
+        "CMAKE_TOOLCHAIN_FILE": "$env{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake",
+        "CMAKE_BUILD_TYPE": "RelWithDebInfo",
+        "TRACY_PROFILE_ENABLE": "ON"
+      }
+    },
+    {
+      "name": "release-base",
       "binaryDir": "${sourceDir}/build",
       "cacheVariables": {
         "CMAKE_TOOLCHAIN_FILE": "$env{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake",
@@ -22,13 +35,40 @@
       }
     },
     {
-      "name": "Profile",
+      "name": "release-windows",
+      "inherits": "release-base",
       "generator": "Ninja",
-      "binaryDir": "${sourceDir}/build",
       "cacheVariables": {
-        "CMAKE_TOOLCHAIN_FILE": "$env{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake",
-        "CMAKE_BUILD_TYPE": "RelWithDebInfo"
+        "VCPKG_TARGET_TRIPLET": "x64-windows-static-md"
       }
+    },
+    {
+      "name": "release-linux",
+      "inherits": "release-base",
+      "generator": "Unix Makefiles",
+      "cacheVariables": {
+        "VCPKG_TARGET_TRIPLET": "x64-linux-release"
+      }
+    },
+    {
+      "name": "debug-windows",
+      "inherits": "debug-base",
+      "generator": "Ninja"
+    },
+    {
+      "name": "debug-linux",
+      "inherits": "debug-base",
+      "generator": "Unix Makefiles"
+    },
+    {
+      "name": "profile-windows",
+      "inherits": "profile-base",
+      "generator": "Ninja"
+    },
+    {
+      "name": "profile-linux",
+      "inherits": "profile-base",
+      "generator": "Unix Makefiles"
     }
   ]
 }

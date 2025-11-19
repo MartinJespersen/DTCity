@@ -1,6 +1,5 @@
 // lib(s)
 DISABLE_WARNINGS_PUSH
-#include "third_party/simdjson/simdjson.cpp"
 #define CGLTF_IMPLEMENTATION
 #include "third_party/cgltf.h"
 DISABLE_WARNINGS_POP

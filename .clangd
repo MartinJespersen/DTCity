@@ -11,20 +11,17 @@ Index:
 Diagnostics:
   UnusedIncludes: None
   Suppress:
-    [
-      "unused-function",
-      "redefinition_different_kind",
-      "too_many_args_in_macro_invoc",
-    ]
+    - undefined-internal
+    - tautological-pointer-compare
+    - c99-designator
+    - c++11-narrowing
   ClangTidy:
     FastCheckFilter: Strict
-    Add:
-      ["clang-analyzer-deadcode.*", "misc-definitions-in-headers", "bugprone*"]
 Hover:
   ShowAKA: true
 ---
 If:
-  PathMatch: (src/third_party/.*|src/os_core/linux/.*|src/http/linux/.*)
+  PathMatch: (src\/third_party|src\/os_core|src\/http)\/.*
 Diagnostics:
   Suppress: "*"
 CompileFlags:
