@@ -7,8 +7,7 @@
   },
   "configurePresets": [
     {
-      "name": "debug",
-      "generator": "Ninja",
+      "name": "debug-base",
       "hidden": true,
       "binaryDir": "${sourceDir}/build",
       "cacheVariables": {
@@ -19,8 +18,7 @@
       }
     },
     {
-      "name": "profile",
-      "generator": "Ninja",
+      "name": "profile-base",
       "binaryDir": "${sourceDir}/build",
       "cacheVariables": {
         "CMAKE_TOOLCHAIN_FILE": "$env{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake",
@@ -32,19 +30,44 @@
       "name": "release-base",
       "binaryDir": "${sourceDir}/build",
       "cacheVariables": {
-        "CMAKE_TOOLCHAIN_FILE": "$env{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake",
-        "VCPKG_TARGET_TRIPLET": "x64-windows-static-release",
+        "CMAKE_TOOLCHAIN_FIE": "$env{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake",
         "CMAKE_BUILD_TYPE": "Release"
       }
     },
     {
       "name": "release-windows",
       "inherits": "release-base",
-      "generator": "Ninja"
+      "generator": "Ninja",
+      "cacheVariables": {
+        "VCPKG_TARGET_TRIPLET": "x64-windows-static-release"
+      }
     },
     {
       "name": "release-linux",
       "inherits": "release-base",
+      "generator": "Unix Makefiles",
+      "cacheVariables": {
+        "VCPKG_TARGET_TRIPLET": "x64-linux-release"
+      }
+    },
+    {
+      "name": "debug-windows",
+      "inherits": "debug-base",
+      "generator": "Ninja"
+    },
+    {
+      "name": "debug-linux",
+      "inherits": "debug-base",
+      "generator": "Unix Makefiles"
+    },
+    {
+      "name": "profile-windows",
+      "inherits": "profile-base",
+      "generator": "Ninja"
+    },
+    {
+      "name": "profile-linux",
+      "inherits": "profile-base",
       "generator": "Unix Makefiles"
     }
   ]
