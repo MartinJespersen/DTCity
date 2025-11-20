@@ -114,6 +114,7 @@ add_custom_target(CompileShaders ALL DEPENDS ${SPIRV_BINARY_FILES})
 
 target_sources(city
     PRIVATE
+    src/
     src/main.cpp
 )
 

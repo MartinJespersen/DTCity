@@ -24,27 +24,23 @@ VK_TextureDestroy(VK_Context* vk_ctx, VK_Texture* texture)
     vkDestroySampler(vk_ctx->device, texture->sampler, nullptr);
 }
 static void
-VK_ImageFromKtx2file(VkCommandBuffer cmd, VkImage image, VK_BufferAllocation staging_buffer,
-                     VK_Context* vk_ctx, ktxTexture2* ktx_texture)
+vk_texture_gpu_upload(VkCommandBuffer cmd, VkImage image, VK_BufferAllocation staging_buffer,
+                      r_TextureInfo* tex_info)
 {
     ScratchScope scratch = ScratchScope(0, 0);
+    VK_Context* vk_ctx = VK_CtxGet();
 
-    VkDeviceSize img_size = ktx_texture->dataSize;
-    U32 mip_levels = ktx_texture->numLevels;
+    vmaCopyMemoryToAllocation(vk_ctx->allocator, tex_info->data.data, staging_buffer.allocation, 0,
+                              tex_info->data.size);
 
-    vmaCopyMemoryToAllocation(vk_ctx->allocator, ktx_texture->pData, staging_buffer.allocation, 0,
-                              img_size);
+    VkBufferImageCopy* regions =
+        PushArray(scratch.arena, VkBufferImageCopy, tex_info->mip_level_offsets.size);
 
-    VkBufferImageCopy* regions = PushArray(scratch.arena, VkBufferImageCopy, mip_levels);
-
-    for (uint32_t level = 0; level < mip_levels; ++level)
+    for (uint32_t level = 0; level < tex_info->mip_level_offsets.size; ++level)
     {
-        ktx_size_t offset;
-        ktxTexture_GetImageOffset((ktxTexture*)ktx_texture, level, 0, 0, &offset);
-
-        uint32_t mip_width = ktx_texture->baseWidth >> level;
-        uint32_t mip_height = ktx_texture->baseHeight >> level;
-        uint32_t mip_depth = ktx_texture->baseDepth >> level;
+        uint32_t mip_width = tex_info->base_width >> level;
+        uint32_t mip_height = tex_info->base_height >> level;
+        uint32_t mip_depth = tex_info->base_depth >> level;
 
         if (mip_width == 0)
             mip_width = 1;
@@ -53,7 +49,7 @@ VK_ImageFromKtx2file(VkCommandBuffer cmd, VkImage image, VK_BufferAllocation sta
         if (mip_depth == 0)
             mip_depth = 1;
 
-        regions[level] = {.bufferOffset = offset,
+        regions[level] = {.bufferOffset = tex_info->mip_level_offsets.data[level],
                           .bufferRowLength = 0, // tightly packed
                           .bufferImageHeight = 0,
                           .imageSubresource = {.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
@@ -75,14 +71,14 @@ VK_ImageFromKtx2file(VkCommandBuffer cmd, VkImage image, VK_BufferAllocation sta
         .image = image,
         .subresourceRange = {.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
                              .baseMipLevel = 0,
-                             .levelCount = mip_levels,
+                             .levelCount = (U32)tex_info->mip_level_offsets.size,
                              .baseArrayLayer = 0,
                              .layerCount = 1},
     };
     vkCmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0,
                          0, NULL, 0, NULL, 1, &barrier);
     vkCmdCopyBufferToImage(cmd, staging_buffer.buffer, image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-                           mip_levels, regions);
+                           tex_info->mip_level_offsets.size, regions);
 
     barrier.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
     barrier.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
@@ -129,7 +125,7 @@ VK_ThreadSetup(async::ThreadInfo thread_info, void* input)
         {
             R_TextureLoadingInfo* extra_info =
                 (R_TextureLoadingInfo*)&asset_loading_info->extra_info;
-            VK_TextureCreate(cmd, asset_loading_info->handle, extra_info->texture_path);
+            vk_texture_create(cmd, asset_loading_info->handle, &extra_info->texture_info);
         }
         break;
         case R_AssetItemType_Buffer:
@@ -146,40 +142,19 @@ VK_ThreadSetup(async::ThreadInfo thread_info, void* input)
     VK_AssetCmdQueueItemEnqueue(thread_info.thread_id, cmd, thread_input);
 }
 
-g_inline r_TextureInfo
-vk_texture_info_from_ktx(U8* data, U64 size)
-{
-    ktxTexture2* ktx_texture;
-    ktx_error_code_e ktxresult = ktxTexture2_CreateFromMemory(data, size, NULL, &ktx_texture);
-    Assert(ktxresult == KTX_SUCCESS);
-
-    r_TextureInfo tex_info = {.base_width = ktx_texture->baseWidth,
-                              .base_height = ktx_texture->baseHeight,
-                              .base_depth = ktx_texture->baseDepth,
-                              .mip_level_count = ktx_texture->numLayers,
-                              .data = ktx_texture->pData};
-    return tex_info;
-}
-
 static void
-VK_TextureCreate(VkCommandBuffer cmd_buffer, R_Handle handle, String8 texture_path)
+vk_texture_create(VkCommandBuffer cmd_buffer, R_Handle handle, r_TextureInfo* tex_info)
 {
     VK_Context* vk_ctx = VK_CtxGet();
 
     R_AssetItem<VK_Texture>* asset_store_texture = VK_AssetManagerTextureItemGet(handle);
     VK_Texture* texture = &asset_store_texture->item;
 
-    // Get texture
-    ktxTexture2* ktx_texture;
-    ktx_error_code_e ktxresult = ktxTexture2_CreateFromNamedFile(
-        (char*)texture_path.str, KTX_TEXTURE_CREATE_ALLOC_STORAGE, &ktx_texture);
-    Assert(ktxresult == KTX_SUCCESS);
-
     VK_BufferAllocation texture_staging_buffer =
-        VK_StagingBufferCreate(vk_ctx->allocator, ktx_texture->dataSize);
+        VK_StagingBufferCreate(vk_ctx->allocator, tex_info->data.size);
 
-    VK_ImageFromKtx2file(cmd_buffer, texture->image_resource.image_alloc.image,
-                         texture_staging_buffer, vk_ctx, ktx_texture);
+    vk_texture_gpu_upload(cmd_buffer, texture->image_resource.image_alloc.image,
+                          texture_staging_buffer, tex_info);
 
     texture->staging_buffer = texture_staging_buffer;
 }
@@ -1789,7 +1764,7 @@ r_latest_hovered_object_id_get()
 
 g_internal R_Handle
 r_texture_handle_create(R_SamplerInfo* sampler_info, R_PipelineUsageType pipeline_usage_type,
-                        r_TextureCreateInfo* tex_create_info)
+                        r_TextureInfo* tex_create_info)
 {
     VK_Context* vk_ctx = VK_CtxGet();
     VK_AssetManager* asset_manager = vk_ctx->asset_manager;
@@ -1807,11 +1782,11 @@ r_texture_handle_create(R_SamplerInfo* sampler_info, R_PipelineUsageType pipelin
         VK_SAMPLE_COUNT_1_BIT, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_TILING_OPTIMAL,
         VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT |
             VK_IMAGE_USAGE_SAMPLED_BIT,
-        tex_create_info->mip_level_count, vma_info);
+        tex_create_info->mip_level_offsets.size, vma_info);
 
-    VK_ImageViewResource image_view_resource =
-        VK_ImageViewResourceCreate(vk_ctx->device, image_alloc.image, VK_FORMAT_R8G8B8A8_SRGB,
-                                   VK_IMAGE_ASPECT_COLOR_BIT, tex_create_info->mip_level_count);
+    VK_ImageViewResource image_view_resource = VK_ImageViewResourceCreate(
+        vk_ctx->device, image_alloc.image, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_ASPECT_COLOR_BIT,
+        tex_create_info->mip_level_offsets.size);
 
     // ~mgj: Choose Descriptor Set Layout and Create Descriptor Set
     VkDescriptorSetLayout desc_set_layout = NULL;
@@ -1843,32 +1818,28 @@ r_texture_handle_create(R_SamplerInfo* sampler_info, R_PipelineUsageType pipelin
 }
 
 static R_Handle
-r_texture_load(R_SamplerInfo* sampler_info, String8 texture_path,
-               R_PipelineUsageType pipeline_usage_type)
+r_texture_load_async(R_SamplerInfo* sampler_info, String8 texture_path,
+                     R_PipelineUsageType pipeline_usage_type)
 {
     ScratchScope scratch = ScratchScope(0, 0);
     VK_Context* vk_ctx = VK_CtxGet();
     VK_AssetManager* asset_manager = vk_ctx->asset_manager;
-
-    // Get texture dimensions
-    Buffer<U8> tex_data = io_file_read(scratch.arena, texture_path);
-
-    r_TextureInfo tex_info = vk_texture_info_from_ktx(tex_data.data, tex_data.size);
-
-    R_Handle texture_handle = r_texture_handle_create(sampler_info, pipeline_usage_type, &tex_info);
+    R_ThreadInput* thread_input = VK_ThreadInputCreate();
 
     // ~mgj: make input ready for texture loading on thread
-    R_ThreadInput* thread_input = VK_ThreadInputCreate();
     R_AssetLoadingInfo* asset_load_info = &thread_input->asset_info;
-    asset_load_info->handle = texture_handle;
     asset_load_info->type = R_AssetItemType_Texture;
     R_TextureLoadingInfo* texture_load_info = &asset_load_info->extra_info.texture_info;
-    texture_load_info->texture_path = PushStr8Copy(thread_input->arena, texture_path);
+
+    Buffer<U8> tex_data = io_file_read(thread_input->arena, texture_path);
+    texture_load_info->texture_info = vk_texture_info_get(thread_input->arena, tex_data);
+    asset_load_info->handle = r_texture_handle_create(sampler_info, pipeline_usage_type,
+                                                      &texture_load_info->texture_info);
 
     async::QueueItem queue_input = {.data = thread_input, .worker_func = VK_ThreadSetup};
     async::QueuePush(asset_manager->work_queue, &queue_input);
 
-    return texture_handle;
+    return asset_load_info->handle;
 }
 
 static R_Handle
@@ -1914,7 +1885,36 @@ R_BufferLoad(R_BufferInfo* buffer_info)
     return handle;
 }
 
-g_internal void
-r_texture_upload(R_Handle tex_handle)
+static r_TextureInfo
+vk_texture_info_get(Arena* arena, Buffer<U8> tex_data)
 {
+    r_TextureInfo tex_info = {};
+
+    ktxTexture2* ktx_texture;
+    ktx_error_code_e ktxresult =
+        ktxTexture2_CreateFromMemory(tex_data.data, tex_data.size, NULL, &ktx_texture);
+
+    if (ktxresult == KTX_SUCCESS)
+    {
+        Buffer<U32> mip_level_offsets = BufferAlloc<U32>(arena, ktx_texture->numLevels);
+        for (U32 i = 0; i < ktx_texture->numLevels; ++i)
+        {
+            ktx_size_t offset;
+            KTX_error_code ktx_error =
+                ktxTexture_GetImageOffset((ktxTexture*)ktx_texture, i, 0, 0, &offset);
+            if (ktx_error != KTX_SUCCESS)
+            {
+                exit_with_error("Failed to get image offset for mipmap level %u", i);
+            }
+            mip_level_offsets.data[i] = offset;
+        }
+        tex_info = {.base_width = ktx_texture->baseWidth,
+                    .base_height = ktx_texture->baseHeight,
+                    .base_depth = ktx_texture->baseDepth,
+                    .base_size = ktx_texture->dataSize,
+                    .mip_level_offsets = mip_level_offsets,
+                    .data = tex_data};
+    }
+    Assert(ktxresult == KTX_SUCCESS);
+    return tex_info;
 }

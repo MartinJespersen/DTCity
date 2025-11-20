@@ -9,4 +9,3 @@ DISABLE_WARNINGS_POP
 
 // ~mgj: user defined
 #include "lib_wrappers/json.hpp"
-#include "lib_wrappers/cgltf.hpp"

@@ -1,5 +1,130 @@
 namespace city
 {
+static R_SamplerInfo
+city_sampler_from_cgltf_sampler(gltfw_Sampler sampler)
+{
+    R_Filter min_filter = R_Filter_Nearest;
+    R_Filter mag_filter = R_Filter_Nearest;
+    R_MipMapMode mipmap_mode = R_MipMapMode_Nearest;
+    R_SamplerAddressMode address_mode_u = R_SamplerAddressMode_Repeat;
+    R_SamplerAddressMode address_mode_v = R_SamplerAddressMode_Repeat;
+
+    switch (sampler.min_filter)
+    {
+        default: exit_with_error("Invalid min filter type"); break;
+        case cgltf_filter_type_nearest:
+        {
+            min_filter = R_Filter_Nearest;
+            mag_filter = R_Filter_Nearest;
+            mipmap_mode = R_MipMapMode_Nearest;
+        }
+        break;
+        case cgltf_filter_type_linear:
+        {
+            min_filter = R_Filter_Linear;
+            mag_filter = R_Filter_Linear;
+            mipmap_mode = R_MipMapMode_Nearest;
+        }
+        break;
+        case cgltf_filter_type_nearest_mipmap_nearest:
+        {
+            min_filter = R_Filter_Nearest;
+            mag_filter = R_Filter_Nearest;
+            mipmap_mode = R_MipMapMode_Nearest;
+        }
+        break;
+        case cgltf_filter_type_linear_mipmap_nearest:
+        {
+            min_filter = R_Filter_Linear;
+            mag_filter = R_Filter_Linear;
+            mipmap_mode = R_MipMapMode_Nearest;
+        }
+        break;
+        case cgltf_filter_type_nearest_mipmap_linear:
+        {
+            min_filter = R_Filter_Nearest;
+            mag_filter = R_Filter_Nearest;
+            mipmap_mode = R_MipMapMode_Linear;
+        }
+        break;
+        case cgltf_filter_type_linear_mipmap_linear:
+        {
+            min_filter = R_Filter_Linear;
+            mag_filter = R_Filter_Linear;
+            mipmap_mode = R_MipMapMode_Linear;
+        }
+        break;
+    }
+
+    if (sampler.mag_filter != sampler.min_filter)
+    {
+        switch (sampler.mag_filter)
+        {
+            default: exit_with_error("Invalid mag filter type"); break;
+            case cgltf_filter_type_nearest_mipmap_nearest:
+            {
+                mag_filter = R_Filter_Nearest;
+            }
+            break;
+            case cgltf_filter_type_linear_mipmap_nearest:
+            {
+                mag_filter = R_Filter_Linear;
+            }
+            break;
+            case cgltf_filter_type_nearest_mipmap_linear:
+            {
+                mag_filter = R_Filter_Nearest;
+            }
+            break;
+            case cgltf_filter_type_linear_mipmap_linear:
+            {
+                mag_filter = R_Filter_Linear;
+            }
+            break;
+            case cgltf_filter_type_nearest:
+            {
+                mag_filter = R_Filter_Nearest;
+            }
+            break;
+            case cgltf_filter_type_linear:
+            {
+                mag_filter = R_Filter_Linear;
+            }
+            break;
+
+                break;
+        }
+    }
+
+    switch (sampler.wrap_s)
+    {
+        case cgltf_wrap_mode_clamp_to_edge:
+            address_mode_u = R_SamplerAddressMode_ClampToEdge;
+            break;
+        case cgltf_wrap_mode_repeat: address_mode_u = R_SamplerAddressMode_Repeat; break;
+        case cgltf_wrap_mode_mirrored_repeat:
+            address_mode_u = R_SamplerAddressMode_MirroredRepeat;
+            break;
+    }
+    switch (sampler.wrap_t)
+    {
+        case cgltf_wrap_mode_clamp_to_edge:
+            address_mode_v = R_SamplerAddressMode_ClampToEdge;
+            break;
+        case cgltf_wrap_mode_repeat: address_mode_v = R_SamplerAddressMode_Repeat; break;
+        case cgltf_wrap_mode_mirrored_repeat:
+            address_mode_v = R_SamplerAddressMode_MirroredRepeat;
+            break;
+    }
+
+    R_SamplerInfo sampler_info = {.min_filter = min_filter,
+                                  .mag_filter = mag_filter,
+                                  .mip_map_mode = mipmap_mode,
+                                  .address_mode_u = address_mode_u,
+                                  .address_mode_v = address_mode_v};
+
+    return sampler_info;
+}
 
 static Road*
 RoadCreate(String8 texture_path, String8 cache_path, osm_GCSBoundingBox* gcs_bbox,
@@ -76,7 +201,8 @@ RoadCreate(String8 texture_path, String8 cache_path, osm_GCSBoundingBox* gcs_bbo
 
     road->texture_path = Str8PathFromStr8List(road->arena, {texture_path, S("road_texture.ktx2")});
 
-    road->texture_handle = r_texture_load(sampler_info, road->texture_path, R_PipelineUsageType_3D);
+    road->texture_handle =
+        r_texture_load_async(sampler_info, road->texture_path, R_PipelineUsageType_3D);
     road->vertex_handle = R_BufferLoad(&vertex_buffer_info);
     road->index_handle = R_BufferLoad(&index_buffer_info);
 
@@ -682,7 +808,7 @@ RoadIntersectionPointsFind(Road* road, RoadSegment* in_out_segment, osm_Way* cur
 
 // ~mgj: Cars
 static Rng1F32
-CarCenterHeightOffset(Buffer<Vertex3D> vertices)
+CarCenterHeightOffset(Buffer<gltfw_Vertex3D> vertices)
 {
     F32 highest_value = 0;
     for (U64 i = 0; i < vertices.size; i++)
@@ -710,24 +836,20 @@ CarSimCreate(String8 asset_path, String8 texture_path, U32 car_count, Road* road
 
     // parse gltf file
     String8 gltf_path = Str8PathFromStr8List(scratch.arena, {asset_path, S("cars/scene.gltf")});
-    wrapper::CgltfResult parsed_result = wrapper::CgltfParse(arena, gltf_path, S("Car.013"));
-    R_SamplerInfo sampler_info = gltfw_sampler_from_cgltf_sampler(parsed_result.sampler);
-    car_sim->vertex_buffer = parsed_result.vertex_buffer;
-    car_sim->index_buffer = parsed_result.index_buffer;
-    car_sim->sampler_info = sampler_info;
-
-    R_BufferInfo vertex_buffer_info =
-        R_BufferInfoFromTemplateBuffer(car_sim->vertex_buffer, R_BufferType_Vertex);
-    R_BufferInfo index_buffer_info =
-        R_BufferInfoFromTemplateBuffer(car_sim->index_buffer, R_BufferType_Index);
+    CgltfResult parsed_result = gltfw_gltf_read(arena, gltf_path, S("Car.013"));
+    car_sim->sampler_info = city_sampler_from_cgltf_sampler(parsed_result.sampler);
+    car_sim->vertex_buffer =
+        R_BufferInfoFromTemplateBuffer(parsed_result.vertex_buffer, R_BufferType_Vertex);
+    car_sim->index_buffer =
+        R_BufferInfoFromTemplateBuffer(parsed_result.index_buffer, R_BufferType_Index);
 
     car_sim->texture_path = Str8PathFromStr8List(arena, {texture_path, S("car_collection.ktx2")});
-    car_sim->texture_handle =
-        r_texture_load(&sampler_info, car_sim->texture_path, R_PipelineUsageType_3DInstanced);
-    car_sim->vertex_handle = R_BufferLoad(&vertex_buffer_info);
-    car_sim->index_handle = R_BufferLoad(&index_buffer_info);
+    car_sim->texture_handle = r_texture_load_async(&car_sim->sampler_info, car_sim->texture_path,
+                                                   R_PipelineUsageType_3DInstanced);
+    car_sim->vertex_handle = R_BufferLoad(&car_sim->vertex_buffer);
+    car_sim->index_handle = R_BufferLoad(&car_sim->index_buffer);
 
-    car_sim->car_center_offset = CarCenterHeightOffset(car_sim->vertex_buffer);
+    car_sim->car_center_offset = CarCenterHeightOffset(parsed_result.vertex_buffer);
     car_sim->cars = BufferAlloc<Car>(arena, car_count);
 
     for (U32 i = 0; i < car_count; ++i)
@@ -881,9 +1003,9 @@ BuildingsCreate(String8 cache_path, String8 texture_path, F32 road_height,
     buildings->roof_texture_path =
         Str8PathFromStr8List(arena, {texture_path, S("concrete042A.ktx2")});
     buildings->facade_texture_handle =
-        r_texture_load(sampler_info, buildings->facade_texture_path, R_PipelineUsageType_3D);
+        r_texture_load_async(sampler_info, buildings->facade_texture_path, R_PipelineUsageType_3D);
     buildings->roof_texture_handle =
-        r_texture_load(sampler_info, buildings->roof_texture_path, R_PipelineUsageType_3D);
+        r_texture_load_async(sampler_info, buildings->roof_texture_path, R_PipelineUsageType_3D);
 
     BuildingRenderInfo render_info;
     city::BuildingsBuffersCreate(arena, road_height, &render_info, node_utm_structure);

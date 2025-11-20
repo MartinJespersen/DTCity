@@ -8,6 +8,7 @@ DISABLE_WARNINGS_POP
 #include "http/http_inc.cpp"
 #include "async/async.cpp"
 #include "lib_wrappers/lib_wrappers_inc.cpp"
+#include "gltfw/gltfw.cpp"
 #include "render/render_inc.cpp"
 #include "misc/misc_inc.cpp"
 #include "osm/osm.cpp"

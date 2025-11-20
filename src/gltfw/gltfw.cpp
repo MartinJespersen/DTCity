@@ -1,133 +1,7 @@
-#include "base/base_core.hpp"
-#include "render/vulkan/vulkan.hpp"
-#include <ktx.h>
-namespace wrapper
-{
-static R_SamplerInfo
-gltfw_sampler_from_cgltf_sampler(CgltfSampler sampler)
-{
-    R_Filter min_filter = R_Filter_Nearest;
-    R_Filter mag_filter = R_Filter_Nearest;
-    R_MipMapMode mipmap_mode = R_MipMapMode_Nearest;
-    R_SamplerAddressMode address_mode_u = R_SamplerAddressMode_Repeat;
-    R_SamplerAddressMode address_mode_v = R_SamplerAddressMode_Repeat;
-
-    switch (sampler.min_filter)
-    {
-        default: exit_with_error("Invalid min filter type"); break;
-        case cgltf_filter_type_nearest:
-        {
-            min_filter = R_Filter_Nearest;
-            mag_filter = R_Filter_Nearest;
-            mipmap_mode = R_MipMapMode_Nearest;
-        }
-        break;
-        case cgltf_filter_type_linear:
-        {
-            min_filter = R_Filter_Linear;
-            mag_filter = R_Filter_Linear;
-            mipmap_mode = R_MipMapMode_Nearest;
-        }
-        break;
-        case cgltf_filter_type_nearest_mipmap_nearest:
-        {
-            min_filter = R_Filter_Nearest;
-            mag_filter = R_Filter_Nearest;
-            mipmap_mode = R_MipMapMode_Nearest;
-        }
-        break;
-        case cgltf_filter_type_linear_mipmap_nearest:
-        {
-            min_filter = R_Filter_Linear;
-            mag_filter = R_Filter_Linear;
-            mipmap_mode = R_MipMapMode_Nearest;
-        }
-        break;
-        case cgltf_filter_type_nearest_mipmap_linear:
-        {
-            min_filter = R_Filter_Nearest;
-            mag_filter = R_Filter_Nearest;
-            mipmap_mode = R_MipMapMode_Linear;
-        }
-        break;
-        case cgltf_filter_type_linear_mipmap_linear:
-        {
-            min_filter = R_Filter_Linear;
-            mag_filter = R_Filter_Linear;
-            mipmap_mode = R_MipMapMode_Linear;
-        }
-        break;
-    }
-
-    if (sampler.mag_filter != sampler.min_filter)
-    {
-        switch (sampler.mag_filter)
-        {
-            default: exit_with_error("Invalid mag filter type"); break;
-            case cgltf_filter_type_nearest_mipmap_nearest:
-            {
-                mag_filter = R_Filter_Nearest;
-            }
-            break;
-            case cgltf_filter_type_linear_mipmap_nearest:
-            {
-                mag_filter = R_Filter_Linear;
-            }
-            break;
-            case cgltf_filter_type_nearest_mipmap_linear:
-            {
-                mag_filter = R_Filter_Nearest;
-            }
-            break;
-            case cgltf_filter_type_linear_mipmap_linear:
-            {
-                mag_filter = R_Filter_Linear;
-            }
-            break;
-            case cgltf_filter_type_nearest:
-            {
-                mag_filter = R_Filter_Nearest;
-            }
-            break;
-            case cgltf_filter_type_linear:
-            {
-                mag_filter = R_Filter_Linear;
-            }
-            break;
-
-                break;
-        }
-    }
-
-    switch (sampler.wrap_s)
-    {
-        case cgltf_wrap_mode_clamp_to_edge:
-            address_mode_u = R_SamplerAddressMode_ClampToEdge;
-            break;
-        case cgltf_wrap_mode_repeat: address_mode_u = R_SamplerAddressMode_Repeat; break;
-        case cgltf_wrap_mode_mirrored_repeat:
-            address_mode_u = R_SamplerAddressMode_MirroredRepeat;
-            break;
-    }
-    switch (sampler.wrap_t)
-    {
-        case cgltf_wrap_mode_clamp_to_edge:
-            address_mode_v = R_SamplerAddressMode_ClampToEdge;
-            break;
-        case cgltf_wrap_mode_repeat: address_mode_v = R_SamplerAddressMode_Repeat; break;
-        case cgltf_wrap_mode_mirrored_repeat:
-            address_mode_v = R_SamplerAddressMode_MirroredRepeat;
-            break;
-    }
-
-    R_SamplerInfo sampler_info = {.min_filter = min_filter,
-                                  .mag_filter = mag_filter,
-                                  .mip_map_mode = mipmap_mode,
-                                  .address_mode_u = address_mode_u,
-                                  .address_mode_v = address_mode_v};
-
-    return sampler_info;
-}
+DISABLE_WARNINGS_PUSH
+#define CGLTF_IMPLEMENTATION
+#include "third_party/cgltf.h"
+DISABLE_WARNINGS_POP
 
 static CgltfNode*
 ChildrenNodesDepthFirstPreOrder(Arena* arena, CgltfNode** stack, CgltfNode* node)
@@ -163,7 +37,7 @@ ChildrenNodesDepthFirstPreOrder(Arena* arena, CgltfNode** stack, CgltfNode* node
 }
 
 g_internal CgltfResult
-CgltfParse(Arena* arena, String8 gltf_path, String8 root_node_name)
+gltfw_gltf_read(Arena* arena, String8 gltf_path, String8 root_node_name)
 {
     ScratchScope scratch = ScratchScope(&arena, 1);
     cgltf_options options = {};
@@ -238,8 +112,8 @@ CgltfParse(Arena* arena, String8 gltf_path, String8 root_node_name)
                 BufferNode* buffer_node = PushStruct(scratch.arena, BufferNode);
                 SLLQueuePush(buffer_node_list.first, buffer_node_list.last, buffer_node);
                 buffer_node->index_buffer = BufferAlloc<U32>(arena, accessor_indices->count);
-                buffer_node->vertex_buffer = BufferAlloc<city::Vertex3D>(arena, expected_count);
-                Buffer<city::Vertex3D>* vertex_buffer = &buffer_node->vertex_buffer;
+                buffer_node->vertex_buffer = BufferAlloc<gltfw_Vertex3D>(arena, expected_count);
+                Buffer<gltfw_Vertex3D>* vertex_buffer = &buffer_node->vertex_buffer;
                 Buffer<U32>* index_buffer = &buffer_node->index_buffer;
                 for (U32 indice_idx = 0; indice_idx < accessor_indices->count; indice_idx++)
                 {
@@ -263,7 +137,7 @@ CgltfParse(Arena* arena, String8 gltf_path, String8 root_node_name)
     cgltf_sampler* sampler = data->samplers;
     Assert(sampler);
 
-    CgltfSampler cgltf_sampler = {
+    gltfw_Sampler cgltf_sampler = {
         .mag_filter = sampler->mag_filter,
         .min_filter = sampler->min_filter,
         .wrap_s = sampler->wrap_s,
@@ -281,8 +155,8 @@ CgltfParse(Arena* arena, String8 gltf_path, String8 root_node_name)
         total_index_buffer_count += buffer_node->index_buffer.size;
     }
 
-    Buffer<city::Vertex3D> vertex_buffer =
-        BufferAlloc<city::Vertex3D>(arena, total_vertex_buffer_count);
+    Buffer<gltfw_Vertex3D> vertex_buffer =
+        BufferAlloc<gltfw_Vertex3D>(arena, total_vertex_buffer_count);
     Buffer<U32> index_buffer = BufferAlloc<U32>(arena, total_index_buffer_count);
 
     U32 cur_vertex_buffer_idx = 0;
@@ -305,14 +179,6 @@ CgltfParse(Arena* arena, String8 gltf_path, String8 root_node_name)
     }
     return CgltfResult{vertex_buffer, index_buffer, cgltf_sampler};
 }
-
-struct gltfw_Primitive
-{
-    gltfw_Primitive* next;
-    Buffer<city::Vertex3D> vertices;
-    Buffer<U32> indices;
-    U32 tex_idx;
-};
 
 g_internal gltfw_Primitive*
 gltfw_primitive_create(Arena* arena, cgltf_data* data, cgltf_primitive* in_prim)
@@ -351,7 +217,7 @@ gltfw_primitive_create(Arena* arena, cgltf_data* data, cgltf_primitive* in_prim)
 
     cgltf_accessor* accessor_indices = in_prim->indices;
     primitive->indices = BufferAlloc<U32>(arena, accessor_indices->count);
-    primitive->vertices = BufferAlloc<city::Vertex3D>(arena, expected_count);
+    primitive->vertices = BufferAlloc<gltfw_Vertex3D>(arena, expected_count);
     for (U32 indice_idx = 0; indice_idx < accessor_indices->count; indice_idx++)
     {
         U32 index = (U32)cgltf_accessor_read_index(accessor_indices, indice_idx);
@@ -371,24 +237,6 @@ gltfw_primitive_create(Arena* arena, cgltf_data* data, cgltf_primitive* in_prim)
     return primitive;
 }
 
-struct gltfw_PrimitiveList
-{
-    gltfw_Primitive* first;
-    gltfw_Primitive* last;
-};
-
-struct gltfw_Texture
-{
-    Buffer<U8> tex_buf;
-    R_SamplerInfo sampler;
-};
-
-struct gltfw_GlbResult
-{
-    gltfw_PrimitiveList primitives;
-    Buffer<gltfw_Texture> samplers;
-};
-
 g_internal bool
 ktx2_check(U8* buf, U64 size)
 {
@@ -402,77 +250,11 @@ ktx2_check(U8* buf, U64 size)
     return result;
 }
 
-g_internal void
-r_texture_load(ktxTexture2* ktx2)
-{
-    VK_Context* vk_ctx = VK_CtxGet();
-    VK_AssetManager* asset_mng = vk_ctx->asset_manager;
-
-    R_AssetItem<VK_Texture>* asset =
-        VK_AssetManagerItemCreate(&asset_mng->texture_list, &asset_mng->texture_free_list);
-}
-
-g_internal Buffer<gltfw_Texture>
-gltfw_textures_read(Arena* arena, cgltf_data* data, R_PipelineUsageType usage_type)
-{
-    Buffer<gltfw_Texture> textures = BufferAlloc<gltfw_Texture>(arena, data->textures_count);
-    for (U32 tex_idx = 0; tex_idx < textures.size; ++tex_idx)
-    {
-        gltfw_Texture* tex = &textures.data[tex_idx];
-        cgltf_texture* cgltf_tex = &data->textures[tex_idx];
-        cgltf_sampler* cgltf_sampler = cgltf_tex->sampler;
-
-        CgltfSampler gltfw_sampler = {
-            .mag_filter = cgltf_sampler->mag_filter,
-            .min_filter = cgltf_sampler->min_filter,
-            .wrap_s = cgltf_sampler->wrap_s,
-            .wrap_t = cgltf_sampler->wrap_t,
-        };
-
-        tex->sampler = gltfw_sampler_from_cgltf_sampler(gltfw_sampler);
-        cgltf_buffer_view* buf_view = cgltf_tex->image->buffer_view;
-        cgltf_buffer* c_buf = buf_view->buffer;
-        U8* buf = (U8*)c_buf->data + buf_view->offset;
-        if (ktx2_check(buf, buf_view->size))
-        {
-            ktxTexture2* ktx;
-            ktx_error_code_e err = ktxTexture2_CreateFromMemory(buf, buf_view->size, NULL, &ktx);
-            if ((err == false) && ktx)
-            {
-                r_TextureInfo info = {.base_width = ktx->baseWidth,
-                                      .base_height = ktx->baseHeight,
-                                      .base_depth = ktx->baseDepth,
-                                      .mip_level_count = ktx->numLevels};
-                R_Handle handle = r_texture_handle_create(&tex->sampler, usage_type, &info);
-            }
-        }
-    }
-
-    return textures;
-}
-
-void
-glftw_glb_read(Arena* arena, String8 glb_path)
+g_internal gltfw_PrimitiveList
+gltfw_primitives_read(Arena* arena, cgltf_data* data)
 {
     ScratchScope scratch = ScratchScope(&arena, 1);
-    cgltf_options options = {};
-    cgltf_data* data = NULL;
-
-    cgltf_accessor* accessor_position = NULL;
-    cgltf_accessor* accessor_uv = NULL;
-
-    cgltf_result result = cgltf_parse_file(&options, (char*)glb_path.str, &data);
-    Assert(result == cgltf_result_success);
-    result = cgltf_load_buffers(&options, data, (char*)glb_path.str);
-    Assert(result == cgltf_result_success);
-
-    struct BufferNodeList
-    {
-        BufferNode* first;
-        BufferNode* last;
-    };
-
-    gltfw_Primitive* prim_list;
+    gltfw_PrimitiveList prim_list = {};
 
     for (U32 scene_idx = 0; scene_idx < data->scenes_count; ++scene_idx)
     {
@@ -496,58 +278,80 @@ glftw_glb_read(Arena* arena, String8 glb_path)
                         cgltf_primitive* primitive = &mesh->primitives[prim_idx];
                         gltfw_Primitive* primitive_w =
                             gltfw_primitive_create(arena, data, primitive);
-                        SLLStackPush(prim_list, primitive_w);
+                        SLLQueuePush(prim_list.first, prim_list.last, primitive_w);
                     }
                 }
             }
         }
     }
-
-    Buffer<CgltfSampler> samplers = BufferAlloc<CgltfSampler>(scratch.arena, data->samplers_count);
-    cgltf_sampler* sampler = data->samplers;
-    for (U32 sampler_idx = 0; sampler_idx < data->samplers_count; ++sampler_idx)
-    {
-        samplers.data[sampler_idx] = {
-            .mag_filter = sampler->mag_filter,
-            .min_filter = sampler->min_filter,
-            .wrap_s = sampler->wrap_s,
-            .wrap_t = sampler->wrap_t,
-        };
-    }
-
-    cgltf_free(data);
-
-    U32 total_vertex_buffer_count = 0;
-    U32 total_index_buffer_count = 0;
-    for (BufferNode* buffer_node = buffer_node_list.first; buffer_node;
-         buffer_node = buffer_node->next)
-    {
-        total_vertex_buffer_count += buffer_node->vertex_buffer.size;
-        total_index_buffer_count += buffer_node->index_buffer.size;
-    }
-
-    Buffer<city::Vertex3D> vertex_buffer =
-        BufferAlloc<city::Vertex3D>(arena, total_vertex_buffer_count);
-    Buffer<U32> index_buffer = BufferAlloc<U32>(arena, total_index_buffer_count);
-
-    U32 cur_vertex_buffer_idx = 0;
-    U32 cur_index_buffer_idx = 0;
-    for (BufferNode* buffer_node = buffer_node_list.first; buffer_node;
-         buffer_node = buffer_node->next)
-    {
-        for (U32 i = 0; i < buffer_node->index_buffer.size; ++i)
-        {
-            buffer_node->index_buffer.data[i] =
-                buffer_node->index_buffer.data[i] + cur_index_buffer_idx;
-        }
-        BufferCopy(vertex_buffer, buffer_node->vertex_buffer, cur_vertex_buffer_idx, 0,
-                   buffer_node->vertex_buffer.size);
-        BufferCopy(index_buffer, buffer_node->index_buffer, cur_index_buffer_idx, 0,
-                   buffer_node->index_buffer.size);
-
-        cur_vertex_buffer_idx += buffer_node->vertex_buffer.size;
-        cur_index_buffer_idx += buffer_node->index_buffer.size;
-    }
-    return CgltfResult{vertex_buffer, index_buffer, cgltf_sampler};
+    return prim_list;
 }
-} // namespace wrapper
+
+g_internal Buffer<gltfw_Texture>
+gltfw_textures_read(Arena* arena, cgltf_data* data)
+{
+    Buffer<gltfw_Texture> textures = BufferAlloc<gltfw_Texture>(arena, data->textures_count);
+    for (U32 tex_idx = 0; tex_idx < textures.size; ++tex_idx)
+    {
+        gltfw_Texture* tex = &textures.data[tex_idx];
+        cgltf_texture* cgltf_tex = &data->textures[tex_idx];
+        cgltf_sampler* cgltf_sampler = cgltf_tex->sampler;
+
+        gltfw_Sampler gltfw_sampler = {
+            .mag_filter = cgltf_sampler->mag_filter,
+            .min_filter = cgltf_sampler->min_filter,
+            .wrap_s = cgltf_sampler->wrap_s,
+            .wrap_t = cgltf_sampler->wrap_t,
+        };
+
+        tex->sampler = gltfw_sampler;
+
+        cgltf_buffer_view* buf_view = cgltf_tex->image->buffer_view;
+        cgltf_buffer* c_buf = buf_view->buffer;
+        U8* buf = (U8*)c_buf->data + buf_view->offset;
+        tex->tex_buf = {buf, buf_view->size};
+    }
+
+    return textures;
+}
+
+static void*
+gltfw_alloc_func(void* user, size_t size)
+{
+    Arena* arena = (Arena*)user;
+    void* ptr = PushArray(arena, U8, size);
+    return ptr;
+}
+
+static void
+gltfw_free_func(void* user, void* ptr)
+{
+    (void)user;
+    (void)ptr;
+}
+
+static gltfw_Result
+gltfw_glb_read(Arena* arena, String8 glb_path)
+{
+    ScratchScope scratch = ScratchScope(&arena, 1);
+    cgltf_options options = {};
+    cgltf_data* data = NULL;
+
+    cgltf_accessor* accessor_position = NULL;
+    cgltf_accessor* accessor_uv = NULL;
+
+    options.memory.user_data = arena;
+    options.memory.alloc_func = gltfw_alloc_func;
+    options.memory.free_func = gltfw_free_func;
+    cgltf_result result = cgltf_parse_file(&options, (char*)glb_path.str, &data);
+    Assert(result == cgltf_result_success);
+
+    // use custom allocator for buffers as there lifetime is managed by the arena
+    result = cgltf_load_buffers(&options, data, (char*)glb_path.str);
+    Assert(result == cgltf_result_success);
+
+    gltfw_PrimitiveList prim_list = gltfw_primitives_read(arena, data);
+    Buffer<gltfw_Texture> tex_buffer = gltfw_textures_read(arena, data);
+
+    return gltfw_Result{prim_list, tex_buffer};
+}

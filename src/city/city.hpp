@@ -68,8 +68,8 @@ struct CarSim
 
     Buffer<Car> cars;
 
-    Buffer<city::Vertex3D> vertex_buffer;
-    Buffer<U32> index_buffer;
+    R_BufferInfo vertex_buffer;
+    R_BufferInfo index_buffer;
 
     R_SamplerInfo sampler_info;
     Rng1F32 car_center_offset;
@@ -118,6 +118,9 @@ struct Model3DInstance
     glm::vec4 z_basis;
     glm::vec4 w_basis;
 };
+
+static R_SamplerInfo
+city_sampler_from_cgltf_sampler(gltfw_Sampler sampler);
 
 static Road*
 RoadCreate(String8 texture_path, String8 cache_path, osm_GCSBoundingBox* gcs_bbox,

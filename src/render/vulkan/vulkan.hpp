@@ -204,7 +204,7 @@ VK_TextureDestroy(VK_Context* vk_ctx, VK_Texture* texture);
 static void
 VK_ThreadSetup(async::ThreadInfo thread_info, void* input);
 static void
-VK_TextureCreate(VkCommandBuffer cmd_buffer, R_Handle handle, String8 texture_path);
+vk_texture_create(VkCommandBuffer cmd_buffer, R_Handle handle, r_TextureInfo* tex_info);
 
 static void
 VK_Model3DInstanceRendering();
@@ -273,8 +273,8 @@ static void
 VK_ThreadInputDestroy(R_ThreadInput* thread_input);
 
 static void
-VK_ImageFromKtx2file(VkCommandBuffer cmd, VkImage image, VK_BufferAllocation staging_buffer,
-                     VK_Context* vk_ctx, ktxTexture2* ktx_texture);
+vk_texture_gpu_upload(VkCommandBuffer cmd, VkImage image, VK_BufferAllocation staging_buffer,
+                      r_TextureInfo* texture_info);
 // ~mgj: Vulkan Lifetime
 static void
 VK_CtxSet(VK_Context* vk_ctx);
