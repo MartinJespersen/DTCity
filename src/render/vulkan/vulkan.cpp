@@ -30,8 +30,8 @@ vk_texture_gpu_upload(VkCommandBuffer cmd, VkImage image, VK_BufferAllocation st
     ScratchScope scratch = ScratchScope(0, 0);
     VK_Context* vk_ctx = VK_CtxGet();
 
-    vmaCopyMemoryToAllocation(vk_ctx->allocator, tex_info->data.data, staging_buffer.allocation, 0,
-                              tex_info->data.size);
+    vmaCopyMemoryToAllocation(vk_ctx->allocator, tex_info->image_start_ptr,
+                              staging_buffer.allocation, 0, tex_info->base_size);
 
     VkBufferImageCopy* regions =
         PushArray(scratch.arena, VkBufferImageCopy, tex_info->mip_level_offsets.size);
@@ -151,7 +151,7 @@ vk_texture_create(VkCommandBuffer cmd_buffer, R_Handle handle, r_TextureInfo* te
     VK_Texture* texture = &asset_store_texture->item;
 
     VK_BufferAllocation texture_staging_buffer =
-        VK_StagingBufferCreate(vk_ctx->allocator, tex_info->data.size);
+        VK_StagingBufferCreate(vk_ctx->allocator, tex_info->base_size);
 
     vk_texture_gpu_upload(cmd_buffer, texture->image_resource.image_alloc.image,
                           texture_staging_buffer, tex_info);
@@ -1891,8 +1891,8 @@ vk_texture_info_get(Arena* arena, Buffer<U8> tex_data)
     r_TextureInfo tex_info = {};
 
     ktxTexture2* ktx_texture;
-    ktx_error_code_e ktxresult =
-        ktxTexture2_CreateFromMemory(tex_data.data, tex_data.size, NULL, &ktx_texture);
+    ktx_error_code_e ktxresult = ktxTexture2_CreateFromMemory(
+        tex_data.data, tex_data.size, KTX_TEXTURE_CREATE_LOAD_IMAGE_DATA_BIT, &ktx_texture);
 
     if (ktxresult == KTX_SUCCESS)
     {
@@ -1908,13 +1908,16 @@ vk_texture_info_get(Arena* arena, Buffer<U8> tex_data)
             }
             mip_level_offsets.data[i] = offset;
         }
+        U8* image_ptr = ktxTexture_GetData((ktxTexture*)ktx_texture);
         tex_info = {.base_width = ktx_texture->baseWidth,
                     .base_height = ktx_texture->baseHeight,
                     .base_depth = ktx_texture->baseDepth,
                     .base_size = ktx_texture->dataSize,
                     .mip_level_offsets = mip_level_offsets,
-                    .data = tex_data};
+                    .data = tex_data,
+                    .image_start_ptr = image_ptr};
     }
     Assert(ktxresult == KTX_SUCCESS);
+    // ktxTexture_Destroy((ktxTexture*)ktx_texture);
     return tex_info;
 }

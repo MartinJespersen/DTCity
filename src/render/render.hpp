@@ -63,6 +63,7 @@ struct r_TextureInfo
     U64 base_size;
     Buffer<U32> mip_level_offsets;
     Buffer<U8> data;
+    U8* image_start_ptr;
 };
 
 struct R_SamplerInfo
