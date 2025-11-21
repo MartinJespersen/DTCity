@@ -23,70 +23,140 @@ VK_TextureDestroy(VK_Context* vk_ctx, VK_Texture* texture)
     VK_ImageResourceDestroy(vk_ctx->allocator, texture->image_resource);
     vkDestroySampler(vk_ctx->device, texture->sampler, nullptr);
 }
-static void
-vk_texture_gpu_upload(VkCommandBuffer cmd, VkImage image, VK_BufferAllocation staging_buffer,
-                      r_TextureInfo* tex_info)
+g_internal void
+vk_texture_gpu_upload(VkCommandBuffer cmd, VK_Texture* tex, R_TextureLoadingInfo* info)
 {
     ScratchScope scratch = ScratchScope(0, 0);
     VK_Context* vk_ctx = VK_CtxGet();
 
-    vmaCopyMemoryToAllocation(vk_ctx->allocator, tex_info->image_start_ptr,
-                              staging_buffer.allocation, 0, tex_info->base_size);
+    ktxTexture2* ktx_texture;
+    ktx_error_code_e ktxresult =
+        ktxTexture2_CreateFromNamedFile((char*)info->tex_path.str, NULL, &ktx_texture);
 
-    VkBufferImageCopy* regions =
-        PushArray(scratch.arena, VkBufferImageCopy, tex_info->mip_level_offsets.size);
+    VK_BufferAllocation staging = {};
 
-    for (uint32_t level = 0; level < tex_info->mip_level_offsets.size; ++level)
+    if (ktxresult == KTX_SUCCESS)
     {
-        uint32_t mip_width = tex_info->base_width >> level;
-        uint32_t mip_height = tex_info->base_height >> level;
-        uint32_t mip_depth = tex_info->base_depth >> level;
+        U32 mip_levels = ktx_texture->numLevels;
+        U32 base_width = ktx_texture->baseWidth;
+        U32 base_height = ktx_texture->baseHeight;
+        U32 base_depth = ktx_texture->baseDepth;
 
-        if (mip_width == 0)
-            mip_width = 1;
-        if (mip_height == 0)
-            mip_height = 1;
-        if (mip_depth == 0)
-            mip_depth = 1;
+        Buffer<U32> mip_level_offsets = BufferAlloc<U32>(scratch.arena, mip_levels);
+        for (U32 i = 0; i < ktx_texture->numLevels; ++i)
+        {
+            ktx_size_t offset;
+            KTX_error_code ktx_error =
+                ktxTexture_GetImageOffset((ktxTexture*)ktx_texture, i, 0, 0, &offset);
+            if (ktx_error != KTX_SUCCESS)
+            {
+                exit_with_error("Failed to get image offset for mipmap level %u", i);
+            }
+            mip_level_offsets.data[i] = offset;
+        }
 
-        regions[level] = {.bufferOffset = tex_info->mip_level_offsets.data[level],
-                          .bufferRowLength = 0, // tightly packed
-                          .bufferImageHeight = 0,
-                          .imageSubresource = {.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
-                                               .mipLevel = level,
-                                               .baseArrayLayer = 0,
-                                               .layerCount = 1},
-                          .imageOffset = {0, 0, 0},
-                          .imageExtent = {mip_width, mip_height, mip_depth}};
+        VkFormat vk_format = ktxTexture2_GetVkFormat(ktx_texture);
+        {
+            VkFormatProperties vk_format_properties;
+            vkGetPhysicalDeviceFormatProperties(vk_ctx->physical_device, vk_format,
+                                                &vk_format_properties);
+            if ((vk_format_properties.optimalTilingFeatures &
+                 VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BIT) == 0)
+            {
+                exit_with_error("Unsupported image tiling features for format %s", vk_format);
+            }
+        }
+
+        VkBufferCreateInfo staging_buf_create_info = {VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO};
+        staging_buf_create_info.size = ktx_texture->dataSize;
+        staging_buf_create_info.usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
+
+        VmaAllocationCreateInfo staging_alloc_create_info = {};
+        staging_alloc_create_info.usage = VMA_MEMORY_USAGE_AUTO;
+        staging_alloc_create_info.flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT |
+                                          VMA_ALLOCATION_CREATE_MAPPED_BIT;
+
+        VkBuffer staging_buf;
+        VmaAllocation staging_alloc;
+        VmaAllocationInfo staging_alloc_info;
+        vmaCreateBuffer(vk_ctx->allocator, &staging_buf_create_info, &staging_alloc_create_info,
+                        &staging_buf, &staging_alloc, &staging_alloc_info);
+
+        VmaAllocationCreateInfo vma_info = {.usage = VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE};
+        VK_ImageAllocation image_alloc = VK_ImageAllocationCreate(
+            vk_ctx->allocator, base_width, base_height, VK_SAMPLE_COUNT_1_BIT, vk_format,
+            VK_IMAGE_TILING_OPTIMAL,
+            VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT |
+                VK_IMAGE_USAGE_SAMPLED_BIT,
+            mip_levels, vma_info);
+
+        VK_ImageViewResource image_view_resource =
+            VK_ImageViewResourceCreate(vk_ctx->device, image_alloc.image, VK_FORMAT_R8G8B8A8_SRGB,
+                                       VK_IMAGE_ASPECT_COLOR_BIT, mip_levels);
+
+        KTX_error_code ktx_error = ktxTexture_LoadImageData(
+            (ktxTexture*)ktx_texture, (U8*)staging_alloc_info.pMappedData, ktx_texture->dataSize);
+        if (ktx_error != KTX_SUCCESS)
+        {
+            exit_with_error("Failed to load KTX texture data");
+        }
+
+        VkBufferImageCopy* regions = PushArray(scratch.arena, VkBufferImageCopy, mip_levels);
+
+        for (uint32_t level = 0; level < mip_levels; ++level)
+        {
+            uint32_t mip_width = Max(base_width >> level, 1);
+            uint32_t mip_height = Max(base_height >> level, 1);
+            uint32_t mip_depth = Max(base_depth >> level, 1);
+
+            regions[level] = {.bufferOffset = mip_level_offsets.data[level],
+                              .bufferRowLength = 0, // tightly packed
+                              .bufferImageHeight = 0,
+                              .imageSubresource = {.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+                                                   .mipLevel = level,
+                                                   .baseArrayLayer = 0,
+                                                   .layerCount = 1},
+                              .imageOffset = {0, 0, 0},
+                              .imageExtent = {mip_width, mip_height, mip_depth}};
+        }
+
+        VkImageMemoryBarrier barrier = {
+            .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
+            .srcAccessMask = 0,
+            .dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT,
+            .oldLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+            .newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+            .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+            .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+            .image = image_alloc.image,
+            .subresourceRange = {.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+                                 .baseMipLevel = 0,
+                                 .levelCount = mip_levels,
+                                 .baseArrayLayer = 0,
+                                 .layerCount = 1},
+        };
+        vkCmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT,
+                             0, 0, NULL, 0, NULL, 1, &barrier);
+        vkCmdCopyBufferToImage(cmd, staging_buf, image_alloc.image,
+                               VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, mip_levels, regions);
+
+        barrier.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+        barrier.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+        barrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+        barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+
+        vkCmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_TRANSFER_BIT,
+                             VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0, 0, NULL, 0, NULL, 1,
+                             &barrier);
+
+        tex->image_resource = {.image_alloc = image_alloc,
+                               .image_view_resource = image_view_resource};
+        tex->staging_buffer = {
+            .buffer = staging_buf, .allocation = staging_alloc, .size = ktx_texture->dataSize};
+
+        ktxTexture_Destroy((ktxTexture*)ktx_texture);
     }
-
-    VkImageMemoryBarrier barrier = {
-        .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
-        .srcAccessMask = 0,
-        .dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT,
-        .oldLayout = VK_IMAGE_LAYOUT_UNDEFINED,
-        .newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-        .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-        .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-        .image = image,
-        .subresourceRange = {.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
-                             .baseMipLevel = 0,
-                             .levelCount = (U32)tex_info->mip_level_offsets.size,
-                             .baseArrayLayer = 0,
-                             .layerCount = 1},
-    };
-    vkCmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0,
-                         0, NULL, 0, NULL, 1, &barrier);
-    vkCmdCopyBufferToImage(cmd, staging_buffer.buffer, image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-                           tex_info->mip_level_offsets.size, regions);
-
-    barrier.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
-    barrier.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-    barrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
-    barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
-
-    vkCmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
-                         0, 0, NULL, 0, NULL, 1, &barrier);
+    Assert(ktxresult == KTX_SUCCESS);
 }
 
 static R_ThreadInput*
@@ -125,7 +195,7 @@ VK_ThreadSetup(async::ThreadInfo thread_info, void* input)
         {
             R_TextureLoadingInfo* extra_info =
                 (R_TextureLoadingInfo*)&asset_loading_info->extra_info;
-            vk_texture_create(cmd, asset_loading_info->handle, &extra_info->texture_info);
+            vk_texture_create(cmd, asset_loading_info->handle, extra_info);
         }
         break;
         case R_AssetItemType_Buffer:
@@ -143,20 +213,15 @@ VK_ThreadSetup(async::ThreadInfo thread_info, void* input)
 }
 
 static void
-vk_texture_create(VkCommandBuffer cmd_buffer, R_Handle handle, r_TextureInfo* tex_info)
+vk_texture_create(VkCommandBuffer cmd_buffer, R_Handle handle, R_TextureLoadingInfo* tex_info)
 {
     VK_Context* vk_ctx = VK_CtxGet();
 
+    // TODO: Make this thread safe
     R_AssetItem<VK_Texture>* asset_store_texture = VK_AssetManagerTextureItemGet(handle);
     VK_Texture* texture = &asset_store_texture->item;
 
-    VK_BufferAllocation texture_staging_buffer =
-        VK_StagingBufferCreate(vk_ctx->allocator, tex_info->base_size);
-
-    vk_texture_gpu_upload(cmd_buffer, texture->image_resource.image_alloc.image,
-                          texture_staging_buffer, tex_info);
-
-    texture->staging_buffer = texture_staging_buffer;
+    vk_texture_gpu_upload(cmd_buffer, texture, tex_info);
 }
 
 static VK_Pipeline
@@ -786,6 +851,7 @@ VK_AssetManagerTextureItemGet(R_Handle handle)
 {
     VK_Context* vk_ctx = VK_CtxGet();
     VK_AssetManager* asset_manager = vk_ctx->asset_manager;
+
     R_AssetItem<VK_Texture>* asset_item_texture =
         VK_AssetManagerItemGet(&asset_manager->texture_list, handle);
     return asset_item_texture;
@@ -865,6 +931,10 @@ VK_AssetManagerCmdDoneCheck()
             {
                 R_AssetItem<VK_Texture>* asset =
                     VK_AssetManagerTextureItemGet(asset_load_info->handle);
+                VK_Texture* tex = &asset->item;
+                tex->desc_set = VK_DescriptorSetCreate(
+                    vk_ctx->arena, vk_ctx->device, vk_ctx->descriptor_pool, tex->desc_set_layout,
+                    tex->image_resource.image_view_resource.image_view, tex->sampler);
                 VK_BufferDestroy(vk_ctx->allocator, &asset->item.staging_buffer);
                 asset->is_loaded = 1;
             }
@@ -1761,10 +1831,8 @@ r_latest_hovered_object_id_get()
 }
 
 // ~mgj: Texture interface functions
-
 g_internal R_Handle
-r_texture_handle_create(R_SamplerInfo* sampler_info, R_PipelineUsageType pipeline_usage_type,
-                        r_TextureInfo* tex_create_info)
+r_texture_handle_create(R_SamplerInfo* sampler_info, R_PipelineUsageType pipeline_usage_type)
 {
     VK_Context* vk_ctx = VK_CtxGet();
     VK_AssetManager* asset_manager = vk_ctx->asset_manager;
@@ -1775,20 +1843,7 @@ r_texture_handle_create(R_SamplerInfo* sampler_info, R_PipelineUsageType pipelin
     sampler_create_info.maxAnisotropy = (F32)vk_ctx->msaa_samples;
     VkSampler vk_sampler = VK_SamplerCreate(vk_ctx->device, &sampler_create_info);
 
-    // ~mgj: Create Image and Image View
-    VmaAllocationCreateInfo vma_info = {.usage = VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE};
-    VK_ImageAllocation image_alloc = VK_ImageAllocationCreate(
-        vk_ctx->allocator, tex_create_info->base_width, tex_create_info->base_height,
-        VK_SAMPLE_COUNT_1_BIT, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_TILING_OPTIMAL,
-        VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT |
-            VK_IMAGE_USAGE_SAMPLED_BIT,
-        tex_create_info->mip_level_offsets.size, vma_info);
-
-    VK_ImageViewResource image_view_resource = VK_ImageViewResourceCreate(
-        vk_ctx->device, image_alloc.image, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_ASPECT_COLOR_BIT,
-        tex_create_info->mip_level_offsets.size);
-
-    // ~mgj: Choose Descriptor Set Layout and Create Descriptor Set
+    // ~mgj : Choose Descriptor Set Layout
     VkDescriptorSetLayout desc_set_layout = NULL;
     switch (pipeline_usage_type)
     {
@@ -1800,17 +1855,12 @@ r_texture_handle_create(R_SamplerInfo* sampler_info, R_PipelineUsageType pipelin
             break;
         default: InvalidPath;
     }
-    VkDescriptorSet desc_set =
-        VK_DescriptorSetCreate(vk_ctx->arena, vk_ctx->device, vk_ctx->descriptor_pool,
-                               desc_set_layout, image_view_resource.image_view, vk_sampler);
 
     // ~mgj: Assign values to texture
     R_AssetItem<VK_Texture>* asset_item =
         VK_AssetManagerItemCreate(&asset_manager->texture_list, &asset_manager->texture_free_list);
     VK_Texture* texture = &asset_item->item;
-    texture->image_resource = {.image_alloc = image_alloc,
-                               .image_view_resource = image_view_resource};
-    texture->desc_set = desc_set;
+    texture->desc_set_layout = desc_set_layout;
     texture->sampler = vk_sampler;
     R_Handle texture_handle = {.u64 = (U64)asset_item};
 
@@ -1830,11 +1880,9 @@ r_texture_load_async(R_SamplerInfo* sampler_info, String8 texture_path,
     R_AssetLoadingInfo* asset_load_info = &thread_input->asset_info;
     asset_load_info->type = R_AssetItemType_Texture;
     R_TextureLoadingInfo* texture_load_info = &asset_load_info->extra_info.texture_info;
+    texture_load_info->tex_path = PushStr8Copy(thread_input->arena, texture_path);
 
-    Buffer<U8> tex_data = io_file_read(thread_input->arena, texture_path);
-    texture_load_info->texture_info = vk_texture_info_get(thread_input->arena, tex_data);
-    asset_load_info->handle = r_texture_handle_create(sampler_info, pipeline_usage_type,
-                                                      &texture_load_info->texture_info);
+    asset_load_info->handle = r_texture_handle_create(sampler_info, pipeline_usage_type);
 
     async::QueueItem queue_input = {.data = thread_input, .worker_func = VK_ThreadSetup};
     async::QueuePush(asset_manager->work_queue, &queue_input);
@@ -1883,41 +1931,4 @@ R_BufferLoad(R_BufferInfo* buffer_info)
 
     R_Handle handle = {.u64 = (U64)asset_item};
     return handle;
-}
-
-static r_TextureInfo
-vk_texture_info_get(Arena* arena, Buffer<U8> tex_data)
-{
-    r_TextureInfo tex_info = {};
-
-    ktxTexture2* ktx_texture;
-    ktx_error_code_e ktxresult = ktxTexture2_CreateFromMemory(
-        tex_data.data, tex_data.size, KTX_TEXTURE_CREATE_LOAD_IMAGE_DATA_BIT, &ktx_texture);
-
-    if (ktxresult == KTX_SUCCESS)
-    {
-        Buffer<U32> mip_level_offsets = BufferAlloc<U32>(arena, ktx_texture->numLevels);
-        for (U32 i = 0; i < ktx_texture->numLevels; ++i)
-        {
-            ktx_size_t offset;
-            KTX_error_code ktx_error =
-                ktxTexture_GetImageOffset((ktxTexture*)ktx_texture, i, 0, 0, &offset);
-            if (ktx_error != KTX_SUCCESS)
-            {
-                exit_with_error("Failed to get image offset for mipmap level %u", i);
-            }
-            mip_level_offsets.data[i] = offset;
-        }
-        U8* image_ptr = ktxTexture_GetData((ktxTexture*)ktx_texture);
-        tex_info = {.base_width = ktx_texture->baseWidth,
-                    .base_height = ktx_texture->baseHeight,
-                    .base_depth = ktx_texture->baseDepth,
-                    .base_size = ktx_texture->dataSize,
-                    .mip_level_offsets = mip_level_offsets,
-                    .data = tex_data,
-                    .image_start_ptr = image_ptr};
-    }
-    Assert(ktxresult == KTX_SUCCESS);
-    // ktxTexture_Destroy((ktxTexture*)ktx_texture);
-    return tex_info;
 }

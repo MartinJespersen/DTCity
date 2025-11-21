@@ -32,6 +32,7 @@ The following application specific macros are used to enable address sanitizatio
 CMake presets define these macros based on what type of build configuration is used - debug, release or profile. These defaults can be changed e.g. you might want to enable address sanitization in a profile build.
 
 # TODO along the way
+* Make the asset manager thread safe - accessing texture and buffer lists are not thread safe at the moment
 * Add linting and static analysis checks
 * Change the naming convention for functions from PascalCase to snake_case
 * Cleanup entrypoint main loop

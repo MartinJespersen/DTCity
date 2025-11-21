@@ -11,6 +11,7 @@ struct VK_Texture
     VK_BufferAllocation staging_buffer;
     VK_ImageResource image_resource;
     VkSampler sampler;
+    VkDescriptorSetLayout desc_set_layout;
     VkDescriptorSet desc_set;
 };
 
@@ -204,7 +205,7 @@ VK_TextureDestroy(VK_Context* vk_ctx, VK_Texture* texture);
 static void
 VK_ThreadSetup(async::ThreadInfo thread_info, void* input);
 static void
-vk_texture_create(VkCommandBuffer cmd_buffer, R_Handle handle, r_TextureInfo* tex_info);
+vk_texture_create(VkCommandBuffer cmd_buffer, R_Handle handle, R_TextureLoadingInfo* tex_info);
 
 static void
 VK_Model3DInstanceRendering();
@@ -223,9 +224,6 @@ VK_CameraDescriptorSetLayoutCreate(VK_Context* vk_ctx);
 static void
 VK_CameraDescriptorSetCreate(VK_Context* vk_ctx);
 
-// static void
-// AssetManagerRoadResourceLoadAsync(AssetId texture_id, String8 texture_path,
-//                                   R_SamplerInfo* sampler_info);
 //~mgj: Asset Store
 static VK_AssetManager*
 VK_AssetManagerCreate(VkDevice device, U32 queue_family_index, async::Threads* threads,
@@ -272,9 +270,8 @@ VK_ThreadInputCreate();
 static void
 VK_ThreadInputDestroy(R_ThreadInput* thread_input);
 
-static void
-vk_texture_gpu_upload(VkCommandBuffer cmd, VkImage image, VK_BufferAllocation staging_buffer,
-                      r_TextureInfo* texture_info);
+g_internal void
+vk_texture_gpu_upload(VkCommandBuffer cmd, VK_Texture* tex, R_TextureLoadingInfo* info);
 // ~mgj: Vulkan Lifetime
 static void
 VK_CtxSet(VK_Context* vk_ctx);

@@ -55,17 +55,6 @@ enum R_SamplerAddressMode
     R_SamplerAddressMode_ClampToBorder,
 };
 
-struct r_TextureInfo
-{
-    U32 base_width;
-    U32 base_height;
-    U32 base_depth;
-    U64 base_size;
-    Buffer<U32> mip_level_offsets;
-    Buffer<U8> data;
-    U8* image_start_ptr;
-};
-
 struct R_SamplerInfo
 {
     R_Filter min_filter;
@@ -118,7 +107,7 @@ template <typename T> struct R_AssetItemList
 
 struct R_TextureLoadingInfo
 {
-    r_TextureInfo texture_info;
+    String8 tex_path;
 };
 
 struct R_AssetLoadingInfo
@@ -163,13 +152,10 @@ r_latest_hovered_object_id_get();
 
 // ~mgj: Texture loading interface
 g_internal R_Handle
-r_texture_handle_create(R_SamplerInfo* sampler_info, R_PipelineUsageType pipeline_usage_type,
-                        r_TextureInfo* tex_create_info);
+r_texture_handle_create(R_SamplerInfo* sampler_info, R_PipelineUsageType pipeline_usage_type);
 g_internal R_Handle
 r_texture_load_async(R_SamplerInfo* sampler_info, String8 texture_path,
                      R_PipelineUsageType pipeline_usage_type);
-static r_TextureInfo
-vk_texture_info_get(Arena* arena, Buffer<U8> tex_data);
 
 g_internal R_Handle
 R_BufferLoad(R_BufferInfo* buffer_info);

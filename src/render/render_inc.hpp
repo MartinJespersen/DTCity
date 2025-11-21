@@ -4,6 +4,7 @@ DISABLE_WARNINGS_PUSH
 #undef VK_CHECK_RESULT
 #define KHRONOS_STATIC
 #include "ktx.h"
+#include "ktxvulkan.h"
 #define VMA_VULKAN_VERSION 1003000 // Vulkan 1.3
 #define VMA_DEBUG_DETECT_CORRUPTION 1
 #define VMA_DEBUG_DETECT_LEAKS 1

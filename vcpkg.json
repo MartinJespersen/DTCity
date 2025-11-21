@@ -1,6 +1,6 @@
 {
   "dependencies": [
-    "ktx",
+    { "name": "ktx", "features": ["vulkan"] },
     "vulkan-loader",
     "glfw3",
     { "name": "glslang", "features": ["tools"] }

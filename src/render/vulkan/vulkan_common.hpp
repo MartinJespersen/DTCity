@@ -280,6 +280,9 @@ VK_CheckValidationLayerSupport(VK_Context* vk_ctx);
 static VkSurfaceFormatKHR
 VK_ChooseSwapSurfaceFormat(Buffer<VkSurfaceFormatKHR> availableFormats);
 
+static VkFormat
+VK_SupportedFormat(VkPhysicalDevice physical_device, VkFormat* candidates, U32 candidate_count,
+                   VkImageTiling tiling, VkFormatFeatureFlags features);
 static VkPresentModeKHR
 VK_ChooseSwapPresentMode(Buffer<VkPresentModeKHR> availablePresentModes);
 
