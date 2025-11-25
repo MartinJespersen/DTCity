@@ -146,6 +146,7 @@ struct VK_Context
     static const U8 enable_validation_layers = 0;
 #endif
     Arena* arena;
+    U32 render_thread_id;
 
     Buffer<String8> validation_layers;
     Buffer<String8> device_extensions;
@@ -204,8 +205,14 @@ static void
 VK_TextureDestroy(VK_Context* vk_ctx, VK_Texture* texture);
 static void
 VK_ThreadSetup(async::ThreadInfo thread_info, void* input);
-static void
-vk_texture_create(VkCommandBuffer cmd_buffer, R_Handle handle, R_TextureLoadingInfo* tex_info);
+
+g_internal void
+vk_blit_transition_image(VkCommandBuffer cmd_buf, VkImage image, VkImageLayout src_layout,
+                         VkImageLayout dst_layout, U32 mip_level);
+g_internal void
+vk_texture_ktx_cmd_record(VkCommandBuffer cmd, VK_Texture* tex, Buffer<U8> tex_buf);
+g_internal B32
+vk_texture_cmd_record(VkCommandBuffer cmd, VK_Texture* tex, Buffer<U8> tex_buf);
 
 static void
 VK_Model3DInstanceRendering();
@@ -270,8 +277,8 @@ VK_ThreadInputCreate();
 static void
 VK_ThreadInputDestroy(R_ThreadInput* thread_input);
 
-g_internal void
-vk_texture_gpu_upload(VkCommandBuffer cmd, VK_Texture* tex, R_TextureLoadingInfo* info);
+g_internal B32
+vk_texture_gpu_upload_cmd_recording(VkCommandBuffer cmd, R_Handle tex_handle, Buffer<U8> tex_buf);
 // ~mgj: Vulkan Lifetime
 static void
 VK_CtxSet(VK_Context* vk_ctx);
@@ -287,9 +294,6 @@ static void
 VK_Model3DInstanceBucketAdd(VK_BufferAllocation* vertex_buffer_allocation,
                             VK_BufferAllocation* index_buffer_allocation,
                             VkDescriptorSet texture_handle, R_BufferInfo* instance_buffer_info);
-static void
-VK_Model3DDraw(R_Handle texture_handle, R_Handle vertex_buffer_handle, R_Handle index_buffer_handle,
-               B32 depth_test_per_draw_call_only, U32 index_buffer_offset, U32 index_count);
 static void
 VK_Model3DInstanceDraw(R_Handle texture_handle, R_Handle vertex_buffer_handle,
                        R_Handle index_buffer_handle, R_BufferInfo* instance_buffer);

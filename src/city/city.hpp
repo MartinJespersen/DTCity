@@ -1,16 +1,6 @@
 #pragma once
 
-namespace city
-{
-
-struct Vertex3D
-{
-    Vec3F32 pos;
-    Vec2F32 uv;
-    Vec2U32 object_id;
-};
-
-struct Road
+struct city_Road
 {
     Arena* arena;
 
@@ -26,14 +16,14 @@ struct Road
     glm::mat4 model_matrix;
 
     String8 texture_path;
-    R_Handle texture_handle;
-    R_Handle vertex_handle;
-    R_Handle index_handle;
+    r_Model3DPipelineData handles;
 
-    Buffer<Vertex3D> vertex_buffer;
+    Buffer<r_Vertex3D> vertex_buffer;
     Buffer<U32> index_buffer;
     /////////////////////////
 };
+namespace city
+{
 
 struct AdjacentNodeLL
 {
@@ -83,7 +73,7 @@ struct CarSim
 
 struct BuildingRenderInfo
 {
-    Buffer<city::Vertex3D> vertex_buffer;
+    Buffer<r_Vertex3D> vertex_buffer;
     Buffer<U32> index_buffer;
     U32 roof_index_offset;
     U32 roof_index_count;
@@ -100,15 +90,8 @@ struct Buildings
     String8 roof_texture_path;
     String8 facade_texture_path;
 
-    U32 roof_index_buffer_offset;
-    U32 roof_index_count;
-    U32 facade_index_buffer_offset;
-    U32 facade_index_count;
-
-    R_Handle vertex_handle;
-    R_Handle index_handle;
-    R_Handle roof_texture_handle;
-    R_Handle facade_texture_handle;
+    r_Model3DPipelineData roof_model_handles;
+    r_Model3DPipelineData facade_model_handles;
 };
 
 struct Model3DInstance
@@ -119,27 +102,21 @@ struct Model3DInstance
     glm::vec4 w_basis;
 };
 
-static R_SamplerInfo
-city_sampler_from_cgltf_sampler(gltfw_Sampler sampler);
-
-static Road*
-RoadCreate(String8 texture_path, String8 cache_path, osm_GCSBoundingBox* gcs_bbox,
-           R_SamplerInfo* sampler_info, osm_Network* node_utm_structure);
 static void
-RoadDestroy(Road* road);
+RoadDestroy(city_Road* road);
 static void
-RoadVertexBufferCreate(Road* road, Buffer<Vertex3D>* out_vertex_buffer,
+RoadVertexBufferCreate(city_Road* road, Buffer<r_Vertex3D>* out_vertex_buffer,
                        Buffer<U32>* out_index_buffer, osm_Network* node_utm_structure);
 
 static void
-QuadToBufferAdd(RoadSegment* road_segment, Buffer<Vertex3D> buffer, Buffer<U32> indices, U64 way_id,
-                F32 road_height, U32* cur_vertex_idx, U32* cur_index_idx);
+QuadToBufferAdd(RoadSegment* road_segment, Buffer<r_Vertex3D> buffer, Buffer<U32> indices,
+                U64 way_id, F32 road_height, U32* cur_vertex_idx, U32* cur_index_idx);
 static void
-RoadIntersectionPointsFind(Road* road, RoadSegment* in_out_segment, osm_Way* current_road_way,
+RoadIntersectionPointsFind(city_Road* road, RoadSegment* in_out_segment, osm_Way* current_road_way,
                            osm_Network* node_utm_structure);
 // ~mgj: Cars
 static CarSim*
-CarSimCreate(String8 asset_path, String8 texture_path, U32 car_count, Road* road);
+CarSimCreate(String8 asset_path, String8 texture_path, U32 car_count, city_Road* road);
 static void
 CarSimDestroy(CarSim* car_sim);
 static Buffer<Model3DInstance>
@@ -148,7 +125,7 @@ CarUpdate(Arena* arena, CarSim* car, F32 time_delta);
 // ~mgj: Buildings
 static Buildings*
 BuildingsCreate(String8 cache_path, String8 texture_path, F32 road_height,
-                osm_GCSBoundingBox* gcs_bbox, R_SamplerInfo* sampler_info,
+                osm_BoundingBox* gcs_bbox, R_SamplerInfo* sampler_info,
                 osm_Network* node_utm_structure);
 static void
 BuildingDestroy(Buildings* building);
@@ -159,7 +136,7 @@ static Buffer<U32>
 EarClipping(Arena* arena, Buffer<Vec2F32> node_buffer);
 
 static Rng2F32
-UtmFromBoundingBox(osm_GCSBoundingBox bbox);
+UtmFromBoundingBox(osm_BoundingBox bbox);
 
 // ~mgj: HTTP and caching
 static String8
@@ -172,10 +149,20 @@ city_cache_write(String8 cache_file, String8 cache_meta_file, String8 content,
 
 static U64
 HashU64FromStr8(String8 str);
-static String8
-Str8FromGCSCoordinates(Arena* arena, osm_GCSBoundingBox* bbox);
 static B32
 city_cache_needs_update(String8 data_file_str, String8 cache_meta_file_path);
 static B32
 city_cache_needs_update(String8 data_file_str, String8 cache_meta_file_path);
 } // namespace city
+
+static String8
+city_str8_from_wqs_coord(Arena* arena, osm_BoundingBox* bbox);
+g_internal r_Model3DPipelineDataList
+city_land_create(Arena* arena, String8 glb_path);
+g_internal void
+city_land_destroy(r_Model3DPipelineDataList list);
+static R_SamplerInfo
+city_sampler_from_cgltf_sampler(gltfw_Sampler sampler);
+static city_Road*
+city_road_create(String8 texture_path, String8 cache_path, osm_BoundingBox* gcs_bbox,
+                 R_SamplerInfo* sampler_info, osm_Network* node_utm_structure);

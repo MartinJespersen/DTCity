@@ -3,7 +3,7 @@ ui_camera_init(ui_Camera* camera)
 {
     camera->zoom_sensitivity = 20.0f;
     camera->fov = 45.0;
-    camera->position = glm::vec3(0.0f, 150.0f, 1.0f);
+    camera->position = glm::vec3(2000.0f, 250.0f, -1615.0f);
     camera->yaw = 0.0f;
     camera->pitch = -88.0f;
     camera->view_dir = ui_direction_normal_from_euler_angles(camera->yaw, camera->pitch);

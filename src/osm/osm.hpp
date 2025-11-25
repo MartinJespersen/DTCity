@@ -39,7 +39,7 @@ struct osm_RoadNodeParseResult
     B32 error;
 };
 
-union osm_GCSBoundingBox
+union osm_BoundingBox
 {
     struct
     {
@@ -128,7 +128,7 @@ read_only static osm_UtmNode osm_g_road_node_utm = {&osm_g_road_node_utm, 0, 0.0
 ///////////////////////
 
 static void
-osm_structure_init(U64 node_hashmap_size, U64 way_hashmap_size, osm_GCSBoundingBox* gcs_bbox);
+osm_structure_init(U64 node_hashmap_size, U64 way_hashmap_size, osm_BoundingBox* gcs_bbox);
 static void
 osm_structure_cleanup();
 static void

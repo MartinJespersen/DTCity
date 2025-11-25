@@ -59,7 +59,7 @@ struct gltfw_Texture
 struct gltfw_Result
 {
     gltfw_PrimitiveList primitives;
-    Buffer<gltfw_Texture> samplers;
+    Buffer<gltfw_Texture> textures;
 };
 
 static CgltfNode*

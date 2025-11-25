@@ -1,5 +1,5 @@
 static void
-osm_structure_init(U64 node_hashmap_size, U64 way_hashmap_size, osm_GCSBoundingBox* gcs_bbox)
+osm_structure_init(U64 node_hashmap_size, U64 way_hashmap_size, osm_BoundingBox* gcs_bbox)
 {
     Arena* arena = ArenaAlloc();
     Buffer<osm_UtmNodeList> utm_node_hashmap =

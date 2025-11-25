@@ -7,10 +7,10 @@ set(SHADER_DIR ${CMAKE_CURRENT_SOURCE_DIR}/data/shaders)
 set(SHADER_BINARY_DIR ${CMAKE_CURRENT_SOURCE_DIR}/data/shaders/bin)
 set(ASAN_LINK_FLAGS "")
 set(ASAN_COMPILE_FLAGS "")
+set(ALL_TARGETS tile_streaming city)
 
 option(BUILD_DEBUG "Enable Additional Debugging Information (e.g Vulkan Validation Layers)" OFF)
 option(ASAN_ENABLED "Enable Address Sanitizer" OFF)
-set(ALL_TARGETS tile_streaming city)
 
 # cmake macro -> compiler macro
 if(BUILD_DEBUG)

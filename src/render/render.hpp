@@ -6,9 +6,11 @@
 //~ mgj: Handle Type
 union R_Handle
 {
-    U64 u64[1];
+    void* ptr;
+    U64 u64;
     U32 u32[2];
     U16 u16[4];
+    static_assert(sizeof(ptr) == 8, "ptr should be 8 bytes");
 };
 
 /////////////////////////////////
@@ -126,6 +128,36 @@ struct R_ThreadInput
     Arena* arena;
     R_AssetLoadingInfo asset_info;
 };
+
+struct r_Model3DPipelineData
+{
+    R_Handle vertex_buffer_handle;
+    R_Handle index_buffer_handle;
+    R_Handle texture_handle;
+
+    U64 index_count;
+    U32 index_offset;
+};
+
+struct r_Model3DPipelineDataNode
+{
+    r_Model3DPipelineData handles;
+    r_Model3DPipelineDataNode* next;
+};
+
+struct r_Model3DPipelineDataList
+{
+    r_Model3DPipelineDataNode* first;
+    r_Model3DPipelineDataNode* last;
+};
+
+struct r_Vertex3D
+{
+    Vec3F32 pos;
+    Vec2F32 uv;
+    Vec2U32 object_id;
+};
+
 static R_Handle
 R_HandleZero();
 
@@ -144,9 +176,9 @@ static void
 R_RenderFrame(Vec2U32 framebuffer_dim, B32* in_out_framebuffer_resized, ui_Camera* camera,
               Vec2S64 mouse_cursor_pos);
 static void
-R_GpuWorkDoneWait();
+r_gpu_work_done_wait();
 static void
-R_NewFrame();
+r_new_frame();
 static U64
 r_latest_hovered_object_id_get();
 
@@ -156,6 +188,16 @@ r_texture_handle_create(R_SamplerInfo* sampler_info, R_PipelineUsageType pipelin
 g_internal R_Handle
 r_texture_load_async(R_SamplerInfo* sampler_info, String8 texture_path,
                      R_PipelineUsageType pipeline_usage_type);
+g_internal void
+r_texture_gpu_upload_sync(R_Handle tex_handle, Buffer<U8> tex_bufs);
+
+g_internal void
+r_texture_destroy(R_Handle handle);
+g_internal void
+r_buffer_destroy(R_Handle handle);
+
+g_internal void
+r_model_3d_draw(r_Model3DPipelineData pipeline_input, B32 depth_test_per_draw_call_only);
 
 g_internal R_Handle
-R_BufferLoad(R_BufferInfo* buffer_info);
+r_buffer_load(R_BufferInfo* buffer_info);

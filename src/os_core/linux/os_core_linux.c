@@ -187,7 +187,7 @@ static U32 os_tid() {
   return result;
 }
 
-static void OS_SetThreadName(String8 name) {
+static void os_set_thread_name(String8 name) {
   Temp scratch = ScratchBegin(0, 0);
   String8 name_copy = PushStr8Copy(scratch.arena, name);
   pthread_t current_thread = pthread_self();

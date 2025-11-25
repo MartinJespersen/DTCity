@@ -20,18 +20,36 @@ VK_CtxGet()
 static void
 VK_TextureDestroy(VK_Context* vk_ctx, VK_Texture* texture)
 {
+    if (texture->staging_buffer.buffer != 0)
+    {
+        VK_BufferDestroy(vk_ctx->allocator, &texture->staging_buffer);
+    }
     VK_ImageResourceDestroy(vk_ctx->allocator, texture->image_resource);
     vkDestroySampler(vk_ctx->device, texture->sampler, nullptr);
 }
+
+g_internal bool
+vk_ktx2_check(U8* buf, U64 size)
+{
+    bool result = false;
+    const unsigned char ktx2_magic[12] = {0xab, 0x4b, 0x54, 0x58, 0x20, 0x32,
+                                          0x30, 0xbb, 0x0d, 0x0a, 0x1a, 0x0a};
+    if (size >= ArrayCount(ktx2_magic) && MemoryMatch(ktx2_magic, buf, ArrayCount(ktx2_magic)))
+    {
+        result = true;
+    }
+    return result;
+}
+
 g_internal void
-vk_texture_gpu_upload(VkCommandBuffer cmd, VK_Texture* tex, R_TextureLoadingInfo* info)
+vk_texture_ktx_cmd_record(VkCommandBuffer cmd, VK_Texture* tex, Buffer<U8> tex_buf)
 {
     ScratchScope scratch = ScratchScope(0, 0);
     VK_Context* vk_ctx = VK_CtxGet();
 
     ktxTexture2* ktx_texture;
     ktx_error_code_e ktxresult =
-        ktxTexture2_CreateFromNamedFile((char*)info->tex_path.str, NULL, &ktx_texture);
+        ktxTexture2_CreateFromMemory(tex_buf.data, tex_buf.size, NULL, &ktx_texture);
 
     VK_BufferAllocation staging = {};
 
@@ -110,7 +128,7 @@ vk_texture_gpu_upload(VkCommandBuffer cmd, VK_Texture* tex, R_TextureLoadingInfo
             uint32_t mip_depth = Max(base_depth >> level, 1);
 
             regions[level] = {.bufferOffset = mip_level_offsets.data[level],
-                              .bufferRowLength = 0, // tightly packed
+                              .bufferRowLength = 0,
                               .bufferImageHeight = 0,
                               .imageSubresource = {.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
                                                    .mipLevel = level,
@@ -159,6 +177,222 @@ vk_texture_gpu_upload(VkCommandBuffer cmd, VK_Texture* tex, R_TextureLoadingInfo
     Assert(ktxresult == KTX_SUCCESS);
 }
 
+g_internal void
+vk_blit_transition_image(VkCommandBuffer cmd_buf, VkImage image, VkImageLayout src_layout,
+                         VkImageLayout dst_layout, U32 mip_level)
+{
+    // ~mgj: Transition color attachment images for presentation or transfer
+    VkImageMemoryBarrier2 barrier{};
+    barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2;
+    barrier.srcStageMask = VK_PIPELINE_STAGE_2_TRANSFER_BIT;
+    barrier.srcAccessMask = VK_ACCESS_2_TRANSFER_WRITE_BIT;
+    barrier.dstStageMask = VK_PIPELINE_STAGE_2_TRANSFER_BIT;
+    barrier.dstAccessMask = VK_ACCESS_2_TRANSFER_READ_BIT;
+    barrier.oldLayout = src_layout;
+    barrier.newLayout = dst_layout;
+    barrier.image = image;
+    barrier.subresourceRange = {.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+                                .baseMipLevel = mip_level,
+                                .levelCount = 1,
+                                .baseArrayLayer = 0,
+                                .layerCount = 1};
+
+    VkImageMemoryBarrier2 barriers[] = {barrier};
+    VkDependencyInfo layout_transition_info = {.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
+                                               .imageMemoryBarrierCount = ArrayCount(barriers),
+                                               .pImageMemoryBarriers = barriers};
+
+    vkCmdPipelineBarrier2(cmd_buf, &layout_transition_info);
+}
+
+g_internal B32
+vk_texture_cmd_record(VkCommandBuffer cmd, VK_Texture* tex, Buffer<U8> tex_buf)
+{
+    VK_Context* vk_ctx = VK_CtxGet();
+    S32 width;
+    S32 height;
+    S32 desired_num_channels = STBI_rgb_alpha;
+    U8* data;
+    U8* image_data = stbi_load_from_memory(tex_buf.data, tex_buf.size, &width, &height, NULL,
+                                           desired_num_channels);
+    B32 err = false;
+    err = !image_data;
+
+    Assert(image_data);
+    if (image_data)
+    {
+        U64 total_size = (U64)width * (U64)height * (U64)desired_num_channels;
+        U32 mip_levels = floor(log2f(Max(width, height))) + 1;
+        VkFormat vk_format = VK_FORMAT_R8G8B8A8_SRGB;
+
+        // upload base mip level
+        VkBufferCreateInfo staging_buf_create_info = {VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO};
+        staging_buf_create_info.size = total_size;
+        staging_buf_create_info.usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
+
+        VmaAllocationCreateInfo staging_alloc_create_info = {};
+        staging_alloc_create_info.usage = VMA_MEMORY_USAGE_AUTO;
+        staging_alloc_create_info.flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT |
+                                          VMA_ALLOCATION_CREATE_MAPPED_BIT;
+
+        VkBuffer staging_buf;
+        VmaAllocation staging_alloc;
+        VmaAllocationInfo staging_alloc_info;
+        err |=
+            vmaCreateBuffer(vk_ctx->allocator, &staging_buf_create_info, &staging_alloc_create_info,
+                            &staging_buf, &staging_alloc, &staging_alloc_info);
+        if (err)
+        {
+            return err;
+        }
+
+        VmaAllocationCreateInfo alloc_create_info = {
+            .flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT};
+        VmaAllocationCreateInfo vma_info = {.usage = VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE};
+        VK_ImageAllocation image_alloc = VK_ImageAllocationCreate(
+            vk_ctx->allocator, width, height, VK_SAMPLE_COUNT_1_BIT, vk_format,
+            VK_IMAGE_TILING_OPTIMAL,
+            VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT |
+                VK_IMAGE_USAGE_SAMPLED_BIT,
+            mip_levels, vma_info);
+
+        err |=
+            vmaCopyMemoryToAllocation(vk_ctx->allocator, image_data, staging_alloc, 0, total_size);
+        if (err)
+        {
+            return err;
+        }
+
+        VK_ImageViewResource image_view_resource = VK_ImageViewResourceCreate(
+            vk_ctx->device, image_alloc.image, vk_format, VK_IMAGE_ASPECT_COLOR_BIT, mip_levels);
+
+        VkImageMemoryBarrier barrier = {
+            .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
+            .srcAccessMask = 0,
+            .dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT,
+            .oldLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+            .newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+            .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+            .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+            .image = image_alloc.image,
+            .subresourceRange = {.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+                                 .baseMipLevel = 0,
+                                 .levelCount = mip_levels,
+                                 .baseArrayLayer = 0,
+                                 .layerCount = 1},
+        };
+        vkCmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT,
+                             0, 0, NULL, 0, NULL, 1, &barrier);
+
+        VkBufferImageCopy region;
+        region.bufferOffset = 0;
+        region.bufferRowLength = 0;
+        region.bufferImageHeight = 0;
+        region.imageSubresource = {.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+                                   .mipLevel = 0,
+                                   .baseArrayLayer = 0,
+                                   .layerCount = 1};
+        region.imageOffset = {.x = 0, .y = 0, .z = 0};
+        region.imageExtent = {.width = (U32)width, .height = (U32)height, .depth = 1};
+
+        vkCmdCopyBufferToImage(cmd, staging_buf, image_alloc.image,
+                               VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &region);
+
+        S32 dst_img_width = width;
+        S32 dst_img_height = height;
+        for (U32 blit_lvl = 1; blit_lvl < mip_levels; blit_lvl++)
+        {
+            S32 src_img_width = dst_img_width;
+            S32 src_img_height = dst_img_height;
+            dst_img_width = Max((src_img_width >> 1), 1);
+            dst_img_height = Max((src_img_height >> 1), 1);
+
+            vk_blit_transition_image(cmd, image_alloc.image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                                     VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, blit_lvl - 1);
+
+            VkImageBlit2 image_blit = {
+                .sType = VK_STRUCTURE_TYPE_IMAGE_BLIT_2,
+                .srcSubresource =
+                    {
+                        .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+                        .mipLevel = blit_lvl - 1,
+                        .baseArrayLayer = 0,
+                        .layerCount = 1,
+                    },
+                .srcOffsets =
+                    {
+                        {0, 0, 0},
+                        {src_img_width, src_img_height, 1},
+                    },
+                .dstSubresource =
+                    {
+                        .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+                        .mipLevel = blit_lvl,
+                        .baseArrayLayer = 0,
+                        .layerCount = 1,
+                    },
+                .dstOffsets =
+                    {
+                        {0, 0, 0},
+                        {dst_img_width, dst_img_height, 1},
+                    },
+            };
+
+            VkBlitImageInfo2 blit_info = {
+                .sType = VK_STRUCTURE_TYPE_BLIT_IMAGE_INFO_2,
+                .srcImage = image_alloc.image,
+                .srcImageLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+                .dstImage = image_alloc.image,
+                .dstImageLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                .regionCount = 1,
+                .pRegions = &image_blit,
+                .filter = VK_FILTER_NEAREST,
+            };
+            vkCmdBlitImage2(cmd, &blit_info);
+            vk_blit_transition_image(cmd, image_alloc.image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+                                     VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, blit_lvl - 1);
+        }
+        vk_blit_transition_image(cmd, image_alloc.image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                                 VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, mip_levels - 1);
+
+        stbi_image_free(image_data);
+        tex->image_resource = {.image_alloc = image_alloc,
+                               .image_view_resource = image_view_resource};
+        tex->staging_buffer = {
+            .buffer = staging_buf, .allocation = staging_alloc, .size = total_size};
+    };
+    return err;
+}
+
+g_internal B32
+vk_texture_gpu_upload_cmd_recording(VkCommandBuffer cmd, R_Handle tex_handle, Buffer<U8> tex_buf)
+{
+    VK_Context* vk_ctx = VK_CtxGet();
+    R_AssetItem<VK_Texture>* tex_asset = (R_AssetItem<VK_Texture>*)tex_handle.ptr;
+    VK_Texture* tex = &tex_asset->item;
+    B32 err = false;
+
+    bool is_ktx2 = vk_ktx2_check(tex_buf.data, tex_buf.size);
+    if (is_ktx2)
+    {
+        vk_texture_ktx_cmd_record(cmd, tex, tex_buf);
+    }
+    else
+    {
+        err |= vk_texture_cmd_record(cmd, tex, tex_buf);
+    }
+
+    U32 cur_thread_id = os_tid();
+    if (vk_ctx->render_thread_id == cur_thread_id)
+    {
+        tex->desc_set = VK_DescriptorSetCreate(
+            vk_ctx->arena, vk_ctx->device, vk_ctx->descriptor_pool, tex->desc_set_layout,
+            tex->image_resource.image_view_resource.image_view, tex->sampler);
+    }
+
+    return err;
+}
+
 static R_ThreadInput*
 VK_ThreadInputCreate()
 {
@@ -177,6 +411,7 @@ VK_ThreadInputDestroy(R_ThreadInput* thread_input)
 static void
 VK_ThreadSetup(async::ThreadInfo thread_info, void* input)
 {
+    ScratchScope scratch = ScratchScope(0, 0);
     R_ThreadInput* thread_input = (R_ThreadInput*)input;
 
     VK_Context* vk_ctx = VK_CtxGet();
@@ -188,6 +423,7 @@ VK_ThreadSetup(async::ThreadInfo thread_info, void* input)
 
     R_AssetLoadingInfo* asset_loading_info = &thread_input->asset_info;
     Assert(asset_loading_info->handle.u64 != 0);
+    B32 err = false;
 
     switch (asset_loading_info->type)
     {
@@ -195,12 +431,19 @@ VK_ThreadSetup(async::ThreadInfo thread_info, void* input)
         {
             R_TextureLoadingInfo* extra_info =
                 (R_TextureLoadingInfo*)&asset_loading_info->extra_info;
-            vk_texture_create(cmd, asset_loading_info->handle, extra_info);
+            Buffer<U8> tex_buf = io_file_read(scratch.arena, extra_info->tex_path);
+            err |=
+                vk_texture_gpu_upload_cmd_recording(cmd, thread_input->asset_info.handle, tex_buf);
+            if (err)
+            {
+                ERROR_LOG("Error when uploading texture - Error id: %d\n", err);
+            }
         }
         break;
         case R_AssetItemType_Buffer:
         {
             R_BufferInfo* buffer_info = (R_BufferInfo*)&asset_loading_info->extra_info;
+
             VK_AssetInfoBufferCmd(cmd, asset_loading_info->handle, buffer_info->buffer);
         }
         break;
@@ -210,18 +453,6 @@ VK_ThreadSetup(async::ThreadInfo thread_info, void* input)
 
     // ~mgj: Enqueue the command buffer
     VK_AssetCmdQueueItemEnqueue(thread_info.thread_id, cmd, thread_input);
-}
-
-static void
-vk_texture_create(VkCommandBuffer cmd_buffer, R_Handle handle, R_TextureLoadingInfo* tex_info)
-{
-    VK_Context* vk_ctx = VK_CtxGet();
-
-    // TODO: Make this thread safe
-    R_AssetItem<VK_Texture>* asset_store_texture = VK_AssetManagerTextureItemGet(handle);
-    VK_Texture* texture = &asset_store_texture->item;
-
-    vk_texture_gpu_upload(cmd_buffer, texture, tex_info);
 }
 
 static VK_Pipeline
@@ -263,7 +494,7 @@ VK_Model3DInstancePipelineCreate(VK_Context* vk_ctx, String8 shader_path)
     VkPipelineVertexInputStateCreateInfo vertex_input_info{};
     vertex_input_info.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
 
-    U32 uv_offset = (U32)offsetof(city::Vertex3D, uv);
+    U32 uv_offset = (U32)offsetof(r_Vertex3D, uv);
     U32 x_basis_offset = (U32)offsetof(city::Model3DInstance, x_basis);
     U32 y_basis_offset = (U32)offsetof(city::Model3DInstance, y_basis);
     U32 z_basis_offset = (U32)offsetof(city::Model3DInstance, z_basis);
@@ -290,7 +521,7 @@ VK_Model3DInstancePipelineCreate(VK_Context* vk_ctx, String8 shader_path)
          .offset = w_basis_offset},
     };
     VkVertexInputBindingDescription input_desc[] = {
-        {.binding = 0, .stride = sizeof(city::Vertex3D), .inputRate = VK_VERTEX_INPUT_RATE_VERTEX},
+        {.binding = 0, .stride = sizeof(r_Vertex3D), .inputRate = VK_VERTEX_INPUT_RATE_VERTEX},
         {.binding = 1,
          .stride = sizeof(city::Model3DInstance),
          .inputRate = VK_VERTEX_INPUT_RATE_INSTANCE}};
@@ -446,8 +677,8 @@ VK_Model3DPipelineCreate(VK_Context* vk_ctx, String8 shader_path)
     VkPipelineVertexInputStateCreateInfo vertex_input_info{};
     vertex_input_info.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
 
-    U32 uv_offset = offsetof(city::Vertex3D, uv);
-    U32 object_id_offset = offsetof(city::Vertex3D, object_id);
+    U32 uv_offset = offsetof(r_Vertex3D, uv);
+    U32 object_id_offset = offsetof(r_Vertex3D, object_id);
 
     VkVertexInputAttributeDescription attr_desc[] = {
         {.location = 0, .binding = 0, .format = VK_FORMAT_R32G32B32_SFLOAT},
@@ -457,7 +688,7 @@ VK_Model3DPipelineCreate(VK_Context* vk_ctx, String8 shader_path)
          .format = vk_ctx->object_id_format,
          .offset = object_id_offset}};
     VkVertexInputBindingDescription input_desc[] = {
-        {.binding = 0, .stride = sizeof(city::Vertex3D), .inputRate = VK_VERTEX_INPUT_RATE_VERTEX}};
+        {.binding = 0, .stride = sizeof(r_Vertex3D), .inputRate = VK_VERTEX_INPUT_RATE_VERTEX}};
 
     vertex_input_info.vertexBindingDescriptionCount = ArrayCount(input_desc);
     vertex_input_info.vertexAttributeDescriptionCount = ArrayCount(attr_desc);
@@ -798,7 +1029,7 @@ VK_AssetCmdQueueItemEnqueue(U32 thread_id, VkCommandBuffer cmd, R_ThreadInput* t
 
     VK_CmdQueueItem item = {
         .thread_input = thread_input, .thread_id = thread_id, .cmd_buffer = cmd};
-    DEBUG_LOG("Asset ID: %llu - Cmd Getting Queued\n", thread_input->asset_info.handle.u64[0]);
+    DEBUG_LOG("Asset ID: %llu - Cmd Getting Queued\n", thread_input->asset_info.handle.u64);
     async::QueuePush(asset_manager->cmd_queue, &item);
 }
 
@@ -825,7 +1056,7 @@ VK_AssetManagerExecuteCmds()
             VK_CHECK_RESULT(vkQueueSubmit(vk_ctx->graphics_queue, 1, &submit_info, item.fence));
 
             DEBUG_LOG("Asset ID: %llu - Submitted Command Buffer\n",
-                      item.thread_input->asset_info.handle.u64[0]);
+                      item.thread_input->asset_info.handle.u64);
             VK_AssetManagerCmdListAdd(asset_store->cmd_wait_list, item);
         }
     }
@@ -837,7 +1068,7 @@ VK_AssetManagerItemGet(R_AssetItemList<T>* list, R_Handle handle)
 {
     for (R_AssetItem<T>* item = list->first; item; item = item->next)
     {
-        if (handle.u64[0] == (U64)item)
+        if (handle.u64 == (U64)item)
         {
             return item;
         }
@@ -943,10 +1174,11 @@ VK_AssetManagerCmdDoneCheck()
                 R_AssetItem<VK_Buffer>* asset =
                     VK_AssetManagerItemGet(&asset_manager->buffer_list, asset_load_info->handle);
                 VK_BufferDestroy(vk_ctx->allocator, &asset->item.staging_buffer);
+                asset->item.staging_buffer.buffer = 0;
                 asset->is_loaded = 1;
             }
             Assert(asset_load_info->type != R_AssetItemType_Undefined);
-            DEBUG_LOG("Asset: %llu - Finished loading\n", asset_load_info->handle.u64[0]);
+            DEBUG_LOG("Asset: %llu - Finished loading\n", asset_load_info->handle.u64);
             vkDestroyFence(vk_ctx->device, cmd_queue_item->fence, 0);
             VK_ThreadInputDestroy(cmd_queue_item->thread_input);
             VK_AssetManagerCmdListItemRemove(asset_manager->cmd_wait_list, cmd_queue_item);
@@ -1111,23 +1343,24 @@ VK_Model3DInstanceBucketAdd(VK_BufferAllocation* vertex_buffer_allocation,
     SLLQueuePush(instance_draw->list.first, instance_draw->list.last, node);
 }
 
-static void
-VK_Model3DDraw(R_Handle texture_handle, R_Handle vertex_buffer_handle, R_Handle index_buffer_handle,
-               B32 depth_test_per_draw_call_only, U32 index_buffer_offset, U32 index_count)
+g_internal void
+r_model_3d_draw(r_Model3DPipelineData pipeline_input, B32 depth_test_per_draw_call_only)
 {
     VK_Context* vk_ctx = VK_CtxGet();
     VK_AssetManager* asset_manager = vk_ctx->asset_manager;
     R_AssetItem<VK_Buffer>* asset_vertex_buffer =
-        VK_AssetManagerItemGet(&asset_manager->buffer_list, vertex_buffer_handle);
+        VK_AssetManagerItemGet(&asset_manager->buffer_list, pipeline_input.vertex_buffer_handle);
     R_AssetItem<VK_Buffer>* asset_index_buffer =
-        VK_AssetManagerItemGet(&asset_manager->buffer_list, index_buffer_handle);
-    R_AssetItem<VK_Texture>* asset_texture = VK_AssetManagerTextureItemGet(texture_handle);
+        VK_AssetManagerItemGet(&asset_manager->buffer_list, pipeline_input.index_buffer_handle);
+    R_AssetItem<VK_Texture>* asset_texture =
+        VK_AssetManagerTextureItemGet(pipeline_input.texture_handle);
 
     if (asset_index_buffer->is_loaded && asset_texture->is_loaded)
     {
         VK_Model3DBucketAdd(&asset_vertex_buffer->item.buffer_alloc,
                             &asset_index_buffer->item.buffer_alloc, asset_texture->item.desc_set,
-                            depth_test_per_draw_call_only, index_buffer_offset, index_count);
+                            depth_test_per_draw_call_only, pipeline_input.index_offset,
+                            pipeline_input.index_count);
     }
 }
 
@@ -1574,361 +1807,4 @@ VK_ProfileBuffersDestroy(VK_Context* vk_ctx)
         TracyVkDestroy(vk_ctx->tracy_ctx[i]);
     }
 #endif
-}
-// ~mgj: Vulkan Interface
-static void
-R_RenderCtxCreate(String8 shader_path, io_IO* io_ctx, async::Threads* thread_pool)
-{
-    ScratchScope scratch = ScratchScope(0, 0);
-
-    Arena* arena = ArenaAlloc();
-
-    VK_Context* vk_ctx = PushStruct(arena, VK_Context);
-    VK_CtxSet(vk_ctx);
-    vk_ctx->arena = arena;
-
-    const char* validation_layers[] = {"VK_LAYER_KHRONOS_validation",
-                                       "VK_LAYER_KHRONOS_synchronization2"};
-    vk_ctx->validation_layers = BufferAlloc<String8>(vk_ctx->arena, ArrayCount(validation_layers));
-    for (U32 i = 0; i < ArrayCount(validation_layers); i++)
-    {
-        vk_ctx->validation_layers.data[i] = {str8_c_string(validation_layers[i])};
-    }
-
-    const char* device_extensions[] = {VK_KHR_SWAPCHAIN_EXTENSION_NAME,
-                                       VK_KHR_DYNAMIC_RENDERING_EXTENSION_NAME,
-                                       VK_EXT_COLOR_WRITE_ENABLE_EXTENSION_NAME};
-    vk_ctx->device_extensions = BufferAlloc<String8>(vk_ctx->arena, ArrayCount(device_extensions));
-    for (U32 i = 0; i < ArrayCount(device_extensions); i++)
-    {
-        vk_ctx->device_extensions.data[i] = {str8_c_string(device_extensions[i])};
-    }
-
-    VK_CreateInstance(vk_ctx);
-    VK_DebugMessengerSetup(vk_ctx);
-    VK_SurfaceCreate(vk_ctx, io_ctx);
-    VK_PhysicalDevicePick(vk_ctx);
-    VK_LogicalDeviceCreate(scratch.arena, vk_ctx);
-
-    // ~mgj: Blitting format
-    vk_ctx->blit_format = VK_FORMAT_R8G8B8A8_SRGB;
-    VkFormatProperties formatProperties;
-    vkGetPhysicalDeviceFormatProperties(vk_ctx->physical_device, vk_ctx->blit_format,
-                                        &formatProperties);
-    if (!(formatProperties.optimalTilingFeatures &
-          VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT))
-    {
-        exit_with_error("texture image format does not support linear blitting!");
-    }
-
-    VmaAllocatorCreateInfo allocatorInfo = {};
-    allocatorInfo.physicalDevice = vk_ctx->physical_device;
-    allocatorInfo.device = vk_ctx->device;
-    allocatorInfo.instance = vk_ctx->instance;
-
-    vmaCreateAllocator(&allocatorInfo, &vk_ctx->allocator);
-    vk_ctx->object_id_format = VK_FORMAT_R32G32_UINT;
-
-    Vec2S32 vk_framebuffer_dim_s32 = io_wait_for_valid_framebuffer_size(io_ctx);
-    Vec2U32 vk_framebuffer_dim_u32 = {(U32)vk_framebuffer_dim_s32.x, (U32)vk_framebuffer_dim_s32.y};
-    vk_ctx->swapchain_resources = VK_SwapChainCreate(vk_ctx, vk_framebuffer_dim_u32);
-
-    VkCommandPoolCreateInfo poolInfo{};
-    poolInfo.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
-    poolInfo.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
-    poolInfo.queueFamilyIndex = vk_ctx->queue_family_indices.graphicsFamilyIndex;
-    vk_ctx->command_pool = VK_CommandPoolCreate(vk_ctx->device, &poolInfo);
-
-    VK_CommandBuffersCreate(vk_ctx);
-
-    vk_sync_objects_create(vk_ctx);
-
-    VK_DescriptorPoolCreate(vk_ctx);
-    VK_CameraUniformBufferCreate(vk_ctx);
-    VK_CameraDescriptorSetLayoutCreate(vk_ctx);
-    VK_CameraDescriptorSetCreate(vk_ctx);
-    VK_ProfileBuffersCreate(vk_ctx);
-
-    // TODO: change from 1 to much larger value
-    vk_ctx->asset_manager = VK_AssetManagerCreate(
-        vk_ctx->device, vk_ctx->queue_family_indices.graphicsFamilyIndex, thread_pool, GB(1));
-
-    // ~mgj: Drawing (TODO: Move out of vulkan context to own module)
-    vk_ctx->draw_frame_arena = ArenaAlloc();
-    vk_ctx->model_3D_pipeline = VK_Model3DPipelineCreate(vk_ctx, shader_path);
-    vk_ctx->model_3D_instance_pipeline = VK_Model3DInstancePipelineCreate(vk_ctx, shader_path);
-}
-
-static void
-R_RenderCtxDestroy()
-{
-    VK_Context* vk_ctx = VK_CtxGet();
-    ImGui_ImplVulkan_Shutdown();
-    ImGui_ImplGlfw_Shutdown();
-    ImGui::DestroyContext();
-
-    vkDeviceWaitIdle(vk_ctx->device);
-
-    if (vk_ctx->enable_validation_layers)
-    {
-        VK_DestroyDebugUtilsMessengerEXT(vk_ctx->instance, vk_ctx->debug_messenger, nullptr);
-    }
-
-    VK_CameraCleanup(vk_ctx);
-    VK_ProfileBuffersDestroy(vk_ctx);
-
-    VK_SwapChainCleanup(vk_ctx->device, vk_ctx->allocator, vk_ctx->swapchain_resources);
-
-    vkDestroyCommandPool(vk_ctx->device, vk_ctx->command_pool, nullptr);
-
-    vkDestroySurfaceKHR(vk_ctx->instance, vk_ctx->surface, nullptr);
-    for (U32 i = 0; i < VK_MAX_FRAMES_IN_FLIGHT; i++)
-    {
-        vkDestroyFence(vk_ctx->device, vk_ctx->in_flight_fences.data[i], nullptr);
-    }
-
-    vkDestroyDescriptorPool(vk_ctx->device, vk_ctx->descriptor_pool, 0);
-
-    VK_BufferDestroy(vk_ctx->allocator, &vk_ctx->model_3D_instance_buffer);
-
-    vmaDestroyAllocator(vk_ctx->allocator);
-
-    VK_AssetManagerDestroy(vk_ctx, vk_ctx->asset_manager);
-
-    VK_PipelineDestroy(&vk_ctx->model_3D_pipeline);
-    VK_PipelineDestroy(&vk_ctx->model_3D_instance_pipeline);
-
-    vkDestroyDevice(vk_ctx->device, nullptr);
-    vkDestroyInstance(vk_ctx->instance, nullptr);
-
-    ArenaRelease(vk_ctx->draw_frame_arena);
-
-    ArenaRelease(vk_ctx->arena);
-}
-
-static void
-R_RenderFrame(Vec2U32 framebuffer_dim, B32* in_out_framebuffer_resized, ui_Camera* camera,
-              Vec2S64 mouse_cursor_pos)
-{
-    VK_Context* vk_ctx = VK_CtxGet();
-
-    VK_AssetManagerExecuteCmds();
-    VK_AssetManagerCmdDoneCheck();
-    vk_SwapchainResources* swapchain_resources = vk_ctx->swapchain_resources;
-
-    VkFence* in_flight_fence = &vk_ctx->in_flight_fences.data[vk_ctx->current_frame];
-    {
-        ProfScopeMarkerNamed("Wait for frame");
-        VK_CHECK_RESULT(vkWaitForFences(vk_ctx->device, 1, in_flight_fence, VK_TRUE, 1000000000));
-    }
-    VkSemaphore image_available_semaphore =
-        swapchain_resources->image_available_semaphores.data[vk_ctx->cur_img_idx];
-
-    uint32_t image_idx;
-    VkResult result =
-        vkAcquireNextImageKHR(vk_ctx->device, vk_ctx->swapchain_resources->swapchain, UINT64_MAX,
-                              image_available_semaphore, VK_NULL_HANDLE, &image_idx);
-    vk_ctx->cur_img_idx = (vk_ctx->cur_img_idx + 1) % swapchain_resources->image_count;
-
-    VkSemaphore render_finished_semaphore =
-        swapchain_resources->render_finished_semaphores.data[image_idx];
-
-    if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR ||
-        *in_out_framebuffer_resized)
-    {
-        *in_out_framebuffer_resized = false;
-        ImGui::EndFrame();
-
-        VK_RecreateSwapChain(framebuffer_dim, vk_ctx);
-        vk_ctx->current_frame = (vk_ctx->current_frame + 1) % VK_MAX_FRAMES_IN_FLIGHT;
-        return;
-    }
-    else if (result != VK_SUCCESS)
-    {
-        exit_with_error("failed to acquire swap chain image!");
-    }
-
-    VkCommandBuffer cmd_buffer = vk_ctx->command_buffers.data[vk_ctx->current_frame];
-    VK_CHECK_RESULT(vkResetFences(vk_ctx->device, 1, in_flight_fence));
-    VK_CHECK_RESULT(vkResetCommandBuffer(cmd_buffer, 0));
-
-    VK_CommandBufferRecord(image_idx, vk_ctx->current_frame, camera, mouse_cursor_pos);
-
-    VkSemaphoreSubmitInfo waitSemaphoreInfo{};
-    waitSemaphoreInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO;
-    waitSemaphoreInfo.semaphore = image_available_semaphore;
-    waitSemaphoreInfo.stageMask = VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT;
-
-    VkSemaphoreSubmitInfo signalSemaphoreInfo{};
-    signalSemaphoreInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO;
-    signalSemaphoreInfo.semaphore = render_finished_semaphore;
-    signalSemaphoreInfo.stageMask = VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT;
-
-    VkCommandBufferSubmitInfo commandBufferInfo{};
-    commandBufferInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_SUBMIT_INFO;
-    commandBufferInfo.commandBuffer = cmd_buffer;
-
-    VkSubmitInfo2 submitInfo{};
-    submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO_2;
-    submitInfo.waitSemaphoreInfoCount = 1;
-    submitInfo.pWaitSemaphoreInfos = &waitSemaphoreInfo;
-    submitInfo.signalSemaphoreInfoCount = 1;
-    submitInfo.pSignalSemaphoreInfos = &signalSemaphoreInfo;
-    submitInfo.commandBufferInfoCount = 1;
-    submitInfo.pCommandBufferInfos = &commandBufferInfo;
-
-    VK_CHECK_RESULT(vkQueueSubmit2(vk_ctx->graphics_queue, 1, &submitInfo, *in_flight_fence));
-
-    VkPresentInfoKHR presentInfo{};
-    presentInfo.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
-
-    presentInfo.waitSemaphoreCount = 1;
-    presentInfo.pWaitSemaphores = &render_finished_semaphore;
-
-    VkSwapchainKHR swapChains[] = {vk_ctx->swapchain_resources->swapchain};
-    presentInfo.swapchainCount = 1;
-    presentInfo.pSwapchains = swapChains;
-    presentInfo.pImageIndices = &image_idx;
-    presentInfo.pResults = nullptr; // Optional
-
-    result = vkQueuePresentKHR(vk_ctx->present_queue, &presentInfo);
-    ProfFrameMarker; // end of frame is assumed to be here
-    if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR ||
-        *in_out_framebuffer_resized)
-    {
-        *in_out_framebuffer_resized = 0;
-        VK_RecreateSwapChain(framebuffer_dim, vk_ctx);
-    }
-    else if (result != VK_SUCCESS)
-    {
-        exit_with_error("failed to present swap chain image!");
-    }
-
-    vk_ctx->current_frame = (vk_ctx->current_frame + 1) % VK_MAX_FRAMES_IN_FLIGHT;
-}
-
-static void
-R_GpuWorkDoneWait()
-{
-    VK_Context* vk_ctx = VK_CtxGet();
-    vkDeviceWaitIdle(vk_ctx->device);
-}
-
-static void
-R_NewFrame()
-{
-    VK_Context* vk_ctx = VK_CtxGet();
-    ArenaClear(vk_ctx->draw_frame_arena);
-    vk_ctx->draw_frame = PushStruct(vk_ctx->draw_frame_arena, VK_DrawFrame);
-    ImGui_ImplVulkan_NewFrame();
-}
-
-static U64
-r_latest_hovered_object_id_get()
-{
-    VK_Context* vk_ctx = VK_CtxGet();
-    return vk_ctx->hovered_object_id;
-}
-
-// ~mgj: Texture interface functions
-g_internal R_Handle
-r_texture_handle_create(R_SamplerInfo* sampler_info, R_PipelineUsageType pipeline_usage_type)
-{
-    VK_Context* vk_ctx = VK_CtxGet();
-    VK_AssetManager* asset_manager = vk_ctx->asset_manager;
-    // ~mgj: Create sampler
-    VkSamplerCreateInfo sampler_create_info = {};
-    VK_SamplerCreateInfoFromSamplerInfo(sampler_info, &sampler_create_info);
-    sampler_create_info.anisotropyEnable = VK_TRUE;
-    sampler_create_info.maxAnisotropy = (F32)vk_ctx->msaa_samples;
-    VkSampler vk_sampler = VK_SamplerCreate(vk_ctx->device, &sampler_create_info);
-
-    // ~mgj : Choose Descriptor Set Layout
-    VkDescriptorSetLayout desc_set_layout = NULL;
-    switch (pipeline_usage_type)
-    {
-        case R_PipelineUsageType_3D:
-            desc_set_layout = vk_ctx->model_3D_pipeline.descriptor_set_layout;
-            break;
-        case R_PipelineUsageType_3DInstanced:
-            desc_set_layout = vk_ctx->model_3D_instance_pipeline.descriptor_set_layout;
-            break;
-        default: InvalidPath;
-    }
-
-    // ~mgj: Assign values to texture
-    R_AssetItem<VK_Texture>* asset_item =
-        VK_AssetManagerItemCreate(&asset_manager->texture_list, &asset_manager->texture_free_list);
-    VK_Texture* texture = &asset_item->item;
-    texture->desc_set_layout = desc_set_layout;
-    texture->sampler = vk_sampler;
-    R_Handle texture_handle = {.u64 = (U64)asset_item};
-
-    return texture_handle;
-}
-
-static R_Handle
-r_texture_load_async(R_SamplerInfo* sampler_info, String8 texture_path,
-                     R_PipelineUsageType pipeline_usage_type)
-{
-    ScratchScope scratch = ScratchScope(0, 0);
-    VK_Context* vk_ctx = VK_CtxGet();
-    VK_AssetManager* asset_manager = vk_ctx->asset_manager;
-    R_ThreadInput* thread_input = VK_ThreadInputCreate();
-
-    // ~mgj: make input ready for texture loading on thread
-    R_AssetLoadingInfo* asset_load_info = &thread_input->asset_info;
-    asset_load_info->type = R_AssetItemType_Texture;
-    R_TextureLoadingInfo* texture_load_info = &asset_load_info->extra_info.texture_info;
-    texture_load_info->tex_path = PushStr8Copy(thread_input->arena, texture_path);
-
-    asset_load_info->handle = r_texture_handle_create(sampler_info, pipeline_usage_type);
-
-    async::QueueItem queue_input = {.data = thread_input, .worker_func = VK_ThreadSetup};
-    async::QueuePush(asset_manager->work_queue, &queue_input);
-
-    return asset_load_info->handle;
-}
-
-static R_Handle
-R_BufferLoad(R_BufferInfo* buffer_info)
-{
-    VK_Context* vk_ctx = VK_CtxGet();
-    VK_AssetManager* asset_manager = vk_ctx->asset_manager;
-    R_AssetItem<VK_Buffer>* asset_item =
-        VK_AssetManagerItemCreate(&asset_manager->buffer_list, &asset_manager->buffer_free_list);
-
-    // ~mgj: Create buffer allocation
-    VmaAllocationCreateInfo vma_info = {0};
-    vma_info.usage = VMA_MEMORY_USAGE_AUTO;
-    vma_info.requiredFlags = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
-    VkBufferUsageFlags usage_flags = {};
-    switch (buffer_info->buffer_type)
-    {
-        case R_BufferType_Vertex: usage_flags = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT; break;
-        case R_BufferType_Index: usage_flags = VK_BUFFER_USAGE_INDEX_BUFFER_BIT; break;
-        default: InvalidPath;
-    }
-    VK_BufferAllocation buffer =
-        VK_BufferAllocationCreate(vk_ctx->allocator, buffer_info->buffer.size,
-                                  usage_flags | VK_BUFFER_USAGE_TRANSFER_DST_BIT, vma_info);
-
-    // ~mgj: Prepare Texture
-    VK_Buffer* asset_buffer = &asset_item->item;
-    asset_buffer->buffer_alloc = buffer;
-    R_Handle buffer_handle = {.u64 = (U64)asset_item};
-
-    // ~mgj: Preparing buffer loading for another thread
-    R_ThreadInput* thread_input = VK_ThreadInputCreate();
-    R_AssetLoadingInfo* asset_load_info = &thread_input->asset_info;
-    asset_load_info->handle = buffer_handle;
-    asset_load_info->type = R_AssetItemType_Buffer;
-    R_BufferInfo* buffer_load_info = &asset_load_info->extra_info.buffer_info;
-    *buffer_load_info = *buffer_info;
-
-    async::QueueItem queue_input = {.data = thread_input, .worker_func = VK_ThreadSetup};
-    async::QueuePush(asset_manager->work_queue, &queue_input);
-
-    R_Handle handle = {.u64 = (U64)asset_item};
-    return handle;
 }

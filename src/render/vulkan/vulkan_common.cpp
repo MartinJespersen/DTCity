@@ -1341,8 +1341,8 @@ VK_RecreateSwapChain(Vec2U32 framebuffer_dim, VK_Context* vk_ctx)
     vk_ctx->swapchain_resources = VK_SwapChainCreate(vk_ctx, framebuffer_dim);
     vk_sync_objects_create(vk_ctx);
 }
+
 // Samplers helpers
-//
 static VkSampler
 VK_SamplerCreate(VkDevice device, VkSamplerCreateInfo* sampler_info)
 {
@@ -1359,9 +1359,8 @@ static void
 VK_DescriptorPoolCreate(VK_Context* vk_ctx)
 {
     VkDescriptorPoolSize pool_sizes[] = {
-        {VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
-         VK_MAX_FRAMES_IN_FLIGHT * 2}, // 2 for both camera buffer and terrain buffer
-        {VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_MAX_FRAMES_IN_FLIGHT * 2},
+        {VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 6}, // 2 for both camera buffer and terrain buffer
+        {VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 20},
     };
     U32 pool_size_count = ArrayCount(pool_sizes);
 
@@ -1370,7 +1369,7 @@ VK_DescriptorPoolCreate(VK_Context* vk_ctx)
     poolInfo.poolSizeCount = pool_size_count;
     poolInfo.pPoolSizes = pool_sizes;
 
-    poolInfo.maxSets = VK_MAX_FRAMES_IN_FLIGHT * 3;
+    poolInfo.maxSets = 20;
 
     if (vkCreateDescriptorPool(vk_ctx->device, &poolInfo, nullptr, &vk_ctx->descriptor_pool) !=
         VK_SUCCESS)
@@ -1411,10 +1410,7 @@ VK_DescriptorSetCreate(Arena* arena, VkDevice device, VkDescriptorPool desc_pool
     allocInfo.pSetLayouts = layouts;
 
     VkDescriptorSet desc_set;
-    if (vkAllocateDescriptorSets(device, &allocInfo, &desc_set) != VK_SUCCESS)
-    {
-        exit_with_error("DescriptorSetCreate: failed to allocate descriptor sets!");
-    }
+    VK_CHECK_RESULT(vkAllocateDescriptorSets(device, &allocInfo, &desc_set));
 
     VkDescriptorImageInfo image_info{};
     image_info.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
@@ -1490,6 +1486,6 @@ VK_SamplerCreateInfoFromSamplerInfo(R_SamplerInfo* sampler, VkSamplerCreateInfo*
     out_sampler_info->mipmapMode = VkSamplerMipmapModeFromMipMapMode(sampler->mip_map_mode);
     out_sampler_info->mipLodBias = 0.0f;
     out_sampler_info->minLod = 0.0f;
-    out_sampler_info->maxLod = 0.0f;
+    out_sampler_info->maxLod = VK_LOD_CLAMP_NONE;
     out_sampler_info->borderColor = VK_BORDER_COLOR_INT_OPAQUE_BLACK;
 }

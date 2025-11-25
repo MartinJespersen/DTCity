@@ -237,19 +237,6 @@ gltfw_primitive_create(Arena* arena, cgltf_data* data, cgltf_primitive* in_prim)
     return primitive;
 }
 
-g_internal bool
-ktx2_check(U8* buf, U64 size)
-{
-    bool result = false;
-    const unsigned char ktx2_magic[12] = {0xab, 0x4b, 0x54, 0x58, 0x20, 0x32,
-                                          0x30, 0xbb, 0x0d, 0x0a, 0x1a, 0x0a};
-    if (size >= ArrayCount(ktx2_magic) && MemoryMatch(ktx2_magic, buf, ArrayCount(ktx2_magic)))
-    {
-        result = true;
-    }
-    return result;
-}
-
 g_internal gltfw_PrimitiveList
 gltfw_primitives_read(Arena* arena, cgltf_data* data)
 {

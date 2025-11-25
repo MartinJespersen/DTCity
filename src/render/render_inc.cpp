@@ -2,6 +2,11 @@
 DISABLE_WARNINGS_PUSH
 #define VMA_IMPLEMENTATION
 #include "third_party/vk_mem_alloc.h"
+
+#define STB_IMAGE_IMPLEMENTATION
+#define STB_IMAGE_STATIC
+#include "third_party/stb_image.h"
+
 DISABLE_WARNINGS_POP
 
 // ~mgj: user libs
@@ -9,3 +14,4 @@ DISABLE_WARNINGS_POP
 
 #include "vulkan/vulkan_common.cpp"
 #include "vulkan/vulkan.cpp"
+#include "vulkan/vulkan_if.cpp"

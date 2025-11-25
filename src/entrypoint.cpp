@@ -115,7 +115,7 @@ static dt_Input
 dt_interpret_input(int argc, char** argv)
 {
     dt_Input input = {};
-    osm_GCSBoundingBox* bbox = &input.bbox;
+    osm_BoundingBox* bbox = &input.bbox;
     F64* bbox_coords[4] = {&bbox->lon_btm_left, &bbox->lat_btm_left, &bbox->lon_top_right,
                            &bbox->lat_top_right};
 
@@ -171,11 +171,12 @@ dt_interpret_input(int argc, char** argv)
 static void
 dt_main_loop(void* ptr)
 {
+    ScratchScope scratch = ScratchScope(0, 0);
     dt_Input* input = (dt_Input*)ptr;
 
     Context* ctx = dt_ctx_get();
     io_IO* io_ctx = ctx->io;
-    OS_SetThreadName(str8_c_string("Entrypoint thread"));
+    os_set_thread_name(str8_c_string("Entrypoint thread"));
 
     Rng2F32 utm_bb_coords = city::UtmFromBoundingBox(input->bbox);
     printf("UTM Coordinates: %f %f %f %f\n", utm_bb_coords.min.x, utm_bb_coords.min.y,
@@ -183,6 +184,9 @@ dt_main_loop(void* ptr)
     R_RenderCtxCreate(ctx->data_subdir.data[dt_DataDirType::Shaders], io_ctx, ctx->thread_pool);
     VK_Context* vk_ctx = VK_CtxGet();
     ImguiSetup(vk_ctx, io_ctx);
+
+    r_Model3DPipelineDataList land_handle_list =
+        city_land_create(scratch.arena, S("../data/a.glb"));
 
     R_SamplerInfo sampler_info = {
         .min_filter = R_Filter_Linear,
@@ -201,8 +205,8 @@ dt_main_loop(void* ptr)
     String8 asset_dir = ctx->data_subdir.data[dt_DataDirType::Assets];
 
     ctx->road =
-        city::RoadCreate(texture_dir, cache_dir, &input->bbox, &sampler_info, osm_g_network);
-    city::Road* road = ctx->road;
+        city_road_create(texture_dir, cache_dir, &input->bbox, &sampler_info, osm_g_network);
+    city_Road* road = ctx->road;
 
     ui_camera_init(ctx->camera);
     ctx->buildings = city::BuildingsCreate(cache_dir, texture_dir, ctx->road->road_height,
@@ -216,7 +220,7 @@ dt_main_loop(void* ptr)
         dt_time_update(ctx->time);
 
         io_new_frame(io_ctx);
-        R_NewFrame();
+        r_new_frame();
         ImGui::NewFrame();
         Vec2U32 framebuffer_dim = {.x = (U32)io_ctx->framebuffer_width,
                                    .y = (U32)io_ctx->framebuffer_height};
@@ -243,14 +247,13 @@ dt_main_loop(void* ptr)
             }
         }
 
-        VK_Model3DDraw(road->texture_handle, road->vertex_handle, road->index_handle, true, 0,
-                       road->index_buffer.size);
-        VK_Model3DDraw(buildings->roof_texture_handle, buildings->vertex_handle,
-                       buildings->index_handle, false, buildings->roof_index_buffer_offset,
-                       buildings->roof_index_count);
-        VK_Model3DDraw(buildings->facade_texture_handle, buildings->vertex_handle,
-                       buildings->index_handle, false, buildings->facade_index_buffer_offset,
-                       buildings->facade_index_count);
+        for (r_Model3DPipelineDataNode* node = land_handle_list.first; node; node = node->next)
+        {
+            r_model_3d_draw(node->handles, false);
+        }
+        r_model_3d_draw(road->handles, true);
+        r_model_3d_draw(buildings->roof_model_handles, false);
+        r_model_3d_draw(buildings->facade_model_handles, false);
 
         Buffer<city::Model3DInstance> instance_buffer =
             city::CarUpdate(vk_ctx->draw_frame_arena, car_sim, ctx->time->delta_time_sec);
@@ -262,7 +265,9 @@ dt_main_loop(void* ptr)
         R_RenderFrame(framebuffer_dim, &io_ctx->framebuffer_resized, ctx->camera,
                       io_ctx->mouse_pos_cur_s64);
     }
-    R_GpuWorkDoneWait();
+    r_gpu_work_done_wait();
+    city_land_destroy(land_handle_list);
+
     city::RoadDestroy(ctx->road);
     city::CarSimDestroy(ctx->car_sim);
     city::BuildingDestroy(ctx->buildings);

@@ -219,7 +219,7 @@ os_commit_large(void* ptr, U64 size);
 static U32
 os_tid();
 static void
-OS_SetThreadName(String8 string);
+os_set_thread_name(String8 string);
 
 ////////////////////////////////
 //~ rjf: @os_hooks Aborting (Implemented Per-OS)

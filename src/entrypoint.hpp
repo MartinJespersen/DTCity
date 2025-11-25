@@ -8,7 +8,7 @@ struct dt_Time
 
 struct dt_Input
 {
-    osm_GCSBoundingBox bbox;
+    osm_BoundingBox bbox;
 };
 
 enum dt_DataDirType
@@ -38,7 +38,7 @@ struct Context
     io_IO* io;
     ui_Camera* camera;
     dt_Time* time;
-    city::Road* road;
+    city_Road* road;
     city::CarSim* car_sim;
     city::Buildings* buildings;
 

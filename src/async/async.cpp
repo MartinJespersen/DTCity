@@ -72,7 +72,7 @@ ThreadWorker(void* data)
     Queue<QueueItem>* queue = input->queue;
     U32 thread_id = input->thread_id;
 
-    OS_SetThreadName(PushStr8F(scratch.arena, "ThreadWorker: %zu", thread_id));
+    os_set_thread_name(PushStr8F(scratch.arena, "ThreadWorker: %zu", thread_id));
     ThreadInfo thread_info;
     thread_info.thread_id = thread_id;
     thread_info.queue = queue;

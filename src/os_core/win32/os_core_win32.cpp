@@ -264,7 +264,7 @@ os_tid()
 }
 
 static void
-OS_SetThreadName(String8 name)
+os_set_thread_name(String8 name)
 {
     Temp scratch = ScratchBegin(0, 0);
 

@@ -9,6 +9,8 @@ DISABLE_WARNINGS_PUSH
 #define VMA_DEBUG_DETECT_CORRUPTION 1
 #define VMA_DEBUG_DETECT_LEAKS 1
 #include "third_party/vk_mem_alloc.h"
+#include "stb_image.h"
+
 DISABLE_WARNINGS_POP
 
 #include "third_party/tracy/tracy/TracyVulkan.hpp"

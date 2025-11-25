@@ -1,220 +1,12 @@
 namespace city
 {
-static R_SamplerInfo
-city_sampler_from_cgltf_sampler(gltfw_Sampler sampler)
-{
-    R_Filter min_filter = R_Filter_Nearest;
-    R_Filter mag_filter = R_Filter_Nearest;
-    R_MipMapMode mipmap_mode = R_MipMapMode_Nearest;
-    R_SamplerAddressMode address_mode_u = R_SamplerAddressMode_Repeat;
-    R_SamplerAddressMode address_mode_v = R_SamplerAddressMode_Repeat;
-
-    switch (sampler.min_filter)
-    {
-        default: exit_with_error("Invalid min filter type"); break;
-        case cgltf_filter_type_nearest:
-        {
-            min_filter = R_Filter_Nearest;
-            mag_filter = R_Filter_Nearest;
-            mipmap_mode = R_MipMapMode_Nearest;
-        }
-        break;
-        case cgltf_filter_type_linear:
-        {
-            min_filter = R_Filter_Linear;
-            mag_filter = R_Filter_Linear;
-            mipmap_mode = R_MipMapMode_Nearest;
-        }
-        break;
-        case cgltf_filter_type_nearest_mipmap_nearest:
-        {
-            min_filter = R_Filter_Nearest;
-            mag_filter = R_Filter_Nearest;
-            mipmap_mode = R_MipMapMode_Nearest;
-        }
-        break;
-        case cgltf_filter_type_linear_mipmap_nearest:
-        {
-            min_filter = R_Filter_Linear;
-            mag_filter = R_Filter_Linear;
-            mipmap_mode = R_MipMapMode_Nearest;
-        }
-        break;
-        case cgltf_filter_type_nearest_mipmap_linear:
-        {
-            min_filter = R_Filter_Nearest;
-            mag_filter = R_Filter_Nearest;
-            mipmap_mode = R_MipMapMode_Linear;
-        }
-        break;
-        case cgltf_filter_type_linear_mipmap_linear:
-        {
-            min_filter = R_Filter_Linear;
-            mag_filter = R_Filter_Linear;
-            mipmap_mode = R_MipMapMode_Linear;
-        }
-        break;
-    }
-
-    if (sampler.mag_filter != sampler.min_filter)
-    {
-        switch (sampler.mag_filter)
-        {
-            default: exit_with_error("Invalid mag filter type"); break;
-            case cgltf_filter_type_nearest_mipmap_nearest:
-            {
-                mag_filter = R_Filter_Nearest;
-            }
-            break;
-            case cgltf_filter_type_linear_mipmap_nearest:
-            {
-                mag_filter = R_Filter_Linear;
-            }
-            break;
-            case cgltf_filter_type_nearest_mipmap_linear:
-            {
-                mag_filter = R_Filter_Nearest;
-            }
-            break;
-            case cgltf_filter_type_linear_mipmap_linear:
-            {
-                mag_filter = R_Filter_Linear;
-            }
-            break;
-            case cgltf_filter_type_nearest:
-            {
-                mag_filter = R_Filter_Nearest;
-            }
-            break;
-            case cgltf_filter_type_linear:
-            {
-                mag_filter = R_Filter_Linear;
-            }
-            break;
-
-                break;
-        }
-    }
-
-    switch (sampler.wrap_s)
-    {
-        case cgltf_wrap_mode_clamp_to_edge:
-            address_mode_u = R_SamplerAddressMode_ClampToEdge;
-            break;
-        case cgltf_wrap_mode_repeat: address_mode_u = R_SamplerAddressMode_Repeat; break;
-        case cgltf_wrap_mode_mirrored_repeat:
-            address_mode_u = R_SamplerAddressMode_MirroredRepeat;
-            break;
-    }
-    switch (sampler.wrap_t)
-    {
-        case cgltf_wrap_mode_clamp_to_edge:
-            address_mode_v = R_SamplerAddressMode_ClampToEdge;
-            break;
-        case cgltf_wrap_mode_repeat: address_mode_v = R_SamplerAddressMode_Repeat; break;
-        case cgltf_wrap_mode_mirrored_repeat:
-            address_mode_v = R_SamplerAddressMode_MirroredRepeat;
-            break;
-    }
-
-    R_SamplerInfo sampler_info = {.min_filter = min_filter,
-                                  .mag_filter = mag_filter,
-                                  .mip_map_mode = mipmap_mode,
-                                  .address_mode_u = address_mode_u,
-                                  .address_mode_v = address_mode_v};
-
-    return sampler_info;
-}
-
-static Road*
-RoadCreate(String8 texture_path, String8 cache_path, osm_GCSBoundingBox* gcs_bbox,
-           R_SamplerInfo* sampler_info, osm_Network* node_utm_structure)
-{
-    ScratchScope scratch = ScratchScope(0, 0);
-    Arena* arena = ArenaAlloc();
-
-    Road* road = PushStruct(arena, Road);
-
-    road->openapi_data_file_name = PushStr8Copy(arena, S("openapi_node_ways_highway.json"));
-    road->arena = arena;
-    road->road_height = 10.0f;
-    road->default_road_width = 2.0f;
-
-    // TODO: make this an input and check for input conditions
-    String8 query = S(R"(data=
-        [out:json] [timeout:25];
-        (
-          way["highway"](%f, %f, %f, %f);
-        );
-        out body;
-        >;
-        out skel qt;
-    )");
-    HTTP_RequestParams params = {};
-    params.method = HTTP_Method_Post;
-    params.content_type = S("text/html");
-
-    String8 query_str =
-        PushStr8F(scratch.arena, (char*)query.str, gcs_bbox->lat_btm_left, gcs_bbox->lon_btm_left,
-                  gcs_bbox->lat_top_right, gcs_bbox->lon_top_right);
-    String8 cache_data_file =
-        Str8PathFromStr8List(scratch.arena, {cache_path, road->openapi_data_file_name});
-    String8 cache_meta_file = PushStr8Cat(scratch.arena, cache_data_file, S(".meta"));
-
-    String8 input_str = Str8FromGCSCoordinates(scratch.arena, gcs_bbox);
-
-    Result<String8> cache_read_result =
-        city_cache_read(scratch.arena, cache_data_file, cache_meta_file, input_str);
-    String8 http_data = cache_read_result.v;
-    if (cache_read_result.err)
-    {
-        http_data = city_http_call_wrapper(scratch.arena, query_str, &params);
-        city_cache_write(cache_data_file, cache_meta_file, http_data, input_str);
-    }
-    osm_RoadNodeParseResult json_result =
-        wrapper::node_buffer_from_simd_json(scratch.arena, http_data, 100);
-
-    B8 error = true;
-    while (error && json_result.error)
-    {
-        ERROR_LOG("RoadCreate: Failed to create Road Data Structure\n Retrying...\n");
-        http_data = city_http_call_wrapper(scratch.arena, query_str, &params);
-        if (http_data.size)
-        {
-            json_result = wrapper::node_buffer_from_simd_json(scratch.arena, http_data, 100);
-            if (json_result.error == false)
-            {
-                city_cache_write(cache_data_file, cache_meta_file, http_data, input_str);
-                error = false;
-            }
-        }
-    }
-
-    Buffer<osm_RoadNodeList> node_hashmap = json_result.road_nodes;
-    osm_structure_add(node_utm_structure, node_hashmap, http_data, OsmKeytype_Road);
-
-    RoadVertexBufferCreate(road, &road->vertex_buffer, &road->index_buffer, node_utm_structure);
-    R_BufferInfo vertex_buffer_info =
-        R_BufferInfoFromTemplateBuffer(road->vertex_buffer, R_BufferType_Vertex);
-    R_BufferInfo index_buffer_info =
-        R_BufferInfoFromTemplateBuffer(road->index_buffer, R_BufferType_Index);
-
-    road->texture_path = Str8PathFromStr8List(road->arena, {texture_path, S("road_texture.ktx2")});
-
-    road->texture_handle =
-        r_texture_load_async(sampler_info, road->texture_path, R_PipelineUsageType_3D);
-    road->vertex_handle = R_BufferLoad(&vertex_buffer_info);
-    road->index_handle = R_BufferLoad(&index_buffer_info);
-
-    return road;
-}
 
 static void
-RoadDestroy(Road* road)
+RoadDestroy(city_Road* road)
 {
-    VK_AssetManagerBufferFree(road->vertex_handle);
-    VK_AssetManagerBufferFree(road->index_handle);
-    VK_AssetManagerTextureFree(road->texture_handle);
+    VK_AssetManagerBufferFree(road->handles.vertex_buffer_handle);
+    VK_AssetManagerBufferFree(road->handles.index_buffer_handle);
+    VK_AssetManagerTextureFree(road->handles.texture_handle);
 
     ArenaRelease(road->arena);
 }
@@ -290,7 +82,7 @@ TagValueF32Get(Arena* arena, String8 key, F32 default_width, Buffer<osm_Tag> tag
 }
 
 static void
-RoadVertexBufferCreate(Road* road, Buffer<Vertex3D>* out_vertex_buffer,
+RoadVertexBufferCreate(city_Road* road, Buffer<r_Vertex3D>* out_vertex_buffer,
                        Buffer<U32>* out_index_buffer, osm_Network* node_utm_structure)
 {
     ScratchScope scratch = ScratchScope(0, 0);
@@ -309,7 +101,7 @@ RoadVertexBufferCreate(Road* road, Buffer<Vertex3D>* out_vertex_buffer,
     U64 total_vert_count = total_road_segment_count * 4;
     U64 total_index_count = total_road_segment_count * 6;
 
-    Buffer<Vertex3D> vertex_buffer = BufferAlloc<Vertex3D>(road->arena, total_vert_count);
+    Buffer<r_Vertex3D> vertex_buffer = BufferAlloc<r_Vertex3D>(road->arena, total_vert_count);
     Buffer<U32> index_buffer = BufferAlloc<U32>(road->arena, total_index_count);
 
     U32 current_vertex_idx = 0;
@@ -382,14 +174,6 @@ static U64
 HashU64FromStr8(String8 str)
 {
     return HashU128FromStr8(str).u64[1];
-}
-
-static String8
-Str8FromGCSCoordinates(Arena* arena, osm_GCSBoundingBox* bbox)
-{
-    String8 str = {.str = (U8*)bbox, .size = sizeof(osm_GCSBoundingBox)};
-    String8 str_copy = PushStr8Copy(arena, str);
-    return str_copy;
 }
 
 static B32
@@ -585,8 +369,8 @@ HeightDimAdd(Vec2F32 pos, F32 height)
 }
 
 static void
-QuadToBufferAdd(RoadSegment* road_segment, Buffer<Vertex3D> buffer, Buffer<U32> indices, U64 way_id,
-                F32 road_height, U32* cur_vertex_idx, U32* cur_index_idx)
+QuadToBufferAdd(RoadSegment* road_segment, Buffer<r_Vertex3D> buffer, Buffer<U32> indices,
+                U64 way_id, F32 road_height, U32* cur_vertex_idx, U32* cur_index_idx)
 {
     F32 road_width = Dist2F32(road_segment->start.top, road_segment->start.btm);
     F32 top_tex_scaled = Dist2F32(road_segment->start.top, road_segment->end.top) / road_width;
@@ -643,7 +427,7 @@ NodeUtmFind(osm_Network* node_ways, U64 node_id)
 }
 
 static void
-RoadIntersectionPointsFind(Road* road, RoadSegment* in_out_segment, osm_Way* current_road_way,
+RoadIntersectionPointsFind(city_Road* road, RoadSegment* in_out_segment, osm_Way* current_road_way,
                            osm_Network* node_utm_structure)
 {
     ScratchScope scratch = ScratchScope(0, 0);
@@ -826,7 +610,7 @@ CarCenterHeightOffset(Buffer<gltfw_Vertex3D> vertices)
 }
 
 static CarSim*
-CarSimCreate(String8 asset_path, String8 texture_path, U32 car_count, Road* road)
+CarSimCreate(String8 asset_path, String8 texture_path, U32 car_count, city_Road* road)
 {
     ScratchScope scratch = ScratchScope(0, 0);
     Arena* arena = ArenaAlloc();
@@ -846,8 +630,8 @@ CarSimCreate(String8 asset_path, String8 texture_path, U32 car_count, Road* road
     car_sim->texture_path = Str8PathFromStr8List(arena, {texture_path, S("car_collection.ktx2")});
     car_sim->texture_handle = r_texture_load_async(&car_sim->sampler_info, car_sim->texture_path,
                                                    R_PipelineUsageType_3DInstanced);
-    car_sim->vertex_handle = R_BufferLoad(&car_sim->vertex_buffer);
-    car_sim->index_handle = R_BufferLoad(&car_sim->index_buffer);
+    car_sim->vertex_handle = r_buffer_load(&car_sim->vertex_buffer);
+    car_sim->index_handle = r_buffer_load(&car_sim->index_buffer);
 
     car_sim->car_center_offset = CarCenterHeightOffset(parsed_result.vertex_buffer);
     car_sim->cars = BufferAlloc<Car>(arena, car_count);
@@ -934,7 +718,7 @@ CarUpdate(Arena* arena, CarSim* car, F32 time_delta)
 
 static Buildings*
 BuildingsCreate(String8 cache_path, String8 texture_path, F32 road_height,
-                osm_GCSBoundingBox* gcs_bbox, R_SamplerInfo* sampler_info,
+                osm_BoundingBox* gcs_bbox, R_SamplerInfo* sampler_info,
                 osm_Network* node_utm_structure)
 {
     ScratchScope scratch = ScratchScope(0, 0);
@@ -965,7 +749,7 @@ BuildingsCreate(String8 cache_path, String8 texture_path, F32 road_height,
             Str8PathFromStr8List(scratch.arena, {cache_path, buildings->cache_file_name});
         String8 cache_meta_file = PushStr8Cat(scratch.arena, cache_data_file, S(".meta"));
 
-        String8 input_str = Str8FromGCSCoordinates(scratch.arena, gcs_bbox);
+        String8 input_str = city_str8_from_wqs_coord(scratch.arena, gcs_bbox);
 
         Result<String8> cache_read_result =
             city_cache_read(scratch.arena, cache_data_file, cache_meta_file, input_str);
@@ -1002,9 +786,9 @@ BuildingsCreate(String8 cache_path, String8 texture_path, F32 road_height,
         Str8PathFromStr8List(arena, {texture_path, S("brick_wall.ktx2")});
     buildings->roof_texture_path =
         Str8PathFromStr8List(arena, {texture_path, S("concrete042A.ktx2")});
-    buildings->facade_texture_handle =
+    R_Handle facade_texture_handle =
         r_texture_load_async(sampler_info, buildings->facade_texture_path, R_PipelineUsageType_3D);
-    buildings->roof_texture_handle =
+    R_Handle roof_texture_handle =
         r_texture_load_async(sampler_info, buildings->roof_texture_path, R_PipelineUsageType_3D);
 
     BuildingRenderInfo render_info;
@@ -1014,12 +798,19 @@ BuildingsCreate(String8 cache_path, String8 texture_path, F32 road_height,
     R_BufferInfo index_buffer_info =
         R_BufferInfoFromTemplateBuffer(render_info.index_buffer, R_BufferType_Index);
 
-    buildings->vertex_handle = R_BufferLoad(&vertex_buffer_info);
-    buildings->index_handle = R_BufferLoad(&index_buffer_info);
-    buildings->roof_index_buffer_offset = render_info.roof_index_offset;
-    buildings->facade_index_buffer_offset = render_info.facade_index_offset;
-    buildings->facade_index_count = render_info.facade_index_count;
-    buildings->roof_index_count = render_info.roof_index_count;
+    R_Handle vertex_handle = r_buffer_load(&vertex_buffer_info);
+    R_Handle index_handle = r_buffer_load(&index_buffer_info);
+
+    buildings->roof_model_handles = {.vertex_buffer_handle = vertex_handle,
+                                     .index_buffer_handle = index_handle,
+                                     .texture_handle = roof_texture_handle,
+                                     .index_count = render_info.roof_index_count,
+                                     .index_offset = render_info.roof_index_offset};
+    buildings->facade_model_handles = {.vertex_buffer_handle = vertex_handle,
+                                       .index_buffer_handle = index_handle,
+                                       .texture_handle = facade_texture_handle,
+                                       .index_count = render_info.facade_index_count,
+                                       .index_offset = render_info.facade_index_offset};
 
     return buildings;
 }
@@ -1027,10 +818,10 @@ BuildingsCreate(String8 cache_path, String8 texture_path, F32 road_height,
 static void
 BuildingDestroy(Buildings* building)
 {
-    VK_AssetManagerBufferFree(building->vertex_handle);
-    VK_AssetManagerBufferFree(building->index_handle);
-    VK_AssetManagerTextureFree(building->roof_texture_handle);
-    VK_AssetManagerTextureFree(building->facade_texture_handle);
+    VK_AssetManagerBufferFree(building->roof_model_handles.vertex_buffer_handle);
+    VK_AssetManagerBufferFree(building->roof_model_handles.index_buffer_handle);
+    VK_AssetManagerTextureFree(building->roof_model_handles.texture_handle);
+    VK_AssetManagerTextureFree(building->facade_model_handles.texture_handle);
     ArenaRelease(building->arena);
 }
 static F32
@@ -1081,7 +872,7 @@ BuildingsBuffersCreate(Arena* arena, F32 road_height, BuildingRenderInfo* out_re
         Assert(way->node_ids[0] == way->node_ids[way->node_count - 1]);
     }
 
-    Buffer<Vertex3D> vertex_buffer = BufferAlloc<Vertex3D>(scratch.arena, total_vertex_count);
+    Buffer<r_Vertex3D> vertex_buffer = BufferAlloc<r_Vertex3D>(scratch.arena, total_vertex_count);
     Buffer<U32> index_buffer = BufferAlloc<U32>(scratch.arena, total_index_count);
 
     U32 base_index_idx = 0;
@@ -1205,7 +996,7 @@ BuildingsBuffersCreate(Arena* arena, F32 road_height, BuildingRenderInfo* out_re
         }
     }
 
-    Buffer<Vertex3D> vertex_buffer_final = BufferAlloc<Vertex3D>(arena, base_vertex_idx);
+    Buffer<r_Vertex3D> vertex_buffer_final = BufferAlloc<r_Vertex3D>(arena, base_vertex_idx);
     Buffer<U32> index_buffer_final = BufferAlloc<U32>(arena, base_index_idx);
     BufferCopy(vertex_buffer_final, vertex_buffer, base_vertex_idx);
     BufferCopy(index_buffer_final, index_buffer, base_index_idx);
@@ -1394,7 +1185,7 @@ EarClipping(Arena* arena, Buffer<Vec2F32> node_buffer)
 
 // ~mgj: Bounding Box is defined as the bottom left corner to the top right corner
 static Rng2F32
-UtmFromBoundingBox(osm_GCSBoundingBox bbox)
+UtmFromBoundingBox(osm_BoundingBox bbox)
 {
     F64 long_low_utm;
     F64 lat_low_utm;
@@ -1409,3 +1200,280 @@ UtmFromBoundingBox(osm_GCSBoundingBox bbox)
 }
 
 } // namespace city
+
+g_internal void
+city_land_destroy(r_Model3DPipelineDataList list)
+{
+    for (r_Model3DPipelineDataNode* data = list.first; data; data = data->next)
+    {
+        r_buffer_destroy(data->handles.index_buffer_handle);
+        r_buffer_destroy(data->handles.vertex_buffer_handle);
+        r_texture_destroy(data->handles.texture_handle);
+    }
+}
+
+g_internal r_Model3DPipelineDataList
+city_land_create(Arena* arena, String8 glb_path)
+{
+    ScratchScope scratch = ScratchScope(&arena, 1);
+
+    gltfw_Result glb_data = gltfw_glb_read(arena, glb_path);
+
+    // create render handles
+    Buffer<R_Handle> tex_handles = BufferAlloc<R_Handle>(scratch.arena, glb_data.textures.size);
+    {
+        for (U32 i = 0; i < glb_data.textures.size; ++i)
+        {
+            gltfw_Texture* texture = &glb_data.textures.data[i];
+            R_SamplerInfo sampler_info = city_sampler_from_cgltf_sampler(texture->sampler);
+            tex_handles.data[i] = r_texture_handle_create(&sampler_info, R_PipelineUsageType_3D);
+            r_texture_gpu_upload_sync(tex_handles.data[i], texture->tex_buf);
+        }
+    }
+
+    // create vertex and index buffers
+    r_Model3DPipelineDataList handles_list = {};
+    {
+        for (gltfw_Primitive* primitive = glb_data.primitives.first; primitive;
+             primitive = primitive->next)
+        {
+            R_BufferInfo vertex_buffer =
+                R_BufferInfoFromTemplateBuffer(primitive->vertices, R_BufferType_Vertex);
+            R_BufferInfo index_buffer =
+                R_BufferInfoFromTemplateBuffer(primitive->indices, R_BufferType_Index);
+
+            R_Handle vertex_handle = r_buffer_load(&vertex_buffer);
+            R_Handle index_handle = r_buffer_load(&index_buffer);
+            R_Handle texture_handle = tex_handles.data[primitive->tex_idx];
+
+            r_Model3DPipelineDataNode* node = PushStruct(arena, r_Model3DPipelineDataNode);
+            node->handles = {.vertex_buffer_handle = vertex_handle,
+                             .index_buffer_handle = index_handle,
+                             .texture_handle = texture_handle,
+                             .index_count = primitive->indices.size,
+                             .index_offset = 0};
+            SLLQueuePush(handles_list.first, handles_list.last, node);
+        }
+    }
+    return handles_list;
+}
+
+static R_SamplerInfo
+city_sampler_from_cgltf_sampler(gltfw_Sampler sampler)
+{
+    R_Filter min_filter = R_Filter_Nearest;
+    R_Filter mag_filter = R_Filter_Nearest;
+    R_MipMapMode mipmap_mode = R_MipMapMode_Nearest;
+    R_SamplerAddressMode address_mode_u = R_SamplerAddressMode_Repeat;
+    R_SamplerAddressMode address_mode_v = R_SamplerAddressMode_Repeat;
+
+    switch (sampler.min_filter)
+    {
+        default: break;
+        case cgltf_filter_type_nearest:
+        {
+            min_filter = R_Filter_Nearest;
+            mag_filter = R_Filter_Nearest;
+            mipmap_mode = R_MipMapMode_Nearest;
+        }
+        break;
+        case cgltf_filter_type_linear:
+        {
+            min_filter = R_Filter_Linear;
+            mag_filter = R_Filter_Linear;
+            mipmap_mode = R_MipMapMode_Nearest;
+        }
+        break;
+        case cgltf_filter_type_nearest_mipmap_nearest:
+        {
+            min_filter = R_Filter_Nearest;
+            mag_filter = R_Filter_Nearest;
+            mipmap_mode = R_MipMapMode_Nearest;
+        }
+        break;
+        case cgltf_filter_type_linear_mipmap_nearest:
+        {
+            min_filter = R_Filter_Linear;
+            mag_filter = R_Filter_Linear;
+            mipmap_mode = R_MipMapMode_Nearest;
+        }
+        break;
+        case cgltf_filter_type_nearest_mipmap_linear:
+        {
+            min_filter = R_Filter_Nearest;
+            mag_filter = R_Filter_Nearest;
+            mipmap_mode = R_MipMapMode_Linear;
+        }
+        break;
+        case cgltf_filter_type_linear_mipmap_linear:
+        {
+            min_filter = R_Filter_Linear;
+            mag_filter = R_Filter_Linear;
+            mipmap_mode = R_MipMapMode_Linear;
+        }
+        break;
+    }
+
+    if (sampler.mag_filter != sampler.min_filter)
+    {
+        switch (sampler.mag_filter)
+        {
+            default: break;
+            case cgltf_filter_type_nearest_mipmap_nearest:
+            {
+                mag_filter = R_Filter_Nearest;
+            }
+            break;
+            case cgltf_filter_type_linear_mipmap_nearest:
+            {
+                mag_filter = R_Filter_Linear;
+            }
+            break;
+            case cgltf_filter_type_nearest_mipmap_linear:
+            {
+                mag_filter = R_Filter_Nearest;
+            }
+            break;
+            case cgltf_filter_type_linear_mipmap_linear:
+            {
+                mag_filter = R_Filter_Linear;
+            }
+            break;
+            case cgltf_filter_type_nearest:
+            {
+                mag_filter = R_Filter_Nearest;
+            }
+            break;
+            case cgltf_filter_type_linear:
+            {
+                mag_filter = R_Filter_Linear;
+            }
+            break;
+
+                break;
+        }
+    }
+
+    switch (sampler.wrap_s)
+    {
+        case cgltf_wrap_mode_clamp_to_edge:
+            address_mode_u = R_SamplerAddressMode_ClampToEdge;
+            break;
+        case cgltf_wrap_mode_repeat: address_mode_u = R_SamplerAddressMode_Repeat; break;
+        case cgltf_wrap_mode_mirrored_repeat:
+            address_mode_u = R_SamplerAddressMode_MirroredRepeat;
+            break;
+    }
+    switch (sampler.wrap_t)
+    {
+        case cgltf_wrap_mode_clamp_to_edge:
+            address_mode_v = R_SamplerAddressMode_ClampToEdge;
+            break;
+        case cgltf_wrap_mode_repeat: address_mode_v = R_SamplerAddressMode_Repeat; break;
+        case cgltf_wrap_mode_mirrored_repeat:
+            address_mode_v = R_SamplerAddressMode_MirroredRepeat;
+            break;
+    }
+
+    R_SamplerInfo sampler_info = {.min_filter = min_filter,
+                                  .mag_filter = mag_filter,
+                                  .mip_map_mode = mipmap_mode,
+                                  .address_mode_u = address_mode_u,
+                                  .address_mode_v = address_mode_v};
+
+    return sampler_info;
+}
+
+static String8
+city_str8_from_wqs_coord(Arena* arena, osm_BoundingBox* bbox)
+{
+    String8 str = {.str = (U8*)bbox, .size = sizeof(osm_BoundingBox)};
+    String8 str_copy = PushStr8Copy(arena, str);
+    return str_copy;
+}
+
+static city_Road*
+city_road_create(String8 texture_path, String8 cache_path, osm_BoundingBox* gcs_bbox,
+                 R_SamplerInfo* sampler_info, osm_Network* node_utm_structure)
+{
+    ScratchScope scratch = ScratchScope(0, 0);
+    Arena* arena = ArenaAlloc();
+
+    city_Road* road = PushStruct(arena, city_Road);
+
+    road->openapi_data_file_name = PushStr8Copy(arena, S("openapi_node_ways_highway.json"));
+    road->arena = arena;
+    road->road_height = 10.0f;
+    road->default_road_width = 2.0f;
+
+    // TODO: make this an input and check for input conditions
+    String8 query = S(R"(data=
+        [out:json] [timeout:25];
+        (
+          way["highway"](%f, %f, %f, %f);
+        );
+        out body;
+        >;
+        out skel qt;
+    )");
+    HTTP_RequestParams params = {};
+    params.method = HTTP_Method_Post;
+    params.content_type = S("text/html");
+
+    String8 query_str =
+        PushStr8F(scratch.arena, (char*)query.str, gcs_bbox->lat_btm_left, gcs_bbox->lon_btm_left,
+                  gcs_bbox->lat_top_right, gcs_bbox->lon_top_right);
+    String8 cache_data_file =
+        Str8PathFromStr8List(scratch.arena, {cache_path, road->openapi_data_file_name});
+    String8 cache_meta_file = PushStr8Cat(scratch.arena, cache_data_file, S(".meta"));
+
+    String8 input_str = city_str8_from_wqs_coord(scratch.arena, gcs_bbox);
+
+    Result<String8> cache_read_result =
+        city::city_cache_read(scratch.arena, cache_data_file, cache_meta_file, input_str);
+    String8 http_data = cache_read_result.v;
+    if (cache_read_result.err)
+    {
+        http_data = city::city_http_call_wrapper(scratch.arena, query_str, &params);
+        city::city_cache_write(cache_data_file, cache_meta_file, http_data, input_str);
+    }
+    osm_RoadNodeParseResult json_result =
+        wrapper::node_buffer_from_simd_json(scratch.arena, http_data, 100);
+
+    B8 error = true;
+    while (error && json_result.error)
+    {
+        ERROR_LOG("RoadCreate: Failed to create Road Data Structure\n Retrying...\n");
+        http_data = city::city_http_call_wrapper(scratch.arena, query_str, &params);
+        if (http_data.size)
+        {
+            json_result = wrapper::node_buffer_from_simd_json(scratch.arena, http_data, 100);
+            if (json_result.error == false)
+            {
+                city::city_cache_write(cache_data_file, cache_meta_file, http_data, input_str);
+                error = false;
+            }
+        }
+    }
+
+    Buffer<osm_RoadNodeList> node_hashmap = json_result.road_nodes;
+    osm_structure_add(node_utm_structure, node_hashmap, http_data, OsmKeytype_Road);
+
+    city::RoadVertexBufferCreate(road, &road->vertex_buffer, &road->index_buffer,
+                                 node_utm_structure);
+    R_BufferInfo vertex_buffer_info =
+        R_BufferInfoFromTemplateBuffer(road->vertex_buffer, R_BufferType_Vertex);
+    R_BufferInfo index_buffer_info =
+        R_BufferInfoFromTemplateBuffer(road->index_buffer, R_BufferType_Index);
+
+    road->texture_path = Str8PathFromStr8List(road->arena, {texture_path, S("road_texture.ktx2")});
+
+    R_Handle texture_handle =
+        r_texture_load_async(sampler_info, road->texture_path, R_PipelineUsageType_3D);
+    R_Handle vertex_handle = r_buffer_load(&vertex_buffer_info);
+    R_Handle index_handle = r_buffer_load(&index_buffer_info);
+
+    road->handles = {vertex_handle, index_handle, texture_handle, road->index_buffer.size, 0};
+
+    return road;
+}

@@ -1,10 +1,6 @@
 #pragma once
 
-// ~mgj: forward declaration
-namespace city
-{
-struct Road;
-} // namespace city
+// namespace city
 struct osm_RoadNodeList;
 struct osm_Way;
 struct osm_RoadNodeParseResult;
