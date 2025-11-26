@@ -2,7 +2,7 @@ namespace city
 {
 
 static void
-RoadDestroy(city_Road* road)
+road_destroy(city_Road* road)
 {
     VK_AssetManagerBufferFree(road->handles.vertex_buffer_handle);
     VK_AssetManagerBufferFree(road->handles.index_buffer_handle);
@@ -655,7 +655,7 @@ CarSimCreate(String8 asset_path, String8 texture_path, U32 car_count, city_Road*
 }
 
 static void
-CarSimDestroy(CarSim* car_sim)
+car_sim_destroy(CarSim* car_sim)
 {
     VK_AssetManagerBufferFree(car_sim->vertex_handle);
     VK_AssetManagerBufferFree(car_sim->index_handle);
@@ -816,7 +816,7 @@ BuildingsCreate(String8 cache_path, String8 texture_path, F32 road_height,
 }
 
 static void
-BuildingDestroy(Buildings* building)
+building_destroy(Buildings* building)
 {
     VK_AssetManagerBufferFree(building->roof_model_handles.vertex_buffer_handle);
     VK_AssetManagerBufferFree(building->roof_model_handles.index_buffer_handle);

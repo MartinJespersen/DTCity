@@ -185,9 +185,6 @@ dt_main_loop(void* ptr)
     VK_Context* vk_ctx = VK_CtxGet();
     ImguiSetup(vk_ctx, io_ctx);
 
-    r_Model3DPipelineDataList land_handle_list =
-        city_land_create(scratch.arena, S("../data/a.glb"));
-
     R_SamplerInfo sampler_info = {
         .min_filter = R_Filter_Linear,
         .mag_filter = R_Filter_Linear,
@@ -247,10 +244,6 @@ dt_main_loop(void* ptr)
             }
         }
 
-        for (r_Model3DPipelineDataNode* node = land_handle_list.first; node; node = node->next)
-        {
-            r_model_3d_draw(node->handles, false);
-        }
         r_model_3d_draw(road->handles, true);
         r_model_3d_draw(buildings->roof_model_handles, false);
         r_model_3d_draw(buildings->facade_model_handles, false);
@@ -266,10 +259,9 @@ dt_main_loop(void* ptr)
                       io_ctx->mouse_pos_cur_s64);
     }
     r_gpu_work_done_wait();
-    city_land_destroy(land_handle_list);
 
-    city::RoadDestroy(ctx->road);
-    city::CarSimDestroy(ctx->car_sim);
-    city::BuildingDestroy(ctx->buildings);
+    city::road_destroy(ctx->road);
+    city::car_sim_destroy(ctx->car_sim);
+    city::building_destroy(ctx->buildings);
     R_RenderCtxDestroy();
 }

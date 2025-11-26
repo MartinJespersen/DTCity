@@ -103,7 +103,7 @@ struct Model3DInstance
 };
 
 static void
-RoadDestroy(city_Road* road);
+road_destroy(city_Road* road);
 static void
 RoadVertexBufferCreate(city_Road* road, Buffer<r_Vertex3D>* out_vertex_buffer,
                        Buffer<U32>* out_index_buffer, osm_Network* node_utm_structure);
@@ -118,7 +118,7 @@ RoadIntersectionPointsFind(city_Road* road, RoadSegment* in_out_segment, osm_Way
 static CarSim*
 CarSimCreate(String8 asset_path, String8 texture_path, U32 car_count, city_Road* road);
 static void
-CarSimDestroy(CarSim* car_sim);
+car_sim_destroy(CarSim* car_sim);
 static Buffer<Model3DInstance>
 CarUpdate(Arena* arena, CarSim* car, F32 time_delta);
 
@@ -128,7 +128,7 @@ BuildingsCreate(String8 cache_path, String8 texture_path, F32 road_height,
                 osm_BoundingBox* gcs_bbox, R_SamplerInfo* sampler_info,
                 osm_Network* node_utm_structure);
 static void
-BuildingDestroy(Buildings* building);
+building_destroy(Buildings* building);
 static void
 BuildingsBuffersCreate(Arena* arena, F32 road_height, BuildingRenderInfo* out_render_info,
                        osm_Network* node_utm_structure);
