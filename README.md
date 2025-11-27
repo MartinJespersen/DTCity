@@ -1,15 +1,66 @@
+# About
+
+DTCity is an application for viewing city data in 3D visualization. 
+The visualization is currently able to receive a bounding box as commandline and from this data the visualization is able to show roads and buildings.
+A basic simulation of cars are also provided that show support for visualizing meshes from .gltf file formats as well.
+The application uses OpenStreetMap as the data source for road and building locations, but upcoming versions of the software will add support for other data sources.  
+
+# How To Use
+
+The program renders a selected area of the Earth's surface in 3D using WGS84 coordinates (longitude/latitude) provided as command-line arguments.
+The area is defined by a rectangular bounding box specified by two corners:
+
+* p0 – lower-left corner (south-west)
+* p1 – upper-right corner (north-east)
+
+Each corner is given as longitude followed by latitude (in decimal degrees).
+```
+./city lon_p0 lat_p0 lon_p1 lat_p1
+```
+example with floating point value:
+```
+./city 13.388860 52.517037 13.428055 52.539674
+```
+
+## Controls
+
+Movement: WASD keys (first-person style)
+* W – forward
+* S – backward
+* A – strafe left
+* D – strafe right
+
+Look around: Hold the left mouse button and move the mouse 
+
+Road information: Hover the mouse cursor over a road to display available details (name, type, etc.), provided the data exists in OpenStreetMap.
+
 # Build instructions
 
 ## Windows Prerequisites
 * Install the Microsoft C/C++ Build Tools to install the MSVC compiler, CMake and vcpkg.
 * Setup environment by running the script: ```vcvarsall.bat x64``` or ```use the x64 Native Tools Command Prompt``` that will automatically run the script when started.
 
-## Linux Prerequisites
-TODO
-
+## Linux Prerequisites (Ubuntu/Debian based)
+A docker file is provided showing how to setup a ubuntu based build environment. 
+The required packages can be installed with the following command: 
+```bash
+apt-get update && apt-get install -y \\
+    python3 \\
+    build-essential \\
+    git \\
+    curl \\
+    zip \\
+	unzip \\
+    tar \\
+    cmake \\
+    libgl1-mesa-dev xorg-dev libwayland-dev libxkbcommon-dev wayland-protocols extra-cmake-modules
+```
+The docker file is only used for testing the build in a linux environment. It will not be executable in a container at the moment.
 ## 1. Create build directory
 
-The different cmake preset and its configuration can be found in CMakePreset.json file in the project root. It currently consist of 3 different presets or build configurations. These are debug, release and profile each having a window and a linux equivalent. So the combinations are:
+The CMakePreset.json file in the project root consists of 3 different build configurations for both windows and linux for the x64 architecture. 
+
+The combinations are:
 * debug-windows
 * debug-linux
 * release-windows
@@ -30,35 +81,6 @@ The following application specific macros are used to enable address sanitizatio
 * -DTRACY_PROFILE_ENABLE (Enable tracy profiling)
 
 CMake presets define these macros based on what type of build configuration is used - debug, release or profile. These defaults can be changed e.g. you might want to enable address sanitization in a profile build.
-
-# TODO along the way
-* Make the asset manager thread safe - accessing texture and buffer lists are not thread safe at the moment
-* Add linting and static analysis checks
-* Change the naming convention for functions from PascalCase to snake_case
-* Cleanup entrypoint main loop
-
-# Future Improvements:
-* Layers should compile as seperate units
-* Error handling improvements - error handling should not be ExitWithError everywhere
-* Improve the conversion between UTM and WGS84 system
-* Consider testing and how to do it
-* Improve the HTTP library implementation
-  * Probably consider using a cross platform library only instead of a mix
-* Threads in asset store should manage have more than one available command buffer in the thread command pool.
-* Linux support:
-  * entrypoint caller currently implemented for windows should change to linux.
-  * HTTP client implementation improvements on linux (move away from httplib)
-  * hot reloading refactor to simplify the implementation for linux
-  * Base library fixes
-* Make executable stand alone:
-  * What to do about shaders
-    * compiled directly into executable?
-  * What to do about assets and textures that are not part of executable
-* Add performance tests in developer workflow and in Github Actions
-
-# Linux Info
-* Compiling (incl. linking) takes a very long time at the moment.
-* remember to link crypto and ssl libraries when using https and define the macro CPPHTTPLIB_OPENSSL_SUPPORT in httplib
 
 # Helpers
 ## Jpg/png to ktx2

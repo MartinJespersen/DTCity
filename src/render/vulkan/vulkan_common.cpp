@@ -225,10 +225,7 @@ VK_CreateInstance(VK_Context* vk_ctx)
         createInfo.pNext = nullptr;
     }
 
-    if (vkCreateInstance(&createInfo, nullptr, &vk_ctx->instance) != VK_SUCCESS)
-    {
-        exit_with_error("failed to create instance!");
-    }
+    VK_CHECK_RESULT(vkCreateInstance(&createInfo, nullptr, &vk_ctx->instance));
 
     ScratchEnd(scratch);
 }
