@@ -22,6 +22,10 @@ example with floating point value:
 ./city 13.388860 52.517037 13.428055 52.539674
 ```
 
+Caution!
+Keep the bounding box to an area that is not over 1 square kilometer to avoid long loading times.
+The application does not currently implement any form of culling. 
+
 ## Controls
 
 Movement: WASD keys (first-person style)
@@ -44,18 +48,26 @@ Road information: Hover the mouse cursor over a road to display available detail
 A docker file is provided showing how to setup a ubuntu based build environment. 
 The required packages can be installed with the following command: 
 ```bash
-apt-get update && apt-get install -y \\
-    python3 \\
-    build-essential \\
-    git \\
-    curl \\
-    zip \\
-	unzip \\
-    tar \\
-    cmake \\
+apt-get update && apt-get install -y \
+    python3 \
+    build-essential \
+    git \
+    curl \
+    zip \
+	unzip \
+    tar \
+    cmake \
+    libvulkan1 \
     libgl1-mesa-dev xorg-dev libwayland-dev libxkbcommon-dev wayland-protocols extra-cmake-modules
 ```
-The docker file is only used for testing the build in a linux environment. It will not be executable in a container at the moment.
+To test the application for linux with WSL2 run the following commands inside WSL2. The commands should be run inside WSL so make sure to enable WSL integration for Docker Desktop with the distro you run the commands from.
+```bash
+docker compose up -d --build
+docker compose exec city
+apt update && apt install -y libvulkan1
+./city
+```
+
 ## 1. Create build directory
 
 The CMakePreset.json file in the project root consists of 3 different build configurations for both windows and linux for the x64 architecture. 

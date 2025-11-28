@@ -11,6 +11,7 @@ RUN apt-get update && apt-get install -y \
 	unzip \
     tar \
     cmake \
+    libvulkan1 \
     libgl1-mesa-dev xorg-dev libwayland-dev libxkbcommon-dev wayland-protocols extra-cmake-modules
 
 RUN git clone https://github.com/Microsoft/vcpkg.git /opt/vcpkg && \
@@ -43,4 +44,4 @@ COPY --from=builder /app/data /app/data
 WORKDIR /app/build
 
 # Run the application
-CMD ["./city", "13.388860", "52.517037", "13.428055", "52.539674"]
+CMD ["/bin/bash"]

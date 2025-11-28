@@ -58,5 +58,5 @@ jobs:
           tag_name: ${{ github.ref_name }}
           files: ${{ env.ZIP_NAME }}
           draft: false
-          prerelease: true
+          prerelease: false
           generate_release_notes: true
