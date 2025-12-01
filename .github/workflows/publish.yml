@@ -58,7 +58,9 @@ jobs:
         if: github.ref_type == 'tag'
         with:
           tag_name: ${{ github.ref_name }}
-          files: ${{ env.ZIP_NAME }} docs/usage-guide.pdf
+          files: |
+            ${{ env.ZIP_NAME }}
+            docs/usage-guide.pdf
           draft: false
           prerelease: false
           generate_release_notes: true
