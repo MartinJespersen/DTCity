@@ -181,7 +181,7 @@ dt_main_loop(void* ptr)
     Rng2F32 utm_bb_coords = city::UtmFromBoundingBox(input->bbox);
     printf("UTM Coordinates: %f %f %f %f\n", utm_bb_coords.min.x, utm_bb_coords.min.y,
            utm_bb_coords.max.x, utm_bb_coords.max.y);
-    r_render_ctx_create(ctx->data_subdir.data[dt_DataDirType::Shaders], io_ctx, ctx->thread_pool);
+    r_render_ctx_create(ctx->data_subdirs.data[dt_DataDirType::Shaders], io_ctx, ctx->thread_pool);
     VK_Context* vk_ctx = VK_CtxGet();
     ImguiSetup(vk_ctx, io_ctx);
 
@@ -197,9 +197,9 @@ dt_main_loop(void* ptr)
     U64 way_hashmap_size = 100;
     osm_structure_init(node_hashmap_size, way_hashmap_size, &input->bbox);
 
-    String8 cache_dir = ctx->data_subdir.data[dt_DataDirType::Cache];
-    String8 texture_dir = ctx->data_subdir.data[dt_DataDirType::Texture];
-    String8 asset_dir = ctx->data_subdir.data[dt_DataDirType::Assets];
+    String8 cache_dir = ctx->data_subdirs.data[dt_DataDirType::Cache];
+    String8 texture_dir = ctx->data_subdirs.data[dt_DataDirType::Texture];
+    String8 asset_dir = ctx->data_subdirs.data[dt_DataDirType::Assets];
 
     ctx->road =
         city_road_create(texture_dir, cache_dir, &input->bbox, &sampler_info, osm_g_network);

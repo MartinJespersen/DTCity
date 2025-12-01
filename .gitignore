@@ -10,6 +10,8 @@ build
 */BROWSE.VC.DB*
 *.zip
 *.tar.gz
+*.geojson
+*.gpkg
 out
 .cache
 .venv

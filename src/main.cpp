@@ -14,14 +14,26 @@ ContextCreate(io_IO* io_ctx)
     ctx->io = PushStruct(app_arena, io_IO);
     ctx->camera = PushStruct(app_arena, ui_Camera);
     ctx->time = PushStruct(app_arena, dt_Time);
-    ctx->cwd = Str8PathFromStr8List(app_arena, {OS_GetCurrentPath(scratch.arena), S("..")});
-    ctx->data_dir = Str8PathFromStr8List(app_arena, {ctx->cwd, S("data")});
+    ctx->cwd = OS_GetCurrentPath(scratch.arena);
+
+    String8 data_dir = Str8PathFromStr8List(app_arena, {ctx->cwd, S("data")});
+    B32 data_dir_exists = os_folder_path_exists(data_dir);
+    if (!data_dir_exists)
+    {
+        data_dir = Str8PathFromStr8List(app_arena, {ctx->cwd, S(".."), S("data")});
+        data_dir_exists = os_folder_path_exists(data_dir);
+    }
+
+    if (!data_dir_exists)
+    {
+        exit_with_error("data directory cannot not found");
+    }
 
     dt_DataDirPair subdirs[] = {{dt_DataDirType::Cache, S("cache")},
                                 {dt_DataDirType::Texture, S("textures")},
                                 {dt_DataDirType::Shaders, S("shaders")},
                                 {dt_DataDirType::Assets, S("assets")}};
-    ctx->data_subdir = dt_dir_create(app_arena, ctx->data_dir, subdirs, ArrayCount(subdirs));
+    ctx->data_subdirs = dt_dir_create(app_arena, data_dir, subdirs, ArrayCount(subdirs));
     ctx->io = io_ctx;
 
     // ~mgj: -2 as 2 are used for Main thread and IO thread
@@ -45,7 +57,7 @@ App(int argc, char** argv)
 {
     ScratchScope scratch = ScratchScope(0, 0);
 
-    io_IO* io_ctx = io_window_create(VK_Context::WIDTH, VK_Context::HEIGHT);
+    io_IO* io_ctx = io_window_create(S("DTCity"), VK_Context::WIDTH, VK_Context::HEIGHT);
     io_input_state_update(io_ctx);
     Context* ctx = ContextCreate(io_ctx);
     dt_ctx_set(ctx);

@@ -31,7 +31,7 @@ struct Context
     B32 running;
     String8 cwd;
     String8 data_dir;
-    Buffer<String8> data_subdir;
+    Buffer<String8> data_subdirs;
 
     Arena* arena_permanent;
 

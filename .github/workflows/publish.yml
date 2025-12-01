@@ -14,8 +14,10 @@ jobs:
         include:
           - os: ubuntu-24.04
             zip_type: linux-x64.tar.gz
+            exe: city
           - os: windows-2022
             zip_type: windows-x64.zip
+            exe: city.exe
     env:
       ZIP_NAME: DTCity-${{ github.ref_name }}-${{ matrix.zip_type }}
     runs-on: ${{ matrix.os}}
@@ -34,7 +36,7 @@ jobs:
           cmake --preset=release-windows
           cmake --build build --target clang-tidy-check
           cmake --build build
-          %SystemRoot%\System32\tar.exe -a -c -f ${{ env.ZIP_NAME }} build/city.exe data/*
+          %SystemRoot%\System32\tar.exe -a -c -f ${{ env.ZIP_NAME }} data -C build ${{ matrix.exe }} -C ../docs usage-guide.pdf
       - name: Build Linux
         if: matrix.os == 'ubuntu-24.04'
         shell: bash
@@ -49,14 +51,14 @@ jobs:
           cmake --preset=release-linux
           cmake --build build --target clang-tidy-check
           cmake --build build
-          tar -czf ${{ env.ZIP_NAME }} build/city data/*
+          tar -czf ${{ env.ZIP_NAME }} data -C build ${{ matrix.exe }} -C ../docs usage-guide.pdf
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         if: github.ref_type == 'tag'
         with:
           tag_name: ${{ github.ref_name }}
-          files: ${{ env.ZIP_NAME }}
+          files: ${{ env.ZIP_NAME }} docs/usage-guide.pdf
           draft: false
           prerelease: false
           generate_release_notes: true

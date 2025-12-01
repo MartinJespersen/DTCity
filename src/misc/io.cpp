@@ -9,7 +9,7 @@ io_framebuffer_resize_callback(GLFWwindow* window, int width, int height)
 }
 
 static io_IO*
-io_window_create(U32 window_width, U32 window_height)
+io_window_create(String8 app_name, U32 window_width, U32 window_height)
 {
     Arena* arena = ArenaAlloc();
     io_IO* io_ctx = PushStruct(arena, io_IO);
@@ -18,7 +18,8 @@ io_window_create(U32 window_width, U32 window_height)
     glfwInit();
     glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
     glfwWindowHint(GLFW_RESIZABLE, GLFW_TRUE);
-    io_ctx->window = glfwCreateWindow(window_width, window_height, "Vulkan", nullptr, nullptr);
+    io_ctx->window =
+        glfwCreateWindow(window_width, window_height, (char*)app_name.str, nullptr, nullptr);
     glfwSetWindowUserPointer(io_ctx->window, io_ctx);
     glfwSetFramebufferSizeCallback(io_ctx->window, io_framebuffer_resize_callback);
     glfwSetScrollCallback(io_ctx->window, io_scroll_callback);

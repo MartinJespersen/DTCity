@@ -60,37 +60,5 @@ The following application specific macros are used to enable address sanitizatio
 
 CMake presets define these macros based on what type of build configuration is used - debug, release or profile. These defaults can be changed e.g. you might want to enable address sanitization in a profile build.
 
-# How To Use
-
-The program renders a selected area of the Earth's surface in 3D using WGS84 coordinates (longitude/latitude) provided as command-line arguments.
-The area is defined by a rectangular bounding box specified by two corners:
-
-* p0 – lower-left corner (south-west)
-* p1 – upper-right corner (north-east)
-
-Each corner is given as longitude followed by latitude (in decimal degrees).
-```
-./city lon_p0 lat_p0 lon_p1 lat_p1
-```
-example with floating point value:
-```
-./city 13.388860 52.517037 13.428055 52.539674
-```
-
-Caution!
-Keep the bounding box to an area that is not over 1 square kilometer to avoid long loading times.
-The application does not currently implement any form of culling. 
-
-## Controls
-
-Movement: WASD keys (first-person style)
-* W – forward
-* S – backward
-* A – left
-* D – right
-
-Look around: Hold the left mouse button and move the mouse 
-
-Road information: Hover the mouse cursor over a road to display available details (e.g road name), provided the data exists in OpenStreetMap.
 
 

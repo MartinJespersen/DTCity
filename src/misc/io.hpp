@@ -35,7 +35,7 @@ io_wait_for_valid_framebuffer_size(io_IO* io_ctx);
 static void
 io_framebuffer_resize_callback(GLFWwindow* window, int width, int height);
 static io_IO*
-io_window_create(U32 window_width, U32 window_height);
+io_window_create(String8 app_name, U32 window_width, U32 window_height);
 static void
 io_window_destroy(io_IO* io_ctx);
 static void
