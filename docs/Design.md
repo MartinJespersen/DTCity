@@ -11,6 +11,7 @@ graph TD
     city --> render
     city --> osm
     osm --> http
+    city --> gltfw
 ```
 ## dt
 This is the top level application layer and contains the main loop that creates a new frame each iteration. Each iteration the state of the simulation is updated, and the state can be used to update the geometry to display.
@@ -30,6 +31,9 @@ This is the layer responsible for rendering and displaying images. It wraps the 
 
 ## async
 Implements a job system using a thread safe FIFO queue. It is currently used by the render layer to stream textures.
+
+## gltfw
+Wrapper layer for loading glTF/glb files. 
 
 # Manual Memory Management
 One important difference between this project and an usual C++ project is in the way memory is managed. This project does heavy use of memory arenas which is an important concept to become familiar. The overall idea is to simplify memory management by decreasing the number of memory allocations by bundling smaller allocations together that has the same lifetime so that only a single deallocation is need. 

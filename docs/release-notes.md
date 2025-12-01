@@ -2,8 +2,8 @@
 This is the first official release of DTCity.
 
 ## Features Introduced:
-* 3D Visualization of road and building data from OpenStreetMap with caching mechanism.
-* Command-line interface for specifying bounding box coordinates in WQS84 format.
+* 3D Visualization of road and building data from OpenStreetMap.
+* Command-line interface for specifying bounding box coordinates in WGS84 format.
 * Random car simulation using .gltf mesh data.
 * Basic user controls for navigation in the 3D world.
 * Additional street information displayed on mouse hover.

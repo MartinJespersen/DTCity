@@ -1,6 +1,3 @@
-# TODO: quick fix
-* Decouple Model3DInstance to be part of render layer only with ties to city
-
 # TODO along the way
 * Make the asset manager thread safe - accessing texture and buffer lists are not thread safe at the moment
 * Add linting and static analysis checks
