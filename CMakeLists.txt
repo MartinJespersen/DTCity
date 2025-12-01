@@ -7,7 +7,7 @@ set(SHADER_DIR ${CMAKE_CURRENT_SOURCE_DIR}/data/shaders)
 set(SHADER_BINARY_DIR ${CMAKE_CURRENT_SOURCE_DIR}/data/shaders/bin)
 set(ASAN_LINK_FLAGS "")
 set(ASAN_COMPILE_FLAGS "")
-set(ALL_TARGETS tile_streaming city)
+set(ALL_TARGETS city)
 
 option(BUILD_DEBUG "Enable Additional Debugging Information (e.g Vulkan Validation Layers)" OFF)
 option(ASAN_ENABLED "Enable Address Sanitizer" OFF)
@@ -21,7 +21,6 @@ if(ASAN_ENABLED)
     add_compile_definitions(ASAN_ENABLED=1)
 endif()
 
-add_executable(tile_streaming)
 add_executable(city)
 
 # Compiler specific options
@@ -135,13 +134,6 @@ target_link_directories(city PRIVATE
 )
 target_sources(city PRIVATE src/third_party/simdjson/simdjson.cpp src/third_party/imgui/imgui_inc.cpp)
 target_link_libraries(city PRIVATE glfw KTX::ktx Vulkan::Vulkan)
-
-# tile streaming specifics
-add_dependencies(tile_streaming CompileShaders)
-
-target_include_directories(tile_streaming PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
-target_sources(tile_streaming PRIVATE src/tile_streaming/tile_streaming.cpp)
-target_link_libraries(tile_streaming PRIVATE glfw Vulkan::Vulkan KTX::ktx)
 
 add_custom_target(clang-tidy-check
     COMMAND clang-tidy -p ${CMAKE_BINARY_DIR} "src/main.cpp"

@@ -1,10 +1,8 @@
-
-
 #pragma once
 
 ////////////////////////////////
 //~ mgj: Handle Type
-union R_Handle
+union r_Handle
 {
     void* ptr;
     U64 u64;
@@ -14,7 +12,7 @@ union R_Handle
 };
 
 /////////////////////////////////
-enum R_ResourceKind
+enum r_ResourceKind
 {
     R_ResourceKind_Static,
     R_ResourceKind_Dynamic,
@@ -22,7 +20,7 @@ enum R_ResourceKind
     R_ResourceKind_COUNT,
 };
 
-enum R_Tex2DFormat
+enum r_Tex2DFormat
 {
     R_Tex2DFormat_R8,
     R_Tex2DFormat_RG8,
@@ -37,19 +35,19 @@ enum R_Tex2DFormat
 };
 
 // ~mgj: Sampler
-enum R_MipMapMode
+enum r_MipMapMode
 {
     R_MipMapMode_Nearest = 0,
     R_MipMapMode_Linear = 1,
 };
 
-enum R_Filter
+enum r_Filter
 {
     R_Filter_Nearest = 0,
     R_Filter_Linear = 1,
 };
 
-enum R_SamplerAddressMode
+enum r_SamplerAddressMode
 {
     R_SamplerAddressMode_Repeat,
     R_SamplerAddressMode_MirroredRepeat,
@@ -57,83 +55,83 @@ enum R_SamplerAddressMode
     R_SamplerAddressMode_ClampToBorder,
 };
 
-struct R_SamplerInfo
+struct r_SamplerInfo
 {
-    R_Filter min_filter;
-    R_Filter mag_filter;
-    R_MipMapMode mip_map_mode;
-    R_SamplerAddressMode address_mode_u;
-    R_SamplerAddressMode address_mode_v;
+    r_Filter min_filter;
+    r_Filter mag_filter;
+    r_MipMapMode mip_map_mode;
+    r_SamplerAddressMode address_mode_u;
+    r_SamplerAddressMode address_mode_v;
 };
 
-enum R_BufferType
+enum r_BufferType
 {
     R_BufferType_Invalid,
     R_BufferType_Vertex,
     R_BufferType_Index
 };
 
-struct R_BufferInfo
+struct r_BufferInfo
 {
     Buffer<U8> buffer;
     U64 type_size;
-    R_BufferType buffer_type;
+    r_BufferType buffer_type;
 };
 
-enum R_AssetItemType
+enum r_AssetItemType
 {
     R_AssetItemType_Undefined,
     R_AssetItemType_Texture,
     R_AssetItemType_Buffer
 };
 
-enum R_PipelineUsageType
+enum r_PipelineUsageType
 {
     R_PipelineUsageType_Invalid,
     R_PipelineUsageType_3D,
     R_PipelineUsageType_3DInstanced,
 };
 
-template <typename T> struct R_AssetItem
+template <typename T> struct r_AssetItem
 {
-    R_AssetItem* next;
+    r_AssetItem* next;
     B32 is_loaded;
     T item;
 };
 
-template <typename T> struct R_AssetItemList
+template <typename T> struct r_AssetItemList
 {
-    R_AssetItem<T>* first;
-    R_AssetItem<T>* last;
+    r_AssetItem<T>* first;
+    r_AssetItem<T>* last;
 };
 
-struct R_TextureLoadingInfo
+struct r_TextureLoadingInfo
 {
     String8 tex_path;
 };
 
-struct R_AssetLoadingInfo
+struct r_AssetLoadingInfo
 {
-    R_Handle handle;
-    R_AssetItemType type;
+    r_Handle handle;
+    r_AssetItemType type;
     union
     {
-        R_TextureLoadingInfo texture_info;
-        R_BufferInfo buffer_info;
+        r_TextureLoadingInfo texture_info;
+        r_BufferInfo buffer_info;
     } extra_info;
 };
 
-struct R_ThreadInput
+struct r_ThreadInput
 {
     Arena* arena;
-    R_AssetLoadingInfo asset_info;
+    r_AssetLoadingInfo asset_info;
 };
 
 struct r_Model3DPipelineData
 {
-    R_Handle vertex_buffer_handle;
-    R_Handle index_buffer_handle;
-    R_Handle texture_handle;
+    r_Handle vertex_buffer_handle;
+    r_Handle index_buffer_handle;
+    r_Handle texture_handle;
 
     U64 index_count;
     U32 index_offset;
@@ -158,23 +156,31 @@ struct r_Vertex3D
     Vec2U32 object_id;
 };
 
-static R_Handle
-R_HandleZero();
+struct r_Model3DInstance
+{
+    glm::vec4 x_basis;
+    glm::vec4 y_basis;
+    glm::vec4 z_basis;
+    glm::vec4 w_basis;
+};
+
+static r_Handle
+r_handle_zero();
 
 template <typename T>
-static R_BufferInfo
-R_BufferInfoFromTemplateBuffer(Buffer<T> buffer, R_BufferType buffer_type);
+static r_BufferInfo
+r_buffer_info_from_template_buffer(Buffer<T> buffer, r_BufferType buffer_type);
 
 //////////////////////////////////////////////////////////////////////////
 // ~mgj: function declaration to be implemented by backend
 
 static void
-R_RenderCtxCreate(String8 shader_path, io_IO* io_ctx, async::Threads* thread_pool);
+r_render_ctx_create(String8 shader_path, io_IO* io_ctx, async::Threads* thread_pool);
 static void
-R_RenderCtxDestroy();
+r_render_ctx_destroy();
 static void
-R_RenderFrame(Vec2U32 framebuffer_dim, B32* in_out_framebuffer_resized, ui_Camera* camera,
-              Vec2S64 mouse_cursor_pos);
+r_render_frame(Vec2U32 framebuffer_dim, B32* in_out_framebuffer_resized, ui_Camera* camera,
+               Vec2S64 mouse_cursor_pos);
 static void
 r_gpu_work_done_wait();
 static void
@@ -183,21 +189,21 @@ static U64
 r_latest_hovered_object_id_get();
 
 // ~mgj: Texture loading interface
-g_internal R_Handle
-r_texture_handle_create(R_SamplerInfo* sampler_info, R_PipelineUsageType pipeline_usage_type);
-g_internal R_Handle
-r_texture_load_async(R_SamplerInfo* sampler_info, String8 texture_path,
-                     R_PipelineUsageType pipeline_usage_type);
+g_internal r_Handle
+r_texture_handle_create(r_SamplerInfo* sampler_info, r_PipelineUsageType pipeline_usage_type);
+g_internal r_Handle
+r_texture_load_async(r_SamplerInfo* sampler_info, String8 texture_path,
+                     r_PipelineUsageType pipeline_usage_type);
 g_internal void
-r_texture_gpu_upload_sync(R_Handle tex_handle, Buffer<U8> tex_bufs);
+r_texture_gpu_upload_sync(r_Handle tex_handle, Buffer<U8> tex_bufs);
 
 g_internal void
-r_texture_destroy(R_Handle handle);
+r_texture_destroy(r_Handle handle);
 g_internal void
-r_buffer_destroy(R_Handle handle);
+r_buffer_destroy(r_Handle handle);
 
 g_internal void
 r_model_3d_draw(r_Model3DPipelineData pipeline_input, B32 depth_test_per_draw_call_only);
 
-g_internal R_Handle
-r_buffer_load(R_BufferInfo* buffer_info);
+g_internal r_Handle
+r_buffer_load(r_BufferInfo* buffer_info);

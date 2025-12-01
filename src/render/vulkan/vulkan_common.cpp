@@ -1431,7 +1431,7 @@ VK_DescriptorSetCreate(Arena* arena, VkDevice device, VkDescriptorPool desc_pool
 }
 
 static VkFilter
-VkFilterFromFilter(R_Filter filter)
+VkFilterFromFilter(r_Filter filter)
 {
     switch (filter)
     {
@@ -1443,7 +1443,7 @@ VkFilterFromFilter(R_Filter filter)
 }
 
 static VkSamplerMipmapMode
-VkSamplerMipmapModeFromMipMapMode(R_MipMapMode mip_map_mode)
+VkSamplerMipmapModeFromMipMapMode(r_MipMapMode mip_map_mode)
 {
     switch (mip_map_mode)
     {
@@ -1455,7 +1455,7 @@ VkSamplerMipmapModeFromMipMapMode(R_MipMapMode mip_map_mode)
 }
 
 static VkSamplerAddressMode
-VkSamplerAddressModeFromSamplerAddressMode(R_SamplerAddressMode address_mode)
+VkSamplerAddressModeFromSamplerAddressMode(r_SamplerAddressMode address_mode)
 {
     switch (address_mode)
     {
@@ -1468,7 +1468,7 @@ VkSamplerAddressModeFromSamplerAddressMode(R_SamplerAddressMode address_mode)
 }
 // ~mgj: Sampler
 static void
-VK_SamplerCreateInfoFromSamplerInfo(R_SamplerInfo* sampler, VkSamplerCreateInfo* out_sampler_info)
+VK_SamplerCreateInfoFromSamplerInfo(r_SamplerInfo* sampler, VkSamplerCreateInfo* out_sampler_info)
 {
     out_sampler_info->sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
     out_sampler_info->magFilter = VkFilterFromFilter(sampler->mag_filter);

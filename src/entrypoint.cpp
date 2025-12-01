@@ -181,11 +181,11 @@ dt_main_loop(void* ptr)
     Rng2F32 utm_bb_coords = city::UtmFromBoundingBox(input->bbox);
     printf("UTM Coordinates: %f %f %f %f\n", utm_bb_coords.min.x, utm_bb_coords.min.y,
            utm_bb_coords.max.x, utm_bb_coords.max.y);
-    R_RenderCtxCreate(ctx->data_subdir.data[dt_DataDirType::Shaders], io_ctx, ctx->thread_pool);
+    r_render_ctx_create(ctx->data_subdir.data[dt_DataDirType::Shaders], io_ctx, ctx->thread_pool);
     VK_Context* vk_ctx = VK_CtxGet();
     ImguiSetup(vk_ctx, io_ctx);
 
-    R_SamplerInfo sampler_info = {
+    r_SamplerInfo sampler_info = {
         .min_filter = R_Filter_Linear,
         .mag_filter = R_Filter_Linear,
         .mip_map_mode = R_MipMapMode_Linear,
@@ -248,20 +248,20 @@ dt_main_loop(void* ptr)
         r_model_3d_draw(buildings->roof_model_handles, false);
         r_model_3d_draw(buildings->facade_model_handles, false);
 
-        Buffer<city::Model3DInstance> instance_buffer =
-            city::CarUpdate(vk_ctx->draw_frame_arena, car_sim, ctx->time->delta_time_sec);
-        R_BufferInfo car_instance_buffer_info =
-            R_BufferInfoFromTemplateBuffer(instance_buffer, R_BufferType_Vertex);
+        Buffer<r_Model3DInstance> instance_buffer =
+            CarUpdate(vk_ctx->draw_frame_arena, car_sim, ctx->time->delta_time_sec);
+        r_BufferInfo car_instance_buffer_info =
+            r_buffer_info_from_template_buffer(instance_buffer, R_BufferType_Vertex);
         VK_Model3DInstanceDraw(car_sim->texture_handle, car_sim->vertex_handle,
                                car_sim->index_handle, &car_instance_buffer_info);
 
-        R_RenderFrame(framebuffer_dim, &io_ctx->framebuffer_resized, ctx->camera,
-                      io_ctx->mouse_pos_cur_s64);
+        r_render_frame(framebuffer_dim, &io_ctx->framebuffer_resized, ctx->camera,
+                       io_ctx->mouse_pos_cur_s64);
     }
     r_gpu_work_done_wait();
 
     city::road_destroy(ctx->road);
     city::car_sim_destroy(ctx->car_sim);
     city::building_destroy(ctx->buildings);
-    R_RenderCtxDestroy();
+    r_render_ctx_destroy();
 }

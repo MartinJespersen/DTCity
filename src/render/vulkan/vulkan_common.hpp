@@ -311,4 +311,4 @@ VK_DestroyDebugUtilsMessengerEXT(VkInstance instance, VkDebugUtilsMessengerEXT d
 
 // ~mgj: sampler functions
 static void
-VK_SamplerCreateInfoFromSamplerInfo(R_SamplerInfo* sampler, VkSamplerCreateInfo* out_sampler_info);
+VK_SamplerCreateInfoFromSamplerInfo(r_SamplerInfo* sampler, VkSamplerCreateInfo* out_sampler_info);

@@ -41,7 +41,7 @@ struct VK_CmdQueueItem
 {
     VK_CmdQueueItem* next;
     VK_CmdQueueItem* prev;
-    R_ThreadInput* thread_input;
+    r_ThreadInput* thread_input;
     U32 thread_id;
     VkCommandBuffer cmd_buffer;
     VkFence fence;
@@ -59,8 +59,8 @@ struct VK_AssetManagerCmdList
 template <typename T> struct VK_AssetList
 {
     Arena* arena;
-    R_AssetItemList<T> list;
-    R_AssetItem<T>* free_list;
+    r_AssetItemList<T> list;
+    r_AssetItem<T>* free_list;
 };
 
 struct VK_Pipeline
@@ -75,12 +75,12 @@ struct VK_AssetManager
     Arena* arena;
 
     // ~mgj: Textures
-    R_AssetItemList<VK_Texture> texture_list;
-    R_AssetItem<VK_Texture>* texture_free_list;
+    r_AssetItemList<VK_Texture> texture_list;
+    r_AssetItem<VK_Texture>* texture_free_list;
 
     // ~mgj: Buffers
-    R_AssetItemList<VK_Buffer> buffer_list;
-    R_AssetItem<VK_Buffer>* buffer_free_list;
+    r_AssetItemList<VK_Buffer> buffer_list;
+    r_AssetItem<VK_Buffer>* buffer_free_list;
 
     // ~mgj: Threading Buffer Commands
     Buffer<VK_AssetManagerCommandPool> threaded_cmd_pools;
@@ -106,7 +106,7 @@ struct VK_Model3DInstanceNode
     VK_Model3DInstanceNode* next;
     VK_BufferAllocation index_alloc;
     VK_BufferAllocation vertex_alloc;
-    R_BufferInfo instance_buffer_info;
+    r_BufferInfo instance_buffer_info;
     U32 instance_buffer_offset;
     VkDescriptorSet texture_handle;
 };
@@ -237,14 +237,14 @@ VK_AssetManagerCreate(VkDevice device, U32 queue_family_index, async::Threads* t
                       U64 total_size_in_bytes);
 static void
 VK_AssetManagerDestroy(VK_Context* vk_ctx, VK_AssetManager* asset_stream);
-static R_AssetItem<VK_Texture>*
-VK_AssetManagerTextureItemGet(R_Handle handle);
+static r_AssetItem<VK_Texture>*
+VK_AssetManagerTextureItemGet(r_Handle handle);
 template <typename T>
-static R_AssetItem<T>*
-VK_AssetManagerItemCreate(R_AssetItemList<T>* list, R_AssetItem<T>** free_list);
+static r_AssetItem<T>*
+VK_AssetManagerItemCreate(r_AssetItemList<T>* list, r_AssetItem<T>** free_list);
 template <typename T>
-static R_AssetItem<T>*
-VK_AssetManagerItemGet(R_AssetItemList<T>* list, R_Handle handle);
+static r_AssetItem<T>*
+VK_AssetManagerItemGet(r_AssetItemList<T>* list, r_Handle handle);
 static void
 VK_AssetManagerExecuteCmds();
 static void
@@ -261,24 +261,24 @@ static void
 VK_AssetManagerCmdListItemRemove(VK_AssetManagerCmdList* cmd_list, VK_CmdQueueItem* item);
 
 static void
-VK_AssetManagerBufferFree(R_Handle handle);
+VK_AssetManagerBufferFree(r_Handle handle);
 static void
-VK_AssetManagerTextureFree(R_Handle handle);
+VK_AssetManagerTextureFree(r_Handle handle);
 
 static void
-VK_AssetCmdQueueItemEnqueue(U32 thread_id, VkCommandBuffer cmd, R_ThreadInput* thread_input);
+VK_AssetCmdQueueItemEnqueue(U32 thread_id, VkCommandBuffer cmd, r_ThreadInput* thread_input);
 
 template <typename T>
 static void
-VK_AssetInfoBufferCmd(VkCommandBuffer cmd, R_Handle handle, Buffer<T> buffer);
+VK_AssetInfoBufferCmd(VkCommandBuffer cmd, r_Handle handle, Buffer<T> buffer);
 
-static R_ThreadInput*
+static r_ThreadInput*
 VK_ThreadInputCreate();
 static void
-VK_ThreadInputDestroy(R_ThreadInput* thread_input);
+VK_ThreadInputDestroy(r_ThreadInput* thread_input);
 
 g_internal B32
-vk_texture_gpu_upload_cmd_recording(VkCommandBuffer cmd, R_Handle tex_handle, Buffer<U8> tex_buf);
+vk_texture_gpu_upload_cmd_recording(VkCommandBuffer cmd, r_Handle tex_handle, Buffer<U8> tex_buf);
 // ~mgj: Vulkan Lifetime
 static void
 VK_CtxSet(VK_Context* vk_ctx);
@@ -293,10 +293,10 @@ VK_Model3DBucketAdd(VK_BufferAllocation* vertex_buffer_allocation,
 static void
 VK_Model3DInstanceBucketAdd(VK_BufferAllocation* vertex_buffer_allocation,
                             VK_BufferAllocation* index_buffer_allocation,
-                            VkDescriptorSet texture_handle, R_BufferInfo* instance_buffer_info);
+                            VkDescriptorSet texture_handle, r_BufferInfo* instance_buffer_info);
 static void
-VK_Model3DInstanceDraw(R_Handle texture_handle, R_Handle vertex_buffer_handle,
-                       R_Handle index_buffer_handle, R_BufferInfo* instance_buffer);
+VK_Model3DInstanceDraw(r_Handle texture_handle, r_Handle vertex_buffer_handle,
+                       r_Handle index_buffer_handle, r_BufferInfo* instance_buffer);
 static VK_Pipeline
 VK_Model3DInstancePipelineCreate(VK_Context* vk_ctx, String8 shader_path);
 static VK_Pipeline

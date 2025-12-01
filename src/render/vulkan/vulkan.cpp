@@ -365,10 +365,10 @@ vk_texture_cmd_record(VkCommandBuffer cmd, VK_Texture* tex, Buffer<U8> tex_buf)
 }
 
 g_internal B32
-vk_texture_gpu_upload_cmd_recording(VkCommandBuffer cmd, R_Handle tex_handle, Buffer<U8> tex_buf)
+vk_texture_gpu_upload_cmd_recording(VkCommandBuffer cmd, r_Handle tex_handle, Buffer<U8> tex_buf)
 {
     VK_Context* vk_ctx = VK_CtxGet();
-    R_AssetItem<VK_Texture>* tex_asset = (R_AssetItem<VK_Texture>*)tex_handle.ptr;
+    r_AssetItem<VK_Texture>* tex_asset = (r_AssetItem<VK_Texture>*)tex_handle.ptr;
     VK_Texture* tex = &tex_asset->item;
     B32 err = false;
 
@@ -393,17 +393,17 @@ vk_texture_gpu_upload_cmd_recording(VkCommandBuffer cmd, R_Handle tex_handle, Bu
     return err;
 }
 
-static R_ThreadInput*
+static r_ThreadInput*
 VK_ThreadInputCreate()
 {
     Arena* arena = ArenaAlloc();
-    R_ThreadInput* thread_input = PushStruct(arena, R_ThreadInput);
+    r_ThreadInput* thread_input = PushStruct(arena, r_ThreadInput);
     thread_input->arena = arena;
     return thread_input;
 }
 
 static void
-VK_ThreadInputDestroy(R_ThreadInput* thread_input)
+VK_ThreadInputDestroy(r_ThreadInput* thread_input)
 {
     ArenaRelease(thread_input->arena);
 }
@@ -412,7 +412,7 @@ static void
 VK_ThreadSetup(async::ThreadInfo thread_info, void* input)
 {
     ScratchScope scratch = ScratchScope(0, 0);
-    R_ThreadInput* thread_input = (R_ThreadInput*)input;
+    r_ThreadInput* thread_input = (r_ThreadInput*)input;
 
     VK_Context* vk_ctx = VK_CtxGet();
     VK_AssetManager* asset_store = vk_ctx->asset_manager;
@@ -421,7 +421,7 @@ VK_ThreadSetup(async::ThreadInfo thread_info, void* input)
     VkCommandBuffer cmd = VK_BeginCommand(
         vk_ctx->device, asset_store->threaded_cmd_pools.data[thread_info.thread_id]); // Your helper
 
-    R_AssetLoadingInfo* asset_loading_info = &thread_input->asset_info;
+    r_AssetLoadingInfo* asset_loading_info = &thread_input->asset_info;
     Assert(asset_loading_info->handle.u64 != 0);
     B32 err = false;
 
@@ -429,8 +429,8 @@ VK_ThreadSetup(async::ThreadInfo thread_info, void* input)
     {
         case R_AssetItemType_Texture:
         {
-            R_TextureLoadingInfo* extra_info =
-                (R_TextureLoadingInfo*)&asset_loading_info->extra_info;
+            r_TextureLoadingInfo* extra_info =
+                (r_TextureLoadingInfo*)&asset_loading_info->extra_info;
             Buffer<U8> tex_buf = io_file_read(scratch.arena, extra_info->tex_path);
             err |=
                 vk_texture_gpu_upload_cmd_recording(cmd, thread_input->asset_info.handle, tex_buf);
@@ -442,7 +442,7 @@ VK_ThreadSetup(async::ThreadInfo thread_info, void* input)
         break;
         case R_AssetItemType_Buffer:
         {
-            R_BufferInfo* buffer_info = (R_BufferInfo*)&asset_loading_info->extra_info;
+            r_BufferInfo* buffer_info = (r_BufferInfo*)&asset_loading_info->extra_info;
 
             VK_AssetInfoBufferCmd(cmd, asset_loading_info->handle, buffer_info->buffer);
         }
@@ -495,10 +495,10 @@ VK_Model3DInstancePipelineCreate(VK_Context* vk_ctx, String8 shader_path)
     vertex_input_info.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
 
     U32 uv_offset = (U32)offsetof(r_Vertex3D, uv);
-    U32 x_basis_offset = (U32)offsetof(city::Model3DInstance, x_basis);
-    U32 y_basis_offset = (U32)offsetof(city::Model3DInstance, y_basis);
-    U32 z_basis_offset = (U32)offsetof(city::Model3DInstance, z_basis);
-    U32 w_basis_offset = (U32)offsetof(city::Model3DInstance, w_basis);
+    U32 x_basis_offset = (U32)offsetof(r_Model3DInstance, x_basis);
+    U32 y_basis_offset = (U32)offsetof(r_Model3DInstance, y_basis);
+    U32 z_basis_offset = (U32)offsetof(r_Model3DInstance, z_basis);
+    U32 w_basis_offset = (U32)offsetof(r_Model3DInstance, w_basis);
 
     VkVertexInputAttributeDescription attr_desc[] = {
         {.location = 0, .binding = 0, .format = VK_FORMAT_R32G32B32_SFLOAT},
@@ -523,7 +523,7 @@ VK_Model3DInstancePipelineCreate(VK_Context* vk_ctx, String8 shader_path)
     VkVertexInputBindingDescription input_desc[] = {
         {.binding = 0, .stride = sizeof(r_Vertex3D), .inputRate = VK_VERTEX_INPUT_RATE_VERTEX},
         {.binding = 1,
-         .stride = sizeof(city::Model3DInstance),
+         .stride = sizeof(r_Model3DInstance),
          .inputRate = VK_VERTEX_INPUT_RATE_INSTANCE}};
 
     vertex_input_info.vertexBindingDescriptionCount = ArrayCount(input_desc);
@@ -1023,7 +1023,7 @@ VK_AssetManagerDestroy(VK_Context* vk_ctx, VK_AssetManager* asset_store)
 }
 
 static void
-VK_AssetCmdQueueItemEnqueue(U32 thread_id, VkCommandBuffer cmd, R_ThreadInput* thread_input)
+VK_AssetCmdQueueItemEnqueue(U32 thread_id, VkCommandBuffer cmd, r_ThreadInput* thread_input)
 {
     VK_AssetManager* asset_manager = VK_CtxGet()->asset_manager;
 
@@ -1063,10 +1063,10 @@ VK_AssetManagerExecuteCmds()
 }
 
 template <typename T>
-static R_AssetItem<T>*
-VK_AssetManagerItemGet(R_AssetItemList<T>* list, R_Handle handle)
+static r_AssetItem<T>*
+VK_AssetManagerItemGet(r_AssetItemList<T>* list, r_Handle handle)
 {
-    for (R_AssetItem<T>* item = list->first; item; item = item->next)
+    for (r_AssetItem<T>* item = list->first; item; item = item->next)
     {
         if (handle.u64 == (U64)item)
         {
@@ -1077,26 +1077,26 @@ VK_AssetManagerItemGet(R_AssetItemList<T>* list, R_Handle handle)
     return 0;
 }
 
-static R_AssetItem<VK_Texture>*
-VK_AssetManagerTextureItemGet(R_Handle handle)
+static r_AssetItem<VK_Texture>*
+VK_AssetManagerTextureItemGet(r_Handle handle)
 {
     VK_Context* vk_ctx = VK_CtxGet();
     VK_AssetManager* asset_manager = vk_ctx->asset_manager;
 
-    R_AssetItem<VK_Texture>* asset_item_texture =
+    r_AssetItem<VK_Texture>* asset_item_texture =
         VK_AssetManagerItemGet(&asset_manager->texture_list, handle);
     return asset_item_texture;
 }
 
 template <typename T>
-static R_AssetItem<T>*
-VK_AssetManagerItemCreate(R_AssetItemList<T>* list, R_AssetItem<T>** free_list)
+static r_AssetItem<T>*
+VK_AssetManagerItemCreate(r_AssetItemList<T>* list, r_AssetItem<T>** free_list)
 {
     VK_Context* vk_ctx = VK_CtxGet();
     VK_AssetManager* asset_mng = vk_ctx->asset_manager;
     Arena* arena = asset_mng->arena;
 
-    R_AssetItem<T>* asset_item = {0};
+    r_AssetItem<T>* asset_item = {0};
     if (*free_list)
     {
         asset_item = *free_list;
@@ -1104,7 +1104,7 @@ VK_AssetManagerItemCreate(R_AssetItemList<T>* list, R_AssetItem<T>** free_list)
     }
     else
     {
-        asset_item = PushStruct(arena, R_AssetItem<T>);
+        asset_item = PushStruct(arena, r_AssetItem<T>);
         SLLQueuePushFront(list->first, list->last, asset_item);
     }
     return asset_item;
@@ -1112,11 +1112,11 @@ VK_AssetManagerItemCreate(R_AssetItemList<T>* list, R_AssetItem<T>** free_list)
 
 template <typename T>
 static void
-VK_AssetInfoBufferCmd(VkCommandBuffer cmd, R_Handle handle, Buffer<T> buffer)
+VK_AssetInfoBufferCmd(VkCommandBuffer cmd, r_Handle handle, Buffer<T> buffer)
 {
     VK_Context* vk_ctx = VK_CtxGet();
     VK_AssetManager* asset_manager = vk_ctx->asset_manager;
-    R_AssetItem<VK_Buffer>* asset_item_buffer =
+    r_AssetItem<VK_Buffer>* asset_item_buffer =
         VK_AssetManagerItemGet(&asset_manager->buffer_list, handle);
     VK_Buffer* asset_buffer = &asset_item_buffer->item;
 
@@ -1155,12 +1155,12 @@ VK_AssetManagerCmdDoneCheck()
                     &cmd_queue_item->cmd_buffer);
             }
 
-            R_ThreadInput* thread_input = cmd_queue_item->thread_input;
+            r_ThreadInput* thread_input = cmd_queue_item->thread_input;
 
-            R_AssetLoadingInfo* asset_load_info = &thread_input->asset_info;
+            r_AssetLoadingInfo* asset_load_info = &thread_input->asset_info;
             if (asset_load_info->type == R_AssetItemType_Texture)
             {
-                R_AssetItem<VK_Texture>* asset =
+                r_AssetItem<VK_Texture>* asset =
                     VK_AssetManagerTextureItemGet(asset_load_info->handle);
                 VK_Texture* tex = &asset->item;
                 tex->desc_set = VK_DescriptorSetCreate(
@@ -1171,7 +1171,7 @@ VK_AssetManagerCmdDoneCheck()
             }
             else if (asset_load_info->type == R_AssetItemType_Buffer)
             {
-                R_AssetItem<VK_Buffer>* asset =
+                r_AssetItem<VK_Buffer>* asset =
                     VK_AssetManagerItemGet(&asset_manager->buffer_list, asset_load_info->handle);
                 VK_BufferDestroy(vk_ctx->allocator, &asset->item.staging_buffer);
                 asset->item.staging_buffer.buffer = 0;
@@ -1258,11 +1258,11 @@ VK_AssetManagerCmdListItemRemove(VK_AssetManagerCmdList* cmd_list, VK_CmdQueueIt
 }
 
 static void
-VK_AssetManagerBufferFree(R_Handle handle)
+VK_AssetManagerBufferFree(r_Handle handle)
 {
     VK_Context* vk_ctx = VK_CtxGet();
     VK_AssetManager* asset_manager = vk_ctx->asset_manager;
-    R_AssetItem<VK_Buffer>* item = VK_AssetManagerItemGet(&asset_manager->buffer_list, handle);
+    r_AssetItem<VK_Buffer>* item = VK_AssetManagerItemGet(&asset_manager->buffer_list, handle);
     if (item->is_loaded)
     {
         VK_BufferDestroy(vk_ctx->allocator, &item->item.buffer_alloc);
@@ -1270,11 +1270,11 @@ VK_AssetManagerBufferFree(R_Handle handle)
     item->is_loaded = false;
 }
 static void
-VK_AssetManagerTextureFree(R_Handle handle)
+VK_AssetManagerTextureFree(r_Handle handle)
 {
     VK_Context* vk_ctx = VK_CtxGet();
     VK_AssetManager* asset_manager = vk_ctx->asset_manager;
-    R_AssetItem<VK_Texture>* item = VK_AssetManagerItemGet(&asset_manager->texture_list, handle);
+    r_AssetItem<VK_Texture>* item = VK_AssetManagerItemGet(&asset_manager->texture_list, handle);
     if (item->is_loaded)
     {
         VK_TextureDestroy(vk_ctx, &item->item);
@@ -1323,7 +1323,7 @@ VK_Model3DBucketAdd(VK_BufferAllocation* vertex_buffer_allocation,
 static void
 VK_Model3DInstanceBucketAdd(VK_BufferAllocation* vertex_buffer_allocation,
                             VK_BufferAllocation* index_buffer_allocation,
-                            VkDescriptorSet texture_handle, R_BufferInfo* instance_buffer_info)
+                            VkDescriptorSet texture_handle, r_BufferInfo* instance_buffer_info)
 {
     U32 align = 16;
     VK_Context* vk_ctx = VK_CtxGet();
@@ -1348,11 +1348,11 @@ r_model_3d_draw(r_Model3DPipelineData pipeline_input, B32 depth_test_per_draw_ca
 {
     VK_Context* vk_ctx = VK_CtxGet();
     VK_AssetManager* asset_manager = vk_ctx->asset_manager;
-    R_AssetItem<VK_Buffer>* asset_vertex_buffer =
+    r_AssetItem<VK_Buffer>* asset_vertex_buffer =
         VK_AssetManagerItemGet(&asset_manager->buffer_list, pipeline_input.vertex_buffer_handle);
-    R_AssetItem<VK_Buffer>* asset_index_buffer =
+    r_AssetItem<VK_Buffer>* asset_index_buffer =
         VK_AssetManagerItemGet(&asset_manager->buffer_list, pipeline_input.index_buffer_handle);
-    R_AssetItem<VK_Texture>* asset_texture =
+    r_AssetItem<VK_Texture>* asset_texture =
         VK_AssetManagerTextureItemGet(pipeline_input.texture_handle);
 
     if (asset_index_buffer->is_loaded && asset_texture->is_loaded)
@@ -1365,16 +1365,16 @@ r_model_3d_draw(r_Model3DPipelineData pipeline_input, B32 depth_test_per_draw_ca
 }
 
 static void
-VK_Model3DInstanceDraw(R_Handle texture_handle, R_Handle vertex_buffer_handle,
-                       R_Handle index_buffer_handle, R_BufferInfo* instance_buffer)
+VK_Model3DInstanceDraw(r_Handle texture_handle, r_Handle vertex_buffer_handle,
+                       r_Handle index_buffer_handle, r_BufferInfo* instance_buffer)
 {
     VK_Context* vk_ctx = VK_CtxGet();
     VK_AssetManager* asset_manager = vk_ctx->asset_manager;
-    R_AssetItem<VK_Buffer>* asset_vertex_buffer =
+    r_AssetItem<VK_Buffer>* asset_vertex_buffer =
         VK_AssetManagerItemGet(&asset_manager->buffer_list, vertex_buffer_handle);
-    R_AssetItem<VK_Buffer>* asset_index_buffer =
+    r_AssetItem<VK_Buffer>* asset_index_buffer =
         VK_AssetManagerItemGet(&asset_manager->buffer_list, index_buffer_handle);
-    R_AssetItem<VK_Texture>* asset_texture = VK_AssetManagerTextureItemGet(texture_handle);
+    r_AssetItem<VK_Texture>* asset_texture = VK_AssetManagerTextureItemGet(texture_handle);
 
     if (asset_index_buffer->is_loaded && asset_texture->is_loaded)
     {

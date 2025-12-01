@@ -58,15 +58,15 @@ struct CarSim
 
     Buffer<Car> cars;
 
-    R_BufferInfo vertex_buffer;
-    R_BufferInfo index_buffer;
+    r_BufferInfo vertex_buffer;
+    r_BufferInfo index_buffer;
 
-    R_SamplerInfo sampler_info;
+    r_SamplerInfo sampler_info;
     Rng1F32 car_center_offset;
 
-    R_Handle texture_handle;
-    R_Handle vertex_handle;
-    R_Handle index_handle;
+    r_Handle texture_handle;
+    r_Handle vertex_handle;
+    r_Handle index_handle;
 
     String8 texture_path;
 };
@@ -94,14 +94,6 @@ struct Buildings
     r_Model3DPipelineData facade_model_handles;
 };
 
-struct Model3DInstance
-{
-    glm::vec4 x_basis;
-    glm::vec4 y_basis;
-    glm::vec4 z_basis;
-    glm::vec4 w_basis;
-};
-
 static void
 road_destroy(city_Road* road);
 static void
@@ -119,13 +111,13 @@ static CarSim*
 CarSimCreate(String8 asset_path, String8 texture_path, U32 car_count, city_Road* road);
 static void
 car_sim_destroy(CarSim* car_sim);
-static Buffer<Model3DInstance>
+static Buffer<r_Model3DInstance>
 CarUpdate(Arena* arena, CarSim* car, F32 time_delta);
 
 // ~mgj: Buildings
 static Buildings*
 BuildingsCreate(String8 cache_path, String8 texture_path, F32 road_height,
-                osm_BoundingBox* gcs_bbox, R_SamplerInfo* sampler_info,
+                osm_BoundingBox* gcs_bbox, r_SamplerInfo* sampler_info,
                 osm_Network* node_utm_structure);
 static void
 building_destroy(Buildings* building);
@@ -161,8 +153,8 @@ g_internal r_Model3DPipelineDataList
 city_land_create(Arena* arena, String8 glb_path);
 g_internal void
 city_land_destroy(r_Model3DPipelineDataList list);
-static R_SamplerInfo
+static r_SamplerInfo
 city_sampler_from_cgltf_sampler(gltfw_Sampler sampler);
 static city_Road*
 city_road_create(String8 texture_path, String8 cache_path, osm_BoundingBox* gcs_bbox,
-                 R_SamplerInfo* sampler_info, osm_Network* node_utm_structure);
+                 r_SamplerInfo* sampler_info, osm_Network* node_utm_structure);

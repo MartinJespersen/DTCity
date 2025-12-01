@@ -1,16 +1,16 @@
 ////////////////////////////////////////////////////////
 // ~mgj: Handles
-static R_Handle
-R_HandleZero()
+static r_Handle
+r_handle_zero()
 {
-    R_Handle handle = {};
+    r_Handle handle = {};
     return handle;
 }
 
 ////////////////////////////////////////////////////////
 template <typename T>
-static R_BufferInfo
-R_BufferInfoFromTemplateBuffer(Buffer<T> buffer, R_BufferType buffer_type)
+static r_BufferInfo
+r_buffer_info_from_template_buffer(Buffer<T> buffer, r_BufferType buffer_type)
 {
     U64 type_size = sizeof(T);
     U64 byte_count = buffer.size * type_size;

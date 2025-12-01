@@ -623,9 +623,9 @@ CarSimCreate(String8 asset_path, String8 texture_path, U32 car_count, city_Road*
     CgltfResult parsed_result = gltfw_gltf_read(arena, gltf_path, S("Car.013"));
     car_sim->sampler_info = city_sampler_from_cgltf_sampler(parsed_result.sampler);
     car_sim->vertex_buffer =
-        R_BufferInfoFromTemplateBuffer(parsed_result.vertex_buffer, R_BufferType_Vertex);
+        r_buffer_info_from_template_buffer(parsed_result.vertex_buffer, R_BufferType_Vertex);
     car_sim->index_buffer =
-        R_BufferInfoFromTemplateBuffer(parsed_result.index_buffer, R_BufferType_Index);
+        r_buffer_info_from_template_buffer(parsed_result.index_buffer, R_BufferType_Index);
 
     car_sim->texture_path = Str8PathFromStr8List(arena, {texture_path, S("car_collection.ktx2")});
     car_sim->texture_handle = r_texture_load_async(&car_sim->sampler_info, car_sim->texture_path,
@@ -663,11 +663,12 @@ car_sim_destroy(CarSim* car_sim)
     ArenaRelease(car_sim->arena);
 }
 
-static Buffer<Model3DInstance>
+static Buffer<r_Model3DInstance>
 CarUpdate(Arena* arena, CarSim* car, F32 time_delta)
 {
-    Buffer<Model3DInstance> instance_buffer = BufferAlloc<Model3DInstance>(arena, car->cars.size);
-    Model3DInstance* instance;
+    Buffer<r_Model3DInstance> instance_buffer =
+        BufferAlloc<r_Model3DInstance>(arena, car->cars.size);
+    r_Model3DInstance* instance;
     city::Car* car_info;
 
     F32 car_speed_default = 5.0f; // m/s
@@ -718,7 +719,7 @@ CarUpdate(Arena* arena, CarSim* car, F32 time_delta)
 
 static Buildings*
 BuildingsCreate(String8 cache_path, String8 texture_path, F32 road_height,
-                osm_BoundingBox* gcs_bbox, R_SamplerInfo* sampler_info,
+                osm_BoundingBox* gcs_bbox, r_SamplerInfo* sampler_info,
                 osm_Network* node_utm_structure)
 {
     ScratchScope scratch = ScratchScope(0, 0);
@@ -786,20 +787,20 @@ BuildingsCreate(String8 cache_path, String8 texture_path, F32 road_height,
         Str8PathFromStr8List(arena, {texture_path, S("brick_wall.ktx2")});
     buildings->roof_texture_path =
         Str8PathFromStr8List(arena, {texture_path, S("concrete042A.ktx2")});
-    R_Handle facade_texture_handle =
+    r_Handle facade_texture_handle =
         r_texture_load_async(sampler_info, buildings->facade_texture_path, R_PipelineUsageType_3D);
-    R_Handle roof_texture_handle =
+    r_Handle roof_texture_handle =
         r_texture_load_async(sampler_info, buildings->roof_texture_path, R_PipelineUsageType_3D);
 
     BuildingRenderInfo render_info;
     city::BuildingsBuffersCreate(arena, road_height, &render_info, node_utm_structure);
-    R_BufferInfo vertex_buffer_info =
-        R_BufferInfoFromTemplateBuffer(render_info.vertex_buffer, R_BufferType_Vertex);
-    R_BufferInfo index_buffer_info =
-        R_BufferInfoFromTemplateBuffer(render_info.index_buffer, R_BufferType_Index);
+    r_BufferInfo vertex_buffer_info =
+        r_buffer_info_from_template_buffer(render_info.vertex_buffer, R_BufferType_Vertex);
+    r_BufferInfo index_buffer_info =
+        r_buffer_info_from_template_buffer(render_info.index_buffer, R_BufferType_Index);
 
-    R_Handle vertex_handle = r_buffer_load(&vertex_buffer_info);
-    R_Handle index_handle = r_buffer_load(&index_buffer_info);
+    r_Handle vertex_handle = r_buffer_load(&vertex_buffer_info);
+    r_Handle index_handle = r_buffer_load(&index_buffer_info);
 
     buildings->roof_model_handles = {.vertex_buffer_handle = vertex_handle,
                                      .index_buffer_handle = index_handle,
@@ -1220,12 +1221,12 @@ city_land_create(Arena* arena, String8 glb_path)
     gltfw_Result glb_data = gltfw_glb_read(arena, glb_path);
 
     // create render handles
-    Buffer<R_Handle> tex_handles = BufferAlloc<R_Handle>(scratch.arena, glb_data.textures.size);
+    Buffer<r_Handle> tex_handles = BufferAlloc<r_Handle>(scratch.arena, glb_data.textures.size);
     {
         for (U32 i = 0; i < glb_data.textures.size; ++i)
         {
             gltfw_Texture* texture = &glb_data.textures.data[i];
-            R_SamplerInfo sampler_info = city_sampler_from_cgltf_sampler(texture->sampler);
+            r_SamplerInfo sampler_info = city_sampler_from_cgltf_sampler(texture->sampler);
             tex_handles.data[i] = r_texture_handle_create(&sampler_info, R_PipelineUsageType_3D);
             r_texture_gpu_upload_sync(tex_handles.data[i], texture->tex_buf);
         }
@@ -1237,14 +1238,14 @@ city_land_create(Arena* arena, String8 glb_path)
         for (gltfw_Primitive* primitive = glb_data.primitives.first; primitive;
              primitive = primitive->next)
         {
-            R_BufferInfo vertex_buffer =
-                R_BufferInfoFromTemplateBuffer(primitive->vertices, R_BufferType_Vertex);
-            R_BufferInfo index_buffer =
-                R_BufferInfoFromTemplateBuffer(primitive->indices, R_BufferType_Index);
+            r_BufferInfo vertex_buffer =
+                r_buffer_info_from_template_buffer(primitive->vertices, R_BufferType_Vertex);
+            r_BufferInfo index_buffer =
+                r_buffer_info_from_template_buffer(primitive->indices, R_BufferType_Index);
 
-            R_Handle vertex_handle = r_buffer_load(&vertex_buffer);
-            R_Handle index_handle = r_buffer_load(&index_buffer);
-            R_Handle texture_handle = tex_handles.data[primitive->tex_idx];
+            r_Handle vertex_handle = r_buffer_load(&vertex_buffer);
+            r_Handle index_handle = r_buffer_load(&index_buffer);
+            r_Handle texture_handle = tex_handles.data[primitive->tex_idx];
 
             r_Model3DPipelineDataNode* node = PushStruct(arena, r_Model3DPipelineDataNode);
             node->handles = {.vertex_buffer_handle = vertex_handle,
@@ -1258,14 +1259,14 @@ city_land_create(Arena* arena, String8 glb_path)
     return handles_list;
 }
 
-static R_SamplerInfo
+static r_SamplerInfo
 city_sampler_from_cgltf_sampler(gltfw_Sampler sampler)
 {
-    R_Filter min_filter = R_Filter_Nearest;
-    R_Filter mag_filter = R_Filter_Nearest;
-    R_MipMapMode mipmap_mode = R_MipMapMode_Nearest;
-    R_SamplerAddressMode address_mode_u = R_SamplerAddressMode_Repeat;
-    R_SamplerAddressMode address_mode_v = R_SamplerAddressMode_Repeat;
+    r_Filter min_filter = R_Filter_Nearest;
+    r_Filter mag_filter = R_Filter_Nearest;
+    r_MipMapMode mipmap_mode = R_MipMapMode_Nearest;
+    r_SamplerAddressMode address_mode_u = R_SamplerAddressMode_Repeat;
+    r_SamplerAddressMode address_mode_v = R_SamplerAddressMode_Repeat;
 
     switch (sampler.min_filter)
     {
@@ -1375,7 +1376,7 @@ city_sampler_from_cgltf_sampler(gltfw_Sampler sampler)
             break;
     }
 
-    R_SamplerInfo sampler_info = {.min_filter = min_filter,
+    r_SamplerInfo sampler_info = {.min_filter = min_filter,
                                   .mag_filter = mag_filter,
                                   .mip_map_mode = mipmap_mode,
                                   .address_mode_u = address_mode_u,
@@ -1394,7 +1395,7 @@ city_str8_from_wqs_coord(Arena* arena, osm_BoundingBox* bbox)
 
 static city_Road*
 city_road_create(String8 texture_path, String8 cache_path, osm_BoundingBox* gcs_bbox,
-                 R_SamplerInfo* sampler_info, osm_Network* node_utm_structure)
+                 r_SamplerInfo* sampler_info, osm_Network* node_utm_structure)
 {
     ScratchScope scratch = ScratchScope(0, 0);
     Arena* arena = ArenaAlloc();
@@ -1461,17 +1462,17 @@ city_road_create(String8 texture_path, String8 cache_path, osm_BoundingBox* gcs_
 
     city::RoadVertexBufferCreate(road, &road->vertex_buffer, &road->index_buffer,
                                  node_utm_structure);
-    R_BufferInfo vertex_buffer_info =
-        R_BufferInfoFromTemplateBuffer(road->vertex_buffer, R_BufferType_Vertex);
-    R_BufferInfo index_buffer_info =
-        R_BufferInfoFromTemplateBuffer(road->index_buffer, R_BufferType_Index);
+    r_BufferInfo vertex_buffer_info =
+        r_buffer_info_from_template_buffer(road->vertex_buffer, R_BufferType_Vertex);
+    r_BufferInfo index_buffer_info =
+        r_buffer_info_from_template_buffer(road->index_buffer, R_BufferType_Index);
 
     road->texture_path = Str8PathFromStr8List(road->arena, {texture_path, S("road_texture.ktx2")});
 
-    R_Handle texture_handle =
+    r_Handle texture_handle =
         r_texture_load_async(sampler_info, road->texture_path, R_PipelineUsageType_3D);
-    R_Handle vertex_handle = r_buffer_load(&vertex_buffer_info);
-    R_Handle index_handle = r_buffer_load(&index_buffer_info);
+    r_Handle vertex_handle = r_buffer_load(&vertex_buffer_info);
+    r_Handle index_handle = r_buffer_load(&index_buffer_info);
 
     road->handles = {vertex_handle, index_handle, texture_handle, road->index_buffer.size, 0};
 

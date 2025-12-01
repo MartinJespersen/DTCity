@@ -1,6 +1,6 @@
 // ~mgj: Vulkan Interface
 static void
-R_RenderCtxCreate(String8 shader_path, io_IO* io_ctx, async::Threads* thread_pool)
+r_render_ctx_create(String8 shader_path, io_IO* io_ctx, async::Threads* thread_pool)
 {
     ScratchScope scratch = ScratchScope(0, 0);
 
@@ -84,7 +84,7 @@ R_RenderCtxCreate(String8 shader_path, io_IO* io_ctx, async::Threads* thread_poo
 }
 
 static void
-R_RenderCtxDestroy()
+r_render_ctx_destroy()
 {
     VK_Context* vk_ctx = VK_CtxGet();
     ImGui_ImplVulkan_Shutdown();
@@ -131,8 +131,8 @@ R_RenderCtxDestroy()
 }
 
 static void
-R_RenderFrame(Vec2U32 framebuffer_dim, B32* in_out_framebuffer_resized, ui_Camera* camera,
-              Vec2S64 mouse_cursor_pos)
+r_render_frame(Vec2U32 framebuffer_dim, B32* in_out_framebuffer_resized, ui_Camera* camera,
+               Vec2S64 mouse_cursor_pos)
 {
     VK_Context* vk_ctx = VK_CtxGet();
 
@@ -255,8 +255,8 @@ r_latest_hovered_object_id_get()
 }
 
 // ~mgj: Texture interface functions
-g_internal R_Handle
-r_texture_handle_create(R_SamplerInfo* sampler_info, R_PipelineUsageType pipeline_usage_type)
+g_internal r_Handle
+r_texture_handle_create(r_SamplerInfo* sampler_info, r_PipelineUsageType pipeline_usage_type)
 {
     VK_Context* vk_ctx = VK_CtxGet();
     VK_AssetManager* asset_manager = vk_ctx->asset_manager;
@@ -281,29 +281,29 @@ r_texture_handle_create(R_SamplerInfo* sampler_info, R_PipelineUsageType pipelin
     }
 
     // ~mgj: Assign values to texture
-    R_AssetItem<VK_Texture>* asset_item =
+    r_AssetItem<VK_Texture>* asset_item =
         VK_AssetManagerItemCreate(&asset_manager->texture_list, &asset_manager->texture_free_list);
     VK_Texture* texture = &asset_item->item;
     texture->desc_set_layout = desc_set_layout;
     texture->sampler = vk_sampler;
-    R_Handle texture_handle = {.u64 = (U64)asset_item};
+    r_Handle texture_handle = {.u64 = (U64)asset_item};
 
     return texture_handle;
 }
 
-static R_Handle
-r_texture_load_async(R_SamplerInfo* sampler_info, String8 texture_path,
-                     R_PipelineUsageType pipeline_usage_type)
+static r_Handle
+r_texture_load_async(r_SamplerInfo* sampler_info, String8 texture_path,
+                     r_PipelineUsageType pipeline_usage_type)
 {
     ScratchScope scratch = ScratchScope(0, 0);
     VK_Context* vk_ctx = VK_CtxGet();
     VK_AssetManager* asset_manager = vk_ctx->asset_manager;
-    R_ThreadInput* thread_input = VK_ThreadInputCreate();
+    r_ThreadInput* thread_input = VK_ThreadInputCreate();
 
     // ~mgj: make input ready for texture loading on thread
-    R_AssetLoadingInfo* asset_load_info = &thread_input->asset_info;
+    r_AssetLoadingInfo* asset_load_info = &thread_input->asset_info;
     asset_load_info->type = R_AssetItemType_Texture;
-    R_TextureLoadingInfo* texture_load_info = &asset_load_info->extra_info.texture_info;
+    r_TextureLoadingInfo* texture_load_info = &asset_load_info->extra_info.texture_info;
     texture_load_info->tex_path = PushStr8Copy(thread_input->arena, texture_path);
 
     asset_load_info->handle = r_texture_handle_create(sampler_info, pipeline_usage_type);
@@ -315,23 +315,23 @@ r_texture_load_async(R_SamplerInfo* sampler_info, String8 texture_path,
 }
 
 g_internal void
-r_texture_destroy(R_Handle handle)
+r_texture_destroy(r_Handle handle)
 {
     VK_AssetManagerTextureFree(handle);
 }
 
 g_internal void
-r_buffer_destroy(R_Handle handle)
+r_buffer_destroy(r_Handle handle)
 {
     VK_AssetManagerBufferFree(handle);
 }
 
-static R_Handle
-r_buffer_load(R_BufferInfo* buffer_info)
+static r_Handle
+r_buffer_load(r_BufferInfo* buffer_info)
 {
     VK_Context* vk_ctx = VK_CtxGet();
     VK_AssetManager* asset_manager = vk_ctx->asset_manager;
-    R_AssetItem<VK_Buffer>* asset_item =
+    r_AssetItem<VK_Buffer>* asset_item =
         VK_AssetManagerItemCreate(&asset_manager->buffer_list, &asset_manager->buffer_free_list);
 
     // ~mgj: Create buffer allocation
@@ -352,25 +352,25 @@ r_buffer_load(R_BufferInfo* buffer_info)
     // ~mgj: Prepare Texture
     VK_Buffer* asset_buffer = &asset_item->item;
     asset_buffer->buffer_alloc = buffer;
-    R_Handle buffer_handle = {.u64 = (U64)asset_item};
+    r_Handle buffer_handle = {.u64 = (U64)asset_item};
 
     // ~mgj: Preparing buffer loading for another thread
-    R_ThreadInput* thread_input = VK_ThreadInputCreate();
-    R_AssetLoadingInfo* asset_load_info = &thread_input->asset_info;
+    r_ThreadInput* thread_input = VK_ThreadInputCreate();
+    r_AssetLoadingInfo* asset_load_info = &thread_input->asset_info;
     asset_load_info->handle = buffer_handle;
     asset_load_info->type = R_AssetItemType_Buffer;
-    R_BufferInfo* buffer_load_info = &asset_load_info->extra_info.buffer_info;
+    r_BufferInfo* buffer_load_info = &asset_load_info->extra_info.buffer_info;
     *buffer_load_info = *buffer_info;
 
     async::QueueItem queue_input = {.data = thread_input, .worker_func = VK_ThreadSetup};
     async::QueuePush(asset_manager->work_queue, &queue_input);
 
-    R_Handle handle = {.u64 = (U64)asset_item};
+    r_Handle handle = {.u64 = (U64)asset_item};
     return handle;
 }
 
 g_internal void
-r_texture_gpu_upload_sync(R_Handle tex_handle, Buffer<U8> tex_buf)
+r_texture_gpu_upload_sync(r_Handle tex_handle, Buffer<U8> tex_buf)
 {
     VK_Context* vk_ctx = VK_CtxGet();
     VkResult result;
@@ -398,7 +398,7 @@ r_texture_gpu_upload_sync(R_Handle tex_handle, Buffer<U8> tex_buf)
     submit_info.commandBufferInfoCount = 1;
     submit_info.pCommandBufferInfos = &cmd_buf_info;
 
-    R_AssetItem<VK_Texture>* asset = (R_AssetItem<VK_Texture>*)tex_handle.ptr;
+    r_AssetItem<VK_Texture>* asset = (r_AssetItem<VK_Texture>*)tex_handle.ptr;
     asset->is_loaded = true;
     result = vkQueueSubmit2(vk_ctx->graphics_queue, 1, &submit_info, NULL);
 }
