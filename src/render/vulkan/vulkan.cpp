@@ -1073,7 +1073,12 @@ VK_AssetManagerItemGet(r_AssetItemList<T>* list, r_Handle handle)
             return item;
         }
     }
-    InvalidPath;
+
+    if (!r_is_handle_zero(handle))
+    {
+        exit_with_error("Asset ID: %llu - Not Found", handle.u64);
+    }
+
     return 0;
 }
 
@@ -1101,6 +1106,7 @@ VK_AssetManagerItemCreate(r_AssetItemList<T>* list, r_AssetItem<T>** free_list)
     {
         asset_item = *free_list;
         SLLStackPop(asset_item);
+        MemoryZero(asset_item, sizeof(*asset_item));
     }
     else
     {
@@ -1348,6 +1354,11 @@ r_model_3d_draw(r_Model3DPipelineData pipeline_input, B32 depth_test_per_draw_ca
 {
     VK_Context* vk_ctx = VK_CtxGet();
     VK_AssetManager* asset_manager = vk_ctx->asset_manager;
+
+    if (r_is_handle_zero(pipeline_input.index_buffer_handle) ||
+        r_is_handle_zero(pipeline_input.vertex_buffer_handle) ||
+        r_is_handle_zero(pipeline_input.texture_handle))
+        return;
     r_AssetItem<VK_Buffer>* asset_vertex_buffer =
         VK_AssetManagerItemGet(&asset_manager->buffer_list, pipeline_input.vertex_buffer_handle);
     r_AssetItem<VK_Buffer>* asset_index_buffer =

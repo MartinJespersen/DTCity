@@ -53,7 +53,6 @@ osm_structure_add(osm_Network* node_utm_structure, Buffer<osm_RoadNodeList> node
             U64 node_id = way->node_ids[node_index];
             osm_UtmNode* node_utm;
             B8 inserted = osm_node_hashmap_insert(node_id, way, &node_utm);
-
             if (inserted)
             {
                 osm_RoadNode* node_coord = osm_node_find(node_hashmap, node_id);
@@ -178,6 +177,7 @@ osm_node_hashmap_insert(U64 node_id, osm_Way* way, osm_UtmNode** out)
         node = PushStruct(structure->arena, osm_UtmNode);
         node->id = node_id;
         SLLQueuePush(slot->first, slot->last, node);
+        Assert(slot->last->next == 0);
         node_inserted = 1;
     }
 

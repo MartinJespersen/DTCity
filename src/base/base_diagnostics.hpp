@@ -7,7 +7,9 @@
 #define DEBUG_LOG(message, ...)                                                                    \
     do                                                                                             \
     {                                                                                              \
+        printf("File %s Line %d: ", __FILE__, __LINE__);                                           \
         fprintf(stdout, message, ##__VA_ARGS__);                                                   \
+        printf("\n");                                                                              \
     } while (0)
 #else
 #define DEBUG_LOG(message, ...)

@@ -4,9 +4,9 @@ namespace city
 static void
 road_destroy(city_Road* road)
 {
-    VK_AssetManagerBufferFree(road->handles.vertex_buffer_handle);
-    VK_AssetManagerBufferFree(road->handles.index_buffer_handle);
-    VK_AssetManagerTextureFree(road->handles.texture_handle);
+    r_buffer_destroy(road->handles.vertex_buffer_handle);
+    r_buffer_destroy(road->handles.index_buffer_handle);
+    r_texture_destroy(road->handles.texture_handle);
 
     ArenaRelease(road->arena);
 }
@@ -657,9 +657,9 @@ CarSimCreate(String8 asset_path, String8 texture_path, U32 car_count, city_Road*
 static void
 car_sim_destroy(CarSim* car_sim)
 {
-    VK_AssetManagerBufferFree(car_sim->vertex_handle);
-    VK_AssetManagerBufferFree(car_sim->index_handle);
-    VK_AssetManagerTextureFree(car_sim->texture_handle);
+    r_buffer_destroy(car_sim->vertex_handle);
+    r_buffer_destroy(car_sim->index_handle);
+    r_texture_destroy(car_sim->texture_handle);
     ArenaRelease(car_sim->arena);
 }
 
@@ -819,10 +819,10 @@ BuildingsCreate(String8 cache_path, String8 texture_path, F32 road_height,
 static void
 building_destroy(Buildings* building)
 {
-    VK_AssetManagerBufferFree(building->roof_model_handles.vertex_buffer_handle);
-    VK_AssetManagerBufferFree(building->roof_model_handles.index_buffer_handle);
-    VK_AssetManagerTextureFree(building->roof_model_handles.texture_handle);
-    VK_AssetManagerTextureFree(building->facade_model_handles.texture_handle);
+    r_buffer_destroy(building->roof_model_handles.vertex_buffer_handle);
+    r_buffer_destroy(building->roof_model_handles.index_buffer_handle);
+    r_texture_destroy(building->roof_model_handles.texture_handle);
+    r_texture_destroy(building->facade_model_handles.texture_handle);
     ArenaRelease(building->arena);
 }
 static F32

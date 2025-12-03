@@ -317,18 +317,30 @@ r_texture_load_async(r_SamplerInfo* sampler_info, String8 texture_path,
 g_internal void
 r_texture_destroy(r_Handle handle)
 {
-    VK_AssetManagerTextureFree(handle);
+    if (r_is_handle_zero(handle) == false)
+    {
+        VK_AssetManagerTextureFree(handle);
+    }
 }
 
 g_internal void
 r_buffer_destroy(r_Handle handle)
 {
-    VK_AssetManagerBufferFree(handle);
+    if (r_is_handle_zero(handle) == false)
+    {
+        VK_AssetManagerBufferFree(handle);
+    }
 }
 
 static r_Handle
 r_buffer_load(r_BufferInfo* buffer_info)
 {
+    if (buffer_info->buffer.size == 0)
+    {
+        DEBUG_LOG("Zero handle created for buffer\n");
+        return r_handle_zero();
+    }
+
     VK_Context* vk_ctx = VK_CtxGet();
     VK_AssetManager* asset_manager = vk_ctx->asset_manager;
     r_AssetItem<VK_Buffer>* asset_item =

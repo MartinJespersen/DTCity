@@ -166,7 +166,8 @@ struct r_Model3DInstance
 
 static r_Handle
 r_handle_zero();
-
+static bool
+r_is_handle_zero(r_Handle handle);
 template <typename T>
 static r_BufferInfo
 r_buffer_info_from_template_buffer(Buffer<T> buffer, r_BufferType buffer_type);
