@@ -4,6 +4,10 @@ DTCity is an application for visualizing city data in 3D.
 The visualization is able to receive bounding box coordinates as input through the command line. Information about roads and buildings are fetched from OpenStreetMap. The information is either visualized in 3D or shown as text in a pop up window, when the object is hovered over.
 A basic simulation of cars are also provided that show support for visualizing mesh data provided through a .gltf or .glb file.
 
+# Usage
+Binary executables for Linux and Windows along with dependencies are attached to each version of the application released on Github. 
+The [usage-guide.pdf](docs/usage-guide.pdf) explains how to use the application after launch. 
+
 # Build instructions
 
 ## Windows Prerequisites
