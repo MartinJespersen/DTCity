@@ -57,6 +57,10 @@ static F32 Length2F32(Vec2F32 v) {
   F32 c = SqrtF32(v.x * v.x + v.y * v.y);
   return c;
 }
+static F64 length_2f64(Vec2F64 v) {
+  F64 c = sqrt_f64(v.x * v.x + v.y * v.y);
+  return c;
+}
 static Vec2F32 Normalize2F32(Vec2F32 v) {
   v = Scale2F32(v, 1.f / Length2F32(v));
   return v;
@@ -406,6 +410,11 @@ static F32 Dist2F32(Vec2F32 a, Vec2F32 b) {
   return c;
 }
 
+static F64 dist_2f64(Vec2F64 a, Vec2F64 b) {
+  Vec2F64 diff = {a.x - b.x, a.y - b.y};
+  F64 c = length_2f64(diff);
+  return c;
+}
 ////////////////////////////////
 //~ rjf: Matrix Ops
 

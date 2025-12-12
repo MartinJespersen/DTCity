@@ -8,7 +8,7 @@ struct dt_Time
 
 struct dt_Input
 {
-    osm_BoundingBox bbox;
+    Rng2F64 bbox;
 };
 
 enum dt_DataDirType

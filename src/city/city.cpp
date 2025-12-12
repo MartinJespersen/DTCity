@@ -83,10 +83,11 @@ TagValueF32Get(Arena* arena, String8 key, F32 default_width, Buffer<osm_Tag> tag
 
 static void
 RoadVertexBufferCreate(city_Road* road, Buffer<r_Vertex3D>* out_vertex_buffer,
-                       Buffer<U32>* out_index_buffer, osm_Network* node_utm_structure)
+                       Buffer<U32>* out_index_buffer)
 {
+    osm_Network* network = osm_g_network;
     ScratchScope scratch = ScratchScope(0, 0);
-    Buffer<osm_Way> ways = node_utm_structure->ways_arr[OsmKeytype_Road];
+    Buffer<osm_Way> ways = network->ways_arr[OsmKeytype_Road];
 
     U64 total_road_segment_count = 0;
     for (U32 way_index = 0; way_index < ways.size; way_index++)
@@ -173,7 +174,7 @@ RoadVertexBufferCreate(city_Road* road, Buffer<r_Vertex3D>* out_vertex_buffer,
 static U64
 HashU64FromStr8(String8 str)
 {
-    return HashU128FromStr8(str).u64[1];
+    return hash_u128_from_str8(str).u64[1];
 }
 
 static B32
@@ -718,9 +719,8 @@ CarUpdate(Arena* arena, CarSim* car, F32 time_delta)
 // ~mgj: Buildings
 
 static Buildings*
-BuildingsCreate(String8 cache_path, String8 texture_path, F32 road_height,
-                osm_BoundingBox* gcs_bbox, r_SamplerInfo* sampler_info,
-                osm_Network* node_utm_structure)
+BuildingsCreate(String8 cache_path, String8 texture_path, F32 road_height, Rng2F64 bbox,
+                r_SamplerInfo* sampler_info, osm_Network* node_utm_structure)
 {
     ScratchScope scratch = ScratchScope(0, 0);
     Arena* arena = ArenaAlloc();
@@ -743,14 +743,13 @@ BuildingsCreate(String8 cache_path, String8 texture_path, F32 road_height,
         out skel qt;
     )");
 
-        String8 query_str =
-            PushStr8F(scratch.arena, (char*)query.str, gcs_bbox->lat_btm_left,
-                      gcs_bbox->lon_btm_left, gcs_bbox->lat_top_right, gcs_bbox->lon_top_right);
+        String8 query_str = PushStr8F(scratch.arena, (char*)query.str, bbox.min.y, bbox.min.x,
+                                      bbox.max.y, bbox.max.x);
         String8 cache_data_file =
             Str8PathFromStr8List(scratch.arena, {cache_path, buildings->cache_file_name});
         String8 cache_meta_file = PushStr8Cat(scratch.arena, cache_data_file, S(".meta"));
 
-        String8 input_str = city_str8_from_wqs_coord(scratch.arena, gcs_bbox);
+        String8 input_str = city_str8_from_bbox(scratch.arena, bbox);
 
         Result<String8> cache_read_result =
             city_cache_read(scratch.arena, cache_data_file, cache_meta_file, input_str);
@@ -779,8 +778,7 @@ BuildingsCreate(String8 cache_path, String8 texture_path, F32 road_height,
             }
         }
 
-        osm_structure_add(node_utm_structure, json_result.road_nodes, http_data,
-                          OsmKeyType_Building);
+        osm_structure_add(json_result.road_nodes, http_data, OsmKeyType_Building);
     }
 
     buildings->facade_texture_path =
@@ -1171,7 +1169,7 @@ EarClipping(Arena* arena, Buffer<Vec2F32> node_buffer)
         }
         else if (cross_product_z == 0)
         {
-            DEBUG_LOG("Error in EarClipping: two line segments are collinear\n");
+            DEBUG_LOG("Error in EarClipping: two line segments are collinear");
         }
     }
     if (cur_index_buffer_idx != out_vertex_index_buffer.size)
@@ -1182,22 +1180,6 @@ EarClipping(Arena* arena, Buffer<Vec2F32> node_buffer)
 
     Assert(cur_index_buffer_idx == out_vertex_index_buffer.size);
     return out_vertex_index_buffer;
-}
-
-// ~mgj: Bounding Box is defined as the bottom left corner to the top right corner
-static Rng2F32
-UtmFromBoundingBox(osm_BoundingBox bbox)
-{
-    F64 long_low_utm;
-    F64 lat_low_utm;
-    F64 long_high_utm;
-    F64 lat_high_utm;
-    char utm_zone[10];
-    UTM::LLtoUTM(bbox.lat_btm_left, bbox.lon_btm_left, lat_low_utm, long_low_utm, utm_zone);
-    UTM::LLtoUTM(bbox.lat_top_right, bbox.lon_top_right, lat_high_utm, long_high_utm, utm_zone);
-
-    Rng2F32 utm_bb = {(F32)lat_low_utm, (F32)long_low_utm, (F32)lat_high_utm, (F32)long_high_utm};
-    return utm_bb;
 }
 
 } // namespace city
@@ -1386,16 +1368,16 @@ city_sampler_from_cgltf_sampler(gltfw_Sampler sampler)
 }
 
 static String8
-city_str8_from_wqs_coord(Arena* arena, osm_BoundingBox* bbox)
+city_str8_from_bbox(Arena* arena, Rng2F64 bbox)
 {
-    String8 str = {.str = (U8*)bbox, .size = sizeof(osm_BoundingBox)};
+    String8 str = {.str = (U8*)&bbox, .size = sizeof(Rng2F64)};
     String8 str_copy = PushStr8Copy(arena, str);
     return str_copy;
 }
 
 static city_Road*
-city_road_create(String8 texture_path, String8 cache_path, osm_BoundingBox* gcs_bbox,
-                 r_SamplerInfo* sampler_info, osm_Network* node_utm_structure)
+city_road_create(String8 texture_path, String8 cache_path, Rng2F64 bbox,
+                 r_SamplerInfo* sampler_info)
 {
     ScratchScope scratch = ScratchScope(0, 0);
     Arena* arena = ArenaAlloc();
@@ -1422,13 +1404,12 @@ city_road_create(String8 texture_path, String8 cache_path, osm_BoundingBox* gcs_
     params.content_type = S("text/html");
 
     String8 query_str =
-        PushStr8F(scratch.arena, (char*)query.str, gcs_bbox->lat_btm_left, gcs_bbox->lon_btm_left,
-                  gcs_bbox->lat_top_right, gcs_bbox->lon_top_right);
+        PushStr8F(scratch.arena, (char*)query.str, bbox.min.y, bbox.min.x, bbox.max.y, bbox.max.x);
     String8 cache_data_file =
         Str8PathFromStr8List(scratch.arena, {cache_path, road->openapi_data_file_name});
     String8 cache_meta_file = PushStr8Cat(scratch.arena, cache_data_file, S(".meta"));
 
-    String8 input_str = city_str8_from_wqs_coord(scratch.arena, gcs_bbox);
+    String8 input_str = city_str8_from_bbox(scratch.arena, bbox);
 
     Result<String8> cache_read_result =
         city::city_cache_read(scratch.arena, cache_data_file, cache_meta_file, input_str);
@@ -1458,10 +1439,9 @@ city_road_create(String8 texture_path, String8 cache_path, osm_BoundingBox* gcs_
     }
 
     Buffer<osm_RoadNodeList> node_hashmap = json_result.road_nodes;
-    osm_structure_add(node_utm_structure, node_hashmap, http_data, OsmKeytype_Road);
+    osm_structure_add(node_hashmap, http_data, OsmKeytype_Road);
 
-    city::RoadVertexBufferCreate(road, &road->vertex_buffer, &road->index_buffer,
-                                 node_utm_structure);
+    city::RoadVertexBufferCreate(road, &road->vertex_buffer, &road->index_buffer);
     r_BufferInfo vertex_buffer_info =
         r_buffer_info_from_template_buffer(road->vertex_buffer, R_BufferType_Vertex);
     r_BufferInfo index_buffer_info =

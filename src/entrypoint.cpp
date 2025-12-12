@@ -1,4 +1,3 @@
-
 static Buffer<String8>
 dt_dir_create(Arena* arena, String8 parent, dt_DataDirPair* dirs, U32 count)
 {
@@ -115,9 +114,8 @@ static dt_Input
 dt_interpret_input(int argc, char** argv)
 {
     dt_Input input = {};
-    osm_BoundingBox* bbox = &input.bbox;
-    F64* bbox_coords[4] = {&bbox->lon_btm_left, &bbox->lat_btm_left, &bbox->lon_top_right,
-                           &bbox->lat_top_right};
+    Rng2F64* bbox = &input.bbox;
+    F64* bbox_coords[4] = {&bbox->min.x, &bbox->min.y, &bbox->max.x, &bbox->max.y};
 
     if (argc != 1 && argc != 5)
     {
@@ -157,15 +155,30 @@ dt_interpret_input(int argc, char** argv)
     if (use_default)
     {
         // Initialize default values
-        bbox->lon_btm_left = 9.213970;
-        bbox->lat_btm_left = 55.704686;
-        bbox->lon_top_right = 9.22868;
-        bbox->lat_top_right = 55.713671;
+        bbox->min.x = 10.1200;
+        bbox->min.y = 56.1250;
+        bbox->max.x = 10.1330;
+        bbox->max.y = 56.1330;
         INFO_LOG("Using default values:\nlon_btm_left=%lf, lat_btm_left=%lf, lon_top_right=%lf, "
                  "lat_top_right=%lf\n",
-                 bbox->lon_btm_left, bbox->lat_btm_left, bbox->lon_top_right, bbox->lat_top_right);
+                 bbox->min.x, bbox->min.y, bbox->max.x, bbox->max.y);
     }
     return input;
+}
+
+// wgs84 to utm conversion
+g_internal Rng2F64
+dt_utm_from_wgs84(Rng2F64 wgs84_bbox)
+{
+    F64 south_west_lon;
+    F64 south_west_lat;
+    F64 north_east_lon;
+    F64 north_east_lat;
+    char utm_zone[10];
+    UTM::LLtoUTM(wgs84_bbox.min.y, wgs84_bbox.min.x, south_west_lat, south_west_lon, utm_zone);
+    UTM::LLtoUTM(wgs84_bbox.max.y, wgs84_bbox.max.x, north_east_lat, north_east_lon, utm_zone);
+
+    return {south_west_lon, south_west_lat, north_east_lon, north_east_lat};
 }
 
 static void
@@ -178,9 +191,9 @@ dt_main_loop(void* ptr)
     io_IO* io_ctx = ctx->io;
     os_set_thread_name(str8_c_string("Entrypoint thread"));
 
-    Rng2F32 utm_bb_coords = city::UtmFromBoundingBox(input->bbox);
-    printf("UTM Coordinates: %f %f %f %f\n", utm_bb_coords.min.x, utm_bb_coords.min.y,
-           utm_bb_coords.max.x, utm_bb_coords.max.y);
+    Rng2F64 utm_coords = dt_utm_from_wgs84(input->bbox);
+    printf("UTM Coordinates: %f %f %f %f\n", utm_coords.min.x, utm_coords.min.y, utm_coords.max.x,
+           utm_coords.max.y);
     r_render_ctx_create(ctx->data_subdirs.data[dt_DataDirType::Shaders], io_ctx, ctx->thread_pool);
     VK_Context* vk_ctx = VK_CtxGet();
     ImguiSetup(vk_ctx, io_ctx);
@@ -195,22 +208,30 @@ dt_main_loop(void* ptr)
 
     U64 node_hashmap_size = 100;
     U64 way_hashmap_size = 100;
-    osm_structure_init(node_hashmap_size, way_hashmap_size, &input->bbox);
+    osm_structure_init(node_hashmap_size, way_hashmap_size, utm_coords);
 
     String8 cache_dir = ctx->data_subdirs.data[dt_DataDirType::Cache];
     String8 texture_dir = ctx->data_subdirs.data[dt_DataDirType::Texture];
     String8 asset_dir = ctx->data_subdirs.data[dt_DataDirType::Assets];
 
-    ctx->road =
-        city_road_create(texture_dir, cache_dir, &input->bbox, &sampler_info, osm_g_network);
+    ctx->road = city_road_create(texture_dir, cache_dir, input->bbox, &sampler_info);
     city_Road* road = ctx->road;
 
     ui_camera_init(ctx->camera);
     ctx->buildings = city::BuildingsCreate(cache_dir, texture_dir, ctx->road->road_height,
-                                           &input->bbox, &sampler_info, osm_g_network);
+                                           input->bbox, &sampler_info, osm_g_network);
     city::Buildings* buildings = ctx->buildings;
     ctx->car_sim = city::CarSimCreate(asset_dir, texture_dir, 100, ctx->road);
     city::CarSim* car_sim = ctx->car_sim;
+
+    String8 neta_path =
+        Str8PathFromStr8List(scratch.arena, {ctx->data_dir, S("netascore.geojson")});
+    Map<S64, neta_EdgeList>* edge_map =
+        neta_osm_to_edges_map_create(scratch.arena, neta_path, utm_coords);
+    if (!edge_map)
+    {
+        exit_with_error("Failed to initialize neta");
+    }
 
     while (ctx->running)
     {
@@ -237,9 +258,32 @@ dt_main_loop(void* ptr)
                     osm_Tag* tag = &way->tags.data[tag_idx];
                     ImGui::Text("%s: %s", (char*)tag->key.str, (char*)tag->value.str);
                 }
+
+                neta_EdgeList* edge_list = {};
+                map_get(edge_map, (S64)hovered_object_id, &edge_list);
+                if (edge_list)
+                {
+                    ImGui::Text("The following are edge coordinates:");
+
+                    for (neta_EdgeNode* edge_node = edge_list->first; edge_node;
+                         edge_node = edge_node->next)
+                    {
+                        if (edge_node->edge->coords.size > 0)
+                        {
+                            ImGui::Text("Edge %lld:\n", edge_node->edge->edge_id);
+                        }
+                        for (U32 i = 0; i < edge_node->edge->coords.size; i++)
+                        {
+                            Vec2F64* coord = edge_node->edge->coords[i];
+                            ImGui::Text("(%lf, %lf)", coord->x, coord->y);
+                        }
+                    }
+                }
+
                 ImVec2 window_size = ImGui::GetWindowSize();
                 ImVec2 window_pos = ImVec2((F32)framebuffer_dim.x - window_size.x, 0);
                 ImGui::SetWindowPos(window_pos, ImGuiCond_Always);
+
                 ImGui::End();
             }
         }

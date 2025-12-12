@@ -1,5 +1,12 @@
 #pragma once
 
+enum class osm_Result : B32
+{
+    Success = 0,
+    NotFound = (1 << 0),
+
+};
+
 struct osm_RoadNode
 {
     osm_RoadNode* next;
@@ -37,22 +44,6 @@ struct osm_RoadNodeParseResult
 {
     Buffer<osm_RoadNodeList> road_nodes;
     B32 error;
-};
-
-union osm_BoundingBox
-{
-    struct
-    {
-        Vec2F64 btm_left;
-        Vec2F64 top_right;
-    };
-    struct
-    {
-        F64 lat_btm_left;
-        F64 lon_btm_left;
-        F64 lat_top_right;
-        F64 lon_top_right;
-    };
 };
 
 struct osm_Way
@@ -128,12 +119,11 @@ read_only static osm_UtmNode osm_g_road_node_utm = {&osm_g_road_node_utm, 0, 0.0
 ///////////////////////
 
 static void
-osm_structure_init(U64 node_hashmap_size, U64 way_hashmap_size, osm_BoundingBox* gcs_bbox);
+osm_structure_init(U64 node_hashmap_size, U64 way_hashmap_size, Rng2F64 utm_coords);
 static void
 osm_structure_cleanup();
 static void
-osm_structure_add(osm_Network* node_utm_structure, Buffer<osm_RoadNodeList> node_hashmap,
-                  String8 json, osm_KeyType osm_key_type);
+osm_structure_add(Buffer<osm_RoadNodeList> node_hashmap, String8 json, osm_KeyType osm_key_type);
 static osm_TagResult
 osm_tag_find(Arena* arena, Buffer<osm_Tag> tags, String8 tag_to_find);
 static osm_WayNode*

@@ -23,6 +23,7 @@ ContextCreate(io_IO* io_ctx)
         data_dir = Str8PathFromStr8List(app_arena, {ctx->cwd, S(".."), S("data")});
         data_dir_exists = os_folder_path_exists(data_dir);
     }
+    ctx->data_dir = data_dir;
 
     if (!data_dir_exists)
     {

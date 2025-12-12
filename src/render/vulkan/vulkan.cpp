@@ -1029,7 +1029,7 @@ VK_AssetCmdQueueItemEnqueue(U32 thread_id, VkCommandBuffer cmd, r_ThreadInput* t
 
     VK_CmdQueueItem item = {
         .thread_input = thread_input, .thread_id = thread_id, .cmd_buffer = cmd};
-    DEBUG_LOG("Asset ID: %llu - Cmd Getting Queued\n", thread_input->asset_info.handle.u64);
+    DEBUG_LOG("Asset ID: %llu - Cmd Getting Queued", thread_input->asset_info.handle.u64);
     async::QueuePush(asset_manager->cmd_queue, &item);
 }
 
@@ -1055,7 +1055,7 @@ VK_AssetManagerExecuteCmds()
 
             VK_CHECK_RESULT(vkQueueSubmit(vk_ctx->graphics_queue, 1, &submit_info, item.fence));
 
-            DEBUG_LOG("Asset ID: %llu - Submitted Command Buffer\n",
+            DEBUG_LOG("Asset ID: %llu - Submitted Command Buffer",
                       item.thread_input->asset_info.handle.u64);
             VK_AssetManagerCmdListAdd(asset_store->cmd_wait_list, item);
         }
@@ -1184,7 +1184,7 @@ VK_AssetManagerCmdDoneCheck()
                 asset->is_loaded = 1;
             }
             Assert(asset_load_info->type != R_AssetItemType_Undefined);
-            DEBUG_LOG("Asset: %llu - Finished loading\n", asset_load_info->handle.u64);
+            DEBUG_LOG("Asset: %llu - Finished loading", asset_load_info->handle.u64);
             vkDestroyFence(vk_ctx->device, cmd_queue_item->fence, 0);
             VK_ThreadInputDestroy(cmd_queue_item->thread_input);
             VK_AssetManagerCmdListItemRemove(asset_manager->cmd_wait_list, cmd_queue_item);

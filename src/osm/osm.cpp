@@ -1,23 +1,14 @@
+
 static void
-osm_structure_init(U64 node_hashmap_size, U64 way_hashmap_size, osm_BoundingBox* gcs_bbox)
+osm_structure_init(U64 node_hashmap_size, U64 way_hashmap_size, Rng2F64 utm_coords)
 {
     Arena* arena = ArenaAlloc();
     Buffer<osm_UtmNodeList> utm_node_hashmap =
         BufferAlloc<osm_UtmNodeList>(arena, node_hashmap_size);
     Buffer<osm_WayList> way_hashmap = BufferAlloc<osm_WayList>(arena, way_hashmap_size);
 
-    F64 long_low_utm;
-    F64 lat_low_utm;
-    F64 long_high_utm;
-    F64 lat_high_utm;
-    char utm_zone[10];
-    UTM::LLtoUTM(gcs_bbox->lat_btm_left, gcs_bbox->lon_btm_left, lat_low_utm, long_low_utm,
-                 utm_zone);
-    UTM::LLtoUTM(gcs_bbox->lat_top_right, gcs_bbox->lon_top_right, lat_high_utm, long_high_utm,
-                 utm_zone);
-
-    F64 center_transform_x = -(long_low_utm + long_high_utm) / 2.0;
-    F64 center_transform_y = -(lat_low_utm + lat_high_utm) / 2.0;
+    F64 center_transform_x = -(utm_coords.min.x + utm_coords.max.x) / 2.0;
+    F64 center_transform_y = -(utm_coords.min.y + utm_coords.max.y) / 2.0;
     Vec2F64 utm_center_offset = {center_transform_x, center_transform_y};
 
     osm_g_network = PushStruct(arena, osm_Network);
@@ -31,13 +22,13 @@ osm_structure_cleanup()
 }
 
 static void
-osm_structure_add(osm_Network* node_utm_structure, Buffer<osm_RoadNodeList> node_hashmap,
-                  String8 json, osm_KeyType osm_key_type)
+osm_structure_add(Buffer<osm_RoadNodeList> node_hashmap, String8 json, osm_KeyType osm_key_type)
 {
-    Arena* arena = node_utm_structure->arena;
+    osm_Network* network = osm_g_network;
+    Arena* arena = network->arena;
     // ~mgj: parse OSM way structures
     osm_WayParseResult osm_way_parse_result =
-        wrapper::way_buffer_from_simd_json(node_utm_structure->arena, json);
+        wrapper::way_buffer_from_simd_json(network->arena, json);
 
     if (osm_way_parse_result.error)
     {
@@ -62,13 +53,13 @@ osm_structure_add(osm_Network* node_utm_structure, Buffer<osm_RoadNodeList> node
 
                 String8 utm_zone_str = str8_c_string(node_utm_zone);
                 node_utm->utm_zone = PushStr8Copy(arena, utm_zone_str);
-                node_utm->pos.x = x + node_utm_structure->utm_center_offset.x;
-                node_utm->pos.y = y + node_utm_structure->utm_center_offset.y;
+                node_utm->pos.x = x + network->utm_center_offset.x;
+                node_utm->pos.y = y + network->utm_center_offset.y;
             }
         }
     }
 
-    node_utm_structure->ways_arr[osm_key_type] = ways;
+    network->ways_arr[osm_key_type] = ways;
 }
 static osm_RoadNode*
 osm_node_find(Buffer<osm_RoadNodeList> node_hashmap, U64 node_id)

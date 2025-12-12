@@ -326,6 +326,29 @@ union Rng2F32
     Vec2F32 v[2];
 };
 
+typedef union Rng2F64 Rng2F64;
+union Rng2F64
+{
+    struct
+    {
+        Vec2F64 min;
+        Vec2F64 max;
+    };
+    struct
+    {
+        Vec2F64 p0;
+        Vec2F64 p1;
+    };
+    struct
+    {
+        F64 x0;
+        F64 y0;
+        F64 x1;
+        F64 y1;
+    };
+    Vec2F64 v[2];
+};
+
 typedef union Rng2S64 Rng2S64;
 union Rng2S64
 {
@@ -466,12 +489,17 @@ static F32
 length_squared_2f32(Vec2F32 v);
 static F32
 Length2F32(Vec2F32 v);
+static F64
+length_2f64(Vec2F64 v);
+
 static Vec2F32
 Normalize2F32(Vec2F32 v);
 static Vec2F32
 mix_2f32(Vec2F32 a, Vec2F32 b, F32 t);
 static F32
 Dist2F32(Vec2F32 a, Vec2F32 b);
+static F64
+dist_2f64(Vec2F64 a, Vec2F64 b);
 
 #define v2s64(x, y) vec_2s64((x), (y))
 static Vec2S64

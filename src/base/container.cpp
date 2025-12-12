@@ -95,9 +95,11 @@ io_file_read(Arena* arena, String8 filename)
 {
     Buffer<U8> buffer = {0};
     FILE* file = fopen((const char*)filename.str, "rb");
+    defer(fclose(file));
     if (file == NULL)
     {
         DEBUG_LOG("failed to open file!");
+        return buffer;
     }
 
     fseek(file, 0, SEEK_END);
@@ -107,7 +109,6 @@ io_file_read(Arena* arena, String8 filename)
     buffer.data = PushArray(arena, U8, buffer.size);
     fread(buffer.data, sizeof(U8), buffer.size, file);
 
-    fclose(file);
     return buffer;
 }
 
@@ -123,4 +124,167 @@ CStrArrFromStr8Buffer(Arena* arena, Buffer<String8> buffer)
         arr[i] = (char*)buffer.data[i].str;
     }
     return arr;
+}
+
+//~mgj: ChunckList: safe T value in contigous Chunks usually for intermediate storage
+template <typename T>
+ChunkList<T>*
+chunk_list_create(Arena* arena, U64 capacity)
+{
+    ChunkList<T>* chunk = PushStruct(arena, ChunkList<T>);
+    chunk->capacity = capacity;
+    chunk->chunk_count = 0;
+    chunk->total_count = 0;
+
+    return chunk;
+}
+
+template <typename T>
+void
+chunk_list_insert(Arena* arena, ChunkList<T>* list, T item)
+{
+    T* res = chunk_list_get_next(arena, list);
+    *res = item;
+    list->total_count++;
+}
+
+template <typename T>
+T*
+chunk_list_get_next(Arena* arena, ChunkList<T>* list)
+{
+    ChunkItem<T>* chunk = list->last;
+    if (!chunk || chunk->count >= list->capacity)
+    {
+        chunk = PushStruct(arena, ChunkItem<T>);
+        SLLQueuePush(list->first, list->last, chunk);
+        chunk->values = PushArray(arena, T, list->capacity);
+    }
+    T* item = &chunk->values[chunk->count++];
+    list->total_count++;
+    return item;
+}
+
+template <typename T>
+static Buffer<T>
+buffer_from_chunk_list(Arena* arena, ChunkList<T>* list)
+{
+    Buffer<T> buffer = BufferAlloc<T>(arena, list->total_count);
+    U64 offset = 0;
+    for (ChunkItem<T>* chunk = list->first; chunk; chunk = chunk->next)
+    {
+        MemoryCopy(buffer.data + offset, chunk->values, chunk->count * sizeof(T));
+        offset += chunk->count;
+    }
+    return buffer;
+}
+
+// Linked List Map
+static inline U64
+map_hash_u64(U64 x)
+{
+    String8 str = {.str = (U8*)&x, .size = sizeof(U64)};
+    U64 res = hash_u128_from_str8(str).u64[1];
+    return res;
+}
+
+static inline U64
+map_round_up_pow2_u64(U64 v)
+{
+    if (v <= 8)
+        return 8;
+    v -= 1;
+    v |= v >> 1;
+    v |= v >> 2;
+    v |= v >> 4;
+    v |= v >> 8;
+    v |= v >> 16;
+    v |= v >> 32;
+    return v + 1;
+}
+
+template <typename K, typename V>
+static Map<K, V>*
+map_create(Arena* arena, U64 capacity)
+{
+    using MapType = Map<K, V>;
+    Map<K, V>* map = PushStruct(arena, MapType);
+    map->arena = arena;
+    U64 actual_cap = map_round_up_pow2_u64(capacity);
+    using MapKeyValuePairList = MapChunkList<K, V>;
+    map->v = PushArray(arena, MapKeyValuePairList, actual_cap);
+    map->capacity = actual_cap;
+    return map;
+}
+
+template <typename K, typename V>
+static V*
+map_get(Map<K, V>* m, K key)
+{
+    U64 hash = map_hash_u64(key);
+    U64 index = hash % m->capacity;
+    MapChunkList<K, V>* chunk_list = &m->v[index];
+    MapChunk<K, V>* chunk = chunk_list->first;
+    while (chunk)
+    {
+        for (U64 i = 0; i < chunk->count; ++i)
+        {
+            if (chunk->v[i].key == key)
+                return &chunk->v[i].value;
+        }
+        chunk = chunk->next;
+    }
+    return nullptr;
+}
+
+template <typename K, typename V>
+static MapResult
+map_get(Map<K, V>* m, K key, V** out_value)
+{
+    V* value = map_get(m, key);
+    if (value)
+    {
+        *out_value = value;
+        return MapResult::Ok;
+    }
+
+    *out_value = nullptr;
+    return MapResult::NotFound;
+}
+
+template <typename K, typename V>
+static V*
+map_insert(Map<K, V>* m, K key, V* value)
+{
+    using KeyPair = MapChunk<K, V>;
+
+    U64 hash = map_hash_u64((U64)key);
+    U64 index = hash % m->capacity;
+    MapChunkList<K, V>* chunk_list = &m->v[index];
+    MapChunk<K, V>* chunk = chunk_list->first;
+
+    // check if key is already present
+    for (; chunk; chunk = chunk->next)
+    {
+        for (U64 i = 0; i < chunk->count; ++i)
+        {
+            if (chunk->v[i].key == key)
+                return nullptr;
+        }
+    }
+
+    U64 i = 0;
+    if (!chunk || chunk->count >= ArrayCount(chunk->v))
+    {
+        chunk = PushStruct(m->arena, KeyPair);
+        SLLQueuePush(chunk_list->first, chunk_list->last, chunk);
+        chunk_list->chunk_count += 1;
+    }
+
+    chunk = chunk_list->last;
+    chunk->v[i].key = key;
+    chunk->v[i].value = *value;
+    chunk_list->total_count += 1;
+    chunk->count += 1;
+
+    return &chunk->v[i].value;
 }

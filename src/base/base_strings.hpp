@@ -577,7 +577,7 @@ F32FromStr8(String8 string, F32* out);
 
 // ~mgj: String hashes
 static U128
-HashU128FromStr8(String8 str);
+hash_u128_from_str8(String8 str);
 
 // ~mgj: Errors
 static void

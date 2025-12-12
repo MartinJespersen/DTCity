@@ -7,10 +7,12 @@ IndentWidth: 4
 AlwaysBreakAfterReturnType: All
 
 # Align parameters
-#AlignAfterOpenBracket: Align
+# AlignAfterOpenBracket: Align
 
 # Break before braces
 BreakBeforeBraces: Allman
+
+# BreakAfterTemplateDeclaration: true
 
 IndentCaseLabels: true
 

@@ -98,7 +98,7 @@ static void
 road_destroy(city_Road* road);
 static void
 RoadVertexBufferCreate(city_Road* road, Buffer<r_Vertex3D>* out_vertex_buffer,
-                       Buffer<U32>* out_index_buffer, osm_Network* node_utm_structure);
+                       Buffer<U32>* out_index_buffer);
 
 static void
 QuadToBufferAdd(RoadSegment* road_segment, Buffer<r_Vertex3D> buffer, Buffer<U32> indices,
@@ -116,9 +116,8 @@ CarUpdate(Arena* arena, CarSim* car, F32 time_delta);
 
 // ~mgj: Buildings
 static Buildings*
-BuildingsCreate(String8 cache_path, String8 texture_path, F32 road_height,
-                osm_BoundingBox* gcs_bbox, r_SamplerInfo* sampler_info,
-                osm_Network* node_utm_structure);
+BuildingsCreate(String8 cache_path, String8 texture_path, F32 road_height, Rng2F64 bbox,
+                r_SamplerInfo* sampler_info, osm_Network* node_utm_structure);
 static void
 building_destroy(Buildings* building);
 static void
@@ -126,9 +125,6 @@ BuildingsBuffersCreate(Arena* arena, F32 road_height, BuildingRenderInfo* out_re
                        osm_Network* node_utm_structure);
 static Buffer<U32>
 EarClipping(Arena* arena, Buffer<Vec2F32> node_buffer);
-
-static Rng2F32
-UtmFromBoundingBox(osm_BoundingBox bbox);
 
 // ~mgj: HTTP and caching
 static String8
@@ -148,7 +144,7 @@ city_cache_needs_update(String8 data_file_str, String8 cache_meta_file_path);
 } // namespace city
 
 static String8
-city_str8_from_wqs_coord(Arena* arena, osm_BoundingBox* bbox);
+city_str8_from_bbox(Arena* arena, Rng2F64 bbox);
 g_internal r_Model3DPipelineDataList
 city_land_create(Arena* arena, String8 glb_path);
 g_internal void
@@ -156,5 +152,5 @@ city_land_destroy(r_Model3DPipelineDataList list);
 static r_SamplerInfo
 city_sampler_from_cgltf_sampler(gltfw_Sampler sampler);
 static city_Road*
-city_road_create(String8 texture_path, String8 cache_path, osm_BoundingBox* gcs_bbox,
-                 r_SamplerInfo* sampler_info, osm_Network* node_utm_structure);
+city_road_create(String8 texture_path, String8 cache_path, Rng2F64 bbox,
+                 r_SamplerInfo* sampler_info);
