@@ -214,8 +214,8 @@ dt_main_loop(void* ptr)
     String8 texture_dir = ctx->data_subdirs.data[dt_DataDirType::Texture];
     String8 asset_dir = ctx->data_subdirs.data[dt_DataDirType::Assets];
 
-    ctx->road = city_road_create(texture_dir, cache_dir, input->bbox, &sampler_info);
-    city_Road* road = ctx->road;
+    ctx->road = city::city_road_create(texture_dir, cache_dir, input->bbox, &sampler_info);
+    city::Road* road = ctx->road;
 
     ui_camera_init(ctx->camera);
     ctx->buildings = city::BuildingsCreate(cache_dir, texture_dir, ctx->road->road_height,

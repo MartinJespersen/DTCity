@@ -1,8 +1,8 @@
 namespace city
 {
 
-static void
-road_destroy(city_Road* road)
+g_internal void
+road_destroy(Road* road)
 {
     r_buffer_destroy(road->handles.vertex_buffer_handle);
     r_buffer_destroy(road->handles.index_buffer_handle);
@@ -11,7 +11,7 @@ road_destroy(city_Road* road)
     ArenaRelease(road->arena);
 }
 
-static void
+g_internal void
 RoadSegmentFromTwoRoadNodes(RoadSegment* out_road_segment, osm_UtmNode* node_0, osm_UtmNode* node_1,
                             F32 road_width)
 {
@@ -34,7 +34,7 @@ RoadSegmentFromTwoRoadNodes(RoadSegment* out_road_segment, osm_UtmNode* node_0, 
 
 // find the two nodes connecting two road segments
 // source: https://opensage.github.io/blog/roads-how-boring-part-5-connecting-the-road-segments
-static void
+g_internal void
 RoadSegmentConnectionFromTwoRoadSegments(RoadSegment* in_out_road_segment_0,
                                          RoadSegment* in_out_road_segment_1, F32 road_width)
 {
@@ -63,7 +63,7 @@ RoadSegmentConnectionFromTwoRoadSegments(RoadSegment* in_out_road_segment_0,
     in_out_road_segment_1->start.top = shared_top;
 }
 
-static F32
+g_internal F32
 TagValueF32Get(Arena* arena, String8 key, F32 default_width, Buffer<osm_Tag> tags)
 {
     F32 road_width = default_width; // Example value, adjust as needed
@@ -81,9 +81,9 @@ TagValueF32Get(Arena* arena, String8 key, F32 default_width, Buffer<osm_Tag> tag
     return road_width;
 }
 
-static void
-RoadVertexBufferCreate(city_Road* road, Buffer<r_Vertex3D>* out_vertex_buffer,
-                       Buffer<U32>* out_index_buffer)
+g_internal void
+road_render_buffers_create(Road* road, Buffer<r_Vertex3D>* out_vertex_buffer,
+                           Buffer<U32>* out_index_buffer)
 {
     osm_Network* network = osm_g_network;
     ScratchScope scratch = ScratchScope(0, 0);
@@ -171,13 +171,13 @@ RoadVertexBufferCreate(city_Road* road, Buffer<r_Vertex3D>* out_vertex_buffer,
     *out_index_buffer = index_buffer;
 }
 
-static U64
+g_internal U64
 HashU64FromStr8(String8 str)
 {
     return hash_u128_from_str8(str).u64[1];
 }
 
-static B32
+g_internal B32
 city_cache_needs_update(String8 cache_data_file, String8 cache_meta_file)
 {
     ScratchScope scratch = ScratchScope(0, 0);
@@ -254,7 +254,7 @@ city_cache_needs_update(String8 cache_data_file, String8 cache_meta_file)
     return update_needed;
 }
 
-static String8
+g_internal String8
 city_http_call_wrapper(Arena* arena, String8 query_str, HTTP_RequestParams* params)
 {
     DEBUG_LOG("DataFetch: Fetching data from overpass-api.de\n");
@@ -292,7 +292,7 @@ city_http_call_wrapper(Arena* arena, String8 query_str, HTTP_RequestParams* para
     return response.body;
 }
 
-static void
+g_internal void
 city_cache_write(String8 cache_file, String8 cache_meta_file, String8 content, String8 hash_content)
 {
     ScratchScope scratch = ScratchScope(0, 0);
@@ -324,7 +324,7 @@ city_cache_write(String8 cache_file, String8 cache_meta_file, String8 content, S
     }
 }
 
-static Result<String8>
+g_internal Result<String8>
 city_cache_read(Arena* arena, String8 cache_file, String8 cache_meta_file, String8 hash_input)
 {
     ScratchScope scratch = ScratchScope(&arena, 1);
@@ -363,13 +363,13 @@ city_cache_read(Arena* arena, String8 cache_file, String8 cache_meta_file, Strin
     return res;
 }
 
-static Vec3F32
+g_internal Vec3F32
 HeightDimAdd(Vec2F32 pos, F32 height)
 {
     return {pos.x, height, pos.y};
 }
 
-static void
+g_internal void
 QuadToBufferAdd(RoadSegment* road_segment, Buffer<r_Vertex3D> buffer, Buffer<U32> indices,
                 U64 way_id, F32 road_height, U32* cur_vertex_idx, U32* cur_index_idx)
 {
@@ -413,7 +413,7 @@ QuadToBufferAdd(RoadSegment* road_segment, Buffer<r_Vertex3D> buffer, Buffer<U32
     *cur_index_idx += 6;
 }
 
-static osm_UtmNode*
+g_internal osm_UtmNode*
 NodeUtmFind(osm_Network* node_ways, U64 node_id)
 {
     U64 node_index = node_id % node_ways->utm_node_hashmap.size;
@@ -427,8 +427,8 @@ NodeUtmFind(osm_Network* node_ways, U64 node_id)
     return &osm_g_road_node_utm;
 }
 
-static void
-RoadIntersectionPointsFind(city_Road* road, RoadSegment* in_out_segment, osm_Way* current_road_way,
+g_internal void
+RoadIntersectionPointsFind(Road* road, RoadSegment* in_out_segment, osm_Way* current_road_way,
                            osm_Network* node_utm_structure)
 {
     ScratchScope scratch = ScratchScope(0, 0);
@@ -592,7 +592,7 @@ RoadIntersectionPointsFind(city_Road* road, RoadSegment* in_out_segment, osm_Way
 }
 
 // ~mgj: Cars
-static Rng1F32
+g_internal Rng1F32
 CarCenterHeightOffset(Buffer<gltfw_Vertex3D> vertices)
 {
     F32 highest_value = 0;
@@ -610,8 +610,8 @@ CarCenterHeightOffset(Buffer<gltfw_Vertex3D> vertices)
     return {.min = lowest_value, .max = highest_value};
 }
 
-static CarSim*
-CarSimCreate(String8 asset_path, String8 texture_path, U32 car_count, city_Road* road)
+g_internal CarSim*
+CarSimCreate(String8 asset_path, String8 texture_path, U32 car_count, Road* road)
 {
     ScratchScope scratch = ScratchScope(0, 0);
     Arena* arena = ArenaAlloc();
@@ -655,7 +655,7 @@ CarSimCreate(String8 asset_path, String8 texture_path, U32 car_count, city_Road*
     return car_sim;
 }
 
-static void
+g_internal void
 car_sim_destroy(CarSim* car_sim)
 {
     r_buffer_destroy(car_sim->vertex_handle);
@@ -664,7 +664,7 @@ car_sim_destroy(CarSim* car_sim)
     ArenaRelease(car_sim->arena);
 }
 
-static Buffer<r_Model3DInstance>
+g_internal Buffer<r_Model3DInstance>
 CarUpdate(Arena* arena, CarSim* car, F32 time_delta)
 {
     Buffer<r_Model3DInstance> instance_buffer =
@@ -718,7 +718,7 @@ CarUpdate(Arena* arena, CarSim* car, F32 time_delta)
 }
 // ~mgj: Buildings
 
-static Buildings*
+g_internal Buildings*
 BuildingsCreate(String8 cache_path, String8 texture_path, F32 road_height, Rng2F64 bbox,
                 r_SamplerInfo* sampler_info, osm_Network* node_utm_structure)
 {
@@ -814,7 +814,7 @@ BuildingsCreate(String8 cache_path, String8 texture_path, F32 road_height, Rng2F
     return buildings;
 }
 
-static void
+g_internal void
 building_destroy(Buildings* building)
 {
     r_buffer_destroy(building->roof_model_handles.vertex_buffer_handle);
@@ -823,12 +823,12 @@ building_destroy(Buildings* building)
     r_texture_destroy(building->facade_model_handles.texture_handle);
     ArenaRelease(building->arena);
 }
-static F32
+g_internal F32
 Cross2F32ZComponent(Vec2F32 a, Vec2F32 b)
 {
     return a.x * b.y - a.y * b.x;
 }
-static B32
+g_internal B32
 AreTwoConnectedLineSegmentsCollinear(Vec2F32 prev, Vec2F32 cur, Vec2F32 next)
 {
     Vec2F32 ba = Sub2F32(prev, cur);
@@ -844,7 +844,7 @@ AreTwoConnectedLineSegmentsCollinear(Vec2F32 prev, Vec2F32 cur, Vec2F32 next)
 }
 // TODO: Built the roof, which requires a way to divide the concave polygons (that are the
 // buildings) and divide it into convex parts
-static void
+g_internal void
 BuildingsBuffersCreate(Arena* arena, F32 road_height, BuildingRenderInfo* out_render_info,
                        osm_Network* node_utm_structure)
 {
@@ -1015,7 +1015,7 @@ enum Direction
     Direction_CounterClockwise
 };
 
-static Direction
+g_internal Direction
 ClockWiseTest(Buffer<Vec2F32> node_buffer)
 {
     F32 total = 0;
@@ -1039,7 +1039,7 @@ ClockWiseTest(Buffer<Vec2F32> node_buffer)
     return Direction_Undefined;
 }
 
-static Buffer<U32>
+g_internal Buffer<U32>
 IndexBufferCreate(Arena* arena, U64 buffer_size, Direction direction)
 {
     Buffer<U32> index_buffer = BufferAlloc<U32>(arena, buffer_size);
@@ -1066,7 +1066,7 @@ IndexBufferCreate(Arena* arena, U64 buffer_size, Direction direction)
 
 // Shoelace Algorithm
 // source: https://artofproblemsolving.com/wiki/index.php/Shoelace_Theorem
-static B32
+g_internal B32
 PointInTriangle(Vec2F32 p1, Vec2F32 p2, Vec2F32 p3, Vec2F32 point)
 {
     F32 d1, d2, d3;
@@ -1082,7 +1082,7 @@ PointInTriangle(Vec2F32 p1, Vec2F32 p2, Vec2F32 p3, Vec2F32 point)
     return !(has_neg && has_pos);
 }
 
-static void
+g_internal void
 NodeBufferPrintDebug(Buffer<Vec2F32> node_buffer)
 {
     DEBUG_LOG("Error in ear clipping algo. Expecting vertex_count-2 number of triangles\n"
@@ -1093,7 +1093,7 @@ NodeBufferPrintDebug(Buffer<Vec2F32> node_buffer)
     }
 }
 
-static Buffer<U32>
+g_internal Buffer<U32>
 EarClipping(Arena* arena, Buffer<Vec2F32> node_buffer)
 {
     Assert(node_buffer.size >= 3);
@@ -1182,8 +1182,6 @@ EarClipping(Arena* arena, Buffer<Vec2F32> node_buffer)
     return out_vertex_index_buffer;
 }
 
-} // namespace city
-
 g_internal void
 city_land_destroy(r_Model3DPipelineDataList list)
 {
@@ -1208,7 +1206,7 @@ city_land_create(Arena* arena, String8 glb_path)
         for (U32 i = 0; i < glb_data.textures.size; ++i)
         {
             gltfw_Texture* texture = &glb_data.textures.data[i];
-            r_SamplerInfo sampler_info = city_sampler_from_cgltf_sampler(texture->sampler);
+            r_SamplerInfo sampler_info = city::city_sampler_from_cgltf_sampler(texture->sampler);
             tex_handles.data[i] = r_texture_handle_create(&sampler_info, R_PipelineUsageType_3D);
             r_texture_gpu_upload_sync(tex_handles.data[i], texture->tex_buf);
         }
@@ -1241,7 +1239,7 @@ city_land_create(Arena* arena, String8 glb_path)
     return handles_list;
 }
 
-static r_SamplerInfo
+g_internal r_SamplerInfo
 city_sampler_from_cgltf_sampler(gltfw_Sampler sampler)
 {
     r_Filter min_filter = R_Filter_Nearest;
@@ -1367,7 +1365,7 @@ city_sampler_from_cgltf_sampler(gltfw_Sampler sampler)
     return sampler_info;
 }
 
-static String8
+g_internal String8
 city_str8_from_bbox(Arena* arena, Rng2F64 bbox)
 {
     String8 str = {.str = (U8*)&bbox, .size = sizeof(Rng2F64)};
@@ -1375,14 +1373,14 @@ city_str8_from_bbox(Arena* arena, Rng2F64 bbox)
     return str_copy;
 }
 
-static city_Road*
+g_internal Road*
 city_road_create(String8 texture_path, String8 cache_path, Rng2F64 bbox,
                  r_SamplerInfo* sampler_info)
 {
     ScratchScope scratch = ScratchScope(0, 0);
     Arena* arena = ArenaAlloc();
 
-    city_Road* road = PushStruct(arena, city_Road);
+    Road* road = PushStruct(arena, Road);
 
     road->openapi_data_file_name = PushStr8Copy(arena, S("openapi_node_ways_highway.json"));
     road->arena = arena;
@@ -1441,7 +1439,7 @@ city_road_create(String8 texture_path, String8 cache_path, Rng2F64 bbox,
     Buffer<osm_RoadNodeList> node_hashmap = json_result.road_nodes;
     osm_structure_add(node_hashmap, http_data, OsmKeytype_Road);
 
-    city::RoadVertexBufferCreate(road, &road->vertex_buffer, &road->index_buffer);
+    city::road_render_buffers_create(road, &road->vertex_buffer, &road->index_buffer);
     r_BufferInfo vertex_buffer_info =
         r_buffer_info_from_template_buffer(road->vertex_buffer, R_BufferType_Vertex);
     r_BufferInfo index_buffer_info =
@@ -1458,3 +1456,5 @@ city_road_create(String8 texture_path, String8 cache_path, Rng2F64 bbox,
 
     return road;
 }
+
+} // namespace city

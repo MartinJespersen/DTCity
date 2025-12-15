@@ -38,7 +38,7 @@ struct Context
     io_IO* io;
     ui_Camera* camera;
     dt_Time* time;
-    city_Road* road;
+    city::Road* road;
     city::CarSim* car_sim;
     city::Buildings* buildings;
 

@@ -515,7 +515,7 @@ VK_DepthResourcesCleanup(VmaAllocator allocator, VK_ImageResource depth_image_re
 }
 
 static void
-ObjectIdResourcesCleanup()
+vk_object_id_resources_cleanup()
 {
     VK_Context* vk_ctx = VK_CtxGet();
     vk_SwapchainResources* swapchain_resources = vk_ctx->swapchain_resources;
@@ -1313,7 +1313,7 @@ VK_SwapChainCleanup(VkDevice device, VmaAllocator allocator,
 
     VK_ColorResourcesCleanup(allocator, swapchain_resources->color_image_resource);
     VK_DepthResourcesCleanup(allocator, swapchain_resources->depth_image_resource);
-    ObjectIdResourcesCleanup();
+    vk_object_id_resources_cleanup();
 
     for (size_t i = 0; i < swapchain_resources->image_resources.size; i++)
     {
