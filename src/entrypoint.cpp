@@ -246,8 +246,26 @@ dt_main_loop(void* ptr)
         {
             ui_camera_update(ctx->camera, ctx->io, ctx->time->delta_time_sec, framebuffer_dim);
             U64 hovered_object_id = r_latest_hovered_object_id_get();
-            osm::WayNode* way_node = osm::way_find(hovered_object_id);
+            city::RoadEdge** edge_ptr = map_get(&road->edge_map, (S64)hovered_object_id);
+            if (edge_ptr)
+            {
+                city::RoadEdge* edge = *edge_ptr;
+                osm::WayNode* way_node = osm::way_find(edge->way_id);
+                osm::Way* way = &way_node->way;
 
+                bool open = true;
+                ImGui::Begin("Object Info", &open, ImGuiWindowFlags_AlwaysAutoResize);
+                for (osm::Tag& tag : way->tags)
+                {
+                    ImGui::Text("%s: %s", (char*)tag.key.str, (char*)tag.value.str);
+                }
+                ImVec2 window_size = ImGui::GetWindowSize();
+                ImVec2 window_pos = ImVec2((F32)framebuffer_dim.x - window_size.x, 0);
+                ImGui::SetWindowPos(window_pos, ImGuiCond_Always);
+
+                ImGui::End();
+            }
+            osm::WayNode* way_node = osm::way_find(hovered_object_id);
             if (way_node)
             {
                 osm::Way* way = &way_node->way;
@@ -258,28 +276,6 @@ dt_main_loop(void* ptr)
                     osm::Tag* tag = &way->tags.data[tag_idx];
                     ImGui::Text("%s: %s", (char*)tag->key.str, (char*)tag->value.str);
                 }
-
-                neta_EdgeList* edge_list = {};
-                map_get(edge_map, (S64)hovered_object_id, &edge_list);
-                if (edge_list)
-                {
-                    ImGui::Text("The following are edge coordinates:");
-
-                    for (neta_EdgeNode* edge_node = edge_list->first; edge_node;
-                         edge_node = edge_node->next)
-                    {
-                        if (edge_node->edge->coords.size > 0)
-                        {
-                            ImGui::Text("Edge %lld:\n", edge_node->edge->edge_id);
-                        }
-                        for (U32 i = 0; i < edge_node->edge->coords.size; i++)
-                        {
-                            Vec2F64* coord = edge_node->edge->coords[i];
-                            ImGui::Text("(%lf, %lf)", coord->x, coord->y);
-                        }
-                    }
-                }
-
                 ImVec2 window_size = ImGui::GetWindowSize();
                 ImVec2 window_pos = ImVec2((F32)framebuffer_dim.x - window_size.x, 0);
                 ImGui::SetWindowPos(window_pos, ImGuiCond_Always);

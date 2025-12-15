@@ -1,5 +1,5 @@
 # Build stage
-FROM ubuntu:22.04 AS builder
+FROM ubuntu:20.04 AS builder
 
 # Install build dependencies
 RUN apt-get update && apt-get install -y \

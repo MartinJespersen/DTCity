@@ -64,7 +64,7 @@ RoadSegmentConnectionFromTwoRoadSegments(RoadSegment* in_out_road_segment_0,
 }
 
 g_internal F32
-TagValueF32Get(Arena* arena, String8 key, F32 default_width, Buffer<osm::Tag> tags)
+tag_value_get(Arena* arena, String8 key, F32 default_width, Buffer<osm::Tag> tags)
 {
     F32 road_width = default_width; // Example value, adjust as needed
     {
@@ -81,90 +81,56 @@ TagValueF32Get(Arena* arena, String8 key, F32 default_width, Buffer<osm::Tag> ta
     return road_width;
 }
 
-g_internal city::RenderBuffers
-road_render_buffers_create(Road* road, Map<S64, city::RoadEdge*>* edge_map)
+g_internal void
+connect_road_segments(RoadSegment* road_segment, U64 from_id, U64 to_id, F32 road_width)
 {
-    osm::Network* network = osm::g_network;
+    osm::UtmNode* start_node_next = osm::utm_node_find(from_id);
+    osm::UtmNode* end_node_next = osm::utm_node_find(to_id);
+    RoadSegment road_segment_next;
+    RoadSegmentFromTwoRoadNodes(&road_segment_next, start_node_next, end_node_next, road_width);
+
+    RoadSegmentConnectionFromTwoRoadSegments(road_segment, &road_segment_next, road_width);
+}
+
+g_internal city::RenderBuffers
+road_render_buffers_create(Arena* arena, Buffer<city::RoadEdge> edge_buffer, F32 default_road_width,
+                           F32 road_height)
+{
     ScratchScope scratch = ScratchScope(0, 0);
-    Buffer<osm::Way> ways = network->ways_arr[osm::OsmKeyType_Road];
 
-    U64 total_road_segment_count = 0;
-    for (U32 way_index = 0; way_index < ways.size; way_index++)
+    Buffer<r_Vertex3D> vertex_buffer = BufferAlloc<r_Vertex3D>(arena, edge_buffer.size * 4);
+    Buffer<U32> index_buffer = BufferAlloc<U32>(arena, edge_buffer.size * 6);
+
+    U32 cur_vertex_idx = 0;
+    U32 cur_index_idx = 0;
+    for (auto& edge : edge_buffer)
     {
-        osm::Way* way = &ways.data[way_index];
-        // -1 get the number of road segments (because the first and last vertices are shared
-        // between segments)
-        total_road_segment_count += way->node_count - 1;
-    }
+        osm::UtmNode* start_node = osm::utm_node_find(edge.node_id_from);
+        osm::UtmNode* end_node = osm::utm_node_find(edge.node_id_to);
+        osm::WayNode* way_node = osm::way_find(edge.way_id);
+        osm::Way* way = &way_node->way;
 
-    // 6 vertices per road segment quad
-    U64 total_vert_count = total_road_segment_count * 4;
-    U64 total_index_count = total_road_segment_count * 6;
+        F32 road_width = tag_value_get(scratch.arena, S("width"), default_road_width, way->tags);
 
-    Buffer<r_Vertex3D> vertex_buffer = BufferAlloc<r_Vertex3D>(road->arena, total_vert_count);
-    Buffer<U32> index_buffer = BufferAlloc<U32>(road->arena, total_index_count);
+        RoadSegment road_segment;
+        RoadSegmentFromTwoRoadNodes(&road_segment, start_node, end_node, default_road_width);
 
-    U32 current_vertex_idx = 0;
-    U32 current_index_idx = 0;
-    for (U32 way_index = 0; way_index < ways.size; way_index++)
-    {
-        osm::Way* way = &ways.data[way_index];
-        //
-        // ~mgj: road width calculation
-        F32 road_width =
-            TagValueF32Get(scratch.arena, S("width"), road->default_road_width, way->tags);
-        Assert(road_width > 0.0f);
-
-        if (way->node_count < 2)
+        RoadEdge* prev_edge = edge.prev;
+        if (prev_edge)
         {
-            exit_with_error("expected at least one road segment comprising of two nodes");
+            connect_road_segments(&road_segment, prev_edge->node_id_from, prev_edge->node_id_to,
+                                  road_width);
         }
 
-        U64 node_first_id = way->node_ids[0];
-        U64 node_second_id = way->node_ids[1];
-
-        osm::UtmNode* node_first = osm::utm_node_find(node_first_id);
-        osm::UtmNode* node_second = osm::utm_node_find(node_second_id);
-
-        RoadSegment road_segment_prev;
-        RoadSegmentFromTwoRoadNodes(&road_segment_prev, node_first, node_second, road_width);
-
-        if (way->node_count == 2)
+        RoadEdge* next_edge = edge.next;
+        if (next_edge)
         {
-            // RoadIntersectionPointsFind(road, &road_segment_prev, way);
-            QuadToBufferAdd(&road_segment_prev, vertex_buffer, index_buffer, way->id,
-                            road->road_height, &current_vertex_idx, &current_index_idx);
+            connect_road_segments(&road_segment, next_edge->node_id_from, next_edge->node_id_to,
+                                  road_width);
         }
-        else
-        {
-            for (U32 node_idx = 1; node_idx < way->node_count - 1; node_idx++)
-            {
-                U64 node1_id = way->node_ids[node_idx];
-                U64 node2_id = way->node_ids[node_idx + 1];
 
-                osm::UtmNode* node1 = osm::utm_node_find(node1_id);
-                osm::UtmNode* node2 = osm::utm_node_find(node2_id);
-
-                RoadSegment road_segment_cur;
-                RoadSegmentFromTwoRoadNodes(&road_segment_cur, node1, node2, road_width);
-
-                RoadSegmentConnectionFromTwoRoadSegments(&road_segment_prev, &road_segment_cur,
-                                                         road_width);
-
-                // RoadIntersectionPointsFind(road, &road_segment_prev, way);
-                QuadToBufferAdd(&road_segment_prev, vertex_buffer, index_buffer, way->id,
-                                road->road_height, &current_vertex_idx, &current_index_idx);
-                if (node_idx == way->node_count - 2)
-                {
-                    // RoadIntersectionPointsFind(road, &road_segment_cur, way);
-                    QuadToBufferAdd(&road_segment_cur, vertex_buffer, index_buffer, way->id,
-                                    road->road_height, &current_vertex_idx, &current_index_idx);
-                }
-
-                road_segment_prev = road_segment_cur;
-                // TODO: what if road segment is consist of only one or two nodes
-            }
-        }
+        QuadToBufferAdd(&road_segment, vertex_buffer, index_buffer, edge.id, road_height,
+                        &cur_vertex_idx, &cur_index_idx);
     }
 
     city::RenderBuffers render_buffers = {.vertices = vertex_buffer, .indices = index_buffer};
@@ -471,7 +437,7 @@ RoadIntersectionPointsFind(Road* road, RoadSegment* in_out_segment, osm::Way* cu
         {
             osm::Way* way = &road_way_list->way;
             F32 road_width =
-                TagValueF32Get(scratch.arena, S("width"), road->default_road_width, way->tags);
+                tag_value_get(scratch.arena, S("width"), road->default_road_width, way->tags);
             if (way->id != current_road_way->id)
             {
                 // find adjacent nodes on crossing road
@@ -1439,9 +1405,12 @@ road_create(String8 texture_path, String8 cache_path, Rng2F64 bbox, r_SamplerInf
     Buffer<osm::RoadNodeList> node_hashmap = json_result.road_nodes;
     osm::structure_add(node_hashmap, http_data, osm::OsmKeyType_Road);
 
-    Map<S64, city::RoadEdge*>* edge_map = city::road_edge_map_create(road->arena);
+    EdgeStructure edge_structure = city::road_edge_structure_create(road->arena);
+    road->edge_map = edge_structure.edge_map;
 
-    city::RenderBuffers render_buffers = city::road_render_buffers_create(road, edge_map);
+    city::RenderBuffers render_buffers = city::road_render_buffers_create(
+        road->arena, edge_structure.edges, road->default_road_width, road->road_height);
+
     r_BufferInfo vertex_buffer_info =
         r_buffer_info_from_template_buffer(render_buffers.vertices, R_BufferType_Vertex);
     r_BufferInfo index_buffer_info =
@@ -1459,8 +1428,8 @@ road_create(String8 texture_path, String8 cache_path, Rng2F64 bbox, r_SamplerInf
     return road;
 }
 
-g_internal Map<S64, RoadEdge*>*
-road_edge_map_create(Arena* arena)
+g_internal EdgeStructure
+road_edge_structure_create(Arena* arena)
 {
     osm::Network* network = osm::g_network;
     Buffer<osm::Way> way_buf = network->ways_arr[osm::OsmKeyType_Road];
@@ -1468,6 +1437,7 @@ road_edge_map_create(Arena* arena)
     ChunkList<RoadEdge>* chunk_list = chunk_list_create<RoadEdge>(arena, 1024);
     for (const osm::Way& way : way_buf)
     {
+        RoadEdge* prev_edge = 0;
         for (S32 node_idx = 1; node_idx < way.node_count; node_idx++)
         {
             U64 prev_node_id = way.node_ids[node_idx - 1];
@@ -1478,17 +1448,13 @@ road_edge_map_create(Arena* arena)
             road_edge->way_id = way.id;
             road_edge->node_id_from = prev_node_id;
             road_edge->node_id_to = node_id;
+            road_edge->prev = prev_edge;
 
-            S32 prev_idx = node_idx - 2;
-            if (prev_idx >= 0)
+            if (prev_edge)
             {
-                road_edge->node_id_prev = way.node_ids[prev_idx];
+                prev_edge->next = road_edge;
             }
-            S32 next_idx = node_idx + 1;
-            if (next_idx < way_buf.size)
-            {
-                road_edge->node_id_next = way.node_ids[next_idx];
-            }
+            prev_edge = road_edge;
         }
     }
 
@@ -1499,7 +1465,8 @@ road_edge_map_create(Arena* arena)
         map_insert(road_edge_map, edge->id, edge);
     }
 
-    return road_edge_map;
+    EdgeStructure edge_structure = {.edges = road_edge_buf, .edge_map = *road_edge_map};
+    return edge_structure;
 }
 
 } // namespace city

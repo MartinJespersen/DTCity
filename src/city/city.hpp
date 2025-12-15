@@ -11,12 +11,18 @@ struct RenderBuffers
 
 struct RoadEdge
 {
+    RoadEdge* prev;
+    RoadEdge* next;
     S64 id;
     S64 node_id_from;
     S64 node_id_to;
-    S64 node_id_next;
-    S64 node_id_prev;
     S64 way_id;
+};
+
+struct EdgeStructure
+{
+    Buffer<RoadEdge> edges;
+    Map<S64, RoadEdge*> edge_map;
 };
 
 struct Road
@@ -29,6 +35,7 @@ struct Road
     F32 road_height;
     F32 default_road_width;
     F32 texture_scale;
+    Map<S64, RoadEdge*> edge_map;
 
     ////////////////////////////////
     // Graphics API
@@ -61,7 +68,7 @@ struct Car
     osm::UtmNode* source;
     osm::UtmNode* target;
     glm::vec3 dir;
-    F32 speed; //
+    F32 speed;
 };
 
 struct CarSim
@@ -109,7 +116,8 @@ struct Buildings
 g_internal void
 road_destroy(Road* road);
 g_internal city::RenderBuffers
-road_render_buffers_create(Road* road, Map<S64, city::RoadEdge*>* edge_map);
+road_render_buffers_create(Arena* arena, Buffer<city::RoadEdge> edge_buffer, F32 default_road_width,
+                           F32 road_height);
 
 g_internal void
 QuadToBufferAdd(RoadSegment* road_segment, Buffer<r_Vertex3D> buffer, Buffer<U32> indices,
@@ -163,7 +171,7 @@ sampler_from_cgltf_sampler(gltfw_Sampler sampler);
 g_internal Road*
 road_create(String8 texture_path, String8 cache_path, Rng2F64 bbox, r_SamplerInfo* sampler_info);
 
-g_internal Map<S64, RoadEdge*>*
-road_edge_map_create(Arena* arena);
+g_internal EdgeStructure
+road_edge_structure_create(Arena* arena);
 
 } // namespace city
