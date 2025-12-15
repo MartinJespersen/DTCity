@@ -110,7 +110,7 @@ neta_osm_to_edges_map_create(Arena* arena, String8 file_path, Rng2F64 utm_bbox)
         if (!list_res)
         {
             neta_EdgeList dummy_edge_list = {};
-            list_res = map_insert(edge_map, edge->osm_id, &dummy_edge_list);
+            list_res = map_insert(edge_map, edge->osm_id, dummy_edge_list);
         }
 
         SLLQueuePush(list_res->first, list_res->last, edge_node);

@@ -253,7 +253,7 @@ map_get(Map<K, V>* m, K key, V** out_value)
 
 template <typename K, typename V>
 static V*
-map_insert(Map<K, V>* m, K key, V* value)
+map_insert(Map<K, V>* m, K key, V& value)
 {
     using KeyPair = MapChunk<K, V>;
 
@@ -282,7 +282,7 @@ map_insert(Map<K, V>* m, K key, V* value)
 
     chunk = chunk_list->last;
     chunk->v[i].key = key;
-    chunk->v[i].value = *value;
+    chunk->v[i].value = value;
     chunk_list->total_count += 1;
     chunk->count += 1;
 

@@ -3,6 +3,22 @@
 namespace city
 {
 
+struct RenderBuffers
+{
+    Buffer<r_Vertex3D> vertices;
+    Buffer<U32> indices;
+};
+
+struct RoadEdge
+{
+    S64 id;
+    S64 node_id_from;
+    S64 node_id_to;
+    S64 node_id_next;
+    S64 node_id_prev;
+    S64 way_id;
+};
+
 struct Road
 {
     Arena* arena;
@@ -18,9 +34,6 @@ struct Road
     // Graphics API
     String8 texture_path;
     r_Model3DPipelineData handles;
-
-    Buffer<r_Vertex3D> vertex_buffer;
-    Buffer<U32> index_buffer;
     /////////////////////////
 };
 
@@ -95,9 +108,8 @@ struct Buildings
 
 g_internal void
 road_destroy(Road* road);
-g_internal void
-road_render_buffers_create(Road* road, Buffer<r_Vertex3D>* out_vertex_buffer,
-                           Buffer<U32>* out_index_buffer);
+g_internal city::RenderBuffers
+road_render_buffers_create(Road* road, Map<S64, city::RoadEdge*>* edge_map);
 
 g_internal void
 QuadToBufferAdd(RoadSegment* road_segment, Buffer<r_Vertex3D> buffer, Buffer<U32> indices,
@@ -115,8 +127,8 @@ CarUpdate(Arena* arena, CarSim* car, F32 time_delta);
 
 // ~mgj: Buildings
 g_internal Buildings*
-BuildingsCreate(String8 cache_path, String8 texture_path, F32 road_height, Rng2F64 bbox,
-                r_SamplerInfo* sampler_info, osm::Network* node_utm_structure);
+buildings_create(String8 cache_path, String8 texture_path, F32 road_height, Rng2F64 bbox,
+                 r_SamplerInfo* sampler_info);
 g_internal void
 building_destroy(Buildings* building);
 g_internal void
@@ -137,24 +149,21 @@ city_cache_write(String8 cache_file, String8 cache_meta_file, String8 content,
 g_internal U64
 HashU64FromStr8(String8 str);
 g_internal B32
-city_cache_needs_update(String8 data_file_str, String8 cache_meta_file_path);
+cache_needs_update(String8 data_file_str, String8 cache_meta_file_path);
 g_internal B32
-city_cache_needs_update(String8 data_file_str, String8 cache_meta_file_path);
+cache_needs_update(String8 data_file_str, String8 cache_meta_file_path);
 g_internal String8
-city_str8_from_bbox(Arena* arena, Rng2F64 bbox);
+str8_from_bbox(Arena* arena, Rng2F64 bbox);
 g_internal r_Model3DPipelineDataList
-city_land_create(Arena* arena, String8 glb_path);
+land_create(Arena* arena, String8 glb_path);
 g_internal void
-city_land_destroy(r_Model3DPipelineDataList list);
+land_destroy(r_Model3DPipelineDataList list);
 g_internal r_SamplerInfo
-city_sampler_from_cgltf_sampler(gltfw_Sampler sampler);
+sampler_from_cgltf_sampler(gltfw_Sampler sampler);
 g_internal Road*
-city_road_create(String8 texture_path, String8 cache_path, Rng2F64 bbox,
-                 r_SamplerInfo* sampler_info);
+road_create(String8 texture_path, String8 cache_path, Rng2F64 bbox, r_SamplerInfo* sampler_info);
 
-g_internal void
-city_road_edge_map_create()
-{
-}
+g_internal Map<S64, RoadEdge*>*
+road_edge_map_create(Arena* arena);
 
 } // namespace city

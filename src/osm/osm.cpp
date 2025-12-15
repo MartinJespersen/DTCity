@@ -62,6 +62,7 @@ osm::structure_add(Buffer<osm::RoadNodeList> node_hashmap, String8 json,
 
     network->ways_arr[osm_key_type] = ways;
 }
+
 g_internal osm::RoadNode*
 osm::node_find(Buffer<osm::RoadNodeList> node_hashmap, U64 node_id)
 {

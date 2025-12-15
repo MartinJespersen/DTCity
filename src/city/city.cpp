@@ -81,9 +81,8 @@ TagValueF32Get(Arena* arena, String8 key, F32 default_width, Buffer<osm::Tag> ta
     return road_width;
 }
 
-g_internal void
-road_render_buffers_create(Road* road, Buffer<r_Vertex3D>* out_vertex_buffer,
-                           Buffer<U32>* out_index_buffer)
+g_internal city::RenderBuffers
+road_render_buffers_create(Road* road, Map<S64, city::RoadEdge*>* edge_map)
 {
     osm::Network* network = osm::g_network;
     ScratchScope scratch = ScratchScope(0, 0);
@@ -167,8 +166,9 @@ road_render_buffers_create(Road* road, Buffer<r_Vertex3D>* out_vertex_buffer,
             }
         }
     }
-    *out_vertex_buffer = vertex_buffer;
-    *out_index_buffer = index_buffer;
+
+    city::RenderBuffers render_buffers = {.vertices = vertex_buffer, .indices = index_buffer};
+    return render_buffers;
 }
 
 g_internal U64
@@ -178,7 +178,7 @@ HashU64FromStr8(String8 str)
 }
 
 g_internal B32
-city_cache_needs_update(String8 cache_data_file, String8 cache_meta_file)
+cache_needs_update(String8 cache_data_file, String8 cache_meta_file)
 {
     ScratchScope scratch = ScratchScope(0, 0);
     U64 file_hash = 0;
@@ -355,7 +355,7 @@ city_cache_read(Arena* arena, String8 cache_file, String8 cache_meta_file, Strin
         }
         os_file_close(file_handle);
 
-        B32 needs_update = city_cache_needs_update(hash_input, cache_meta_file);
+        B32 needs_update = cache_needs_update(hash_input, cache_meta_file);
         read_from_cache = !needs_update;
     }
 
@@ -622,7 +622,7 @@ CarSimCreate(String8 asset_path, String8 texture_path, U32 car_count, Road* road
     // parse gltf file
     String8 gltf_path = Str8PathFromStr8List(scratch.arena, {asset_path, S("cars/scene.gltf")});
     CgltfResult parsed_result = gltfw_gltf_read(arena, gltf_path, S("Car.013"));
-    car_sim->sampler_info = city_sampler_from_cgltf_sampler(parsed_result.sampler);
+    car_sim->sampler_info = sampler_from_cgltf_sampler(parsed_result.sampler);
     car_sim->vertex_buffer =
         r_buffer_info_from_template_buffer(parsed_result.vertex_buffer, R_BufferType_Vertex);
     car_sim->index_buffer =
@@ -719,9 +719,10 @@ CarUpdate(Arena* arena, CarSim* car, F32 time_delta)
 // ~mgj: Buildings
 
 g_internal Buildings*
-BuildingsCreate(String8 cache_path, String8 texture_path, F32 road_height, Rng2F64 bbox,
-                r_SamplerInfo* sampler_info, osm::Network* node_utm_structure)
+buildings_create(String8 cache_path, String8 texture_path, F32 road_height, Rng2F64 bbox,
+                 r_SamplerInfo* sampler_info)
 {
+    osm::Network* network = osm::g_network;
     ScratchScope scratch = ScratchScope(0, 0);
     Arena* arena = ArenaAlloc();
     Buildings* buildings = PushStruct(arena, Buildings);
@@ -749,7 +750,7 @@ BuildingsCreate(String8 cache_path, String8 texture_path, F32 road_height, Rng2F
             Str8PathFromStr8List(scratch.arena, {cache_path, buildings->cache_file_name});
         String8 cache_meta_file = PushStr8Cat(scratch.arena, cache_data_file, S(".meta"));
 
-        String8 input_str = city_str8_from_bbox(scratch.arena, bbox);
+        String8 input_str = str8_from_bbox(scratch.arena, bbox);
 
         Result<String8> cache_read_result =
             city_cache_read(scratch.arena, cache_data_file, cache_meta_file, input_str);
@@ -791,7 +792,7 @@ BuildingsCreate(String8 cache_path, String8 texture_path, F32 road_height, Rng2F
         r_texture_load_async(sampler_info, buildings->roof_texture_path, R_PipelineUsageType_3D);
 
     BuildingRenderInfo render_info;
-    city::BuildingsBuffersCreate(arena, road_height, &render_info, node_utm_structure);
+    city::BuildingsBuffersCreate(arena, road_height, &render_info, network);
     r_BufferInfo vertex_buffer_info =
         r_buffer_info_from_template_buffer(render_info.vertex_buffer, R_BufferType_Vertex);
     r_BufferInfo index_buffer_info =
@@ -1183,7 +1184,7 @@ EarClipping(Arena* arena, Buffer<Vec2F32> node_buffer)
 }
 
 g_internal void
-city_land_destroy(r_Model3DPipelineDataList list)
+land_destroy(r_Model3DPipelineDataList list)
 {
     for (r_Model3DPipelineDataNode* data = list.first; data; data = data->next)
     {
@@ -1194,7 +1195,7 @@ city_land_destroy(r_Model3DPipelineDataList list)
 }
 
 g_internal r_Model3DPipelineDataList
-city_land_create(Arena* arena, String8 glb_path)
+land_create(Arena* arena, String8 glb_path)
 {
     ScratchScope scratch = ScratchScope(&arena, 1);
 
@@ -1206,7 +1207,7 @@ city_land_create(Arena* arena, String8 glb_path)
         for (U32 i = 0; i < glb_data.textures.size; ++i)
         {
             gltfw_Texture* texture = &glb_data.textures.data[i];
-            r_SamplerInfo sampler_info = city::city_sampler_from_cgltf_sampler(texture->sampler);
+            r_SamplerInfo sampler_info = city::sampler_from_cgltf_sampler(texture->sampler);
             tex_handles.data[i] = r_texture_handle_create(&sampler_info, R_PipelineUsageType_3D);
             r_texture_gpu_upload_sync(tex_handles.data[i], texture->tex_buf);
         }
@@ -1240,7 +1241,7 @@ city_land_create(Arena* arena, String8 glb_path)
 }
 
 g_internal r_SamplerInfo
-city_sampler_from_cgltf_sampler(gltfw_Sampler sampler)
+sampler_from_cgltf_sampler(gltfw_Sampler sampler)
 {
     r_Filter min_filter = R_Filter_Nearest;
     r_Filter mag_filter = R_Filter_Nearest;
@@ -1366,7 +1367,7 @@ city_sampler_from_cgltf_sampler(gltfw_Sampler sampler)
 }
 
 g_internal String8
-city_str8_from_bbox(Arena* arena, Rng2F64 bbox)
+str8_from_bbox(Arena* arena, Rng2F64 bbox)
 {
     String8 str = {.str = (U8*)&bbox, .size = sizeof(Rng2F64)};
     String8 str_copy = PushStr8Copy(arena, str);
@@ -1374,8 +1375,7 @@ city_str8_from_bbox(Arena* arena, Rng2F64 bbox)
 }
 
 g_internal Road*
-city_road_create(String8 texture_path, String8 cache_path, Rng2F64 bbox,
-                 r_SamplerInfo* sampler_info)
+road_create(String8 texture_path, String8 cache_path, Rng2F64 bbox, r_SamplerInfo* sampler_info)
 {
     ScratchScope scratch = ScratchScope(0, 0);
     Arena* arena = ArenaAlloc();
@@ -1407,7 +1407,7 @@ city_road_create(String8 texture_path, String8 cache_path, Rng2F64 bbox,
         Str8PathFromStr8List(scratch.arena, {cache_path, road->openapi_data_file_name});
     String8 cache_meta_file = PushStr8Cat(scratch.arena, cache_data_file, S(".meta"));
 
-    String8 input_str = city_str8_from_bbox(scratch.arena, bbox);
+    String8 input_str = str8_from_bbox(scratch.arena, bbox);
 
     Result<String8> cache_read_result =
         city::city_cache_read(scratch.arena, cache_data_file, cache_meta_file, input_str);
@@ -1439,11 +1439,13 @@ city_road_create(String8 texture_path, String8 cache_path, Rng2F64 bbox,
     Buffer<osm::RoadNodeList> node_hashmap = json_result.road_nodes;
     osm::structure_add(node_hashmap, http_data, osm::OsmKeyType_Road);
 
-    city::road_render_buffers_create(road, &road->vertex_buffer, &road->index_buffer);
+    Map<S64, city::RoadEdge*>* edge_map = city::road_edge_map_create(road->arena);
+
+    city::RenderBuffers render_buffers = city::road_render_buffers_create(road, edge_map);
     r_BufferInfo vertex_buffer_info =
-        r_buffer_info_from_template_buffer(road->vertex_buffer, R_BufferType_Vertex);
+        r_buffer_info_from_template_buffer(render_buffers.vertices, R_BufferType_Vertex);
     r_BufferInfo index_buffer_info =
-        r_buffer_info_from_template_buffer(road->index_buffer, R_BufferType_Index);
+        r_buffer_info_from_template_buffer(render_buffers.indices, R_BufferType_Index);
 
     road->texture_path = Str8PathFromStr8List(road->arena, {texture_path, S("road_texture.ktx2")});
 
@@ -1452,9 +1454,52 @@ city_road_create(String8 texture_path, String8 cache_path, Rng2F64 bbox,
     r_Handle vertex_handle = r_buffer_load(&vertex_buffer_info);
     r_Handle index_handle = r_buffer_load(&index_buffer_info);
 
-    road->handles = {vertex_handle, index_handle, texture_handle, road->index_buffer.size, 0};
+    road->handles = {vertex_handle, index_handle, texture_handle, render_buffers.indices.size, 0};
 
     return road;
+}
+
+g_internal Map<S64, RoadEdge*>*
+road_edge_map_create(Arena* arena)
+{
+    osm::Network* network = osm::g_network;
+    Buffer<osm::Way> way_buf = network->ways_arr[osm::OsmKeyType_Road];
+
+    ChunkList<RoadEdge>* chunk_list = chunk_list_create<RoadEdge>(arena, 1024);
+    for (const osm::Way& way : way_buf)
+    {
+        for (S32 node_idx = 1; node_idx < way.node_count; node_idx++)
+        {
+            U64 prev_node_id = way.node_ids[node_idx - 1];
+            U64 node_id = way.node_ids[node_idx];
+
+            RoadEdge* road_edge = chunk_list_get_next(arena, chunk_list);
+            road_edge->id = random_u64();
+            road_edge->way_id = way.id;
+            road_edge->node_id_from = prev_node_id;
+            road_edge->node_id_to = node_id;
+
+            S32 prev_idx = node_idx - 2;
+            if (prev_idx >= 0)
+            {
+                road_edge->node_id_prev = way.node_ids[prev_idx];
+            }
+            S32 next_idx = node_idx + 1;
+            if (next_idx < way_buf.size)
+            {
+                road_edge->node_id_next = way.node_ids[next_idx];
+            }
+        }
+    }
+
+    Buffer<RoadEdge> road_edge_buf = buffer_from_chunk_list(arena, chunk_list);
+    Map<S64, RoadEdge*>* road_edge_map = map_create<S64, RoadEdge*>(arena, 1024);
+    for (RoadEdge* edge = road_edge_buf.begin(); edge < road_edge_buf.end(); edge++)
+    {
+        map_insert(road_edge_map, edge->id, edge);
+    }
+
+    return road_edge_map;
 }
 
 } // namespace city

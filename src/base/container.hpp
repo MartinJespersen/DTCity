@@ -41,6 +41,18 @@ template <typename T> struct Buffer
     {
         return &data[index];
     }
+
+    T*
+    begin()
+    {
+        return data;
+    }
+
+    T*
+    end()
+    {
+        return data + size;
+    }
 };
 
 template <typename T>
@@ -178,7 +190,7 @@ map_get(Map<K, V>* m, K key, V** out_value);
 
 template <typename K, typename V>
 static V*
-map_insert(Map<K, V>* m, K key, V* value);
+map_insert(Map<K, V>* m, K key, V& value);
 
 // private map functions
 static inline U64
