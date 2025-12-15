@@ -117,31 +117,33 @@ struct Network
 
 ///////////////////////
 // ~mgj: Globals
-static Network* g_network = {};
-read_only static UtmNode g_road_node_utm = {nullptr, 0, {0.0f, 0.0f}, {}, {}};
+g_internal Network* g_network = {};
+read_only g_internal UtmNode g_road_node_utm = {nullptr, 0, {0.0f, 0.0f}, {}, {}};
 ///////////////////////
 
-// Function declarations
-static void
+// Public
+g_internal void
 structure_init(U64 node_hashmap_size, U64 way_hashmap_size, Rng2F64 utm_coords);
-static void
+g_internal void
 structure_cleanup();
-static void
+g_internal void
 structure_add(Buffer<RoadNodeList> node_hashmap, String8 json, OsmKeyType key_type);
-static TagResult
+g_internal TagResult
 tag_find(Arena* arena, Buffer<Tag> tags, String8 tag_to_find);
-static WayNode*
+g_internal WayNode*
 way_find(U64 way_id);
-static UtmNode*
+g_internal UtmNode*
 utm_node_find(U64 node_id);
-static UtmNode*
+g_internal UtmNode*
 random_utm_node_get();
-static B32
-node_hashmap_insert(U64 node_id, Way* way, UtmNode** out);
-static RoadNode*
-node_find(Buffer<RoadNodeList> node_hashmap, U64 node_id);
 
-static UtmNode*
+g_internal UtmNode*
 random_neighbour_node_get(UtmNode* node);
 
+// Privates
+g_internal RoadNode*
+node_find(Buffer<RoadNodeList> node_hashmap, U64 node_id);
+
+g_internal B32
+node_hashmap_insert(U64 node_id, Way* way, UtmNode** out);
 } // namespace osm
