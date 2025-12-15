@@ -1,7 +1,7 @@
 namespace wrapper
 {
 
-static osm_RoadNodeParseResult
+static osm::RoadNodeParseResult
 node_buffer_from_simd_json(Arena* arena, String8 json, U64 node_hashmap_size)
 {
     simdjson::ondemand::parser parser;
@@ -11,13 +11,13 @@ node_buffer_from_simd_json(Arena* arena, String8 json, U64 node_hashmap_size)
     U32 error_num = 0;
     bool error_ret = false;
 
-    Buffer<osm_RoadNodeList> nodes = {};
+    Buffer<osm::RoadNodeList> nodes = {};
     if (error)
     {
         goto early_ret;
     }
 
-    nodes = BufferAlloc<osm_RoadNodeList>(arena, node_hashmap_size);
+    nodes = BufferAlloc<osm::RoadNodeList>(arena, node_hashmap_size);
     {
         simdjson::ondemand::array elements;
         error = doc["elements"].get(elements);
@@ -38,7 +38,7 @@ node_buffer_from_simd_json(Arena* arena, String8 json, U64 node_hashmap_size)
 
             if (node_key == "node")
             {
-                osm_RoadNode* node = PushStruct(arena, osm_RoadNode);
+                osm::RoadNode* node = PushStruct(arena, osm::RoadNode);
                 U64 id;
                 F64 lat, lon;
                 auto item_value = item.value();
@@ -64,11 +64,11 @@ early_ret:
         DEBUG_LOG("Error in node buffer parsing\n");
         error_ret = true;
     }
-    osm_RoadNodeParseResult res = {nodes, error_ret};
+    osm::RoadNodeParseResult res = {nodes, error_ret};
     return res;
 }
 
-static osm_WayParseResult
+static osm::WayParseResult
 way_buffer_from_simd_json(Arena* arena, String8 json)
 {
     simdjson::dom::parser parser;
@@ -78,7 +78,7 @@ way_buffer_from_simd_json(Arena* arena, String8 json)
     U32 error_num = 0;
     bool error_ret = false;
 
-    Buffer<osm_Way> way_buffer = {};
+    Buffer<osm::Way> way_buffer = {};
     U64 way_index = 0;
     U64 way_count = 0;
 
@@ -101,7 +101,7 @@ way_buffer_from_simd_json(Arena* arena, String8 json)
         }
     }
 
-    way_buffer = BufferAlloc<osm_Way>(arena, way_count);
+    way_buffer = BufferAlloc<osm::Way>(arena, way_count);
     for (auto elem : elements)
     {
         std::string_view elem_key;
@@ -114,7 +114,7 @@ way_buffer_from_simd_json(Arena* arena, String8 json)
         {
             // ~mgj: Insert into hashmap
             U64 way_id = elem["id"].get_uint64();
-            osm_Way* way = &way_buffer.data[way_index];
+            osm::Way* way = &way_buffer.data[way_index];
 
             way->id = way_id;
             // Get the nodes array and count elements
@@ -140,7 +140,7 @@ way_buffer_from_simd_json(Arena* arena, String8 json)
 
             // Reset and iterate again to store the tags
             tags_object = elem["tags"].get_object();
-            way->tags = BufferAlloc<osm_Tag>(arena, tag_count);
+            way->tags = BufferAlloc<osm::Tag>(arena, tag_count);
             U64 tag_cur_index = 0;
             for (auto tag : tags_object)
             {
@@ -170,7 +170,7 @@ early_ret:
         error_ret = true;
     }
 
-    osm_WayParseResult res = {way_buffer, error_ret};
+    osm::WayParseResult res = {way_buffer, error_ret};
     return res;
 }
 

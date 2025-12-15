@@ -27,14 +27,14 @@ struct Road
 struct AdjacentNodeLL
 {
     AdjacentNodeLL* next;
-    osm_UtmNode* node;
+    osm::UtmNode* node;
 };
 
 struct RoadCrossSection
 {
     Vec2F32 top;
     Vec2F32 btm;
-    osm_UtmNode* node;
+    osm::UtmNode* node;
 };
 struct RoadSegment
 {
@@ -45,8 +45,8 @@ struct RoadSegment
 struct Car
 {
     glm::vec3 cur_pos;
-    osm_UtmNode* source;
-    osm_UtmNode* target;
+    osm::UtmNode* source;
+    osm::UtmNode* target;
     glm::vec3 dir;
     F32 speed; //
 };
@@ -103,8 +103,8 @@ g_internal void
 QuadToBufferAdd(RoadSegment* road_segment, Buffer<r_Vertex3D> buffer, Buffer<U32> indices,
                 U64 way_id, F32 road_height, U32* cur_vertex_idx, U32* cur_index_idx);
 g_internal void
-RoadIntersectionPointsFind(Road* road, RoadSegment* in_out_segment, osm_Way* current_road_way,
-                           osm_Network* node_utm_structure);
+RoadIntersectionPointsFind(Road* road, RoadSegment* in_out_segment, osm::Way* current_road_way,
+                           osm::Network* node_utm_structure);
 // ~mgj: Cars
 g_internal CarSim*
 CarSimCreate(String8 asset_path, String8 texture_path, U32 car_count, Road* road);
@@ -116,12 +116,12 @@ CarUpdate(Arena* arena, CarSim* car, F32 time_delta);
 // ~mgj: Buildings
 g_internal Buildings*
 BuildingsCreate(String8 cache_path, String8 texture_path, F32 road_height, Rng2F64 bbox,
-                r_SamplerInfo* sampler_info, osm_Network* node_utm_structure);
+                r_SamplerInfo* sampler_info, osm::Network* node_utm_structure);
 g_internal void
 building_destroy(Buildings* building);
 g_internal void
 BuildingsBuffersCreate(Arena* arena, F32 road_height, BuildingRenderInfo* out_render_info,
-                       osm_Network* node_utm_structure);
+                       osm::Network* node_utm_structure);
 g_internal Buffer<U32>
 EarClipping(Arena* arena, Buffer<Vec2F32> node_buffer);
 

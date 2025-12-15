@@ -208,7 +208,7 @@ dt_main_loop(void* ptr)
 
     U64 node_hashmap_size = 100;
     U64 way_hashmap_size = 100;
-    osm_structure_init(node_hashmap_size, way_hashmap_size, utm_coords);
+    osm::structure_init(node_hashmap_size, way_hashmap_size, utm_coords);
 
     String8 cache_dir = ctx->data_subdirs.data[dt_DataDirType::Cache];
     String8 texture_dir = ctx->data_subdirs.data[dt_DataDirType::Texture];
@@ -219,7 +219,7 @@ dt_main_loop(void* ptr)
 
     ui_camera_init(ctx->camera);
     ctx->buildings = city::BuildingsCreate(cache_dir, texture_dir, ctx->road->road_height,
-                                           input->bbox, &sampler_info, osm_g_network);
+                                           input->bbox, &sampler_info, osm::g_network);
     city::Buildings* buildings = ctx->buildings;
     ctx->car_sim = city::CarSimCreate(asset_dir, texture_dir, 100, ctx->road);
     city::CarSim* car_sim = ctx->car_sim;
@@ -246,16 +246,16 @@ dt_main_loop(void* ptr)
         {
             ui_camera_update(ctx->camera, ctx->io, ctx->time->delta_time_sec, framebuffer_dim);
             U64 hovered_object_id = r_latest_hovered_object_id_get();
-            osm_WayNode* way_node = osm_way_find(hovered_object_id);
+            osm::WayNode* way_node = osm::way_find(hovered_object_id);
 
             if (way_node)
             {
-                osm_Way* way = &way_node->way;
+                osm::Way* way = &way_node->way;
                 bool open = true;
                 ImGui::Begin("Object Info", &open, ImGuiWindowFlags_AlwaysAutoResize);
                 for (U32 tag_idx = 0; tag_idx < way->tags.size; tag_idx += 1)
                 {
-                    osm_Tag* tag = &way->tags.data[tag_idx];
+                    osm::Tag* tag = &way->tags.data[tag_idx];
                     ImGui::Text("%s: %s", (char*)tag->key.str, (char*)tag->value.str);
                 }
 

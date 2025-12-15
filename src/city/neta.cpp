@@ -14,7 +14,7 @@ neta_edge_in_osm_area(Arena* arena, simdjson::ondemand::document& doc, Rng2F64 u
         S64 osm_id = 0;
         err |= props["osm_id"].get_int64().get(osm_id);
 
-        osm_WayNode* osm_way = osm_way_find(osm_id);
+        osm::WayNode* osm_way = osm::way_find(osm_id);
         if (!osm_way) // do not save road ways not in the osm database
             continue;
 
