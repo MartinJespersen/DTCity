@@ -12,6 +12,8 @@ build
 *.tar.gz
 *.geojson
 *.gpkg
+*.sqlite
+*.qmd
 out
 .cache
 .venv

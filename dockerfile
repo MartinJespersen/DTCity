@@ -1,5 +1,5 @@
 # Build stage
-FROM ubuntu:22.04 AS builder
+FROM ubuntu:20.04 AS builder
 
 # Install build dependencies
 RUN apt-get update && apt-get install -y \
@@ -24,9 +24,6 @@ ENV PATH="${VCPKG_ROOT}:${PATH}"
 # Set working directory
 WORKDIR /app
 
-# Copy project files
-COPY --exclude=build . .
-
 # Create build directory and configure
 RUN cmake --preset=release-linux
 
@@ -34,7 +31,7 @@ RUN cmake --preset=release-linux
 RUN cmake --build build
 
 # Runtime stage
-FROM ubuntu:22.04 AS runtime
+FROM ubuntu:20.04 AS runtime
 
 # Copy built application from builder
 COPY --from=builder /app/build/city /app/build/city
