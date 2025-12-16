@@ -294,9 +294,6 @@ static void
 VK_Model3DInstanceBucketAdd(VK_BufferAllocation* vertex_buffer_allocation,
                             VK_BufferAllocation* index_buffer_allocation,
                             VkDescriptorSet texture_handle, r_BufferInfo* instance_buffer_info);
-static void
-VK_Model3DInstanceDraw(r_Handle texture_handle, r_Handle vertex_buffer_handle,
-                       r_Handle index_buffer_handle, r_BufferInfo* instance_buffer);
 static VK_Pipeline
 VK_Model3DInstancePipelineCreate(VK_Context* vk_ctx, String8 shader_path);
 static VK_Pipeline

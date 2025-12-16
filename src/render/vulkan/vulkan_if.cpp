@@ -414,3 +414,23 @@ r_texture_gpu_upload_sync(r_Handle tex_handle, Buffer<U8> tex_buf)
     asset->is_loaded = true;
     result = vkQueueSubmit2(vk_ctx->graphics_queue, 1, &submit_info, NULL);
 }
+
+g_internal void
+r_model_3D_instance_draw(r_Handle texture_handle, r_Handle vertex_buffer_handle,
+                         r_Handle index_buffer_handle, r_BufferInfo* instance_buffer)
+{
+    VK_Context* vk_ctx = VK_CtxGet();
+    VK_AssetManager* asset_manager = vk_ctx->asset_manager;
+    r_AssetItem<VK_Buffer>* asset_vertex_buffer =
+        VK_AssetManagerItemGet(&asset_manager->buffer_list, vertex_buffer_handle);
+    r_AssetItem<VK_Buffer>* asset_index_buffer =
+        VK_AssetManagerItemGet(&asset_manager->buffer_list, index_buffer_handle);
+    r_AssetItem<VK_Texture>* asset_texture = VK_AssetManagerTextureItemGet(texture_handle);
+
+    if (asset_index_buffer->is_loaded && asset_texture->is_loaded)
+    {
+        VK_Model3DInstanceBucketAdd(&asset_vertex_buffer->item.buffer_alloc,
+                                    &asset_index_buffer->item.buffer_alloc,
+                                    asset_texture->item.desc_set, instance_buffer);
+    }
+}

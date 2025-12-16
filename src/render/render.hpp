@@ -208,3 +208,7 @@ r_model_3d_draw(r_Model3DPipelineData pipeline_input, B32 depth_test_per_draw_ca
 
 g_internal r_Handle
 r_buffer_load(r_BufferInfo* buffer_info);
+
+g_internal void
+r_model_3D_instance_draw(r_Handle texture_handle, r_Handle vertex_buffer_handle,
+                         r_Handle index_buffer_handle, r_BufferInfo* instance_buffer);

@@ -291,8 +291,8 @@ dt_main_loop(void* ptr)
             CarUpdate(vk_ctx->draw_frame_arena, car_sim, ctx->time->delta_time_sec);
         r_BufferInfo car_instance_buffer_info =
             r_buffer_info_from_template_buffer(instance_buffer, R_BufferType_Vertex);
-        VK_Model3DInstanceDraw(car_sim->texture_handle, car_sim->vertex_handle,
-                               car_sim->index_handle, &car_instance_buffer_info);
+        r_model_3D_instance_draw(car_sim->texture_handle, car_sim->vertex_handle,
+                                 car_sim->index_handle, &car_instance_buffer_info);
 
         r_render_frame(framebuffer_dim, &io_ctx->framebuffer_resized, ctx->camera,
                        io_ctx->mouse_pos_cur_s64);
