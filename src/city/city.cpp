@@ -81,17 +81,6 @@ tag_value_get(Arena* arena, String8 key, F32 default_width, Buffer<osm::Tag> tag
     return road_width;
 }
 
-g_internal void
-connect_road_segments(RoadSegment* road_segment, U64 from_id, U64 to_id, F32 road_width)
-{
-    osm::UtmNode* start_node_next = osm::utm_node_find(from_id);
-    osm::UtmNode* end_node_next = osm::utm_node_find(to_id);
-    RoadSegment road_segment_next;
-    RoadSegmentFromTwoRoadNodes(&road_segment_next, start_node_next, end_node_next, road_width);
-
-    RoadSegmentConnectionFromTwoRoadSegments(road_segment, &road_segment_next, road_width);
-}
-
 g_internal city::RenderBuffers
 road_render_buffers_create(Arena* arena, Buffer<city::RoadEdge> edge_buffer, F32 default_road_width,
                            F32 road_height)
@@ -118,15 +107,23 @@ road_render_buffers_create(Arena* arena, Buffer<city::RoadEdge> edge_buffer, F32
         RoadEdge* prev_edge = edge.prev;
         if (prev_edge)
         {
-            connect_road_segments(&road_segment, prev_edge->node_id_from, prev_edge->node_id_to,
-                                  road_width);
+            osm::UtmNode* start_node_prev = osm::utm_node_find(prev_edge->node_id_from);
+            osm::UtmNode* end_node_prev = osm::utm_node_find(prev_edge->node_id_to);
+            RoadSegment road_segment_prev;
+            RoadSegmentFromTwoRoadNodes(&road_segment_prev, start_node_prev, end_node_prev,
+                                        road_width);
+            RoadSegmentConnectionFromTwoRoadSegments(&road_segment_prev, &road_segment, road_width);
         }
 
         RoadEdge* next_edge = edge.next;
         if (next_edge)
         {
-            connect_road_segments(&road_segment, next_edge->node_id_from, next_edge->node_id_to,
-                                  road_width);
+            osm::UtmNode* start_node_next = osm::utm_node_find(next_edge->node_id_from);
+            osm::UtmNode* end_node_next = osm::utm_node_find(next_edge->node_id_to);
+            RoadSegment road_segment_next;
+            RoadSegmentFromTwoRoadNodes(&road_segment_next, start_node_next, end_node_next,
+                                        road_width);
+            RoadSegmentConnectionFromTwoRoadSegments(&road_segment, &road_segment_next, road_width);
         }
 
         QuadToBufferAdd(&road_segment, vertex_buffer, index_buffer, edge.id, road_height,
