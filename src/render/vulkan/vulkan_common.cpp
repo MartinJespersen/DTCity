@@ -177,10 +177,7 @@ VK_SurfaceCreate(VK_Context* vk_ctx, io_IO* io)
 
     VkResult result =
         glfwCreateWindowSurface(vk_ctx->instance, io->window, nullptr, &vk_ctx->surface);
-    if (result != VK_SUCCESS)
-    {
-        exit_with_error("failed to create window surface!");
-    }
+    VK_CHECK_RESULT(result);
 }
 
 static void

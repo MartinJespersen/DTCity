@@ -219,8 +219,7 @@ dt_main_loop(void* ptr)
         io_new_frame(io_ctx);
         r_new_frame();
         ImGui::NewFrame();
-        Vec2U32 framebuffer_dim = {.x = (U32)io_ctx->framebuffer_width,
-                                   .y = (U32)io_ctx->framebuffer_height};
+        Vec2U32 framebuffer_dim = {(U32)io_ctx->framebuffer_width, (U32)io_ctx->framebuffer_height};
 
         {
             ui_camera_update(ctx->camera, ctx->io, ctx->time->delta_time_sec, framebuffer_dim);
