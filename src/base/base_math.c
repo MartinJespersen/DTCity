@@ -33,6 +33,7 @@ static Vec2F32 mul_2f32(Vec2F32 a, Vec2F32 b) {
   Vec2F32 c = {a.x * b.x, a.y * b.y};
   return c;
 }
+
 static Vec2F32 Div2F32(Vec2F32 a, Vec2F32 b) {
   Vec2F32 c = {a.x / b.x, a.y / b.y};
   return c;
@@ -70,6 +71,12 @@ static Vec2F32 mix_2f32(Vec2F32 a, Vec2F32 b, F32 t) {
   return c;
 }
 
+static Vec2F64 vec_2f64(F64 x, F64 y) {
+  Vec2F64 v = {x, y};
+  return v;
+}
+
+// signed integers
 static Vec2S64 vec_2s64(S64 x, S64 y) {
   Vec2S64 v = {x, y};
   return v;

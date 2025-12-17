@@ -79,7 +79,7 @@ neta_edge_in_osm_area(Arena* arena, simdjson::ondemand::document& doc, Rng2F64 u
 }
 
 static Map<S64, neta_EdgeList>*
-neta_osm_to_edges_map_create(Arena* arena, String8 file_path, Rng2F64 utm_bbox)
+neta_osm_way_to_edges_map_create(Arena* arena, String8 file_path, Rng2F64 utm_bbox)
 {
     using namespace simdjson;
 

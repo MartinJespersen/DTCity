@@ -227,7 +227,7 @@ dt_main_loop(void* ptr)
     String8 neta_path =
         Str8PathFromStr8List(scratch.arena, {ctx->data_dir, S("netascore.geojson")});
     Map<S64, neta_EdgeList>* edge_map =
-        neta_osm_to_edges_map_create(scratch.arena, neta_path, utm_coords);
+        neta_osm_way_to_edges_map_create(scratch.arena, neta_path, utm_coords);
     if (!edge_map)
     {
         exit_with_error("Failed to initialize neta");
@@ -257,6 +257,12 @@ dt_main_loop(void* ptr)
                 for (osm::Tag& tag : way->tags)
                 {
                     ImGui::Text("%s: %s", (char*)tag.key.str, (char*)tag.value.str);
+                }
+
+                neta_Edge* chosen_edge = city::neta_edge_from_road_edge(edge, edge_map);
+                if (chosen_edge)
+                {
+                    ImGui::Text("Edge ID: %lld", chosen_edge->edge_id);
                 }
                 ImVec2 window_size = ImGui::GetWindowSize();
                 ImVec2 window_pos = ImVec2((F32)framebuffer_dim.x - window_size.x, 0);

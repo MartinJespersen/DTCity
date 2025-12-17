@@ -1464,4 +1464,39 @@ road_edge_structure_create(Arena* arena)
     return edge_structure;
 }
 
+g_internal neta_Edge*
+neta_edge_from_road_edge(RoadEdge* road_edge, Map<S64, neta_EdgeList>* edge_list_map)
+{
+    S64 from_id = road_edge->node_id_from;
+    S64 to_id = road_edge->node_id_to;
+
+    osm::UtmNode* from_node = osm::utm_node_find(from_id);
+    osm::UtmNode* to_node = osm::utm_node_find(to_id);
+    Vec2F64 from_node_coord = vec_2f64(from_node->pos.x, from_node->pos.y);
+    Vec2F64 to_node_coord = vec_2f64(to_node->pos.x, to_node->pos.y);
+
+    S64 way_id = road_edge->way_id;
+    neta_EdgeList* edge_list = map_get(edge_list_map, way_id);
+
+    F64 smallest_dist = max_f64;
+    neta_Edge* chosen_edge = {};
+    for (neta_EdgeNode* edge_node = edge_list->first; edge_node; edge_node = edge_node->next)
+    {
+        neta_Edge* edge = edge_node->edge;
+        for (Vec2F64& coord : edge->coords)
+        {
+            F64 from_dist = dist_2f64(coord, from_node_coord);
+            F64 to_dist = dist_2f64(coord, to_node_coord);
+            F64 closest_dist = Min(from_dist, to_dist);
+            if (closest_dist < smallest_dist)
+            {
+                smallest_dist = closest_dist;
+                chosen_edge = edge;
+            }
+        }
+    }
+
+    return chosen_edge;
+}
+
 } // namespace city

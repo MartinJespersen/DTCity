@@ -628,8 +628,8 @@ static S64 max_S64 = (S64)0x7fffffffffffffffull;
 static S32 max_S32 = (S32)0x7fffffff;
 static S16 max_S16 = (S16)0x7fff;
 static S8 max_S8 = (S8)0x7f;
-static F32 max_F32 = (F32)FLT_MAX;
-static F64 max_F64 = (F64)DBL_MAX;
+static F32 max_f32 = (F32)FLT_MAX;
+static F64 max_f64 = (F64)DBL_MAX;
 
 static S64 min_S64 = (S64)0xffffffffffffffffull;
 static S32 min_S32 = (S32)0xffffffff;

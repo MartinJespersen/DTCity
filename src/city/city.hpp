@@ -174,4 +174,6 @@ road_create(String8 texture_path, String8 cache_path, Rng2F64 bbox, r_SamplerInf
 g_internal EdgeStructure
 road_edge_structure_create(Arena* arena);
 
+g_internal neta_Edge*
+neta_edge_from_road_edge(RoadEdge* road_edge, Map<S64, neta_EdgeList>* edge_list_map);
 } // namespace city

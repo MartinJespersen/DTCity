@@ -500,6 +500,8 @@ static F32
 Dist2F32(Vec2F32 a, Vec2F32 b);
 static F64
 dist_2f64(Vec2F64 a, Vec2F64 b);
+static Vec2F64
+vec_2f64(F64 x, F64 y);
 
 #define v2s64(x, y) vec_2s64((x), (y))
 static Vec2S64
