@@ -29,6 +29,10 @@ static Vec2F32 Sub2F32(Vec2F32 a, Vec2F32 b) {
   Vec2F32 c = {a.x - b.x, a.y - b.y};
   return c;
 }
+static Vec2F64 sub_2f64(Vec2F64 a, Vec2F64 b) {
+  Vec2F64 c = {a.x - b.x, a.y - b.y};
+  return c;
+}
 static Vec2F32 mul_2f32(Vec2F32 a, Vec2F32 b) {
   Vec2F32 c = {a.x * b.x, a.y * b.y};
   return c;

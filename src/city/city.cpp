@@ -785,18 +785,18 @@ building_destroy(Buildings* building)
     r_texture_destroy(building->facade_model_handles.texture_handle);
     ArenaRelease(building->arena);
 }
-g_internal F32
-Cross2F32ZComponent(Vec2F32 a, Vec2F32 b)
+g_internal F64
+cross_2f64_z_component(Vec2F64 a, Vec2F64 b)
 {
     return a.x * b.y - a.y * b.x;
 }
 g_internal B32
-AreTwoConnectedLineSegmentsCollinear(Vec2F32 prev, Vec2F32 cur, Vec2F32 next)
+AreTwoConnectedLineSegmentsCollinear(Vec2F64 prev, Vec2F64 cur, Vec2F64 next)
 {
-    Vec2F32 ba = Sub2F32(prev, cur);
-    Vec2F32 ac = Sub2F32(next, prev);
+    Vec2F64 ba = sub_2f64(prev, cur);
+    Vec2F64 ac = sub_2f64(next, prev);
 
-    F32 cross_product_z = Cross2F32ZComponent(ba, ac);
+    F64 cross_product_z = cross_2f64_z_component(ba, ac);
     B32 is_collinear = false;
     if (cross_product_z == 0)
     {
@@ -912,8 +912,9 @@ BuildingsBuffersCreate(Arena* arena, F32 road_height, BuildingRenderInfo* out_re
                 Vec2F32 next_pos =
                     buildings_utm_node_buffer.data[(idx + 1) % buildings_utm_node_buffer.size]->pos;
 
-                B32 is_collinear =
-                    AreTwoConnectedLineSegmentsCollinear(prev_pos, cur_pos, next_pos);
+                B32 is_collinear = AreTwoConnectedLineSegmentsCollinear(
+                    vec_2f64(prev_pos.x, prev_pos.y), vec_2f64(cur_pos.x, cur_pos.y),
+                    vec_2f64(next_pos.x, next_pos.y));
                 if (!is_collinear)
                 {
                     final_utm_node_buffer.data[cur_idx++] = buildings_utm_node_buffer.data[idx];
@@ -980,13 +981,13 @@ enum Direction
 g_internal Direction
 ClockWiseTest(Buffer<Vec2F32> node_buffer)
 {
-    F32 total = 0;
+    F64 total = 0;
     for (U32 idx = 0; idx < node_buffer.size; idx += 1)
     {
         Vec2F32 a = node_buffer.data[idx];
         Vec2F32 b = node_buffer.data[(idx + 1) % node_buffer.size];
 
-        F32 cross_product_z = Cross2F32ZComponent(a, b);
+        F64 cross_product_z = cross_2f64_z_component(vec_2f64(a.x, a.y), vec_2f64(b.x, b.y));
         total += cross_product_z;
     }
     if (total > 0)
@@ -1034,9 +1035,14 @@ PointInTriangle(Vec2F32 p1, Vec2F32 p2, Vec2F32 p3, Vec2F32 point)
     F32 d1, d2, d3;
     B32 has_neg, has_pos;
 
-    d1 = Cross2F32ZComponent(Sub2F32(point, p1), Sub2F32(p2, p1));
-    d2 = Cross2F32ZComponent(Sub2F32(point, p2), Sub2F32(p3, p2));
-    d3 = Cross2F32ZComponent(Sub2F32(point, p3), Sub2F32(p1, p3));
+    Vec2F64 p1_f64 = vec_2f64(p1.x, p1.y);
+    Vec2F64 p2_f64 = vec_2f64(p2.x, p2.y);
+    Vec2F64 p3_f64 = vec_2f64(p3.x, p3.y);
+    Vec2F64 point_f64 = vec_2f64(point.x, point.y);
+
+    d1 = cross_2f64_z_component(sub_2f64(point_f64, p1_f64), sub_2f64(p2_f64, p1_f64));
+    d2 = cross_2f64_z_component(sub_2f64(point_f64, p2_f64), sub_2f64(p3_f64, p2_f64));
+    d3 = cross_2f64_z_component(sub_2f64(point_f64, p3_f64), sub_2f64(p1_f64, p3_f64));
 
     has_neg = (d1 < 0) || (d2 < 0) || (d3 < 0);
     has_pos = (d1 > 0) || (d2 > 0) || (d3 > 0);
@@ -1075,7 +1081,7 @@ EarClipping(Arena* arena, Buffer<Vec2F32> node_buffer)
     Buffer<U32> out_vertex_index_buffer = BufferAlloc<U32>(arena, total_index_count);
     U32 cur_index_buffer_idx = 0;
     U32 idx = 0;
-    for (; idx < index_buffer.size; idx++)
+    for (; idx < index_buffer.size;)
     {
         if (index_buffer.size < 3)
         {
@@ -1097,7 +1103,8 @@ EarClipping(Arena* arena, Buffer<Vec2F32> node_buffer)
         Vec2F32 prev_to_ear = Sub2F32(ear, prev);
         Vec2F32 ear_to_next = Sub2F32(next, ear);
 
-        F32 cross_product_z = Cross2F32ZComponent(prev_to_ear, ear_to_next);
+        F64 cross_product_z = cross_2f64_z_component(vec_2f64(prev_to_ear.x, prev_to_ear.y),
+                                                     vec_2f64(ear_to_next.x, ear_to_next.y));
 
         // negative cross product z component means that the triangle has clockwise orientation.
         if (cross_product_z < 0)
@@ -1127,12 +1134,14 @@ EarClipping(Arena* arena, Buffer<Vec2F32> node_buffer)
                 // remove ear from index buffer
                 BufferItemRemove(&index_buffer, ear_index_buffer_idx);
                 idx = 0;
+                continue;
             }
         }
         else if (cross_product_z == 0)
         {
             DEBUG_LOG("Error in EarClipping: two line segments are collinear");
         }
+        idx++;
     }
     if (cur_index_buffer_idx != out_vertex_index_buffer.size)
     {

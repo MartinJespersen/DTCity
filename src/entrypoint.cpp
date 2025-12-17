@@ -217,7 +217,9 @@ dt_main_loop(void* ptr)
     ctx->road = city::road_create(texture_dir, cache_dir, input->bbox, &sampler_info);
     city::Road* road = ctx->road;
 
-    ui_camera_init(ctx->camera);
+    osm::Network* osm_network = osm::g_network;
+    ui_camera_init(ctx->camera,
+                   {-osm_network->utm_center_offset.x, -osm_network->utm_center_offset.y});
     ctx->buildings = city::buildings_create(cache_dir, texture_dir, ctx->road->road_height,
                                             input->bbox, &sampler_info);
     city::Buildings* buildings = ctx->buildings;
@@ -262,7 +264,10 @@ dt_main_loop(void* ptr)
                 neta_Edge* chosen_edge = city::neta_edge_from_road_edge(edge, edge_map);
                 if (chosen_edge)
                 {
-                    ImGui::Text("Edge ID: %lld", chosen_edge->edge_id);
+                    ImGui::Text("index_bike_ft: %lf", chosen_edge->index_bike_ft);
+                    ImGui::Text("index_bike_tf: %lf", chosen_edge->index_bike_tf);
+                    ImGui::Text("index_bike_ft: %lf", chosen_edge->index_walk_ft);
+                    ImGui::Text("index_bike_tf: %lf", chosen_edge->index_walk_tf);
                 }
                 ImVec2 window_size = ImGui::GetWindowSize();
                 ImVec2 window_pos = ImVec2((F32)framebuffer_dim.x - window_size.x, 0);

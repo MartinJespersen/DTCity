@@ -54,8 +54,8 @@ osm::structure_add(Buffer<osm::RoadNodeList> node_hashmap, String8 json,
 
                 String8 utm_zone_str = str8_c_string(node_utm_zone);
                 node_utm->utm_zone = PushStr8Copy(arena, utm_zone_str);
-                node_utm->pos.x = x + network->utm_center_offset.x;
-                node_utm->pos.y = y + network->utm_center_offset.y;
+                node_utm->pos.x = x;
+                node_utm->pos.y = y;
             }
         }
     }

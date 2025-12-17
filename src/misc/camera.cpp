@@ -1,9 +1,9 @@
 static void
-ui_camera_init(ui_Camera* camera)
+ui_camera_init(ui_Camera* camera, Vec2F64 start_pos)
 {
     camera->zoom_sensitivity = 20.0f;
     camera->fov = 45.0;
-    camera->position = glm::vec3(0.0f, 150.0f, 0.0f);
+    camera->position = glm::vec3(start_pos.x, 150.0f, start_pos.y);
     camera->yaw = 0.0f;
     camera->pitch = -88.0f;
     camera->view_dir = ui_direction_normal_from_euler_angles(camera->yaw, camera->pitch);

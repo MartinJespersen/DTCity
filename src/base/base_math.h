@@ -475,6 +475,8 @@ static Vec2F32
 Add2F32(Vec2F32 a, Vec2F32 b);
 static Vec2F32
 Sub2F32(Vec2F32 a, Vec2F32 b);
+static Vec2F64
+sub_2f64(Vec2F64 a, Vec2F64 b);
 static Vec2F32
 Mul2F32(Vec2F32 a, Vec2F32 b);
 static Vec2F32
