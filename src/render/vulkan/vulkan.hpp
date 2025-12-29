@@ -224,7 +224,7 @@ VK_CameraCleanup(VK_Context* vk_ctx);
 static void
 VK_CameraUniformBufferCreate(VK_Context* vk_ctx);
 static void
-VK_CameraUniformBufferUpdate(VK_Context* vk_ctx, ui_Camera* camera, Vec2F32 screen_res,
+VK_CameraUniformBufferUpdate(VK_Context* vk_ctx, ui::Camera* camera, Vec2F32 screen_res,
                              U32 current_frame);
 static void
 VK_CameraDescriptorSetLayoutCreate(VK_Context* vk_ctx);
@@ -279,6 +279,7 @@ VK_ThreadInputDestroy(r_ThreadInput* thread_input);
 
 g_internal B32
 vk_texture_gpu_upload_cmd_recording(VkCommandBuffer cmd, r_Handle tex_handle, Buffer<U8> tex_buf);
+
 // ~mgj: Vulkan Lifetime
 static void
 VK_CtxSet(VK_Context* vk_ctx);
@@ -318,7 +319,7 @@ VK_PipelineDestroy(VK_Pipeline* draw_ctx);
     }
 
 static void
-VK_CommandBufferRecord(U32 image_index, U32 current_frame, ui_Camera* camera,
+VK_CommandBufferRecord(U32 image_index, U32 current_frame, ui::Camera* camera,
                        Vec2S64 mouse_cursor_pos);
 
 static void

@@ -47,15 +47,16 @@ struct Road
 struct AdjacentNodeLL
 {
     AdjacentNodeLL* next;
-    osm::UtmNode* node;
+    osm::Node* node;
 };
 
 struct RoadCrossSection
 {
     Vec2F32 top;
     Vec2F32 btm;
-    osm::UtmNode* node;
+    osm::UtmLocation node;
 };
+
 struct RoadSegment
 {
     RoadCrossSection start;
@@ -65,8 +66,8 @@ struct RoadSegment
 struct Car
 {
     glm::vec3 cur_pos;
-    osm::UtmNode* source;
-    osm::UtmNode* target;
+    osm::UtmLocation source_loc;
+    osm::UtmLocation target_loc;
     glm::vec3 dir;
     F32 speed;
 };
@@ -127,11 +128,11 @@ RoadIntersectionPointsFind(Road* road, RoadSegment* in_out_segment, osm::Way* cu
                            osm::Network* node_utm_structure);
 // ~mgj: Cars
 g_internal CarSim*
-CarSimCreate(String8 asset_path, String8 texture_path, U32 car_count, Road* road);
+car_sim_create(String8 asset_path, String8 texture_path, U32 car_count, Road* road);
 g_internal void
 car_sim_destroy(CarSim* car_sim);
 g_internal Buffer<r_Model3DInstance>
-CarUpdate(Arena* arena, CarSim* car, F32 time_delta);
+car_sim_update(Arena* arena, CarSim* car, F64 time_delta);
 
 // ~mgj: Buildings
 g_internal Buildings*
@@ -140,8 +141,7 @@ buildings_create(String8 cache_path, String8 texture_path, F32 road_height, Rng2
 g_internal void
 building_destroy(Buildings* building);
 g_internal void
-BuildingsBuffersCreate(Arena* arena, F32 road_height, BuildingRenderInfo* out_render_info,
-                       osm::Network* node_utm_structure);
+buildings_buffers_create(Arena* arena, F32 road_height, BuildingRenderInfo* out_render_info);
 g_internal Buffer<U32>
 EarClipping(Arena* arena, Buffer<Vec2F32> node_buffer);
 
@@ -176,4 +176,16 @@ road_edge_structure_create(Arena* arena);
 
 g_internal neta_Edge*
 neta_edge_from_road_edge(RoadEdge* road_edge, Map<S64, neta_EdgeList>* edge_list_map);
+
+g_internal Buffer<r_Vertex3D>
+vertex_3d_from_gltfw_vertex(Arena* arena, Buffer<gltfw_Vertex3D> in_vertex_buffer);
+
+// privates ///////////////////////////////////////////////////
+
+g_internal Vec2F32
+world_position_offset_adjust(Vec2F32 position);
+g_internal osm::UtmLocation
+random_utm_road_node_get();
+g_internal osm::UtmLocation
+utm_location_find(U64 node_id);
 } // namespace city

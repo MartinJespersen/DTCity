@@ -38,7 +38,7 @@ node_buffer_from_simd_json(Arena* arena, String8 json, U64 node_hashmap_size)
 
             if (node_key == "node")
             {
-                osm::RoadNode* node = PushStruct(arena, osm::RoadNode);
+                osm::WgsNode* node = PushStruct(arena, osm::WgsNode);
                 U64 id;
                 F64 lat, lon;
                 auto item_value = item.value();

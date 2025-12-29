@@ -2,7 +2,7 @@
 
 struct dt_Time
 {
-    F32 delta_time_sec;
+    F64 delta_time_sec;
     U64 last_time_ms;
 };
 
@@ -36,7 +36,7 @@ struct Context
     Arena* arena_permanent;
 
     io_IO* io;
-    ui_Camera* camera;
+    ui::Camera* camera;
     dt_Time* time;
     city::Road* road;
     city::CarSim* car_sim;

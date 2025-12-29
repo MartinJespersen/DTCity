@@ -3,16 +3,19 @@
 namespace osm
 {
 
+typedef U64 NodeId;
+typedef U64 WayId;
+
 enum class Result : B32
 {
     Success = 0,
     NotFound = (1 << 0),
 };
 
-struct RoadNode
+struct WgsNode
 {
-    RoadNode* next;
-    U64 id;
+    WgsNode* next;
+    NodeId id;
     F32 lat;
     F32 lon;
 };
@@ -38,8 +41,8 @@ struct TagResult
 
 struct RoadNodeList
 {
-    RoadNode* first;
-    RoadNode* last;
+    WgsNode* first;
+    WgsNode* last;
 };
 
 struct RoadNodeParseResult
@@ -52,9 +55,9 @@ struct Way
 {
     Way* next;
 
-    U64 id;
+    WayId id;
 
-    U64* node_ids; // fixed array with node_count length and node ids as index
+    NodeId* node_ids; // fixed array with node_count length and node ids as index
     U64 node_count;
 
     Buffer<Tag> tags;
@@ -79,46 +82,61 @@ struct WayParseResult
     B32 error;
 };
 
-struct UtmNode
+struct Node
 {
-    UtmNode* next;
-    U64 id;
+    Node* next;
+    NodeId id;
+
+    String8 utm_zone;  // TODO: If not used in future: Delete
+    WayList way_queue; // Linked list of RoadWays sharing this node
+};
+
+struct UtmLocation
+{
+    NodeId id;
     union
     {
         Vec2F32 pos;
         glm::vec2 vec;
     };
-    String8 utm_zone;
-    WayList way_queue; // Linked list of RoadWays sharing this node
 };
 
-struct UtmNodeList
+UtmLocation
+utm_location_create(U64 id, Vec2F32 pos)
 {
-    UtmNode* first;
-    UtmNode* last;
+    UtmLocation loc = {.id = id, .pos = pos};
+    return loc;
+}
+
+struct NodeList
+{
+    Node* first;
+    Node* last;
 };
 
-enum OsmKeyType
+enum WayType
 {
-    OsmKeyType_Road,
-    OsmKeyType_Building,
-    OsmKeyType_Count
+    WayType_Road,
+    WayType_Building,
+    WayType_Count
 };
 
 struct Network
 {
     Arena* arena;
-    Buffer<UtmNodeList> utm_node_hashmap; // key is the node id
-    Vec2F64 utm_center_offset;            // used for centering utm coordinate based on bounding box
+    Buffer<NodeList> utm_node_hashmap; // key is the node id
+    Vec2F64 utm_center_offset;         // used for centering utm coordinate based on bounding box
+    ChunkList<UtmLocation>* utm_location_chunk_list;
 
-    Buffer<WayList> way_hashmap;            // view into way buffers
-    Buffer<Way> ways_arr[OsmKeyType_Count]; // buffer storage
+    Buffer<WayList> way_hashmap;         // view into way buffers
+    Buffer<Way> ways_arr[WayType_Count]; // buffer storage
+    Buffer<NodeId> node_id_arr[WayType_Count];
 };
 
 ///////////////////////
 // ~mgj: Globals
 g_internal Network* g_network = {};
-read_only g_internal UtmNode g_road_node_utm = {nullptr, 0, {0.0f, 0.0f}, {}, {}};
+read_only g_internal Node g_road_node_utm = {nullptr, 0, {}, {}};
 ///////////////////////
 
 // Public
@@ -127,23 +145,26 @@ structure_init(U64 node_hashmap_size, U64 way_hashmap_size, Rng2F64 utm_coords);
 g_internal void
 structure_cleanup();
 g_internal void
-structure_add(Buffer<RoadNodeList> node_hashmap, String8 json, OsmKeyType key_type);
+structure_add(Buffer<RoadNodeList> node_hashmap, String8 json, WayType key_type);
 g_internal TagResult
 tag_find(Arena* arena, Buffer<Tag> tags, String8 tag_to_find);
 g_internal WayNode*
 way_find(U64 way_id);
-g_internal UtmNode*
-utm_node_find(U64 node_id);
-g_internal UtmNode*
-random_utm_node_get();
-
-g_internal UtmNode*
-random_neighbour_node_get(UtmNode* node);
+g_internal UtmLocation
+utm_location_get(U64 node_id);
+g_internal Node*
+node_get(U64 node_id);
+g_internal Node*
+random_neighbour_node_get(Node* node);
+g_internal Node*
+random_neighbour_node_get(U64 node_id);
+g_internal NodeId
+random_node_id_from_type_get(WayType type);
 
 // Privates
-g_internal RoadNode*
-node_find(Buffer<RoadNodeList> node_hashmap, U64 node_id);
+g_internal WgsNode*
+wgs_node_find(Buffer<RoadNodeList> node_hashmap, U64 node_id);
 
 g_internal B32
-node_hashmap_insert(U64 node_id, Way* way, UtmNode** out);
+node_hashmap_insert(U64 node_id, Way* way, Node** out);
 } // namespace osm

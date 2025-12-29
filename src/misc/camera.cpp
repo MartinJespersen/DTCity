@@ -1,16 +1,20 @@
+namespace ui
+{
+
 static void
-ui_camera_init(ui_Camera* camera, Vec2F64 start_pos)
+camera_init(Camera* camera, Vec2F32 start_pos)
 {
     camera->zoom_sensitivity = 20.0f;
     camera->fov = 45.0;
-    camera->position = glm::vec3(start_pos.x, 150.0f, start_pos.y);
+    camera->position = glm::vec3(0.0f, 150.0f, 0.0f);
     camera->yaw = 0.0f;
     camera->pitch = -88.0f;
     camera->view_dir = ui_direction_normal_from_euler_angles(camera->yaw, camera->pitch);
+    camera->world_offset = {start_pos.x, start_pos.y};
 }
 
 static void
-ui_camera_update(ui_Camera* camera, io_IO* input, F32 time, Vec2U32 extent)
+camera_update(Camera* camera, io_IO* input, F32 time, Vec2U32 extent)
 {
     F32 mouse_sensitivity = 0.1f;
     if (input->mouse_left_clicked & input->is_cursor_inside_win & input->is_window_focused)
@@ -51,3 +55,4 @@ ui_camera_update(ui_Camera* camera, io_IO* input, F32 time, Vec2U32 extent)
         glm::radians(camera->fov), (F32)((F32)extent.x / (F32)extent.y), 0.1f, 1000.0f);
     camera->projection_matrix[1][1] *= -1.0f;
 }
+} // namespace ui

@@ -12,11 +12,11 @@ road_destroy(Road* road)
 }
 
 g_internal void
-RoadSegmentFromTwoRoadNodes(RoadSegment* out_road_segment, osm::UtmNode* node_0,
-                            osm::UtmNode* node_1, F32 road_width)
+RoadSegmentFromTwoRoadNodes(RoadSegment* out_road_segment, osm::UtmLocation node_0,
+                            osm::UtmLocation node_1, F32 road_width)
 {
-    Vec2F32 road_0_pos = node_0->pos;
-    Vec2F32 road_1_pos = node_1->pos;
+    Vec2F32 road_0_pos = node_0.pos;
+    Vec2F32 road_1_pos = node_1.pos;
 
     Vec2F32 road_dir = Sub2F32(road_1_pos, road_0_pos);
     Vec2F32 orthogonal_vec = {road_dir.y, -road_dir.x};
@@ -42,7 +42,7 @@ RoadSegmentConnectionFromTwoRoadSegments(RoadSegment* in_out_road_segment_0,
     // segments
     Vec2F32 road0_top = in_out_road_segment_0->end.top;
     Vec2F32 road1_top = in_out_road_segment_1->start.top;
-    Vec2F32 shared_center = in_out_road_segment_0->end.node->pos;
+    Vec2F32 shared_center = in_out_road_segment_0->end.node.pos;
 
     Vec2F32 road0_top_dir_norm = Normalize2F32(Sub2F32(road0_top, shared_center));
     Vec2F32 road1_top_dir_norm = Normalize2F32(Sub2F32(road1_top, shared_center));
@@ -94,8 +94,8 @@ road_render_buffers_create(Arena* arena, Buffer<city::RoadEdge> edge_buffer, F32
     U32 cur_index_idx = 0;
     for (auto& edge : edge_buffer)
     {
-        osm::UtmNode* start_node = osm::utm_node_find(edge.node_id_from);
-        osm::UtmNode* end_node = osm::utm_node_find(edge.node_id_to);
+        osm::UtmLocation start_node = city::utm_location_find(edge.node_id_from);
+        osm::UtmLocation end_node = city::utm_location_find(edge.node_id_to);
         osm::WayNode* way_node = osm::way_find(edge.way_id);
         osm::Way* way = &way_node->way;
 
@@ -107,8 +107,8 @@ road_render_buffers_create(Arena* arena, Buffer<city::RoadEdge> edge_buffer, F32
         RoadEdge* prev_edge = edge.prev;
         if (prev_edge)
         {
-            osm::UtmNode* start_node_prev = osm::utm_node_find(prev_edge->node_id_from);
-            osm::UtmNode* end_node_prev = osm::utm_node_find(prev_edge->node_id_to);
+            osm::UtmLocation start_node_prev = city::utm_location_find(prev_edge->node_id_from);
+            osm::UtmLocation end_node_prev = city::utm_location_find(prev_edge->node_id_to);
             RoadSegment road_segment_prev;
             RoadSegmentFromTwoRoadNodes(&road_segment_prev, start_node_prev, end_node_prev,
                                         road_width);
@@ -118,8 +118,8 @@ road_render_buffers_create(Arena* arena, Buffer<city::RoadEdge> edge_buffer, F32
         RoadEdge* next_edge = edge.next;
         if (next_edge)
         {
-            osm::UtmNode* start_node_next = osm::utm_node_find(next_edge->node_id_from);
-            osm::UtmNode* end_node_next = osm::utm_node_find(next_edge->node_id_to);
+            osm::UtmLocation start_node_next = city::utm_location_find(next_edge->node_id_from);
+            osm::UtmLocation end_node_next = city::utm_location_find(next_edge->node_id_to);
             RoadSegment road_segment_next;
             RoadSegmentFromTwoRoadNodes(&road_segment_next, start_node_next, end_node_next,
                                         road_width);
@@ -374,23 +374,8 @@ QuadToBufferAdd(RoadSegment* road_segment, Buffer<r_Vertex3D> buffer, Buffer<U32
     *cur_index_idx += 6;
 }
 
-g_internal osm::UtmNode*
-NodeUtmFind(osm::Network* node_ways, U64 node_id)
-{
-    U64 node_index = node_id % node_ways->utm_node_hashmap.size;
-    osm::UtmNodeList* slot = &node_ways->utm_node_hashmap.data[node_index];
-    osm::UtmNode* node = slot->first;
-    for (; node; node = node->next)
-    {
-        if (node->id == node_id)
-            return node;
-    }
-    return &osm::g_road_node_utm;
-}
-
 g_internal void
-RoadIntersectionPointsFind(Road* road, RoadSegment* in_out_segment, osm::Way* current_road_way,
-                           osm::Network* node_utm_structure)
+RoadIntersectionPointsFind(Road* road, RoadSegment* in_out_segment, osm::Way* current_road_way)
 {
     ScratchScope scratch = ScratchScope(0, 0);
     // for each end of segment find whether it there is a road crossing. If there is, change the
@@ -402,7 +387,7 @@ RoadIntersectionPointsFind(Road* road, RoadSegment* in_out_segment, osm::Way* cu
     for (U32 i = 0; i < number_of_cross_sections; i++)
     {
         RoadCrossSection* road_cross_section = road_cross_sections[i];
-        osm::UtmNode* node = road_cross_section->node;
+        U64 node_id = road_cross_section->node.id;
         RoadCrossSection* opposite_cross_section =
             road_cross_sections[(i + 1) % number_of_cross_sections];
 
@@ -427,6 +412,8 @@ RoadIntersectionPointsFind(Road* road, RoadSegment* in_out_segment, osm::Way* cu
             Dist2F32(btm_of_road_line_segment.p0, btm_of_road_line_segment.p1);
         Vec2F32 shortest_distance_pt_btm = road_cross_section->btm;
 
+        osm::Node* node = osm::node_get(node_id);
+        osm::UtmLocation node_loc = city::utm_location_find(node->id);
         for (osm::WayNode* road_way_list = node->way_queue.first; road_way_list;
              road_way_list = road_way_list->next)
         {
@@ -447,7 +434,7 @@ RoadIntersectionPointsFind(Road* road, RoadSegment* in_out_segment, osm::Way* cu
                             U32 prev_node_idx = node_idx - 1;
                             AdjacentNodeLL* adj_node = PushStruct(scratch.arena, AdjacentNodeLL);
                             U64 prev_node_id = way->node_ids[prev_node_idx];
-                            adj_node->node = NodeUtmFind(node_utm_structure, prev_node_id);
+                            adj_node->node = osm::node_get(prev_node_id);
                             SLLStackPush(adj_node_ll, adj_node);
                         }
 
@@ -456,7 +443,7 @@ RoadIntersectionPointsFind(Road* road, RoadSegment* in_out_segment, osm::Way* cu
                             U32 next_node_idx = node_idx + 1;
                             AdjacentNodeLL* adj_node = PushStruct(scratch.arena, AdjacentNodeLL);
                             U64 next_node_id = way->node_ids[next_node_idx];
-                            adj_node->node = NodeUtmFind(node_utm_structure, next_node_id);
+                            adj_node->node = osm::node_get(next_node_id);
                             SLLStackPush(adj_node_ll, adj_node);
                         }
                         break;
@@ -473,7 +460,9 @@ RoadIntersectionPointsFind(Road* road, RoadSegment* in_out_segment, osm::Way* cu
                 {
                     Vec2F64 intersection_pt;
                     RoadSegment crossing_road_segment = {};
-                    RoadSegmentFromTwoRoadNodes(&crossing_road_segment, adj_node_item->node, node,
+                    osm::UtmLocation adj_node_loc =
+                        city::utm_location_find(adj_node_item->node->id);
+                    RoadSegmentFromTwoRoadNodes(&crossing_road_segment, adj_node_loc, node_loc,
                                                 road_width);
                     // update closest point for the top road
                     if (ui_line_intersect(
@@ -554,7 +543,7 @@ RoadIntersectionPointsFind(Road* road, RoadSegment* in_out_segment, osm::Way* cu
 
 // ~mgj: Cars
 g_internal Rng1F32
-CarCenterHeightOffset(Buffer<gltfw_Vertex3D> vertices)
+car_center_height_offset(Buffer<gltfw_Vertex3D> vertices)
 {
     F32 highest_value = 0;
     for (U64 i = 0; i < vertices.size; i++)
@@ -571,8 +560,36 @@ CarCenterHeightOffset(Buffer<gltfw_Vertex3D> vertices)
     return r1f32(lowest_value, highest_value);
 }
 
+g_internal Vec2F32
+world_position_offset_adjust(Vec2F32 position)
+{
+    ui::Camera* camera = dt_ctx_get()->camera;
+    Vec2F32 new_pos =
+        vec_2f32(position.x - camera->world_offset.x, position.y - camera->world_offset.y);
+    return new_pos;
+}
+
+g_internal osm::UtmLocation
+utm_location_find(U64 node_id)
+{
+    osm::UtmLocation node_loc = osm::utm_location_get(node_id);
+    Vec2F32 new_pos = world_position_offset_adjust(node_loc.pos);
+    osm::UtmLocation new_loc = osm::utm_location_create(node_loc.id, new_pos);
+    return new_loc;
+}
+
+g_internal osm::UtmLocation
+random_utm_road_node_get()
+{
+    osm::NodeId node_id = osm::random_node_id_from_type_get(osm::WayType_Road);
+    osm::UtmLocation node_loc = osm::utm_location_get(node_id);
+    Vec2F32 new_pos = world_position_offset_adjust(node_loc.pos);
+    osm::UtmLocation new_loc = osm::utm_location_create(node_loc.id, new_pos);
+    return new_loc;
+}
+
 g_internal CarSim*
-CarSimCreate(String8 asset_path, String8 texture_path, U32 car_count, Road* road)
+car_sim_create(String8 asset_path, String8 texture_path, U32 car_count, Road* road)
 {
     ScratchScope scratch = ScratchScope(0, 0);
     Arena* arena = ArenaAlloc();
@@ -582,12 +599,14 @@ CarSimCreate(String8 asset_path, String8 texture_path, U32 car_count, Road* road
 
     // parse gltf file
     String8 gltf_path = Str8PathFromStr8List(scratch.arena, {asset_path, S("cars/scene.gltf")});
-    CgltfResult parsed_result = gltfw_gltf_read(arena, gltf_path, S("Car.013"));
+    CgltfResult parsed_result = gltfw_gltf_read(scratch.arena, gltf_path, S("Car.013"));
     car_sim->sampler_info = sampler_from_cgltf_sampler(parsed_result.sampler);
+    Buffer<r_Vertex3D> vertex_buffer =
+        vertex_3d_from_gltfw_vertex(arena, parsed_result.vertex_buffer);
     car_sim->vertex_buffer =
-        r_buffer_info_from_template_buffer(parsed_result.vertex_buffer, R_BufferType_Vertex);
-    car_sim->index_buffer =
-        r_buffer_info_from_template_buffer(parsed_result.index_buffer, R_BufferType_Index);
+        r_buffer_info_from_vertex_3d_buffer(vertex_buffer, R_BufferType_Vertex);
+    Buffer<U32> index_buffer = buffer_arena_copy(arena, parsed_result.index_buffer);
+    car_sim->index_buffer = r_buffer_info_from_u32_index_buffer(index_buffer, R_BufferType_Index);
 
     car_sim->texture_path = Str8PathFromStr8List(arena, {texture_path, S("car_collection.ktx2")});
     car_sim->texture_handle = r_texture_load_async(&car_sim->sampler_info, car_sim->texture_path,
@@ -595,23 +614,25 @@ CarSimCreate(String8 asset_path, String8 texture_path, U32 car_count, Road* road
     car_sim->vertex_handle = r_buffer_load(&car_sim->vertex_buffer);
     car_sim->index_handle = r_buffer_load(&car_sim->index_buffer);
 
-    car_sim->car_center_offset = CarCenterHeightOffset(parsed_result.vertex_buffer);
+    car_sim->car_center_offset = car_center_height_offset(parsed_result.vertex_buffer);
     car_sim->cars = BufferAlloc<Car>(arena, car_count);
 
     for (U32 i = 0; i < car_count; ++i)
     {
-        osm::UtmNode* source_node = osm::random_utm_node_get();
-        osm::UtmNode* target_node = osm::random_neighbour_node_get(source_node);
+        osm::UtmLocation source_loc = city::random_utm_road_node_get();
+        osm::Node* source_node = osm::node_get(source_loc.id);
+        osm::Node* target_node = osm::random_neighbour_node_get(source_node);
+        osm::UtmLocation target_loc = city::utm_location_find(target_node->id);
         city::Car* car = &car_sim->cars.data[i];
-        car->source = source_node;
-        car->target = target_node;
+        car->source_loc = source_loc;
+        car->target_loc = target_loc;
         car->speed = 10.0f;
-        car->cur_pos =
-            glm::vec3(source_node->pos.x, road->road_height - car_sim->car_center_offset.min,
-                      source_node->pos.y);
-        car->dir = glm::normalize(glm::vec3(target_node->pos.x - source_node->pos.x, 0,
-                                            target_node->pos.y - source_node->pos.y));
+        car->cur_pos = glm::vec3(
+            source_loc.pos.x, road->road_height - car_sim->car_center_offset.min, source_loc.pos.y);
+        car->dir = glm::normalize(
+            glm::vec3(target_loc.pos.x - source_loc.pos.x, 0, target_loc.pos.y - source_loc.pos.y));
     }
+    ui::Camera* camera = dt_ctx_get()->camera;
 
     return car_sim;
 }
@@ -626,10 +647,11 @@ car_sim_destroy(CarSim* car_sim)
 }
 
 g_internal Buffer<r_Model3DInstance>
-CarUpdate(Arena* arena, CarSim* car, F32 time_delta)
+car_sim_update(Arena* arena, CarSim* car, F64 time_delta)
 {
     Buffer<r_Model3DInstance> instance_buffer =
         BufferAlloc<r_Model3DInstance>(arena, car->cars.size);
+
     r_Model3DInstance* instance;
     city::Car* car_info;
 
@@ -640,8 +662,8 @@ CarUpdate(Arena* arena, CarSim* car, F32 time_delta)
         car_info = &car->cars.data[car_idx];
 
         glm::vec3 target_pos =
-            glm::vec3(car_info->target->pos.x, car_info->cur_pos.y, car_info->target->pos.y);
-        glm::vec3 new_pos = car_info->cur_pos + car_info->dir * car_speed_default * time_delta;
+            glm::vec3(car_info->target_loc.pos.x, car_info->cur_pos.y, car_info->target_loc.pos.y);
+        glm::vec3 new_pos = car_info->cur_pos + car_info->dir * car_speed_default * (F32)time_delta;
 
         // Is the destination point in between new and old pos?
         F32 min_x = Min(car_info->cur_pos.x, new_pos.x);
@@ -654,13 +676,14 @@ CarUpdate(Arena* arena, CarSim* car, F32 time_delta)
         if ((target_pos.x >= min_x && target_pos.x <= max_x) &&
             (target_pos.y >= min_y && target_pos.y <= max_y))
         {
-            osm::UtmNode* new_target = osm::random_neighbour_node_get(car_info->target);
+            osm::Node* node = osm::random_neighbour_node_get(car_info->target_loc.id);
+            osm::UtmLocation new_target_loc = city::utm_location_find(node->id);
             glm::vec3 new_target_pos =
-                glm::vec3(new_target->pos.x, car_info->cur_pos.y, new_target->pos.y);
+                glm::vec3(new_target_loc.pos.x, car_info->cur_pos.y, new_target_loc.pos.y);
             glm::vec3 new_dir = glm::normalize(new_target_pos - new_pos);
             car_info->dir = new_dir;
-            car_info->source = car_info->target;
-            car_info->target = new_target;
+            car_info->source_loc = car_info->target_loc;
+            car_info->target_loc = new_target_loc;
         }
 
         glm::vec3 y_basis = car_info->dir;
@@ -740,7 +763,7 @@ buildings_create(String8 cache_path, String8 texture_path, F32 road_height, Rng2
             }
         }
 
-        osm::structure_add(json_result.road_nodes, http_data, osm::OsmKeyType_Building);
+        osm::structure_add(json_result.road_nodes, http_data, osm::WayType_Building);
     }
 
     buildings->facade_texture_path =
@@ -753,11 +776,11 @@ buildings_create(String8 cache_path, String8 texture_path, F32 road_height, Rng2
         r_texture_load_async(sampler_info, buildings->roof_texture_path, R_PipelineUsageType_3D);
 
     BuildingRenderInfo render_info;
-    city::BuildingsBuffersCreate(arena, road_height, &render_info, network);
+    city::buildings_buffers_create(arena, road_height, &render_info);
     r_BufferInfo vertex_buffer_info =
-        r_buffer_info_from_template_buffer(render_info.vertex_buffer, R_BufferType_Vertex);
+        r_buffer_info_from_vertex_3d_buffer(render_info.vertex_buffer, R_BufferType_Vertex);
     r_BufferInfo index_buffer_info =
-        r_buffer_info_from_template_buffer(render_info.index_buffer, R_BufferType_Index);
+        r_buffer_info_from_u32_index_buffer(render_info.index_buffer, R_BufferType_Index);
 
     r_Handle vertex_handle = r_buffer_load(&vertex_buffer_info);
     r_Handle index_handle = r_buffer_load(&index_buffer_info);
@@ -804,14 +827,13 @@ AreTwoConnectedLineSegmentsCollinear(Vec2F64 prev, Vec2F64 cur, Vec2F64 next)
     }
     return is_collinear;
 }
-// TODO: Built the roof, which requires a way to divide the concave polygons (that are the
-// buildings) and divide it into convex parts
+
 g_internal void
-BuildingsBuffersCreate(Arena* arena, F32 road_height, BuildingRenderInfo* out_render_info,
-                       osm::Network* node_utm_structure)
+buildings_buffers_create(Arena* arena, F32 road_height, BuildingRenderInfo* out_render_info)
 {
+    osm::Network* osm_network = osm::g_network;
     ScratchScope scratch = ScratchScope(&arena, 1);
-    Buffer<osm::Way> ways = node_utm_structure->ways_arr[osm::OsmKeyType_Building];
+    Buffer<osm::Way> ways = osm_network->ways_arr[osm::WayType_Building];
     F32 building_height = 3;
 
     // ~mgj: Calculate vertex buffer size based on node count
@@ -846,27 +868,26 @@ BuildingsBuffersCreate(Arena* arena, F32 road_height, BuildingRenderInfo* out_re
         for (U32 node_idx = 0, vert_idx = base_vertex_idx, index_idx = base_index_idx;
              node_idx < way->node_count - 1; node_idx++, vert_idx += 4, index_idx += 6)
         {
-            osm::UtmNode* utm_node = NodeUtmFind(node_utm_structure, way->node_ids[node_idx]);
-            osm::UtmNode* utm_node_next =
-                NodeUtmFind(node_utm_structure, way->node_ids[node_idx + 1]);
-            F32 side_width = Length2F32(Sub2F32(utm_node->pos, utm_node_next->pos));
+            osm::UtmLocation node_loc = city::utm_location_find(way->node_ids[node_idx]);
+            osm::UtmLocation next_node_loc = city::utm_location_find(way->node_ids[node_idx + 1]);
+            F32 side_width = Length2F32(Sub2F32(node_loc.pos, next_node_loc.pos));
 
             Vec2U32 id = {.u64 = way->id};
 
-            vertex_buffer.data[vert_idx] = {.pos = {utm_node->pos.x, road_height, utm_node->pos.y},
+            vertex_buffer.data[vert_idx] = {.pos = {node_loc.pos.x, road_height, node_loc.pos.y},
                                             .uv = {0.0f, 0.0f},
                                             .object_id = id};
             vertex_buffer.data[vert_idx + 1] = {
-                .pos = {utm_node->pos.x, road_height + building_height, utm_node->pos.y},
+                .pos = {node_loc.pos.x, road_height + building_height, node_loc.pos.y},
                 .uv = {0.0f, building_height},
                 .object_id = id};
 
             vertex_buffer.data[vert_idx + 2] = {
-                .pos = {utm_node_next->pos.x, road_height, utm_node_next->pos.y},
+                .pos = {next_node_loc.pos.x, road_height, next_node_loc.pos.y},
                 .uv = {side_width, 0.0f},
                 .object_id = id};
             vertex_buffer.data[vert_idx + 3] = {
-                .pos = {utm_node_next->pos.x, road_height + building_height, utm_node_next->pos.y},
+                .pos = {next_node_loc.pos.x, road_height + building_height, next_node_loc.pos.y},
                 .uv = {side_width, building_height},
                 .object_id = id};
 
@@ -888,17 +909,16 @@ BuildingsBuffersCreate(Arena* arena, F32 road_height, BuildingRenderInfo* out_re
     for (U32 way_idx = 0; way_idx < ways.size; way_idx++)
     {
         osm::Way* way = &ways.data[way_idx];
-        Buffer<osm::UtmNode*> buildings_utm_node_buffer =
-            BufferAlloc<osm::UtmNode*>(scratch.arena, way->node_count - 1);
+        Buffer<osm::UtmLocation> buildings_utm_node_buffer =
+            BufferAlloc<osm::UtmLocation>(scratch.arena, way->node_count - 1);
         for (U32 idx = 0; idx < way->node_count - 1; idx += 1)
         {
-            buildings_utm_node_buffer.data[idx] =
-                NodeUtmFind(node_utm_structure, way->node_ids[idx]);
+            buildings_utm_node_buffer.data[idx] = city::utm_location_find(way->node_ids[idx]);
         }
 
         // ~mgj: ignore collinear line segments
-        Buffer<osm::UtmNode*> final_utm_node_buffer =
-            BufferAlloc<osm::UtmNode*>(scratch.arena, buildings_utm_node_buffer.size);
+        Buffer<osm::UtmLocation> final_utm_node_buffer =
+            BufferAlloc<osm::UtmLocation>(scratch.arena, buildings_utm_node_buffer.size);
         {
             U32 cur_idx = 0;
             for (U32 idx = 0; idx < buildings_utm_node_buffer.size; idx += 1)
@@ -906,11 +926,11 @@ BuildingsBuffersCreate(Arena* arena, F32 road_height, BuildingRenderInfo* out_re
                 Vec2F32 prev_pos = buildings_utm_node_buffer
                                        .data[(buildings_utm_node_buffer.size + idx - 1) %
                                              buildings_utm_node_buffer.size]
-                                       ->pos;
+                                       .pos;
                 Vec2F32 cur_pos =
-                    buildings_utm_node_buffer.data[idx % buildings_utm_node_buffer.size]->pos;
+                    buildings_utm_node_buffer.data[idx % buildings_utm_node_buffer.size].pos;
                 Vec2F32 next_pos =
-                    buildings_utm_node_buffer.data[(idx + 1) % buildings_utm_node_buffer.size]->pos;
+                    buildings_utm_node_buffer.data[(idx + 1) % buildings_utm_node_buffer.size].pos;
 
                 B32 is_collinear = AreTwoConnectedLineSegmentsCollinear(
                     vec_2f64(prev_pos.x, prev_pos.y), vec_2f64(cur_pos.x, cur_pos.y),
@@ -928,8 +948,8 @@ BuildingsBuffersCreate(Arena* arena, F32 road_height, BuildingRenderInfo* out_re
             BufferAlloc<Vec2F32>(scratch.arena, final_utm_node_buffer.size);
         for (U32 idx = 0; idx < final_utm_node_buffer.size; idx += 1)
         {
-            osm::UtmNode* node_utm = final_utm_node_buffer.data[idx];
-            node_pos_buffer.data[idx] = node_utm->pos;
+            osm::UtmLocation node_utm = final_utm_node_buffer.data[idx];
+            node_pos_buffer.data[idx] = node_utm.pos;
         }
 
         Buffer<U32> polygon_index_buffer = EarClipping(scratch.arena, node_pos_buffer);
@@ -938,11 +958,11 @@ BuildingsBuffersCreate(Arena* arena, F32 road_height, BuildingRenderInfo* out_re
             // vertex buffer fill
             for (U32 idx = 0; idx < final_utm_node_buffer.size; idx += 1)
             {
-                osm::UtmNode* node_utm = final_utm_node_buffer.data[idx];
-                Vec2U32 id = {.u64 = node_utm->id};
+                osm::UtmLocation node_utm = final_utm_node_buffer.data[idx];
+                Vec2U32 id = {.u64 = node_utm.id};
                 vertex_buffer.data[base_vertex_idx + idx] = {
-                    .pos = {node_utm->pos.x, road_height + building_height, node_utm->pos.y},
-                    .uv = {node_utm->pos.x, node_utm->pos.y},
+                    .pos = {node_utm.pos.x, road_height + building_height, node_utm.pos.y},
+                    .uv = {node_utm.pos.x, node_utm.pos.y},
                     .object_id = id};
             }
 
@@ -1139,7 +1159,7 @@ EarClipping(Arena* arena, Buffer<Vec2F32> node_buffer)
         }
         else if (cross_product_z == 0)
         {
-            DEBUG_LOG("Error in EarClipping: two line segments are collinear");
+            DEBUG_LOG("EarClipping: Two line segments are collinear");
         }
         idx++;
     }
@@ -1189,12 +1209,14 @@ land_create(Arena* arena, String8 glb_path)
         for (gltfw_Primitive* primitive = glb_data.primitives.first; primitive;
              primitive = primitive->next)
         {
-            r_BufferInfo vertex_buffer =
-                r_buffer_info_from_template_buffer(primitive->vertices, R_BufferType_Vertex);
+            Buffer<r_Vertex3D> vertex_buffer =
+                vertex_3d_from_gltfw_vertex(arena, primitive->vertices);
+            r_BufferInfo vertex_buffer_info =
+                r_buffer_info_from_vertex_3d_buffer(vertex_buffer, R_BufferType_Vertex);
             r_BufferInfo index_buffer =
-                r_buffer_info_from_template_buffer(primitive->indices, R_BufferType_Index);
+                r_buffer_info_from_u32_index_buffer(primitive->indices, R_BufferType_Index);
 
-            r_Handle vertex_handle = r_buffer_load(&vertex_buffer);
+            r_Handle vertex_handle = r_buffer_load(&vertex_buffer_info);
             r_Handle index_handle = r_buffer_load(&index_buffer);
             r_Handle texture_handle = tex_handles.data[primitive->tex_idx];
 
@@ -1407,7 +1429,7 @@ road_create(String8 texture_path, String8 cache_path, Rng2F64 bbox, r_SamplerInf
     }
 
     Buffer<osm::RoadNodeList> node_hashmap = json_result.road_nodes;
-    osm::structure_add(node_hashmap, http_data, osm::OsmKeyType_Road);
+    osm::structure_add(node_hashmap, http_data, osm::WayType_Road);
 
     EdgeStructure edge_structure = city::road_edge_structure_create(road->arena);
     road->edge_map = edge_structure.edge_map;
@@ -1416,9 +1438,9 @@ road_create(String8 texture_path, String8 cache_path, Rng2F64 bbox, r_SamplerInf
         road->arena, edge_structure.edges, road->default_road_width, road->road_height);
 
     r_BufferInfo vertex_buffer_info =
-        r_buffer_info_from_template_buffer(render_buffers.vertices, R_BufferType_Vertex);
+        r_buffer_info_from_vertex_3d_buffer(render_buffers.vertices, R_BufferType_Vertex);
     r_BufferInfo index_buffer_info =
-        r_buffer_info_from_template_buffer(render_buffers.indices, R_BufferType_Index);
+        r_buffer_info_from_u32_index_buffer(render_buffers.indices, R_BufferType_Index);
 
     road->texture_path = Str8PathFromStr8List(road->arena, {texture_path, S("road_texture.ktx2")});
 
@@ -1436,7 +1458,7 @@ g_internal EdgeStructure
 road_edge_structure_create(Arena* arena)
 {
     osm::Network* network = osm::g_network;
-    Buffer<osm::Way> way_buf = network->ways_arr[osm::OsmKeyType_Road];
+    Buffer<osm::Way> way_buf = network->ways_arr[osm::WayType_Road];
 
     ChunkList<RoadEdge>* chunk_list = chunk_list_create<RoadEdge>(arena, 1024);
     for (const osm::Way& way : way_buf)
@@ -1479,33 +1501,47 @@ neta_edge_from_road_edge(RoadEdge* road_edge, Map<S64, neta_EdgeList>* edge_list
     S64 from_id = road_edge->node_id_from;
     S64 to_id = road_edge->node_id_to;
 
-    osm::UtmNode* from_node = osm::utm_node_find(from_id);
-    osm::UtmNode* to_node = osm::utm_node_find(to_id);
-    Vec2F64 from_node_coord = vec_2f64(from_node->pos.x, from_node->pos.y);
-    Vec2F64 to_node_coord = vec_2f64(to_node->pos.x, to_node->pos.y);
+    osm::UtmLocation from_node_loc = city::utm_location_find(from_id);
+    osm::UtmLocation to_node_loc = city::utm_location_find(to_id);
+    Vec2F64 from_node_coord = vec_2f64(from_node_loc.pos.x, from_node_loc.pos.y);
+    Vec2F64 to_node_coord = vec_2f64(to_node_loc.pos.x, to_node_loc.pos.y);
 
     S64 way_id = road_edge->way_id;
     neta_EdgeList* edge_list = map_get(edge_list_map, way_id);
 
-    F64 smallest_dist = max_f64;
     neta_Edge* chosen_edge = {};
-    for (neta_EdgeNode* edge_node = edge_list->first; edge_node; edge_node = edge_node->next)
+    if (edge_list)
     {
-        neta_Edge* edge = edge_node->edge;
-        for (Vec2F64& coord : edge->coords)
+        F64 smallest_dist = max_f64;
+        for (neta_EdgeNode* edge_node = edge_list->first; edge_node; edge_node = edge_node->next)
         {
-            F64 from_dist = dist_2f64(coord, from_node_coord);
-            F64 to_dist = dist_2f64(coord, to_node_coord);
-            F64 closest_dist = Min(from_dist, to_dist);
-            if (closest_dist < smallest_dist)
+            neta_Edge* edge = edge_node->edge;
+            for (Vec2F64& coord : edge->coords)
             {
-                smallest_dist = closest_dist;
-                chosen_edge = edge;
+                F64 from_dist = dist_2f64(coord, from_node_coord);
+                F64 to_dist = dist_2f64(coord, to_node_coord);
+                F64 closest_dist = Min(from_dist, to_dist);
+                if (closest_dist < smallest_dist)
+                {
+                    smallest_dist = closest_dist;
+                    chosen_edge = edge;
+                }
             }
         }
     }
-
     return chosen_edge;
+}
+
+g_internal Buffer<r_Vertex3D>
+vertex_3d_from_gltfw_vertex(Arena* arena, Buffer<gltfw_Vertex3D> in_vertex_buffer)
+{
+    Buffer<r_Vertex3D> out_vertex_buffer = BufferAlloc<r_Vertex3D>(arena, in_vertex_buffer.size);
+    for (U32 i = 0; i < in_vertex_buffer.size; i++)
+    {
+        out_vertex_buffer.data[i].pos = in_vertex_buffer.data[i].pos;
+        out_vertex_buffer.data[i].uv = in_vertex_buffer.data[i].uv;
+    }
+    return out_vertex_buffer;
 }
 
 } // namespace city

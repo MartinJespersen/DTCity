@@ -131,7 +131,7 @@ r_render_ctx_destroy()
 }
 
 static void
-r_render_frame(Vec2U32 framebuffer_dim, B32* in_out_framebuffer_resized, ui_Camera* camera,
+r_render_frame(Vec2U32 framebuffer_dim, B32* in_out_framebuffer_resized, ui::Camera* camera,
                Vec2S64 mouse_cursor_pos)
 {
     VK_Context* vk_ctx = VK_CtxGet();

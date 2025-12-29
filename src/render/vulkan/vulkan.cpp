@@ -870,7 +870,7 @@ VK_CameraUniformBufferCreate(VK_Context* vk_ctx)
 }
 
 static void
-VK_CameraUniformBufferUpdate(VK_Context* vk_ctx, ui_Camera* camera, Vec2F32 screen_res,
+VK_CameraUniformBufferUpdate(VK_Context* vk_ctx, ui::Camera* camera, Vec2F32 screen_res,
                              U32 current_frame)
 {
     VK_BufferAllocationMapped* buffer = &vk_ctx->camera_buffer_alloc_mapped[current_frame];
@@ -1455,7 +1455,7 @@ VK_Model3DRendering()
 }
 
 static void
-VK_CommandBufferRecord(U32 image_index, U32 current_frame, ui_Camera* camera,
+VK_CommandBufferRecord(U32 image_index, U32 current_frame, ui::Camera* camera,
                        Vec2S64 mouse_cursor_pos)
 {
     ProfScopeMarker;

@@ -12,7 +12,7 @@ ContextCreate(io_IO* io_ctx)
     Context* ctx = PushStruct(app_arena, Context);
     ctx->arena_permanent = app_arena;
     ctx->io = PushStruct(app_arena, io_IO);
-    ctx->camera = PushStruct(app_arena, ui_Camera);
+    ctx->camera = PushStruct(app_arena, ui::Camera);
     ctx->time = PushStruct(app_arena, dt_Time);
     ctx->cwd = OS_GetCurrentPath(scratch.arena);
 

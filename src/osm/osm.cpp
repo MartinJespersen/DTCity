@@ -3,16 +3,17 @@ g_internal void
 osm::structure_init(U64 node_hashmap_size, U64 way_hashmap_size, Rng2F64 utm_coords)
 {
     Arena* arena = ArenaAlloc();
-    Buffer<osm::UtmNodeList> utm_node_hashmap =
-        BufferAlloc<osm::UtmNodeList>(arena, node_hashmap_size);
+    Buffer<osm::NodeList> utm_node_hashmap = BufferAlloc<osm::NodeList>(arena, node_hashmap_size);
     Buffer<osm::WayList> way_hashmap = BufferAlloc<osm::WayList>(arena, way_hashmap_size);
+    ChunkList<UtmLocation>* utm_location_chunk_list = chunk_list_create<UtmLocation>(arena, 1024);
 
     F64 center_transform_x = -(utm_coords.min.x + utm_coords.max.x) / 2.0;
     F64 center_transform_y = -(utm_coords.min.y + utm_coords.max.y) / 2.0;
     Vec2F64 utm_center_offset = {center_transform_x, center_transform_y};
 
     osm::g_network = PushStruct(arena, osm::Network);
-    *osm::g_network = {arena, utm_node_hashmap, utm_center_offset, way_hashmap};
+    *osm::g_network = {arena, utm_node_hashmap, utm_center_offset, utm_location_chunk_list,
+                       way_hashmap};
 }
 
 g_internal void
@@ -22,9 +23,10 @@ osm::structure_cleanup()
 }
 
 g_internal void
-osm::structure_add(Buffer<osm::RoadNodeList> node_hashmap, String8 json,
-                   osm::OsmKeyType osm_key_type)
+osm::structure_add(Buffer<osm::RoadNodeList> node_hashmap, String8 json, osm::WayType osm_key_type)
 {
+    ScratchScope scratch = ScratchScope(0, 0);
+
     osm::Network* network = osm::g_network;
     Arena* arena = network->arena;
     // ~mgj: parse OSM way structures
@@ -37,38 +39,45 @@ osm::structure_add(Buffer<osm::RoadNodeList> node_hashmap, String8 json,
     }
 
     Buffer<osm::Way> ways = osm_way_parse_result.ways;
+    ChunkList<NodeId>* node_id_chunk_list = chunk_list_create<NodeId>(arena, 1024);
+
     for (U32 way_index = 0; way_index < ways.size; way_index++)
     {
         osm::Way* way = &ways.data[way_index];
         for (U32 node_index = 0; node_index < way->node_count; node_index++)
         {
             U64 node_id = way->node_ids[node_index];
-            osm::UtmNode* node_utm;
+            osm::Node* node_utm;
             B8 inserted = osm::node_hashmap_insert(node_id, way, &node_utm);
             if (inserted)
             {
-                osm::RoadNode* node_coord = osm::node_find(node_hashmap, node_id);
+                osm::WgsNode* node_coord = osm::wgs_node_find(node_hashmap, node_id);
                 double x, y;
                 char node_utm_zone[10];
                 UTM::LLtoUTM(node_coord->lat, node_coord->lon, y, x, node_utm_zone);
 
                 String8 utm_zone_str = str8_c_string(node_utm_zone);
                 node_utm->utm_zone = PushStr8Copy(arena, utm_zone_str);
-                node_utm->pos.x = x;
-                node_utm->pos.y = y;
+
+                UtmLocation* loc =
+                    chunk_list_get_next(network->arena, network->utm_location_chunk_list);
+                *loc = utm_location_create(node_id, vec_2f32(x, y));
+
+                chunk_list_insert(scratch.arena, node_id_chunk_list, node_id);
             }
         }
     }
 
+    network->node_id_arr[osm_key_type] = buffer_from_chunk_list(arena, node_id_chunk_list);
     network->ways_arr[osm_key_type] = ways;
 }
 
-g_internal osm::RoadNode*
-osm::node_find(Buffer<osm::RoadNodeList> node_hashmap, U64 node_id)
+g_internal osm::WgsNode*
+osm::wgs_node_find(Buffer<osm::RoadNodeList> node_hashmap, U64 node_id)
 {
     osm::RoadNodeList* node_list = &node_hashmap.data[node_id % node_hashmap.size];
 
-    osm::RoadNode* node = node_list->first;
+    osm::WgsNode* node = node_list->first;
     for (; node; node = node->next)
     {
         if (node->id == node_id)
@@ -114,49 +123,48 @@ osm::tag_find(Arena* arena, Buffer<osm::Tag> tags, String8 tag_to_find)
     return result;
 }
 
-g_internal osm::UtmNode*
-osm::random_utm_node_get()
+g_internal osm::UtmLocation
+osm::utm_location_get(NodeId node_id)
 {
-    Buffer<osm::UtmNodeList> utm_node_hashmap = osm::g_network->utm_node_hashmap;
-    U32 rand_num = RandomU32();
-    for (U32 i = 0; i < utm_node_hashmap.size; ++i)
+    ChunkList<UtmLocation>* utm_location_chunk_list = osm::g_network->utm_location_chunk_list;
+
+    for (auto& loc : *utm_location_chunk_list)
     {
-        U32 slot_index = rand_num % utm_node_hashmap.size;
-        osm::UtmNodeList* slot = &utm_node_hashmap.data[slot_index];
-        if (slot->first != NULL)
+        if (loc.id == node_id)
         {
-            return slot->first;
+            return loc;
         }
-        rand_num++;
     }
-    return &osm::g_road_node_utm;
+
+    return (*utm_location_chunk_list)[0];
 }
 
-g_internal osm::UtmNode*
-osm::utm_node_find(U64 node_id)
+g_internal osm::Node*
+osm::node_get(NodeId node_id)
 {
-    Buffer<osm::UtmNodeList> utm_node_hashmap = osm::g_network->utm_node_hashmap;
+    Buffer<NodeList> utm_node_hashmap = osm::g_network->utm_node_hashmap;
     U32 slot_index = node_id % utm_node_hashmap.size;
-    osm::UtmNodeList* slot = &utm_node_hashmap.data[slot_index];
-    for (osm::UtmNode* node = slot->first; node; node = node->next)
+    osm::NodeList* slot = &utm_node_hashmap.data[slot_index];
+    for (osm::Node* node = slot->first; node; node = node->next)
     {
         if (node->id == node_id)
         {
             return node;
         }
     }
+    Assert("Node not found in hash map");
     return &osm::g_road_node_utm;
 }
 
 g_internal B32
-osm::node_hashmap_insert(U64 node_id, osm::Way* way, osm::UtmNode** out)
+osm::node_hashmap_insert(NodeId node_id, osm::Way* way, osm::Node** out)
 {
     osm::Network* structure = osm::g_network;
 
     // ~mgj: Insert Node into hash if not already inserted
     U64 node_slot = node_id % structure->utm_node_hashmap.size;
-    osm::UtmNodeList* slot = &structure->utm_node_hashmap.data[node_slot];
-    osm::UtmNode* node = slot->first;
+    osm::NodeList* slot = &structure->utm_node_hashmap.data[node_slot];
+    osm::Node* node = slot->first;
     B32 node_inserted = false;
     for (; node; node = node->next)
     {
@@ -167,7 +175,7 @@ osm::node_hashmap_insert(U64 node_id, osm::Way* way, osm::UtmNode** out)
     }
     if (!node)
     {
-        node = PushStruct(structure->arena, osm::UtmNode);
+        node = PushStruct(structure->arena, osm::Node);
         node->id = node_id;
         SLLQueuePush(slot->first, slot->last, node);
         Assert(slot->last->next == 0);
@@ -190,8 +198,27 @@ osm::node_hashmap_insert(U64 node_id, osm::Way* way, osm::UtmNode** out)
     return node_inserted;
 }
 
-g_internal osm::UtmNode*
-osm::random_neighbour_node_get(osm::UtmNode* node)
+g_internal osm::NodeId
+osm::random_node_id_from_type_get(osm::WayType type)
+{
+    Network* network = g_network;
+
+    Buffer<NodeId> node_ids = network->node_id_arr[type];
+    NodeId node_id = node_ids.data[random_u64() % node_ids.size];
+
+    return node_id;
+}
+
+g_internal osm::Node*
+osm::random_neighbour_node_get(U64 node_id)
+{
+    osm::Node* node = osm::node_get(node_id);
+    osm::Node* neighbour = osm::random_neighbour_node_get(node);
+    return neighbour;
+}
+
+g_internal osm::Node*
+osm::random_neighbour_node_get(osm::Node* node)
 {
     // Calculate roadway count for the node
     U32 roadway_count = 0;
@@ -200,10 +227,11 @@ osm::random_neighbour_node_get(osm::UtmNode* node)
     {
         roadway_count++;
     }
-    osm::WayNode* way_element = node->way_queue.first;
+    Assert(roadway_count > 0);
+    osm::WayNode* way_node = node->way_queue.first;
 
     // Find random roadway
-    U32 rand_num = RandomU32();
+    U32 rand_num = random_u32();
     if (roadway_count == 0)
     {
         return &osm::g_road_node_utm;
@@ -212,11 +240,11 @@ osm::random_neighbour_node_get(osm::UtmNode* node)
     U32 rand_roadway_idx = rand_num % roadway_count;
     for (U32 i = 0; i < rand_roadway_idx; ++i)
     {
-        way_element = way_element->next;
+        way_node = way_node->next;
     }
-    Assert(way_element);
+    Assert(way_node);
 
-    osm::Way* way = &way_element->way;
+    osm::Way* way = &way_node->way;
     U32 node_idx = 0;
     for (; node_idx < way->node_count; node_idx++)
     {
@@ -233,6 +261,6 @@ osm::random_neighbour_node_get(osm::UtmNode* node)
         next_node_idx = Max(0, (S32)node_idx - 1);
     }
     U64 next_node_id = way->node_ids[next_node_idx];
-    osm::UtmNode* next_node = osm::utm_node_find(next_node_id);
+    osm::Node* next_node = osm::node_get(next_node_id);
     return next_node;
 }

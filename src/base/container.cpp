@@ -47,6 +47,15 @@ BufferAppend(Buffer<T> buffer, Buffer<T> buffer_append, U32 append_idx)
     MemoryCopy(dst_ptr, buffer_append.data, buffer_append.size * sizeof(T));
 }
 
+template <typename T>
+static Buffer<T>
+buffer_arena_copy(Arena* arena, Buffer<T> buffer)
+{
+    Buffer<T> new_buffer = BufferAlloc<T>(arena, buffer.size);
+    MemoryCopy(new_buffer.data, buffer.data, buffer.size * sizeof(T));
+    return new_buffer;
+}
+
 ////////////////////////////////
 static Buffer<String8>
 Str8BufferFromCString(Arena* arena, std::initializer_list<const char*> strings)
@@ -141,7 +150,7 @@ chunk_list_create(Arena* arena, U64 capacity)
 
 template <typename T>
 void
-chunk_list_insert(Arena* arena, ChunkList<T>* list, T item)
+chunk_list_insert(Arena* arena, ChunkList<T>* list, T& item)
 {
     T* res = chunk_list_get_next(arena, list);
     *res = item;
@@ -158,6 +167,7 @@ chunk_list_get_next(Arena* arena, ChunkList<T>* list)
         chunk = PushStruct(arena, ChunkItem<T>);
         SLLQueuePush(list->first, list->last, chunk);
         chunk->values = PushArray(arena, T, list->capacity);
+        list->chunk_count += 1;
     }
     T* item = &chunk->values[chunk->count++];
     list->total_count++;

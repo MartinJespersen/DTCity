@@ -1,7 +1,7 @@
 #include <random>
 
 g_internal U32
-RandomU32()
+random_u32()
 {
     std::random_device rd;                   // OS entropy source
     std::mt19937 gen(rd());                  // Mersenne Twister

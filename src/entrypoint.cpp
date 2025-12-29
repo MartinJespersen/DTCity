@@ -40,7 +40,7 @@ static void
 dt_time_update(dt_Time* time)
 {
     U64 cur_time = os_now_microseconds();
-    time->delta_time_sec = (F32)(cur_time - time->last_time_ms) / 1'000'000.0;
+    time->delta_time_sec = (F64)(cur_time - time->last_time_ms) / 1'000'000.0;
     time->last_time_ms = cur_time;
 }
 
@@ -155,10 +155,10 @@ dt_interpret_input(int argc, char** argv)
     if (use_default)
     {
         // Initialize default values
-        bbox->min.x = 10.1200;
-        bbox->min.y = 56.1250;
-        bbox->max.x = 10.1330;
-        bbox->max.y = 56.1330;
+        bbox->min.x = 10.298996;
+        bbox->min.y = 56.301587;
+        bbox->max.x = 10.333500;
+        bbox->max.y = 56.322391;
         INFO_LOG("Using default values:\nlon_btm_left=%lf, lat_btm_left=%lf, lon_top_right=%lf, "
                  "lat_top_right=%lf\n",
                  bbox->min.x, bbox->min.y, bbox->max.x, bbox->max.y);
@@ -214,16 +214,17 @@ dt_main_loop(void* ptr)
     String8 texture_dir = ctx->data_subdirs.data[dt_DataDirType::Texture];
     String8 asset_dir = ctx->data_subdirs.data[dt_DataDirType::Assets];
 
+    osm::Network* osm_network = osm::g_network;
+    ui::camera_init(ctx->camera,
+                    vec_2f32(-osm_network->utm_center_offset.x, -osm_network->utm_center_offset.y));
+
     ctx->road = city::road_create(texture_dir, cache_dir, input->bbox, &sampler_info);
     city::Road* road = ctx->road;
 
-    osm::Network* osm_network = osm::g_network;
-    ui_camera_init(ctx->camera,
-                   {-osm_network->utm_center_offset.x, -osm_network->utm_center_offset.y});
     ctx->buildings = city::buildings_create(cache_dir, texture_dir, ctx->road->road_height,
                                             input->bbox, &sampler_info);
     city::Buildings* buildings = ctx->buildings;
-    ctx->car_sim = city::CarSimCreate(asset_dir, texture_dir, 100, ctx->road);
+    ctx->car_sim = city::car_sim_create(asset_dir, texture_dir, 100, ctx->road);
     city::CarSim* car_sim = ctx->car_sim;
 
     String8 neta_path =
@@ -245,7 +246,7 @@ dt_main_loop(void* ptr)
         Vec2U32 framebuffer_dim = {(U32)io_ctx->framebuffer_width, (U32)io_ctx->framebuffer_height};
 
         {
-            ui_camera_update(ctx->camera, ctx->io, ctx->time->delta_time_sec, framebuffer_dim);
+            ui::camera_update(ctx->camera, ctx->io, ctx->time->delta_time_sec, framebuffer_dim);
             U64 hovered_object_id = r_latest_hovered_object_id_get();
             city::RoadEdge** edge_ptr = map_get(&road->edge_map, (S64)hovered_object_id);
             if (edge_ptr)
@@ -299,11 +300,13 @@ dt_main_loop(void* ptr)
         r_model_3d_draw(buildings->facade_model_handles, false);
 
         Buffer<r_Model3DInstance> instance_buffer =
-            CarUpdate(vk_ctx->draw_frame_arena, car_sim, ctx->time->delta_time_sec);
-        r_BufferInfo car_instance_buffer_info =
-            r_buffer_info_from_template_buffer(instance_buffer, R_BufferType_Vertex);
+            car_sim_update(vk_ctx->draw_frame_arena, car_sim, ctx->time->delta_time_sec);
+
+        r_BufferInfo instance_buffer_info =
+            r_buffer_info_from_vertex_3d_instance_buffer(instance_buffer, R_BufferType_Vertex);
+
         r_model_3D_instance_draw(car_sim->texture_handle, car_sim->vertex_handle,
-                                 car_sim->index_handle, &car_instance_buffer_info);
+                                 car_sim->index_handle, &instance_buffer_info);
 
         r_render_frame(framebuffer_dim, &io_ctx->framebuffer_resized, ctx->camera,
                        io_ctx->mouse_pos_cur_s64);

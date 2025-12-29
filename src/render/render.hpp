@@ -168,9 +168,20 @@ static r_Handle
 r_handle_zero();
 static bool
 r_is_handle_zero(r_Handle handle);
+static r_BufferInfo
+r_buffer_info_from_vertex_3d_buffer(Buffer<r_Vertex3D> buffer, r_BufferType buffer_type);
+
+static r_BufferInfo
+r_buffer_info_from_u32_index_buffer(Buffer<U32> buffer, r_BufferType buffer_type);
+
+static r_BufferInfo
+r_buffer_info_from_vertex_3d_instance_buffer(Buffer<r_Model3DInstance> buffer,
+                                             r_BufferType buffer_type);
+
+// privates
 template <typename T>
 static r_BufferInfo
-r_buffer_info_from_template_buffer(Buffer<T> buffer, r_BufferType buffer_type);
+r_buffer_info_from_template_buffer(Buffer<T> buffer, r_BufferType buffer_type, U64 type_size);
 
 //////////////////////////////////////////////////////////////////////////
 // ~mgj: function declaration to be implemented by backend
@@ -180,7 +191,7 @@ r_render_ctx_create(String8 shader_path, io_IO* io_ctx, async::Threads* thread_p
 static void
 r_render_ctx_destroy();
 static void
-r_render_frame(Vec2U32 framebuffer_dim, B32* in_out_framebuffer_resized, ui_Camera* camera,
+r_render_frame(Vec2U32 framebuffer_dim, B32* in_out_framebuffer_resized, ui::Camera* camera,
                Vec2S64 mouse_cursor_pos);
 static void
 r_gpu_work_done_wait();

@@ -1,4 +1,8 @@
-# TODO along the way
+# Bugs
+* map is reversed 
+* Direction or previous node is needed for random neighbor algorithm to avoid doing a u-turn when it is possible to drive straight.
+
+# Changes along the way
 * Make the asset manager thread safe - accessing texture and buffer lists are not thread safe at the moment
 * Add linting and static analysis checks
 * Change the naming convention for functions from PascalCase to snake_case

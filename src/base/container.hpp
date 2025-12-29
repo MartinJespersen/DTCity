@@ -70,6 +70,9 @@ BufferItemRemove(Buffer<T>* in_out_buffer, U32 index);
 template <typename T>
 static void
 BufferAppend(Buffer<T> buffer, Buffer<T> buffer_append, U32 append_idx);
+template <typename T>
+static Buffer<T>
+buffer_arena_copy(Arena* arena, Buffer<T> buffer);
 
 static Buffer<String8>
 Str8BufferFromCString(Arena* arena, std::initializer_list<const char*> strings);
@@ -85,6 +88,7 @@ io_file_read(Arena* arena, String8 filename);
 static char**
 CStrArrFromStr8Buffer(Arena* arena, Buffer<String8> buffer);
 
+// ~mgj: ChunkList
 template <typename T> struct ChunkItem
 {
     ChunkItem<T>* next;
@@ -99,6 +103,73 @@ template <typename T> struct ChunkList
     U64 capacity;
     U64 chunk_count;
     U64 total_count;
+
+    T&
+    operator[](U64 idx)
+    {
+        U64 chunk_idx = idx / capacity;
+
+        ChunkItem<T>* chunk = first;
+        for (U64 i = 0; i < chunk_idx; ++i)
+        {
+            chunk = chunk->next;
+        }
+
+        return chunk->values[chunk->count - 1];
+    }
+
+    struct Iterator
+    {
+        ChunkItem<T>* cur_item;
+        U64 cur_val_idx;
+
+        Iterator(ChunkItem<T>* item, U64 val_idx)
+        {
+            cur_item = item;
+            cur_val_idx = val_idx;
+        }
+
+        Iterator&
+        operator++()
+        {
+            ++cur_val_idx;
+            if (cur_val_idx >= cur_item->count && cur_item->next)
+            {
+                cur_item = cur_item->next;
+                cur_val_idx = 0;
+            }
+            return *this;
+        }
+
+        T&
+        operator*()
+        {
+            return cur_item->values[cur_val_idx];
+        }
+
+        bool
+        operator==(const Iterator& other) const
+        {
+            return cur_item == other.cur_item && cur_val_idx == other.cur_val_idx;
+        }
+
+        bool
+        operator!=(const Iterator& other) const
+        {
+            return !(*this == other);
+        }
+    };
+
+    Iterator
+    begin()
+    {
+        return Iterator(first, 0);
+    }
+    Iterator
+    end()
+    {
+        return Iterator(last, last ? last->count : 0);
+    }
 };
 
 template <typename T>
@@ -106,7 +177,7 @@ ChunkList<T>*
 chunk_list_create(Arena* arena, U64 capacity);
 template <typename T>
 void
-chunk_list_insert(Arena* arena, ChunkList<T>* list, T item);
+chunk_list_insert(Arena* arena, ChunkList<T>* list, T& item);
 template <typename T>
 T*
 chunk_list_get_next(Arena* arena, ChunkList<T>* list);
