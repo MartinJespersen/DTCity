@@ -325,9 +325,10 @@ city_cache_read(Arena* arena, String8 cache_file, String8 cache_meta_file, Strin
 }
 
 g_internal Vec3F32
-HeightDimAdd(Vec2F32 pos, F32 height)
+height_dim_add(Vec2F32 pos, F32 height)
 {
-    return {pos.x, height, pos.y};
+    Vec3F32 result = {pos.x, pos.y, height};
+    return result;
 }
 
 g_internal void
@@ -349,16 +350,16 @@ QuadToBufferAdd(RoadSegment* road_segment, Buffer<r_Vertex3D> buffer, Buffer<U32
     Vec2U32 id = {.u64 = way_id};
 
     // quad of vertices
-    buffer.data[base_vertex_idx] = {.pos = HeightDimAdd(road_segment->start.top, road_height),
+    buffer.data[base_vertex_idx] = {.pos = height_dim_add(road_segment->start.top, road_height),
                                     .uv = {uv_x_top, uv_y_start},
                                     .object_id = id};
-    buffer.data[base_vertex_idx + 1] = {.pos = HeightDimAdd(road_segment->start.btm, road_height),
+    buffer.data[base_vertex_idx + 1] = {.pos = height_dim_add(road_segment->start.btm, road_height),
                                         .uv = {uv_x_btm, uv_y_start},
                                         .object_id = id};
-    buffer.data[base_vertex_idx + 2] = {.pos = HeightDimAdd(road_segment->end.top, road_height),
+    buffer.data[base_vertex_idx + 2] = {.pos = height_dim_add(road_segment->end.top, road_height),
                                         .uv = {uv_x_top, uv_y_end},
                                         .object_id = id};
-    buffer.data[base_vertex_idx + 3] = {.pos = HeightDimAdd(road_segment->end.btm, road_height),
+    buffer.data[base_vertex_idx + 3] = {.pos = height_dim_add(road_segment->end.btm, road_height),
                                         .uv = {uv_x_btm, uv_y_end},
                                         .object_id = id};
 
@@ -627,10 +628,11 @@ car_sim_create(String8 asset_path, String8 texture_path, U32 car_count, Road* ro
         car->source_loc = source_loc;
         car->target_loc = target_loc;
         car->speed = 10.0f;
-        car->cur_pos = glm::vec3(
-            source_loc.pos.x, road->road_height - car_sim->car_center_offset.min, source_loc.pos.y);
-        car->dir = glm::normalize(
-            glm::vec3(target_loc.pos.x - source_loc.pos.x, 0, target_loc.pos.y - source_loc.pos.y));
+        car->cur_pos =
+            height_dim_add(source_loc.pos, road->road_height - car_sim->car_center_offset.min);
+        Vec2F32 dir =
+            vec_2f32(target_loc.pos.x - source_loc.pos.x, target_loc.pos.y - source_loc.pos.y);
+        car->dir = normalize_3f32(height_dim_add(dir, 0));
     }
     ui::Camera* camera = dt_ctx_get()->camera;
 
@@ -661,9 +663,10 @@ car_sim_update(Arena* arena, CarSim* car, F64 time_delta)
         instance = &instance_buffer.data[car_idx];
         car_info = &car->cars.data[car_idx];
 
-        glm::vec3 target_pos =
-            glm::vec3(car_info->target_loc.pos.x, car_info->cur_pos.y, car_info->target_loc.pos.y);
-        glm::vec3 new_pos = car_info->cur_pos + car_info->dir * car_speed_default * (F32)time_delta;
+        Vec3F32 target_pos = height_dim_add(car_info->target_loc.pos, car_info->cur_pos.z);
+        Vec3F32 new_pos =
+            add_3f32(car_info->cur_pos,
+                     scale_3f32(scale_3f32(car_info->dir, car_speed_default), (F32)time_delta));
 
         // Is the destination point in between new and old pos?
         F32 min_x = Min(car_info->cur_pos.x, new_pos.x);
@@ -678,23 +681,23 @@ car_sim_update(Arena* arena, CarSim* car, F64 time_delta)
         {
             osm::Node* node = osm::random_neighbour_node_get(car_info->target_loc.id);
             osm::UtmLocation new_target_loc = city::utm_location_find(node->id);
-            glm::vec3 new_target_pos =
-                glm::vec3(new_target_loc.pos.x, car_info->cur_pos.y, new_target_loc.pos.y);
-            glm::vec3 new_dir = glm::normalize(new_target_pos - new_pos);
+            Vec3F32 new_target_pos = height_dim_add(new_target_loc.pos, car_info->cur_pos.z);
+            Vec3F32 new_dir = normalize_3f32(sub_3f32(new_target_pos, new_pos));
             car_info->dir = new_dir;
             car_info->source_loc = car_info->target_loc;
             car_info->target_loc = new_target_loc;
         }
 
-        glm::vec3 y_basis = car_info->dir;
-        y_basis *= -1; // In model space, the front of the car points in the negative y direction
-        glm::vec3 x_basis = glm::vec3(-y_basis.z, 0, y_basis.x);
+        glm::vec3 dir = glm::vec3(car_info->dir.x, car_info->dir.y, car_info->dir.z);
+        glm::vec3 y_basis = dir;
+        y_basis *= -1; // In model space, the front of the car ws in the negative y direction
+        glm::vec3 x_basis = glm::vec3(y_basis.y, -y_basis.x, 0);
         glm::vec3 z_basis = glm::cross(x_basis, y_basis);
 
         instance->x_basis = glm::vec4(x_basis, 0);
         instance->y_basis = glm::vec4(y_basis, 0);
         instance->z_basis = glm::vec4(z_basis, 0);
-        instance->w_basis = {new_pos, 1};
+        instance->w_basis = {glm::vec3(new_pos.x, new_pos.y, new_pos.z), 1};
 
         car_info->cur_pos = new_pos;
     }
@@ -874,20 +877,20 @@ buildings_buffers_create(Arena* arena, F32 road_height, BuildingRenderInfo* out_
 
             Vec2U32 id = {.u64 = way->id};
 
-            vertex_buffer.data[vert_idx] = {.pos = {node_loc.pos.x, road_height, node_loc.pos.y},
+            vertex_buffer.data[vert_idx] = {.pos = height_dim_add(node_loc.pos, road_height),
                                             .uv = {0.0f, 0.0f},
                                             .object_id = id};
             vertex_buffer.data[vert_idx + 1] = {
-                .pos = {node_loc.pos.x, road_height + building_height, node_loc.pos.y},
+                .pos = height_dim_add(node_loc.pos, road_height + building_height),
                 .uv = {0.0f, building_height},
                 .object_id = id};
 
-            vertex_buffer.data[vert_idx + 2] = {
-                .pos = {next_node_loc.pos.x, road_height, next_node_loc.pos.y},
-                .uv = {side_width, 0.0f},
-                .object_id = id};
+            vertex_buffer.data[vert_idx + 2] = {.pos =
+                                                    height_dim_add(next_node_loc.pos, road_height),
+                                                .uv = {side_width, 0.0f},
+                                                .object_id = id};
             vertex_buffer.data[vert_idx + 3] = {
-                .pos = {next_node_loc.pos.x, road_height + building_height, next_node_loc.pos.y},
+                .pos = height_dim_add(next_node_loc.pos, road_height + building_height),
                 .uv = {side_width, building_height},
                 .object_id = id};
 
@@ -961,7 +964,7 @@ buildings_buffers_create(Arena* arena, F32 road_height, BuildingRenderInfo* out_
                 osm::UtmLocation node_utm = final_utm_node_buffer.data[idx];
                 Vec2U32 id = {.u64 = node_utm.id};
                 vertex_buffer.data[base_vertex_idx + idx] = {
-                    .pos = {node_utm.pos.x, road_height + building_height, node_utm.pos.y},
+                    .pos = height_dim_add(node_utm.pos, road_height + building_height),
                     .uv = {node_utm.pos.x, node_utm.pos.y},
                     .object_id = id};
             }

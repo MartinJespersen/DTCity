@@ -7,7 +7,7 @@ struct Camera
     glm::vec3 position;
     glm::vec3 view_dir;
     Vec2F64 mouse_pos_last;
-    F32 zoom_sensitivity;
+    F32 move_sensitivity;
     F32 fov;
     F32 yaw;
     F32 pitch;

@@ -65,10 +65,10 @@ struct RoadSegment
 
 struct Car
 {
-    glm::vec3 cur_pos;
+    Vec3F32 cur_pos;
     osm::UtmLocation source_loc;
     osm::UtmLocation target_loc;
-    glm::vec3 dir;
+    Vec3F32 dir;
     F32 speed;
 };
 
