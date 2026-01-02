@@ -240,7 +240,7 @@ dt_main_loop(void* ptr)
     {
         dt_time_update(ctx->time);
 
-        io_new_frame(io_ctx);
+        io_new_frame();
         r_new_frame();
         ImGui::NewFrame();
         Vec2U32 framebuffer_dim = {(U32)io_ctx->framebuffer_width, (U32)io_ctx->framebuffer_height};

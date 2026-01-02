@@ -135,7 +135,7 @@ road_render_buffers_create(Arena* arena, Buffer<city::RoadEdge> edge_buffer, F32
 }
 
 g_internal U64
-HashU64FromStr8(String8 str)
+hash_u64_from_str8(String8 str)
 {
     return hash_u128_from_str8(str).u64[1];
 }
@@ -173,7 +173,7 @@ cache_needs_update(String8 cache_data_file, String8 cache_meta_file)
         U8* cur_byte = meta_data_str.str;
         if (update_needed == false)
         {
-            U64 cur_file_hash = HashU64FromStr8(cache_data_file);
+            U64 cur_file_hash = hash_u64_from_str8(cache_data_file);
 
             //~mgj: read hash and ttl from file
             while (*cur_byte != 0 && *cur_byte != '\t')
@@ -271,7 +271,7 @@ city_cache_write(String8 cache_file, String8 cache_meta_file, String8 content, S
     // ~mgj: write to cache meta file
     if (content.size > 0)
     {
-        U64 new_hash = HashU64FromStr8(hash_content);
+        U64 new_hash = hash_u64_from_str8(hash_content);
         U64 timestamp = os_now_unix();
         String8 meta_str = PushStr8F(scratch.arena, "%llu\t%llu", new_hash, timestamp);
 

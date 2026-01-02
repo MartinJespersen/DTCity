@@ -155,7 +155,7 @@ city_cache_write(String8 cache_file, String8 cache_meta_file, String8 content,
                  String8 hash_content);
 
 g_internal U64
-HashU64FromStr8(String8 str);
+hash_u64_from_str8(String8 str);
 g_internal B32
 cache_needs_update(String8 data_file_str, String8 cache_meta_file_path);
 g_internal B32

@@ -14,7 +14,7 @@ struct io_IO
     S32 framebuffer_height;
 
     F64 scroll_x;
-    F64 scroll_y;
+    std::atomic<F64> scroll_y;
     B32 w_btn_clicked;
     B32 s_btn_clicked;
     B32 a_btn_clicked;
@@ -41,4 +41,4 @@ io_window_destroy(io_IO* io_ctx);
 static void
 io_scroll_callback(GLFWwindow* window, double xoffset, double yoffset);
 static void
-io_new_frame(io_IO* io_ctx);
+io_new_frame();

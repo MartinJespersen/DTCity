@@ -112,9 +112,7 @@ io_wait_for_valid_framebuffer_size(io_IO* io_ctx)
 }
 
 static void
-io_new_frame(io_IO* io_ctx)
+io_new_frame()
 {
-    io_ctx->scroll_x = 0.0;
-    io_ctx->scroll_y = 0.0;
     ImGui_ImplGlfw_NewFrame();
 }

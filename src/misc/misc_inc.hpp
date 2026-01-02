@@ -3,6 +3,7 @@
 // third party libs
 #include <stdio.h>
 #include <time.h>
+#include <atomic>
 
 #undef APIENTRY
 #define GLFW_INCLUDE_VULKAN
