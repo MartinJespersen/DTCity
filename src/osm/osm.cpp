@@ -25,6 +25,7 @@ osm::structure_cleanup()
 g_internal void
 osm::structure_add(Buffer<osm::RoadNodeList> node_hashmap, String8 json, osm::WayType osm_key_type)
 {
+    prof_scope_marker;
     ScratchScope scratch = ScratchScope(0, 0);
 
     osm::Network* network = osm::g_network;
@@ -126,17 +127,20 @@ osm::tag_find(Arena* arena, Buffer<osm::Tag> tags, String8 tag_to_find)
 g_internal osm::UtmLocation
 osm::utm_location_get(NodeId node_id)
 {
-    ChunkList<UtmLocation>* utm_location_chunk_list = osm::g_network->utm_location_chunk_list;
+    prof_scope_marker;
 
+    ChunkList<UtmLocation>* utm_location_chunk_list = osm::g_network->utm_location_chunk_list;
+    UtmLocation utm_location = {};
     for (auto& loc : *utm_location_chunk_list)
     {
         if (loc.id == node_id)
         {
-            return loc;
+            utm_location = loc;
+            break;
         }
     }
 
-    return (*utm_location_chunk_list)[0];
+    return utm_location;
 }
 
 g_internal osm::Node*

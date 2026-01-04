@@ -1458,7 +1458,7 @@ static void
 VK_CommandBufferRecord(U32 image_index, U32 current_frame, ui::Camera* camera,
                        Vec2S64 mouse_cursor_pos)
 {
-    ProfScopeMarker;
+    prof_scope_marker;
     Temp scratch = ScratchBegin(0, 0);
 
     VK_Context* vk_ctx = VK_CtxGet();

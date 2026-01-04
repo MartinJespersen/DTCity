@@ -85,6 +85,7 @@ g_internal city::RenderBuffers
 road_render_buffers_create(Arena* arena, Buffer<city::RoadEdge> edge_buffer, F32 default_road_width,
                            F32 road_height)
 {
+    prof_scope_marker;
     ScratchScope scratch = ScratchScope(0, 0);
 
     Buffer<r_Vertex3D> vertex_buffer = BufferAlloc<r_Vertex3D>(arena, edge_buffer.size * 4);
@@ -220,6 +221,7 @@ cache_needs_update(String8 cache_data_file, String8 cache_meta_file)
 g_internal String8
 city_http_call_wrapper(Arena* arena, String8 query_str, HTTP_RequestParams* params)
 {
+    prof_scope_marker;
     DEBUG_LOG("DataFetch: Fetching data from overpass-api.de\n");
     String8 host = S("http://overpass-api.de");
     String8 path = S("/api/interpreter");
@@ -256,8 +258,9 @@ city_http_call_wrapper(Arena* arena, String8 query_str, HTTP_RequestParams* para
 }
 
 g_internal void
-city_cache_write(String8 cache_file, String8 cache_meta_file, String8 content, String8 hash_content)
+cache_write(String8 cache_file, String8 cache_meta_file, String8 content, String8 hash_content)
 {
+    prof_scope_marker;
     ScratchScope scratch = ScratchScope(0, 0);
     // ~mgj: write to cache file
     OS_Handle file_write_handle = os_file_open(OS_AccessFlag_Write, cache_file);
@@ -287,8 +290,9 @@ city_cache_write(String8 cache_file, String8 cache_meta_file, String8 content, S
 }
 
 g_internal Result<String8>
-city_cache_read(Arena* arena, String8 cache_file, String8 cache_meta_file, String8 hash_input)
+cache_read(Arena* arena, String8 cache_file, String8 cache_meta_file, String8 hash_input)
 {
+    prof_scope_marker;
     ScratchScope scratch = ScratchScope(&arena, 1);
     B32 read_from_cache = false;
     String8 str = {};
@@ -592,7 +596,9 @@ random_utm_road_node_get()
 g_internal CarSim*
 car_sim_create(String8 asset_path, String8 texture_path, U32 car_count, Road* road)
 {
+    prof_scope_marker;
     ScratchScope scratch = ScratchScope(0, 0);
+
     Arena* arena = ArenaAlloc();
 
     CarSim* car_sim = PushStruct(arena, CarSim);
@@ -709,6 +715,7 @@ g_internal Buildings*
 buildings_create(String8 cache_path, String8 texture_path, F32 road_height, Rng2F64 bbox,
                  r_SamplerInfo* sampler_info)
 {
+    prof_scope_marker;
     osm::Network* network = osm::g_network;
     ScratchScope scratch = ScratchScope(0, 0);
     Arena* arena = ArenaAlloc();
@@ -740,12 +747,12 @@ buildings_create(String8 cache_path, String8 texture_path, F32 road_height, Rng2
         String8 input_str = str8_from_bbox(scratch.arena, bbox);
 
         Result<String8> cache_read_result =
-            city_cache_read(scratch.arena, cache_data_file, cache_meta_file, input_str);
+            cache_read(scratch.arena, cache_data_file, cache_meta_file, input_str);
         String8 http_data = cache_read_result.v;
         if (cache_read_result.err)
         {
             http_data = city_http_call_wrapper(scratch.arena, query_str, &params);
-            city_cache_write(cache_data_file, cache_meta_file, http_data, input_str);
+            cache_write(cache_data_file, cache_meta_file, http_data, input_str);
         }
         osm::RoadNodeParseResult json_result =
             wrapper::node_buffer_from_simd_json(scratch.arena, http_data, 100);
@@ -760,7 +767,7 @@ buildings_create(String8 cache_path, String8 texture_path, F32 road_height, Rng2
                 json_result = wrapper::node_buffer_from_simd_json(scratch.arena, http_data, 100);
                 if (json_result.error == false)
                 {
-                    city_cache_write(cache_data_file, cache_meta_file, http_data, input_str);
+                    cache_write(cache_data_file, cache_meta_file, http_data, input_str);
                     error = false;
                 }
             }
@@ -834,6 +841,7 @@ AreTwoConnectedLineSegmentsCollinear(Vec2F64 prev, Vec2F64 cur, Vec2F64 next)
 g_internal void
 buildings_buffers_create(Arena* arena, F32 road_height, BuildingRenderInfo* out_render_info)
 {
+    prof_scope_marker;
     osm::Network* osm_network = osm::g_network;
     ScratchScope scratch = ScratchScope(&arena, 1);
     Buffer<osm::Way> ways = osm_network->ways_arr[osm::WayType_Building];
@@ -863,131 +871,143 @@ buildings_buffers_create(Arena* arena, F32 road_height, BuildingRenderInfo* out_
 
     U32 base_index_idx = 0;
     U32 base_vertex_idx = 0;
-    for (U32 way_idx = 0; way_idx < ways.size; way_idx++)
     {
-        osm::Way* way = &ways.data[way_idx];
+        prof_scope_marker_named("Facade Creation");
 
-        // ~mgj: Add Vertices and Indices for the sides of building
-        for (U32 node_idx = 0, vert_idx = base_vertex_idx, index_idx = base_index_idx;
-             node_idx < way->node_count - 1; node_idx++, vert_idx += 4, index_idx += 6)
+        for (U32 way_idx = 0; way_idx < ways.size; way_idx++)
         {
-            osm::UtmLocation node_loc = city::utm_location_find(way->node_ids[node_idx]);
-            osm::UtmLocation next_node_loc = city::utm_location_find(way->node_ids[node_idx + 1]);
-            F32 side_width = Length2F32(Sub2F32(node_loc.pos, next_node_loc.pos));
+            osm::Way* way = &ways.data[way_idx];
 
-            Vec2U32 id = {.u64 = way->id};
+            // ~mgj: Add Vertices and Indices for the sides of building
+            for (U32 node_idx = 0, vert_idx = base_vertex_idx, index_idx = base_index_idx;
+                 node_idx < way->node_count - 1; node_idx++, vert_idx += 4, index_idx += 6)
+            {
+                osm::UtmLocation node_loc = city::utm_location_find(way->node_ids[node_idx]);
+                osm::UtmLocation next_node_loc =
+                    city::utm_location_find(way->node_ids[node_idx + 1]);
+                F32 side_width = Length2F32(Sub2F32(node_loc.pos, next_node_loc.pos));
 
-            vertex_buffer.data[vert_idx] = {.pos = height_dim_add(node_loc.pos, road_height),
-                                            .uv = {0.0f, 0.0f},
-                                            .object_id = id};
-            vertex_buffer.data[vert_idx + 1] = {
-                .pos = height_dim_add(node_loc.pos, road_height + building_height),
-                .uv = {0.0f, building_height},
-                .object_id = id};
+                Vec2U32 id = {.u64 = way->id};
 
-            vertex_buffer.data[vert_idx + 2] = {.pos =
-                                                    height_dim_add(next_node_loc.pos, road_height),
-                                                .uv = {side_width, 0.0f},
+                vertex_buffer.data[vert_idx] = {.pos = height_dim_add(node_loc.pos, road_height),
+                                                .uv = {0.0f, 0.0f},
                                                 .object_id = id};
-            vertex_buffer.data[vert_idx + 3] = {
-                .pos = height_dim_add(next_node_loc.pos, road_height + building_height),
-                .uv = {side_width, building_height},
-                .object_id = id};
+                vertex_buffer.data[vert_idx + 1] = {
+                    .pos = height_dim_add(node_loc.pos, road_height + building_height),
+                    .uv = {0.0f, building_height},
+                    .object_id = id};
 
-            index_buffer.data[index_idx] = vert_idx;
-            index_buffer.data[index_idx + 1] = vert_idx + 1;
-            index_buffer.data[index_idx + 2] = vert_idx + 2;
-            index_buffer.data[index_idx + 3] = vert_idx + 1;
-            index_buffer.data[index_idx + 4] = vert_idx + 2;
-            index_buffer.data[index_idx + 5] = vert_idx + 3;
+                vertex_buffer.data[vert_idx + 2] = {
+                    .pos = height_dim_add(next_node_loc.pos, road_height),
+                    .uv = {side_width, 0.0f},
+                    .object_id = id};
+                vertex_buffer.data[vert_idx + 3] = {
+                    .pos = height_dim_add(next_node_loc.pos, road_height + building_height),
+                    .uv = {side_width, building_height},
+                    .object_id = id};
+
+                index_buffer.data[index_idx] = vert_idx;
+                index_buffer.data[index_idx + 1] = vert_idx + 1;
+                index_buffer.data[index_idx + 2] = vert_idx + 2;
+                index_buffer.data[index_idx + 3] = vert_idx + 1;
+                index_buffer.data[index_idx + 4] = vert_idx + 2;
+                index_buffer.data[index_idx + 5] = vert_idx + 3;
+            }
+
+            base_index_idx += (way->node_count - 1) * 6;
+            base_vertex_idx += (way->node_count - 1) * 4;
         }
-
-        base_index_idx += (way->node_count - 1) * 6;
-        base_vertex_idx += (way->node_count - 1) * 4;
     }
 
     ///////////////////////////////////////////////////////////////////
     // ~mgj: Create roof
     U32 roof_base_index = base_index_idx;
-    for (U32 way_idx = 0; way_idx < ways.size; way_idx++)
     {
-        osm::Way* way = &ways.data[way_idx];
-        Buffer<osm::UtmLocation> buildings_utm_node_buffer =
-            BufferAlloc<osm::UtmLocation>(scratch.arena, way->node_count - 1);
-        for (U32 idx = 0; idx < way->node_count - 1; idx += 1)
+        prof_scope_marker_named("Roof Creation");
+        for (U32 way_idx = 0; way_idx < ways.size; way_idx++)
         {
-            buildings_utm_node_buffer.data[idx] = city::utm_location_find(way->node_ids[idx]);
-        }
-
-        // ~mgj: ignore collinear line segments
-        Buffer<osm::UtmLocation> final_utm_node_buffer =
-            BufferAlloc<osm::UtmLocation>(scratch.arena, buildings_utm_node_buffer.size);
-        {
-            U32 cur_idx = 0;
-            for (U32 idx = 0; idx < buildings_utm_node_buffer.size; idx += 1)
+            osm::Way* way = &ways.data[way_idx];
+            Buffer<osm::UtmLocation> buildings_utm_node_buffer =
+                BufferAlloc<osm::UtmLocation>(scratch.arena, way->node_count - 1);
+            for (U32 idx = 0; idx < way->node_count - 1; idx += 1)
             {
-                Vec2F32 prev_pos = buildings_utm_node_buffer
-                                       .data[(buildings_utm_node_buffer.size + idx - 1) %
-                                             buildings_utm_node_buffer.size]
-                                       .pos;
-                Vec2F32 cur_pos =
-                    buildings_utm_node_buffer.data[idx % buildings_utm_node_buffer.size].pos;
-                Vec2F32 next_pos =
-                    buildings_utm_node_buffer.data[(idx + 1) % buildings_utm_node_buffer.size].pos;
-
-                B32 is_collinear = AreTwoConnectedLineSegmentsCollinear(
-                    vec_2f64(prev_pos.x, prev_pos.y), vec_2f64(cur_pos.x, cur_pos.y),
-                    vec_2f64(next_pos.x, next_pos.y));
-                if (!is_collinear)
-                {
-                    final_utm_node_buffer.data[cur_idx++] = buildings_utm_node_buffer.data[idx];
-                }
+                buildings_utm_node_buffer.data[idx] = city::utm_location_find(way->node_ids[idx]);
             }
-            final_utm_node_buffer.size = cur_idx;
-        }
 
-        // ~mgj: prepare for ear clipping algo
-        Buffer<Vec2F32> node_pos_buffer =
-            BufferAlloc<Vec2F32>(scratch.arena, final_utm_node_buffer.size);
-        for (U32 idx = 0; idx < final_utm_node_buffer.size; idx += 1)
-        {
-            osm::UtmLocation node_utm = final_utm_node_buffer.data[idx];
-            node_pos_buffer.data[idx] = node_utm.pos;
-        }
+            // ~mgj: ignore collinear line segments
+            Buffer<osm::UtmLocation> final_utm_node_buffer =
+                BufferAlloc<osm::UtmLocation>(scratch.arena, buildings_utm_node_buffer.size);
+            {
+                U32 cur_idx = 0;
+                for (U32 idx = 0; idx < buildings_utm_node_buffer.size; idx += 1)
+                {
+                    Vec2F32 prev_pos = buildings_utm_node_buffer
+                                           .data[(buildings_utm_node_buffer.size + idx - 1) %
+                                                 buildings_utm_node_buffer.size]
+                                           .pos;
+                    Vec2F32 cur_pos =
+                        buildings_utm_node_buffer.data[idx % buildings_utm_node_buffer.size].pos;
+                    Vec2F32 next_pos =
+                        buildings_utm_node_buffer.data[(idx + 1) % buildings_utm_node_buffer.size]
+                            .pos;
 
-        Buffer<U32> polygon_index_buffer = EarClipping(scratch.arena, node_pos_buffer);
-        if (polygon_index_buffer.size > 0)
-        {
-            // vertex buffer fill
+                    B32 is_collinear = AreTwoConnectedLineSegmentsCollinear(
+                        vec_2f64(prev_pos.x, prev_pos.y), vec_2f64(cur_pos.x, cur_pos.y),
+                        vec_2f64(next_pos.x, next_pos.y));
+                    if (!is_collinear)
+                    {
+                        final_utm_node_buffer.data[cur_idx++] = buildings_utm_node_buffer.data[idx];
+                    }
+                }
+                final_utm_node_buffer.size = cur_idx;
+            }
+
+            // ~mgj: prepare for ear clipping algo
+            Buffer<Vec2F32> node_pos_buffer =
+                BufferAlloc<Vec2F32>(scratch.arena, final_utm_node_buffer.size);
             for (U32 idx = 0; idx < final_utm_node_buffer.size; idx += 1)
             {
                 osm::UtmLocation node_utm = final_utm_node_buffer.data[idx];
-                Vec2U32 id = {.u64 = node_utm.id};
-                vertex_buffer.data[base_vertex_idx + idx] = {
-                    .pos = height_dim_add(node_utm.pos, road_height + building_height),
-                    .uv = {node_utm.pos.x, node_utm.pos.y},
-                    .object_id = id};
+                node_pos_buffer.data[idx] = node_utm.pos;
             }
 
-            // index buffer fill
-            for (U32 idx = 0; idx < polygon_index_buffer.size; idx += 1)
+            Buffer<U32> polygon_index_buffer = EarClipping(scratch.arena, node_pos_buffer);
+            if (polygon_index_buffer.size > 0)
             {
-                index_buffer.data[base_index_idx + idx] =
-                    polygon_index_buffer.data[idx] + base_vertex_idx;
-            }
+                // vertex buffer fill
+                for (U32 idx = 0; idx < final_utm_node_buffer.size; idx += 1)
+                {
+                    osm::UtmLocation node_utm = final_utm_node_buffer.data[idx];
+                    Vec2U32 id = {.u64 = node_utm.id};
+                    vertex_buffer.data[base_vertex_idx + idx] = {
+                        .pos = height_dim_add(node_utm.pos, road_height + building_height),
+                        .uv = {node_utm.pos.x, node_utm.pos.y},
+                        .object_id = id};
+                }
 
-            base_vertex_idx += final_utm_node_buffer.size;
-            base_index_idx += polygon_index_buffer.size;
+                // index buffer fill
+                for (U32 idx = 0; idx < polygon_index_buffer.size; idx += 1)
+                {
+                    index_buffer.data[base_index_idx + idx] =
+                        polygon_index_buffer.data[idx] + base_vertex_idx;
+                }
+
+                base_vertex_idx += final_utm_node_buffer.size;
+                base_index_idx += polygon_index_buffer.size;
+            }
         }
     }
 
-    Buffer<r_Vertex3D> vertex_buffer_final = BufferAlloc<r_Vertex3D>(arena, base_vertex_idx);
-    Buffer<U32> index_buffer_final = BufferAlloc<U32>(arena, base_index_idx);
-    BufferCopy(vertex_buffer_final, vertex_buffer, base_vertex_idx);
-    BufferCopy(index_buffer_final, index_buffer, base_index_idx);
+    {
+        prof_scope_marker_named("buildings_buffers_create_buffer_copy");
+        Buffer<r_Vertex3D> vertex_buffer_final = BufferAlloc<r_Vertex3D>(arena, base_vertex_idx);
+        Buffer<U32> index_buffer_final = BufferAlloc<U32>(arena, base_index_idx);
+        BufferCopy(vertex_buffer_final, vertex_buffer, base_vertex_idx);
+        BufferCopy(index_buffer_final, index_buffer, base_index_idx);
+        out_render_info->vertex_buffer = vertex_buffer_final;
+        out_render_info->index_buffer = index_buffer_final;
+    }
 
-    out_render_info->vertex_buffer = vertex_buffer_final;
-    out_render_info->index_buffer = index_buffer_final;
     out_render_info->facade_index_offset = 0;
     out_render_info->roof_index_offset = roof_base_index;
     out_render_info->facade_index_count = roof_base_index;
@@ -1087,6 +1107,7 @@ NodeBufferPrintDebug(Buffer<Vec2F32> node_buffer)
 g_internal Buffer<U32>
 EarClipping(Arena* arena, Buffer<Vec2F32> node_buffer)
 {
+    prof_scope_marker;
     Assert(node_buffer.size >= 3);
     ScratchScope scratch = ScratchScope(&arena, 1);
 
@@ -1372,6 +1393,8 @@ str8_from_bbox(Arena* arena, Rng2F64 bbox)
 g_internal Road*
 road_create(String8 texture_path, String8 cache_path, Rng2F64 bbox, r_SamplerInfo* sampler_info)
 {
+    prof_scope_marker;
+
     ScratchScope scratch = ScratchScope(0, 0);
     Arena* arena = ArenaAlloc();
 
@@ -1405,12 +1428,12 @@ road_create(String8 texture_path, String8 cache_path, Rng2F64 bbox, r_SamplerInf
     String8 input_str = str8_from_bbox(scratch.arena, bbox);
 
     Result<String8> cache_read_result =
-        city::city_cache_read(scratch.arena, cache_data_file, cache_meta_file, input_str);
+        city::cache_read(scratch.arena, cache_data_file, cache_meta_file, input_str);
     String8 http_data = cache_read_result.v;
     if (cache_read_result.err)
     {
         http_data = city::city_http_call_wrapper(scratch.arena, query_str, &params);
-        city::city_cache_write(cache_data_file, cache_meta_file, http_data, input_str);
+        city::cache_write(cache_data_file, cache_meta_file, http_data, input_str);
     }
     osm::RoadNodeParseResult json_result =
         wrapper::node_buffer_from_simd_json(scratch.arena, http_data, 100);
@@ -1425,7 +1448,7 @@ road_create(String8 texture_path, String8 cache_path, Rng2F64 bbox, r_SamplerInf
             json_result = wrapper::node_buffer_from_simd_json(scratch.arena, http_data, 100);
             if (json_result.error == false)
             {
-                city::city_cache_write(cache_data_file, cache_meta_file, http_data, input_str);
+                city::cache_write(cache_data_file, cache_meta_file, http_data, input_str);
                 error = false;
             }
         }

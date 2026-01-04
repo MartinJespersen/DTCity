@@ -142,7 +142,7 @@ r_render_frame(Vec2U32 framebuffer_dim, B32* in_out_framebuffer_resized, ui::Cam
 
     VkFence* in_flight_fence = &vk_ctx->in_flight_fences.data[vk_ctx->current_frame];
     {
-        ProfScopeMarkerNamed("Wait for frame");
+        prof_scope_marker_named("Wait for frame");
         VK_CHECK_RESULT(vkWaitForFences(vk_ctx->device, 1, in_flight_fence, VK_TRUE, 1000000000));
     }
     VkSemaphore image_available_semaphore =
@@ -216,7 +216,7 @@ r_render_frame(Vec2U32 framebuffer_dim, B32* in_out_framebuffer_resized, ui::Cam
     presentInfo.pResults = nullptr; // Optional
 
     result = vkQueuePresentKHR(vk_ctx->present_queue, &presentInfo);
-    ProfFrameMarker; // end of frame is assumed to be here
+    prof_frame_marker; // end of frame is assumed to be here
     if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR ||
         *in_out_framebuffer_resized)
     {

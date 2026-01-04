@@ -426,7 +426,7 @@ os_make_guid();
 
 // ~mgj: OS Timer
 force_inline static U64
-OS_CpuTimerRead();
+os_cpu_timer_read();
 force_inline static U64
 OS_SystemTimerRead();
 force_inline static U64

@@ -80,6 +80,7 @@ endif()
 option(TRACY_PROFILE_ENABLE "Enable Tracy profiler" OFF)
 if (TRACY_PROFILE_ENABLE)
     add_compile_definitions(TRACY_ENABLE)
+    add_compile_definitions(TRACY_PROFILE_ENABLE)
     target_sources(city PRIVATE ${THIRD_PARTY_LIBS_DIR}/tracy/TracyClient.cpp)
 endif()
 

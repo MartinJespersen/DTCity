@@ -162,7 +162,7 @@ os_string_from_file_range(Arena* arena, OS_Handle file, Rng1U64 range)
 
 // ~mgj: Timers
 force_inline static U64
-OS_CpuTimerRead()
+os_cpu_timer_read()
 {
     return __rdtsc();
 }

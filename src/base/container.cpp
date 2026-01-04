@@ -39,21 +39,22 @@ BufferItemRemove(Buffer<T>* in_out_buffer, U32 index)
 }
 
 template <typename T>
-static void
-BufferAppend(Buffer<T> buffer, Buffer<T> buffer_append, U32 append_idx)
-{
-    Assert(buffer_append.size + append_idx <= buffer.size);
-    T* dst_ptr = buffer.data + append_idx;
-    MemoryCopy(dst_ptr, buffer_append.data, buffer_append.size * sizeof(T));
-}
-
-template <typename T>
 static Buffer<T>
 buffer_arena_copy(Arena* arena, Buffer<T> buffer)
 {
     Buffer<T> new_buffer = BufferAlloc<T>(arena, buffer.size);
     MemoryCopy(new_buffer.data, buffer.data, buffer.size * sizeof(T));
     return new_buffer;
+}
+
+template <typename T>
+static Buffer<T>
+buffer_concat(Arena* arena, Buffer<T> a, Buffer<T> b)
+{
+    Buffer<T> result = BufferAlloc<T>(arena, a.size + b.size);
+    MemoryCopy(result.data, a.data, a.size * sizeof(T));
+    MemoryCopy(result.data + a.size, b.data, b.size * sizeof(T));
+    return result;
 }
 
 ////////////////////////////////
@@ -192,6 +193,7 @@ buffer_from_chunk_list(Arena* arena, ChunkList<T>* list)
 static inline U64
 map_hash_u64(U64 x)
 {
+    prof_scope_marker;
     String8 str = {.str = (U8*)&x, .size = sizeof(U64)};
     U64 res = hash_u128_from_str8(str).u64[1];
     return res;

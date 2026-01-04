@@ -206,7 +206,7 @@ dt_main_loop(void* ptr)
         .address_mode_v = R_SamplerAddressMode_Repeat,
     };
 
-    U64 node_hashmap_size = 100;
+    U64 node_hashmap_size = 1000;
     U64 way_hashmap_size = 100;
     osm::structure_init(node_hashmap_size, way_hashmap_size, utm_coords);
 

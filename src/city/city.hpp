@@ -149,10 +149,9 @@ EarClipping(Arena* arena, Buffer<Vec2F32> node_buffer);
 g_internal String8
 city_http_call_wrapper(Arena* arena, String8 query_str, HTTP_RequestParams* params);
 g_internal Result<String8>
-city_cache_read(Arena* arena, String8 cache_file, String8 cache_meta_file, String8 hash_input);
+cache_read(Arena* arena, String8 cache_file, String8 cache_meta_file, String8 hash_input);
 g_internal void
-city_cache_write(String8 cache_file, String8 cache_meta_file, String8 content,
-                 String8 hash_content);
+cache_write(String8 cache_file, String8 cache_meta_file, String8 content, String8 hash_content);
 
 g_internal U64
 hash_u64_from_str8(String8 str);

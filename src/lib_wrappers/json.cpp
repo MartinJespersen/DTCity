@@ -4,6 +4,7 @@ namespace wrapper
 static osm::RoadNodeParseResult
 node_buffer_from_simd_json(Arena* arena, String8 json, U64 node_hashmap_size)
 {
+    prof_scope_marker;
     simdjson::ondemand::parser parser;
     simdjson::ondemand::document doc;
     simdjson::padded_string json_padded((char*)json.str, json.size);

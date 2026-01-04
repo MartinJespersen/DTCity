@@ -68,12 +68,11 @@ template <typename T>
 static void
 BufferItemRemove(Buffer<T>* in_out_buffer, U32 index);
 template <typename T>
-static void
-BufferAppend(Buffer<T> buffer, Buffer<T> buffer_append, U32 append_idx);
-template <typename T>
 static Buffer<T>
 buffer_arena_copy(Arena* arena, Buffer<T> buffer);
-
+template <typename T>
+static Buffer<T>
+buffer_concat(Arena* arena, Buffer<T> a, Buffer<T> b);
 static Buffer<String8>
 Str8BufferFromCString(Arena* arena, std::initializer_list<const char*> strings);
 static String8

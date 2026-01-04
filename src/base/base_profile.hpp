@@ -4,22 +4,17 @@
 #include <vulkan/vulkan_core.h>
 #include "third_party/tracy/tracy/TracyVulkan.hpp"
 #include "third_party/tracy/tracy/Tracy.hpp"
-#define ProfScopeMarker ZoneScoped
-#define ProfScopeMarkerNamed(n) ZoneScopedN(n)
-#define ProfFrameMarker FrameMark;
+#define prof_scope_marker ZoneScoped
+#define prof_scope_marker_named(n) ZoneScopedN(n)
+#define prof_frame_marker FrameMark;
 #else
-#define ProfScopeMarker
-#define ProfScopeMarkerNamed(n)
-#define ProfFrameMarker ;
+#define prof_scope_marker
+#define prof_scope_marker_named(n)
+#define prof_frame_marker ;
 #endif
 
 static U64
-CpuTimerFreqEstimate();
+cpu_timer_freq_estimate();
 
-struct Profiler
-{
-    U64 checkpoint;
-
-    Profiler();
-    ~Profiler();
-};
+static F64
+us_from_cpu_cycles(U64 cycles);
