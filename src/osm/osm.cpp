@@ -5,15 +5,15 @@ osm::structure_init(U64 node_hashmap_size, U64 way_hashmap_size, Rng2F64 utm_coo
     Arena* arena = ArenaAlloc();
     Buffer<osm::NodeList> utm_node_hashmap = BufferAlloc<osm::NodeList>(arena, node_hashmap_size);
     Buffer<osm::WayList> way_hashmap = BufferAlloc<osm::WayList>(arena, way_hashmap_size);
-    ChunkList<UtmLocation>* utm_location_chunk_list = chunk_list_create<UtmLocation>(arena, 1024);
+    Map<osm::NodeId, osm::UtmLocation>* utm_location_map =
+        map_create<osm::NodeId, osm::UtmLocation>(arena, node_hashmap_size);
 
     F64 center_transform_x = -(utm_coords.min.x + utm_coords.max.x) / 2.0;
     F64 center_transform_y = -(utm_coords.min.y + utm_coords.max.y) / 2.0;
     Vec2F64 utm_center_offset = {center_transform_x, center_transform_y};
 
     osm::g_network = PushStruct(arena, osm::Network);
-    *osm::g_network = {arena, utm_node_hashmap, utm_center_offset, utm_location_chunk_list,
-                       way_hashmap};
+    *osm::g_network = {arena, utm_node_hashmap, utm_center_offset, utm_location_map, way_hashmap};
 }
 
 g_internal void
@@ -60,9 +60,8 @@ osm::structure_add(Buffer<osm::RoadNodeList> node_hashmap, String8 json, osm::Wa
                 String8 utm_zone_str = str8_c_string(node_utm_zone);
                 node_utm->utm_zone = PushStr8Copy(arena, utm_zone_str);
 
-                UtmLocation* loc =
-                    chunk_list_get_next(network->arena, network->utm_location_chunk_list);
-                *loc = utm_location_create(node_id, vec_2f32(x, y));
+                UtmLocation loc = utm_location_create(node_id, vec_2f32(x, y));
+                map_insert(network->utm_location_map, node_id, loc);
 
                 chunk_list_insert(scratch.arena, node_id_chunk_list, node_id);
             }
@@ -128,19 +127,12 @@ g_internal osm::UtmLocation
 osm::utm_location_get(NodeId node_id)
 {
     prof_scope_marker;
-
-    ChunkList<UtmLocation>* utm_location_chunk_list = osm::g_network->utm_location_chunk_list;
-    UtmLocation utm_location = {};
-    for (auto& loc : *utm_location_chunk_list)
+    UtmLocation* loc = map_get(osm::g_network->utm_location_map, node_id);
+    if (loc)
     {
-        if (loc.id == node_id)
-        {
-            utm_location = loc;
-            break;
-        }
+        return *loc;
     }
-
-    return utm_location;
+    return {};
 }
 
 g_internal osm::Node*

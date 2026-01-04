@@ -126,7 +126,7 @@ struct Network
     Arena* arena;
     Buffer<NodeList> utm_node_hashmap; // key is the node id
     Vec2F64 utm_center_offset;         // used for centering utm coordinate based on bounding box
-    ChunkList<UtmLocation>* utm_location_chunk_list;
+    Map<NodeId, UtmLocation>* utm_location_map;
 
     Buffer<WayList> way_hashmap;         // view into way buffers
     Buffer<Way> ways_arr[WayType_Count]; // buffer storage
