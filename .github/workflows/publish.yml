@@ -35,8 +35,8 @@ jobs:
           call "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Auxiliary\Build\vcvarsall.bat" x64
           cmake --preset=release-windows
           cmake --build build --target clang-tidy-check
-          cmake --build build
-          %SystemRoot%\System32\tar.exe -a -c -f ${{ env.ZIP_NAME }} data -C build ${{ matrix.exe }} -C ../docs usage-guide.pdf
+          cmake --build build/release
+          %SystemRoot%\System32\tar.exe -a -c -f ${{ env.ZIP_NAME }} data -C build/release ${{ matrix.exe }} -C ../docs usage-guide.pdf
       - name: Build Linux
         if: matrix.os == 'ubuntu-24.04'
         shell: bash
@@ -50,8 +50,8 @@ jobs:
           sudo apt-get install -y libgl1-mesa-dev xorg-dev libwayland-dev libxkbcommon-dev wayland-protocols extra-cmake-modules
           cmake --preset=release-linux
           cmake --build build --target clang-tidy-check
-          cmake --build build
-          tar -czf ${{ env.ZIP_NAME }} data -C build ${{ matrix.exe }} -C ../docs usage-guide.pdf
+          cmake --build build/release
+          tar -czf ${{ env.ZIP_NAME }} data -C build/release ${{ matrix.exe }} -C ../docs usage-guide.pdf
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
