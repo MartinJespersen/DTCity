@@ -192,7 +192,7 @@ OS_GetCurrentPath(Arena* arena);
 static U32
 os_get_process_start_time_unix();
 static inline String8
-OS_PathDelimiter();
+os_path_delimiter();
 
 ////////////////////////////////
 //~ rjf: @os_hooks Memory Allocation (Implemented Per-OS)

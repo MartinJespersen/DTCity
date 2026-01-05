@@ -1,6 +1,7 @@
 static Result<Buffer<neta_Edge>>
 neta_edge_in_osm_area(Arena* arena, simdjson::ondemand::document& doc, Rng2F64 utm_bbox)
 {
+    prof_scope_marker;
     using namespace simdjson;
 
     B32 err = false;

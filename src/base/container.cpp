@@ -65,21 +65,21 @@ Str8BufferFromCString(Arena* arena, std::initializer_list<const char*> strings)
     U32 index = 0;
     for (const char* const* str = strings.begin(); str != strings.end(); ++str)
     {
-        buffer.data[index++] = PushStr8Copy(arena, str8_c_string(*str));
+        buffer.data[index++] = push_str8_copy(arena, str8_c_string(*str));
     }
     return buffer;
 }
 
 static String8
-Str8PathFromStr8List(Arena* arena, std::initializer_list<String8> strings)
+str8_path_from_str8_list(Arena* arena, std::initializer_list<String8> strings)
 {
     String8List path_list = {0};
-    StringJoin join_params = {.sep = OS_PathDelimiter()};
+    StringJoin join_params = {.sep = os_path_delimiter()};
     for (const String8* str = strings.begin(); str != strings.end(); ++str)
     {
-        Str8ListPush(arena, &path_list, *str);
+        str8_list_push(arena, &path_list, *str);
     }
-    String8 result = Str8ListJoin(arena, &path_list, &join_params);
+    String8 result = str8_list_join(arena, &path_list, &join_params);
     return result;
 }
 
@@ -87,16 +87,16 @@ static String8
 CreatePathFromStrings(Arena* arena, Buffer<String8> path_elements)
 {
     String8List path_list = {0};
-    StringJoin join_params = {.sep = OS_PathDelimiter()};
+    StringJoin join_params = {.sep = os_path_delimiter()};
 
     // Step 1: Convert each char* to String8 and push to list
     for (U64 i = 0; i < path_elements.size; i++)
     {
         String8 part = path_elements.data[i];
-        Str8ListPush(arena, &path_list, part);
+        str8_list_push(arena, &path_list, part);
     }
 
-    String8 result = Str8ListJoin(arena, &path_list, &join_params);
+    String8 result = str8_list_join(arena, &path_list, &join_params);
     return result;
 }
 
@@ -155,7 +155,6 @@ chunk_list_insert(Arena* arena, ChunkList<T>* list, T& item)
 {
     T* res = chunk_list_get_next(arena, list);
     *res = item;
-    list->total_count++;
 }
 
 template <typename T>

@@ -132,7 +132,7 @@ static HTTP_Response HTTP_Request(Arena *arena, String8 host, String8 path,
         Str8ListPushF(scratch.arena, &header_strings, "Content-Type: %s\n",
                       (char *)params->content_type.str);
       }
-      String8 header = Str8ListJoin(scratch.arena, &header_strings, 0);
+      String8 header = str8_list_join(scratch.arena, &header_strings, 0);
       header16 = Str16From8(scratch.arena, header);
     }
 
@@ -203,14 +203,14 @@ static HTTP_Response HTTP_Request(Arena *arena, String8 host, String8 path,
       DWORD bytes_read = 0;
       good = WinHttpReadData(hRequest, data.str, data.size, &bytes_read);
       if (good) {
-        Str8ListPush(scratch.arena, &response_data_strings, data);
+        str8_list_push(scratch.arena, &response_data_strings, data);
       }
     }
   }
   HTTP_Response response = {0};
   response.good = good;
   response.code = code;
-  response.body = Str8ListJoin(arena, &response_data_strings, 0);
+  response.body = str8_list_join(arena, &response_data_strings, 0);
   ScratchEnd(scratch);
   return response;
 }

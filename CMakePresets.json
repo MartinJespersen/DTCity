@@ -3,7 +3,7 @@
   "configurePresets": [
     {
       "name": "debug-base",
-      "generator": "Ninja",
+      "generator": "Ninja Multi-Config",
       "binaryDir": "${sourceDir}/build",
       "cacheVariables": {
         "CMAKE_TOOLCHAIN_FILE": "$env{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake",
@@ -50,7 +50,7 @@
     {
       "name": "debug-windows",
       "inherits": "debug-base",
-      "generator": "Ninja"
+      "generator": "Ninja Multi-Config"
     },
     {
       "name": "debug-linux",

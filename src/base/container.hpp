@@ -76,7 +76,7 @@ buffer_concat(Arena* arena, Buffer<T> a, Buffer<T> b);
 static Buffer<String8>
 Str8BufferFromCString(Arena* arena, std::initializer_list<const char*> strings);
 static String8
-Str8PathFromStr8List(Arena* arena, std::initializer_list<String8> strings);
+str8_path_from_str8_list(Arena* arena, std::initializer_list<String8> strings);
 static String8
 CreatePathFromStrings(Arena* arena, Buffer<String8> path_elements);
 

@@ -155,8 +155,8 @@ way_buffer_from_simd_json(Arena* arena, String8 json)
                     Str8((U8*)value_view.value().data(), value_view.value().size());
 
                 // Copy to arena
-                way->tags.data[tag_cur_index].key = PushStr8Copy(arena, temp_key);
-                way->tags.data[tag_cur_index].value = PushStr8Copy(arena, temp_value);
+                way->tags.data[tag_cur_index].key = push_str8_copy(arena, temp_key);
+                way->tags.data[tag_cur_index].value = push_str8_copy(arena, temp_value);
 
                 tag_cur_index++;
             }

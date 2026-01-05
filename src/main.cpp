@@ -16,19 +16,24 @@ ContextCreate(io_IO* io_ctx)
     ctx->time = PushStruct(app_arena, dt_Time);
     ctx->cwd = OS_GetCurrentPath(scratch.arena);
 
-    String8 data_dir = Str8PathFromStr8List(app_arena, {ctx->cwd, S("data")});
-    B32 data_dir_exists = os_folder_path_exists(data_dir);
-    if (!data_dir_exists)
+    String8 data_dir = str8_path_from_str8_list(scratch.arena, {ctx->cwd, S("data")});
     {
-        data_dir = Str8PathFromStr8List(app_arena, {ctx->cwd, S(".."), S("data")});
-        data_dir_exists = os_folder_path_exists(data_dir);
+        U32 retry_count = 0;
+        String8List parent_dir_list = {};
+        const U32 retry_stop = 3;
+        for (; retry_count < retry_stop && os_folder_path_exists(data_dir) == false; retry_count++)
+        {
+            str8_list_push(scratch.arena, &parent_dir_list, S(".."));
+            StringJoin join_params = {.sep = os_path_delimiter()};
+            String8 parent_path = str8_list_join(scratch.arena, &parent_dir_list, &join_params);
+            data_dir = str8_path_from_str8_list(scratch.arena, {ctx->cwd, parent_path, S("data")});
+        }
+        if (retry_count >= retry_stop)
+        {
+            exit_with_error("data directory cannot be found");
+        }
     }
-    ctx->data_dir = data_dir;
-
-    if (!data_dir_exists)
-    {
-        exit_with_error("data directory cannot not found");
-    }
+    ctx->data_dir = push_str8_copy(app_arena, data_dir);
 
     dt_DataDirPair subdirs[] = {{dt_DataDirType::Cache, S("cache")},
                                 {dt_DataDirType::Texture, S("textures")},

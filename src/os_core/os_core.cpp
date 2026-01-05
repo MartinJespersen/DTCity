@@ -59,7 +59,7 @@ os_string_list_from_argcv(Arena* arena, int argc, char** argv)
     for (int i = 0; i < argc; i += 1)
     {
         String8 str = str8_c_string(argv[i]);
-        Str8ListPush(arena, &result, str);
+        str8_list_push(arena, &result, str);
     }
     return result;
 }
@@ -221,7 +221,7 @@ os_cmd_line_launch(String8 string)
         String8List cmdline = {0};
         for (String8Node* n = parts.first; n != stdout_delimiter_n && n != 0; n = n->next)
         {
-            Str8ListPush(scratch.arena, &cmdline, n->string);
+            str8_list_push(scratch.arena, &cmdline, n->string);
         }
 
         // rjf: launch

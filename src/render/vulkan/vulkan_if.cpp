@@ -304,7 +304,7 @@ r_texture_load_async(r_SamplerInfo* sampler_info, String8 texture_path,
     r_AssetLoadingInfo* asset_load_info = &thread_input->asset_info;
     asset_load_info->type = R_AssetItemType_Texture;
     r_TextureLoadingInfo* texture_load_info = &asset_load_info->extra_info.texture_info;
-    texture_load_info->tex_path = PushStr8Copy(thread_input->arena, texture_path);
+    texture_load_info->tex_path = push_str8_copy(thread_input->arena, texture_path);
 
     asset_load_info->handle = r_texture_handle_create(sampler_info, pipeline_usage_type);
 

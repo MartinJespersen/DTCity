@@ -275,7 +275,7 @@ str8_skip_chop_slashes(String8 string);
 static String8
 PushStr8Cat(Arena* arena, String8 s1, String8 s2);
 static String8
-PushStr8Copy(Arena* arena, String8 s);
+push_str8_copy(Arena* arena, String8 s);
 static String8
 push_str8fv(Arena* arena, const char* fmt, va_list args);
 static String8
@@ -335,7 +335,7 @@ str8_list_push_node_front(String8List* list, String8Node* node);
 static String8Node*
 str8_list_push_node_front_set_string(String8List* list, String8Node* node, String8 string);
 static String8Node*
-Str8ListPush(Arena* arena, String8List* list, String8 string);
+str8_list_push(Arena* arena, String8List* list, String8 string);
 static String8Node*
 str8_list_push_front(Arena* arena, String8List* list, String8 string);
 static void
@@ -363,7 +363,7 @@ static String8List
 str8_list_split_by_string_chars(Arena* arena, String8List list, String8 split_chars,
                                 StringSplitFlags flags);
 static String8
-Str8ListJoin(Arena* arena, String8List* list, StringJoin* optional_params);
+str8_list_join(Arena* arena, String8List* list, StringJoin* optional_params);
 static void
 str8_list_from_flags(Arena* arena, String8List* list, U32 flags, String8* flag_string_table,
                      U32 flag_string_count);
@@ -563,7 +563,7 @@ str8_deserial_read_block(String8 string, U64 off, U64 size, String8* block_out);
 
 //- rjf: Allocation
 static String8
-PushStr8Copy(Arena* arena, String8 string);
+push_str8_copy(Arena* arena, String8 string);
 static String8
 PushStr8FV(Arena* arena, const char* fmt, va_list args);
 static String8

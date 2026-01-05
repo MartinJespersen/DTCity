@@ -1,6 +1,5 @@
 # Bugs
 * Direction or previous node is needed for random neighbor algorithm to avoid doing a u-turn when it is possible to drive straight.
-* Assertion errors when closing app before initialization has finished.
 
 # Changes along the way
 * Make the asset manager thread safe - accessing texture and buffer lists are not thread safe at the moment

@@ -198,7 +198,7 @@ os_get_process_start_time_unix()
 }
 
 static inline String8
-OS_PathDelimiter()
+os_path_delimiter()
 {
     return Str8Lit("\\");
 }
@@ -277,7 +277,7 @@ os_set_thread_name(String8 name)
 
     // rjf: raise-exception style
     {
-        String8 name_copy = PushStr8Copy(scratch.arena, name);
+        String8 name_copy = push_str8_copy(scratch.arena, name);
 #pragma pack(push, 8)
         typedef struct THREADNAME_INFO THREADNAME_INFO;
         struct THREADNAME_INFO
@@ -786,7 +786,7 @@ os_file_iter_begin(Arena* arena, String8 path, OS_FileIterFlags flags)
             off += next_drive_string_16.size + 1;
             String8 next_drive_string = str8_from_16(arena, next_drive_string_16);
             next_drive_string = str8_chop_last_slash(next_drive_string);
-            Str8ListPush(scratch.arena, &drive_strings, next_drive_string);
+            str8_list_push(scratch.arena, &drive_strings, next_drive_string);
         }
         w32_iter->drive_strings = str8_array_from_list(arena, &drive_strings);
         w32_iter->drive_strings_iter_idx = 0;
@@ -1066,7 +1066,7 @@ os_process_launch(OS_ProcessLaunchParams* params)
         join_params.pre = Str8Lit("\"");
         join_params.sep = Str8Lit("\" \"");
         join_params.post = Str8Lit("\"");
-        cmd = Str8ListJoin(scratch.arena, &params->cmd_line, &join_params);
+        cmd = str8_list_join(scratch.arena, &params->cmd_line, &join_params);
     }
 
     //- rjf: form environment
@@ -1084,12 +1084,12 @@ os_process_launch(OS_ProcessLaunchParams* params)
                 MemoryZeroStruct(&all_opts);
                 for (String8Node* n = params->env.first; n != 0; n = n->next)
                 {
-                    Str8ListPush(scratch.arena, &all_opts, n->string);
+                    str8_list_push(scratch.arena, &all_opts, n->string);
                 }
                 for (String8Node* n = os_w32_state.process_info.environment.first; n != 0;
                      n = n->next)
                 {
-                    Str8ListPush(scratch.arena, &all_opts, n->string);
+                    str8_list_push(scratch.arena, &all_opts, n->string);
                 }
             }
             else
@@ -1099,7 +1099,7 @@ os_process_launch(OS_ProcessLaunchParams* params)
         }
         if (use_null_env_arg == 0)
         {
-            env = Str8ListJoin(scratch.arena, &all_opts, &join_params2);
+            env = str8_list_join(scratch.arena, &all_opts, &join_params2);
         }
     }
 
@@ -1443,7 +1443,7 @@ os_library_load_proc(OS_Handle lib, String8 name)
 {
     Temp scratch = ScratchBegin(0, 0);
     HMODULE mod = (HMODULE)lib.u64[0];
-    name = PushStr8Copy(scratch.arena, name);
+    name = push_str8_copy(scratch.arena, name);
     VoidProc* result = (VoidProc*)GetProcAddress(mod, (LPCSTR)name.str);
     ScratchEnd(scratch);
     return result;
@@ -1864,7 +1864,7 @@ w32_entry_point_caller(int argc, WCHAR** wargv)
             DWORD size = MAX_COMPUTERNAME_LENGTH + 1;
             if (GetComputerNameA((char*)buffer, &size))
             {
-                info->machine_name = PushStr8Copy(arena, Str8(buffer, size));
+                info->machine_name = push_str8_copy(arena, Str8(buffer, size));
             }
         }
     }
@@ -1877,7 +1877,7 @@ w32_entry_point_caller(int argc, WCHAR** wargv)
             DWORD length = GetModuleFileNameW(0, (WCHAR*)buffer, size);
             String8 name8 = str8_from_16(scratch.arena, str16(buffer, length));
             String8 name_chopped = str8_chop_last_slash(name8);
-            info->binary_path = PushStr8Copy(arena, name_chopped);
+            info->binary_path = push_str8_copy(arena, name_chopped);
             ScratchEnd(scratch);
         }
         info->initial_path = OS_GetCurrentPath(arena);
@@ -1906,7 +1906,7 @@ w32_entry_point_caller(int argc, WCHAR** wargv)
                     {
                         String16 string16 = str16((U16*)this_proc_env + start_idx, idx - start_idx);
                         String8 string = str8_from_16(arena, string16);
-                        Str8ListPush(arena, &info->environment, string);
+                        str8_list_push(arena, &info->environment, string);
                         start_idx = idx + 1;
                     }
                 }

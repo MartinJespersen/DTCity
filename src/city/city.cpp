@@ -587,6 +587,7 @@ g_internal osm::UtmLocation
 random_utm_road_node_get()
 {
     osm::NodeId node_id = osm::random_node_id_from_type_get(osm::WayType_Road);
+    Assert(node_id != 0);
     osm::UtmLocation node_loc = osm::utm_location_get(node_id);
     Vec2F32 new_pos = world_position_offset_adjust(node_loc.pos);
     osm::UtmLocation new_loc = osm::utm_location_create(node_loc.id, new_pos);
@@ -605,7 +606,7 @@ car_sim_create(String8 asset_path, String8 texture_path, U32 car_count, Road* ro
     car_sim->arena = arena;
 
     // parse gltf file
-    String8 gltf_path = Str8PathFromStr8List(scratch.arena, {asset_path, S("cars/scene.gltf")});
+    String8 gltf_path = str8_path_from_str8_list(scratch.arena, {asset_path, S("cars/scene.gltf")});
     CgltfResult parsed_result = gltfw_gltf_read(scratch.arena, gltf_path, S("Car.013"));
     car_sim->sampler_info = sampler_from_cgltf_sampler(parsed_result.sampler);
     Buffer<r_Vertex3D> vertex_buffer =
@@ -615,7 +616,8 @@ car_sim_create(String8 asset_path, String8 texture_path, U32 car_count, Road* ro
     Buffer<U32> index_buffer = buffer_arena_copy(arena, parsed_result.index_buffer);
     car_sim->index_buffer = r_buffer_info_from_u32_index_buffer(index_buffer, R_BufferType_Index);
 
-    car_sim->texture_path = Str8PathFromStr8List(arena, {texture_path, S("car_collection.ktx2")});
+    car_sim->texture_path =
+        str8_path_from_str8_list(arena, {texture_path, S("car_collection.ktx2")});
     car_sim->texture_handle = r_texture_load_async(&car_sim->sampler_info, car_sim->texture_path,
                                                    R_PipelineUsageType_3DInstanced);
     car_sim->vertex_handle = r_buffer_load(&car_sim->vertex_buffer);
@@ -721,7 +723,7 @@ buildings_create(String8 cache_path, String8 texture_path, F32 road_height, Rng2
     Arena* arena = ArenaAlloc();
     Buildings* buildings = PushStruct(arena, Buildings);
     buildings->arena = arena;
-    buildings->cache_file_name = PushStr8Copy(arena, S("openapi_node_ways_buildings.json"));
+    buildings->cache_file_name = push_str8_copy(arena, S("openapi_node_ways_buildings.json"));
 
     {
         HTTP_RequestParams params = {};
@@ -741,7 +743,7 @@ buildings_create(String8 cache_path, String8 texture_path, F32 road_height, Rng2
         String8 query_str = PushStr8F(scratch.arena, (char*)query.str, bbox.min.y, bbox.min.x,
                                       bbox.max.y, bbox.max.x);
         String8 cache_data_file =
-            Str8PathFromStr8List(scratch.arena, {cache_path, buildings->cache_file_name});
+            str8_path_from_str8_list(scratch.arena, {cache_path, buildings->cache_file_name});
         String8 cache_meta_file = PushStr8Cat(scratch.arena, cache_data_file, S(".meta"));
 
         String8 input_str = str8_from_bbox(scratch.arena, bbox);
@@ -777,9 +779,9 @@ buildings_create(String8 cache_path, String8 texture_path, F32 road_height, Rng2
     }
 
     buildings->facade_texture_path =
-        Str8PathFromStr8List(arena, {texture_path, S("brick_wall.ktx2")});
+        str8_path_from_str8_list(arena, {texture_path, S("brick_wall.ktx2")});
     buildings->roof_texture_path =
-        Str8PathFromStr8List(arena, {texture_path, S("concrete042A.ktx2")});
+        str8_path_from_str8_list(arena, {texture_path, S("concrete042A.ktx2")});
     r_Handle facade_texture_handle =
         r_texture_load_async(sampler_info, buildings->facade_texture_path, R_PipelineUsageType_3D);
     r_Handle roof_texture_handle =
@@ -1386,7 +1388,7 @@ g_internal String8
 str8_from_bbox(Arena* arena, Rng2F64 bbox)
 {
     String8 str = {.str = (U8*)&bbox, .size = sizeof(Rng2F64)};
-    String8 str_copy = PushStr8Copy(arena, str);
+    String8 str_copy = push_str8_copy(arena, str);
     return str_copy;
 }
 
@@ -1400,7 +1402,7 @@ road_create(String8 texture_path, String8 cache_path, Rng2F64 bbox, r_SamplerInf
 
     Road* road = PushStruct(arena, Road);
 
-    road->openapi_data_file_name = PushStr8Copy(arena, S("openapi_node_ways_highway.json"));
+    road->openapi_data_file_name = push_str8_copy(arena, S("openapi_node_ways_highway.json"));
     road->arena = arena;
     road->road_height = 10.0f;
     road->default_road_width = 2.0f;
@@ -1422,7 +1424,7 @@ road_create(String8 texture_path, String8 cache_path, Rng2F64 bbox, r_SamplerInf
     String8 query_str =
         PushStr8F(scratch.arena, (char*)query.str, bbox.min.y, bbox.min.x, bbox.max.y, bbox.max.x);
     String8 cache_data_file =
-        Str8PathFromStr8List(scratch.arena, {cache_path, road->openapi_data_file_name});
+        str8_path_from_str8_list(scratch.arena, {cache_path, road->openapi_data_file_name});
     String8 cache_meta_file = PushStr8Cat(scratch.arena, cache_data_file, S(".meta"));
 
     String8 input_str = str8_from_bbox(scratch.arena, bbox);
@@ -1468,7 +1470,8 @@ road_create(String8 texture_path, String8 cache_path, Rng2F64 bbox, r_SamplerInf
     r_BufferInfo index_buffer_info =
         r_buffer_info_from_u32_index_buffer(render_buffers.indices, R_BufferType_Index);
 
-    road->texture_path = Str8PathFromStr8List(road->arena, {texture_path, S("road_texture.ktx2")});
+    road->texture_path =
+        str8_path_from_str8_list(road->arena, {texture_path, S("road_texture.ktx2")});
 
     r_Handle texture_handle =
         r_texture_load_async(sampler_info, road->texture_path, R_PipelineUsageType_3D);

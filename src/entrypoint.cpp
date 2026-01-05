@@ -4,7 +4,7 @@ dt_dir_create(Arena* arena, String8 parent, dt_DataDirPair* dirs, U32 count)
     Buffer<String8> buffer = BufferAlloc<String8>(arena, count);
     for (U32 i = 0; i < count; i++)
     {
-        String8 dir = Str8PathFromStr8List(arena, {parent, dirs[i].name});
+        String8 dir = str8_path_from_str8_list(arena, {parent, dirs[i].name});
         if (os_file_path_exists(dir) == false)
         {
             B32 dir_created = os_make_directory(dir);
@@ -228,7 +228,7 @@ dt_main_loop(void* ptr)
     city::CarSim* car_sim = ctx->car_sim;
 
     String8 neta_path =
-        Str8PathFromStr8List(scratch.arena, {ctx->data_dir, S("netascore.geojson")});
+        str8_path_from_str8_list(scratch.arena, {ctx->data_dir, S("netascore.geojson")});
     Map<S64, neta_EdgeList>* edge_map =
         neta_osm_way_to_edges_map_create(scratch.arena, neta_path, utm_coords);
     if (!edge_map)
