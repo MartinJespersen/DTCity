@@ -15,7 +15,7 @@
       "binaryDir": "${sourceDir}/build/debug",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Debug",
-        "ASAN_ENABLED": "ON",
+        "ASAN_ENABLED": "OFF",
         "BUILD_DEBUG": "ON"
       }
     },

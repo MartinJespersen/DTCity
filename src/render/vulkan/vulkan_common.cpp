@@ -547,7 +547,7 @@ vk_sync_objects_create(VK_Context* vk_ctx)
 }
 
 static void
-VK_SyncObjectsDestroy(VK_Context* vk_ctx)
+vk_sync_objects_destroy(VK_Context* vk_ctx)
 {
     for (size_t i = 0; i < VK_MAX_FRAMES_IN_FLIGHT; i++)
     {
@@ -718,7 +718,7 @@ VK_IsDeviceSuitable(VK_Context* vk_ctx, VkPhysicalDevice device, VK_QueueFamilyI
     if (extensionsSupported)
     {
         VK_SwapChainSupportDetails swapChainDetails =
-            VK_QuerySwapChainSupport(vk_ctx->arena, device, vk_ctx->surface);
+            vk_query_swapchain_support(vk_ctx->arena, device, vk_ctx->surface);
         swapChainAdequate = swapChainDetails.formats.size && swapChainDetails.presentModes.size;
     }
 
@@ -740,7 +740,7 @@ VK_QueueFamilyIsComplete(VK_QueueFamilyIndexBits queueFamily)
 }
 
 static VK_SwapChainSupportDetails
-VK_QuerySwapChainSupport(Arena* arena, VkPhysicalDevice device, VkSurfaceKHR surface)
+vk_query_swapchain_support(Arena* arena, VkPhysicalDevice device, VkSurfaceKHR surface)
 {
     VK_SwapChainSupportDetails details;
 
@@ -1131,7 +1131,7 @@ VK_ChooseSwapPresentMode(Buffer<VkPresentModeKHR> availablePresentModes)
 }
 
 static VkExtent2D
-VK_ChooseSwapExtent(Vec2U32 framebuffer_dim, const VkSurfaceCapabilitiesKHR& capabilities)
+vk_choose_swap_extent(Vec2U32 framebuffer_dim, const VkSurfaceCapabilitiesKHR& capabilities)
 {
     if (capabilities.currentExtent.width != UINT32_MAX)
     {
@@ -1198,26 +1198,22 @@ VK_SwapChainImageCountGet(VkDevice device, vk_SwapchainResources* swapchain_reso
 }
 
 static vk_SwapchainResources*
-VK_SwapChainCreate(VK_Context* vk_ctx, Vec2U32 framebuffer_dim)
+vk_swapchain_create(VK_Context* vk_ctx, VK_SwapChainSupportDetails* swapchain_info,
+                    VkExtent2D swapchain_extent)
 {
     Arena* arena = ArenaAlloc();
     vk_SwapchainResources* swapchain_resources = PushStruct(arena, vk_SwapchainResources);
     swapchain_resources->arena = arena;
 
-    VK_SwapChainSupportDetails swapchain_details =
-        VK_QuerySwapChainSupport(arena, vk_ctx->physical_device, vk_ctx->surface);
+    VkSurfaceFormatKHR surface_format = VK_ChooseSwapSurfaceFormat(swapchain_info->formats);
+    VkPresentModeKHR present_mode = VK_ChooseSwapPresentMode(swapchain_info->presentModes);
 
-    VkSurfaceFormatKHR surface_format = VK_ChooseSwapSurfaceFormat(swapchain_details.formats);
-    VkPresentModeKHR present_mode = VK_ChooseSwapPresentMode(swapchain_details.presentModes);
-    VkExtent2D swapchain_extent =
-        VK_ChooseSwapExtent(framebuffer_dim, swapchain_details.capabilities);
+    U32 image_count = swapchain_info->capabilities.minImageCount + 1;
 
-    U32 image_count = swapchain_details.capabilities.minImageCount + 1;
-
-    if (swapchain_details.capabilities.maxImageCount > 0 &&
-        image_count > swapchain_details.capabilities.maxImageCount)
+    if (swapchain_info->capabilities.maxImageCount > 0 &&
+        image_count > swapchain_info->capabilities.maxImageCount)
     {
-        image_count = swapchain_details.capabilities.maxImageCount;
+        image_count = swapchain_info->capabilities.maxImageCount;
     }
 
     VK_QueueFamilyIndices queueFamilyIndices = vk_ctx->queue_family_indices;
@@ -1246,7 +1242,7 @@ VK_SwapChainCreate(VK_Context* vk_ctx, Vec2U32 framebuffer_dim)
         createInfo.pQueueFamilyIndices = nullptr; // Optional
     }
 
-    createInfo.preTransform = swapchain_details.capabilities.currentTransform;
+    createInfo.preTransform = swapchain_info->capabilities.currentTransform;
     createInfo.compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
     createInfo.presentMode = present_mode;
     createInfo.clipped = VK_TRUE;
@@ -1260,7 +1256,6 @@ VK_SwapChainCreate(VK_Context* vk_ctx, Vec2U32 framebuffer_dim)
     swapchain_resources->swapchain_extent = swapchain_extent;
     swapchain_resources->swapchain_image_format = surface_format.format;
     swapchain_resources->color_format = surface_format.format;
-    swapchain_resources->swapchain_support = swapchain_details;
     swapchain_resources->present_mode = present_mode;
     swapchain_resources->surface_format = surface_format;
     U32 swapchain_image_count = VK_SwapChainImageCountGet(vk_ctx->device, swapchain_resources);
@@ -1297,8 +1292,8 @@ VK_SwapChainCreate(VK_Context* vk_ctx, Vec2U32 framebuffer_dim)
 }
 
 static void
-VK_SwapChainCleanup(VkDevice device, VmaAllocator allocator,
-                    vk_SwapchainResources* swapchain_resources)
+vk_swapchain_cleanup(VkDevice device, VmaAllocator allocator,
+                     vk_SwapchainResources* swapchain_resources)
 {
     for (U32 i = 0; i < swapchain_resources->image_count; i++)
     {
@@ -1325,15 +1320,22 @@ VK_SwapChainCleanup(VkDevice device, VmaAllocator allocator,
 }
 
 static void
-VK_RecreateSwapChain(Vec2U32 framebuffer_dim, VK_Context* vk_ctx)
+vk_swapchain_recreate(Vec2U32 framebuffer_dim)
 {
+    VK_Context* vk_ctx = VK_CtxGet();
+    ScratchScope scratch = ScratchScope(0, 0);
+
     VK_CHECK_RESULT(vkDeviceWaitIdle(vk_ctx->device));
 
-    VK_SyncObjectsDestroy(vk_ctx);
-    VK_SwapChainCleanup(vk_ctx->device, vk_ctx->allocator, vk_ctx->swapchain_resources);
+    vk_swapchain_cleanup(vk_ctx->device, vk_ctx->allocator, vk_ctx->swapchain_resources);
     vk_ctx->swapchain_resources = 0;
-    vk_ctx->swapchain_resources = VK_SwapChainCreate(vk_ctx, framebuffer_dim);
-    vk_sync_objects_create(vk_ctx);
+    VK_SwapChainSupportDetails swapchain_details =
+        vk_query_swapchain_support(scratch.arena, vk_ctx->physical_device, vk_ctx->surface);
+    VkExtent2D swapchain_extent =
+        vk_choose_swap_extent(framebuffer_dim, swapchain_details.capabilities);
+    if (swapchain_extent.width != 0 && swapchain_extent.height != 0)
+        vk_ctx->swapchain_resources =
+            vk_swapchain_create(vk_ctx, &swapchain_details, swapchain_extent);
 }
 
 // Samplers helpers

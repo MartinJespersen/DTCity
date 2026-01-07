@@ -154,6 +154,7 @@ struct r_Vertex3D
     Vec3F32 pos;
     Vec2F32 uv;
     Vec2U32 object_id;
+    Vec4F32 color;
 };
 
 struct r_Model3DInstance

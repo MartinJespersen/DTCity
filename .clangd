@@ -1,8 +1,8 @@
 If:
   PathMatch: .*
 CompileFlags:
-  CompilationDatabase: build
-  Add: [/FI../src/includes.hpp]
+  CompilationDatabase: build/debug
+  Add: [/FI../../src/includes.hpp]
 
 Index:
   Background: Build

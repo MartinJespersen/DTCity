@@ -55,7 +55,11 @@ r_render_ctx_create(String8 shader_path, io_IO* io_ctx, async::Threads* thread_p
 
     Vec2S32 vk_framebuffer_dim_s32 = io_wait_for_valid_framebuffer_size(io_ctx);
     Vec2U32 vk_framebuffer_dim_u32 = {(U32)vk_framebuffer_dim_s32.x, (U32)vk_framebuffer_dim_s32.y};
-    vk_ctx->swapchain_resources = VK_SwapChainCreate(vk_ctx, vk_framebuffer_dim_u32);
+    VK_SwapChainSupportDetails swapchain_details =
+        vk_query_swapchain_support(scratch.arena, vk_ctx->physical_device, vk_ctx->surface);
+    VkExtent2D swapchain_extent =
+        vk_choose_swap_extent(vk_framebuffer_dim_u32, swapchain_details.capabilities);
+    vk_ctx->swapchain_resources = vk_swapchain_create(vk_ctx, &swapchain_details, swapchain_extent);
 
     VkCommandPoolCreateInfo poolInfo{};
     poolInfo.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
@@ -101,7 +105,7 @@ r_render_ctx_destroy()
     VK_CameraCleanup(vk_ctx);
     VK_ProfileBuffersDestroy(vk_ctx);
 
-    VK_SwapChainCleanup(vk_ctx->device, vk_ctx->allocator, vk_ctx->swapchain_resources);
+    vk_swapchain_cleanup(vk_ctx->device, vk_ctx->allocator, vk_ctx->swapchain_resources);
 
     vkDestroyCommandPool(vk_ctx->device, vk_ctx->command_pool, nullptr);
 
@@ -134,49 +138,70 @@ static void
 r_render_frame(Vec2U32 framebuffer_dim, B32* in_out_framebuffer_resized, ui::Camera* camera,
                Vec2S64 mouse_cursor_pos)
 {
+    ScratchScope scratch = ScratchScope(0, 0);
+
+    if (framebuffer_dim.x == 0 || framebuffer_dim.y == 0)
+    {
+        return;
+    }
     VK_Context* vk_ctx = VK_CtxGet();
+    defer({ vk_ctx->current_frame = (vk_ctx->current_frame + 1) % VK_MAX_FRAMES_IN_FLIGHT; });
 
     VK_AssetManagerExecuteCmds();
     VK_AssetManagerCmdDoneCheck();
+
     vk_SwapchainResources* swapchain_resources = vk_ctx->swapchain_resources;
-
-    VkFence* in_flight_fence = &vk_ctx->in_flight_fences.data[vk_ctx->current_frame];
+    if (!swapchain_resources)
     {
-        prof_scope_marker_named("Wait for frame");
-        VK_CHECK_RESULT(vkWaitForFences(vk_ctx->device, 1, in_flight_fence, VK_TRUE, 1000000000));
-    }
-    VkSemaphore image_available_semaphore =
-        swapchain_resources->image_available_semaphores.data[vk_ctx->cur_img_idx];
-
-    uint32_t image_idx;
-    VkResult result =
-        vkAcquireNextImageKHR(vk_ctx->device, vk_ctx->swapchain_resources->swapchain, UINT64_MAX,
-                              image_available_semaphore, VK_NULL_HANDLE, &image_idx);
-    vk_ctx->cur_img_idx = (vk_ctx->cur_img_idx + 1) % swapchain_resources->image_count;
-
-    VkSemaphore render_finished_semaphore =
-        swapchain_resources->render_finished_semaphores.data[image_idx];
-
-    if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR ||
-        *in_out_framebuffer_resized)
-    {
-        *in_out_framebuffer_resized = false;
-        ImGui::EndFrame();
-
-        VK_RecreateSwapChain(framebuffer_dim, vk_ctx);
-        vk_ctx->current_frame = (vk_ctx->current_frame + 1) % VK_MAX_FRAMES_IN_FLIGHT;
+        VK_SwapChainSupportDetails swapchain_details =
+            vk_query_swapchain_support(scratch.arena, vk_ctx->physical_device, vk_ctx->surface);
+        VkExtent2D swapchain_extent =
+            vk_choose_swap_extent(framebuffer_dim, swapchain_details.capabilities);
+        if (swapchain_extent.width != 0 && swapchain_extent.height != 0)
+            vk_ctx->swapchain_resources =
+                vk_swapchain_create(vk_ctx, &swapchain_details, swapchain_extent);
         return;
     }
-    else if (result != VK_SUCCESS)
+    VkFence* in_flight_fence = &vk_ctx->in_flight_fences.data[vk_ctx->current_frame];
+    U32 image_idx = 0;
+    U32 prev_image_idx = vk_ctx->cur_img_idx;
     {
-        exit_with_error("failed to acquire swap chain image!");
+        VkSemaphore image_available_semaphore =
+            swapchain_resources->image_available_semaphores.data[prev_image_idx];
+
+        {
+            prof_scope_marker_named("Wait for frame");
+            VK_CHECK_RESULT(
+                vkWaitForFences(vk_ctx->device, 1, in_flight_fence, VK_TRUE, 1000000000));
+        }
+
+        VkResult result = vkAcquireNextImageKHR(
+            vk_ctx->device, vk_ctx->swapchain_resources->swapchain, UINT64_MAX,
+            image_available_semaphore, VK_NULL_HANDLE, &image_idx);
+        vk_ctx->cur_img_idx = (prev_image_idx + 1) % swapchain_resources->image_count;
+
+        if (result == VK_ERROR_OUT_OF_DATE_KHR || *in_out_framebuffer_resized)
+        {
+            *in_out_framebuffer_resized = false;
+            vk_swapchain_recreate(framebuffer_dim);
+            return;
+        }
+        else if (result != VK_SUCCESS && result != VK_SUBOPTIMAL_KHR)
+        {
+            exit_with_error("failed to acquire swap chain image!");
+        }
     }
+
+    VkSemaphore render_finished_semaphore =
+        swapchain_resources->render_finished_semaphores.data[prev_image_idx];
+    VkSemaphore image_available_semaphore =
+        swapchain_resources->image_available_semaphores.data[prev_image_idx];
 
     VkCommandBuffer cmd_buffer = vk_ctx->command_buffers.data[vk_ctx->current_frame];
     VK_CHECK_RESULT(vkResetFences(vk_ctx->device, 1, in_flight_fence));
     VK_CHECK_RESULT(vkResetCommandBuffer(cmd_buffer, 0));
 
-    VK_CommandBufferRecord(image_idx, vk_ctx->current_frame, camera, mouse_cursor_pos);
+    vk_command_buffer_record(image_idx, vk_ctx->current_frame, camera, mouse_cursor_pos);
 
     VkSemaphoreSubmitInfo waitSemaphoreInfo{};
     waitSemaphoreInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO;
@@ -215,20 +240,18 @@ r_render_frame(Vec2U32 framebuffer_dim, B32* in_out_framebuffer_resized, ui::Cam
     presentInfo.pImageIndices = &image_idx;
     presentInfo.pResults = nullptr; // Optional
 
-    result = vkQueuePresentKHR(vk_ctx->present_queue, &presentInfo);
+    VkResult result = vkQueuePresentKHR(vk_ctx->present_queue, &presentInfo);
     prof_frame_marker; // end of frame is assumed to be here
     if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR ||
         *in_out_framebuffer_resized)
     {
         *in_out_framebuffer_resized = 0;
-        VK_RecreateSwapChain(framebuffer_dim, vk_ctx);
+        vk_swapchain_recreate(framebuffer_dim);
     }
     else if (result != VK_SUCCESS)
     {
         exit_with_error("failed to present swap chain image!");
     }
-
-    vk_ctx->current_frame = (vk_ctx->current_frame + 1) % VK_MAX_FRAMES_IN_FLIGHT;
 }
 
 static void

@@ -216,9 +216,10 @@ dt_main_loop(void* ptr)
 
     osm::Network* osm_network = osm::g_network;
     ui::camera_init(ctx->camera,
-                    vec_2f32(-osm_network->utm_center_offset.x, -osm_network->utm_center_offset.y));
+                    vec_2f32(osm_network->utm_center_offset.x, osm_network->utm_center_offset.y));
 
-    ctx->road = city::road_create(texture_dir, cache_dir, input->bbox, &sampler_info);
+    ctx->road = city::road_create(texture_dir, cache_dir, ctx->data_dir, input->bbox, utm_coords,
+                                  &sampler_info);
     city::Road* road = ctx->road;
 
     ctx->buildings = city::buildings_create(cache_dir, texture_dir, ctx->road->road_height,
@@ -226,15 +227,6 @@ dt_main_loop(void* ptr)
     city::Buildings* buildings = ctx->buildings;
     ctx->car_sim = city::car_sim_create(asset_dir, texture_dir, 100, ctx->road);
     city::CarSim* car_sim = ctx->car_sim;
-
-    String8 neta_path =
-        str8_path_from_str8_list(scratch.arena, {ctx->data_dir, S("netascore.geojson")});
-    Map<S64, neta_EdgeList>* edge_map =
-        neta_osm_way_to_edges_map_create(scratch.arena, neta_path, utm_coords);
-    if (!edge_map)
-    {
-        exit_with_error("Failed to initialize neta");
-    }
 
     while (ctx->running)
     {
@@ -248,7 +240,8 @@ dt_main_loop(void* ptr)
         {
             ui::camera_update(ctx->camera, ctx->io, ctx->time->delta_time_sec, framebuffer_dim);
             U64 hovered_object_id = r_latest_hovered_object_id_get();
-            city::RoadEdge** edge_ptr = map_get(&road->edge_map, (S64)hovered_object_id);
+            city::RoadEdge** edge_ptr =
+                map_get(&road->edge_structure.edge_map, (S64)hovered_object_id);
             if (edge_ptr)
             {
                 city::RoadEdge* edge = *edge_ptr;
@@ -262,13 +255,11 @@ dt_main_loop(void* ptr)
                     ImGui::Text("%s: %s", (char*)tag.key.str, (char*)tag.value.str);
                 }
 
-                neta_Edge* chosen_edge = city::neta_edge_from_road_edge(edge, edge_map);
+                city::RoadInfo* chosen_edge = map_get(road->road_info_map, edge->id);
                 if (chosen_edge)
                 {
-                    ImGui::Text("index_bike_ft: %lf", chosen_edge->index_bike_ft);
-                    ImGui::Text("index_bike_tf: %lf", chosen_edge->index_bike_tf);
-                    ImGui::Text("index_bike_ft: %lf", chosen_edge->index_walk_ft);
-                    ImGui::Text("index_bike_tf: %lf", chosen_edge->index_walk_tf);
+                    ImGui::Text("Bikeability: %lf", chosen_edge->bikeability);
+                    ImGui::Text("Walkability: %lf", chosen_edge->walkability);
                 }
                 ImVec2 window_size = ImGui::GetWindowSize();
                 ImVec2 window_pos = ImVec2((F32)framebuffer_dim.x - window_size.x, 0);
@@ -310,6 +301,8 @@ dt_main_loop(void* ptr)
 
         r_render_frame(framebuffer_dim, &io_ctx->framebuffer_resized, ctx->camera,
                        io_ctx->mouse_pos_cur_s64);
+
+        ImGui::EndFrame();
     }
     r_gpu_work_done_wait();
 

@@ -2,7 +2,7 @@ namespace ui
 {
 
 static void
-camera_init(Camera* camera, Vec2F32 start_pos)
+camera_init(Camera* camera, Vec2F32 world_offset)
 {
     camera->move_sensitivity = 20.0f;
     camera->fov = 45.0;
@@ -10,7 +10,7 @@ camera_init(Camera* camera, Vec2F32 start_pos)
     camera->yaw = 0.0f;
     camera->pitch = 88.0f;
     camera->view_dir = ui_direction_normal_from_euler_angles(camera->yaw, camera->pitch);
-    camera->world_offset = {start_pos.x, start_pos.y};
+    camera->world_offset = {-world_offset.x, -world_offset.y};
 }
 
 static void

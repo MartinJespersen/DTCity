@@ -679,6 +679,7 @@ VK_Model3DPipelineCreate(VK_Context* vk_ctx, String8 shader_path)
 
     U32 uv_offset = offsetof(r_Vertex3D, uv);
     U32 object_id_offset = offsetof(r_Vertex3D, object_id);
+    U32 color_offset = offsetof(r_Vertex3D, color);
 
     VkVertexInputAttributeDescription attr_desc[] = {
         {.location = 0, .binding = 0, .format = VK_FORMAT_R32G32B32_SFLOAT},
@@ -686,7 +687,12 @@ VK_Model3DPipelineCreate(VK_Context* vk_ctx, String8 shader_path)
         {.location = 2,
          .binding = 0,
          .format = vk_ctx->object_id_format,
-         .offset = object_id_offset}};
+         .offset = object_id_offset},
+        {.location = 3,
+         .binding = 0,
+         .format = VK_FORMAT_R32G32B32A32_SFLOAT,
+         .offset = color_offset}};
+
     VkVertexInputBindingDescription input_desc[] = {
         {.binding = 0, .stride = sizeof(r_Vertex3D), .inputRate = VK_VERTEX_INPUT_RATE_VERTEX}};
 
@@ -1366,7 +1372,7 @@ r_model_3d_draw(r_Model3DPipelineData pipeline_input, B32 depth_test_per_draw_ca
     r_AssetItem<VK_Texture>* asset_texture =
         VK_AssetManagerTextureItemGet(pipeline_input.texture_handle);
 
-    if (asset_index_buffer->is_loaded && asset_texture->is_loaded)
+    if (asset_vertex_buffer->is_loaded && asset_index_buffer->is_loaded && asset_texture->is_loaded)
     {
         VK_Model3DBucketAdd(&asset_vertex_buffer->item.buffer_alloc,
                             &asset_index_buffer->item.buffer_alloc, asset_texture->item.desc_set,
@@ -1455,8 +1461,8 @@ VK_Model3DRendering()
 }
 
 static void
-VK_CommandBufferRecord(U32 image_index, U32 current_frame, ui::Camera* camera,
-                       Vec2S64 mouse_cursor_pos)
+vk_command_buffer_record(U32 image_index, U32 current_frame, ui::Camera* camera,
+                         Vec2S64 mouse_cursor_pos)
 {
     prof_scope_marker;
     Temp scratch = ScratchBegin(0, 0);

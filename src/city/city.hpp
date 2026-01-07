@@ -9,6 +9,14 @@ struct RenderBuffers
     Buffer<U32> indices;
 };
 
+typedef S64 EdgeId;
+
+struct RoadInfo
+{
+    F32 bikeability;
+    F32 walkability;
+};
+
 struct RoadEdge
 {
     RoadEdge* prev;
@@ -22,7 +30,7 @@ struct RoadEdge
 struct EdgeStructure
 {
     Buffer<RoadEdge> edges;
-    Map<S64, RoadEdge*> edge_map;
+    Map<EdgeId, RoadEdge*> edge_map;
 };
 
 struct Road
@@ -35,7 +43,8 @@ struct Road
     F32 road_height;
     F32 default_road_width;
     F32 texture_scale;
-    Map<S64, RoadEdge*> edge_map;
+    EdgeStructure edge_structure;
+    Map<EdgeId, RoadInfo>* road_info_map;
 
     ////////////////////////////////
     // Graphics API
@@ -118,11 +127,12 @@ g_internal void
 road_destroy(Road* road);
 g_internal city::RenderBuffers
 road_render_buffers_create(Arena* arena, Buffer<city::RoadEdge> edge_buffer, F32 default_road_width,
-                           F32 road_height);
+                           F32 road_height, Map<EdgeId, RoadInfo>* road_info_map);
 
 g_internal void
-QuadToBufferAdd(RoadSegment* road_segment, Buffer<r_Vertex3D> buffer, Buffer<U32> indices,
-                U64 way_id, F32 road_height, U32* cur_vertex_idx, U32* cur_index_idx);
+quad_to_buffer_add(RoadSegment* road_segment, Buffer<r_Vertex3D> buffer, Buffer<U32> indices,
+                   U64 edge_id, F32 road_height, U32* cur_vertex_idx, U32* cur_index_idx,
+                   F32 factor);
 g_internal void
 RoadIntersectionPointsFind(Road* road, RoadSegment* in_out_segment, osm::Way* current_road_way,
                            osm::Network* node_utm_structure);
@@ -168,10 +178,14 @@ land_destroy(r_Model3DPipelineDataList list);
 g_internal r_SamplerInfo
 sampler_from_cgltf_sampler(gltfw_Sampler sampler);
 g_internal Road*
-road_create(String8 texture_path, String8 cache_path, Rng2F64 bbox, r_SamplerInfo* sampler_info);
+road_create(String8 texture_path, String8 cache_path, String8 data_dir, Rng2F64 bbox,
+            Rng2F64 utm_coords, r_SamplerInfo* sampler_info);
 
 g_internal EdgeStructure
 road_edge_structure_create(Arena* arena);
+g_internal Map<EdgeId, RoadInfo>*
+road_info_from_edge_id(Arena* arena, Buffer<RoadEdge> road_edge_buf,
+                       Map<S64, neta_EdgeList>* neta_edge_map);
 
 g_internal neta_Edge*
 neta_edge_from_road_edge(RoadEdge* road_edge, Map<S64, neta_EdgeList>* edge_list_map);

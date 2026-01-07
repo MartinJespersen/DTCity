@@ -83,7 +83,7 @@ tag_value_get(Arena* arena, String8 key, F32 default_width, Buffer<osm::Tag> tag
 
 g_internal city::RenderBuffers
 road_render_buffers_create(Arena* arena, Buffer<city::RoadEdge> edge_buffer, F32 default_road_width,
-                           F32 road_height)
+                           F32 road_height, Map<EdgeId, RoadInfo>* road_info_map)
 {
     prof_scope_marker;
     ScratchScope scratch = ScratchScope(0, 0);
@@ -101,6 +101,10 @@ road_render_buffers_create(Arena* arena, Buffer<city::RoadEdge> edge_buffer, F32
         osm::Way* way = &way_node->way;
 
         F32 road_width = tag_value_get(scratch.arena, S("width"), default_road_width, way->tags);
+        if (road_width != default_road_width)
+        {
+            printf("Road width is not default: %f\n", road_width);
+        }
 
         RoadSegment road_segment;
         RoadSegmentFromTwoRoadNodes(&road_segment, start_node, end_node, default_road_width);
@@ -127,8 +131,9 @@ road_render_buffers_create(Arena* arena, Buffer<city::RoadEdge> edge_buffer, F32
             RoadSegmentConnectionFromTwoRoadSegments(&road_segment, &road_segment_next, road_width);
         }
 
-        QuadToBufferAdd(&road_segment, vertex_buffer, index_buffer, edge.id, road_height,
-                        &cur_vertex_idx, &cur_index_idx);
+        RoadInfo* road_info = map_get(road_info_map, edge.id);
+        quad_to_buffer_add(&road_segment, vertex_buffer, index_buffer, edge.id, road_height,
+                           &cur_vertex_idx, &cur_index_idx, road_info ? road_info->bikeability : 0);
     }
 
     city::RenderBuffers render_buffers = {.vertices = vertex_buffer, .indices = index_buffer};
@@ -336,8 +341,9 @@ height_dim_add(Vec2F32 pos, F32 height)
 }
 
 g_internal void
-QuadToBufferAdd(RoadSegment* road_segment, Buffer<r_Vertex3D> buffer, Buffer<U32> indices,
-                U64 way_id, F32 road_height, U32* cur_vertex_idx, U32* cur_index_idx)
+quad_to_buffer_add(RoadSegment* road_segment, Buffer<r_Vertex3D> buffer, Buffer<U32> indices,
+                   U64 edge_id, F32 road_height, U32* cur_vertex_idx, U32* cur_index_idx,
+                   F32 factor)
 {
     F32 road_width = Dist2F32(road_segment->start.top, road_segment->start.btm);
     F32 top_tex_scaled = Dist2F32(road_segment->start.top, road_segment->end.top) / road_width;
@@ -351,21 +357,26 @@ QuadToBufferAdd(RoadSegment* road_segment, Buffer<r_Vertex3D> buffer, Buffer<U32
     U32 base_vertex_idx = *cur_vertex_idx;
     U32 base_index_idx = *cur_index_idx;
 
-    Vec2U32 id = {.u64 = way_id};
+    Vec2U32 id = {.u64 = edge_id};
+    Vec4F32 color = {0.0f, 1.0f, 0.0f, factor};
 
     // quad of vertices
     buffer.data[base_vertex_idx] = {.pos = height_dim_add(road_segment->start.top, road_height),
                                     .uv = {uv_x_top, uv_y_start},
-                                    .object_id = id};
+                                    .object_id = id,
+                                    .color = color};
     buffer.data[base_vertex_idx + 1] = {.pos = height_dim_add(road_segment->start.btm, road_height),
                                         .uv = {uv_x_btm, uv_y_start},
-                                        .object_id = id};
+                                        .object_id = id,
+                                        .color = color};
     buffer.data[base_vertex_idx + 2] = {.pos = height_dim_add(road_segment->end.top, road_height),
                                         .uv = {uv_x_top, uv_y_end},
-                                        .object_id = id};
+                                        .object_id = id,
+                                        .color = color};
     buffer.data[base_vertex_idx + 3] = {.pos = height_dim_add(road_segment->end.btm, road_height),
                                         .uv = {uv_x_btm, uv_y_end},
-                                        .object_id = id};
+                                        .object_id = id,
+                                        .color = color};
 
     // creating quad from
     indices.data[base_index_idx] = base_vertex_idx;
@@ -889,7 +900,7 @@ buildings_buffers_create(Arena* arena, F32 road_height, BuildingRenderInfo* out_
                     city::utm_location_find(way->node_ids[node_idx + 1]);
                 F32 side_width = Length2F32(Sub2F32(node_loc.pos, next_node_loc.pos));
 
-                Vec2U32 id = {.u64 = way->id};
+                Vec2U32 id = {.u64 = (U64)way->id};
 
                 vertex_buffer.data[vert_idx] = {.pos = height_dim_add(node_loc.pos, road_height),
                                                 .uv = {0.0f, 0.0f},
@@ -1393,7 +1404,8 @@ str8_from_bbox(Arena* arena, Rng2F64 bbox)
 }
 
 g_internal Road*
-road_create(String8 texture_path, String8 cache_path, Rng2F64 bbox, r_SamplerInfo* sampler_info)
+road_create(String8 texture_path, String8 cache_path, String8 data_dir, Rng2F64 bbox,
+            Rng2F64 utm_coords, r_SamplerInfo* sampler_info)
 {
     prof_scope_marker;
 
@@ -1459,11 +1471,21 @@ road_create(String8 texture_path, String8 cache_path, Rng2F64 bbox, r_SamplerInf
     Buffer<osm::RoadNodeList> node_hashmap = json_result.road_nodes;
     osm::structure_add(node_hashmap, http_data, osm::WayType_Road);
 
-    EdgeStructure edge_structure = city::road_edge_structure_create(road->arena);
-    road->edge_map = edge_structure.edge_map;
+    String8 neta_path = str8_path_from_str8_list(scratch.arena, {data_dir, S("netascore.geojson")});
+    Map<S64, neta_EdgeList>* edge_map =
+        neta_osm_way_to_edges_map_create(scratch.arena, neta_path, utm_coords);
+    if (!edge_map)
+    {
+        exit_with_error("Failed to initialize neta");
+    }
+
+    road->edge_structure = city::road_edge_structure_create(road->arena);
+    road->road_info_map =
+        city::road_info_from_edge_id(road->arena, road->edge_structure.edges, edge_map);
 
     city::RenderBuffers render_buffers = city::road_render_buffers_create(
-        road->arena, edge_structure.edges, road->default_road_width, road->road_height);
+        road->arena, road->edge_structure.edges, road->default_road_width, road->road_height,
+        road->road_info_map);
 
     r_BufferInfo vertex_buffer_info =
         r_buffer_info_from_vertex_3d_buffer(render_buffers.vertices, R_BufferType_Vertex);
@@ -1486,6 +1508,7 @@ road_create(String8 texture_path, String8 cache_path, Rng2F64 bbox, r_SamplerInf
 g_internal EdgeStructure
 road_edge_structure_create(Arena* arena)
 {
+    prof_scope_marker;
     osm::Network* network = osm::g_network;
     Buffer<osm::Way> way_buf = network->ways_arr[osm::WayType_Road];
 
@@ -1524,8 +1547,30 @@ road_edge_structure_create(Arena* arena)
     return edge_structure;
 }
 
+g_internal Map<EdgeId, RoadInfo>*
+road_info_from_edge_id(Arena* arena, Buffer<RoadEdge> road_edge_buf,
+                       Map<S64, neta_EdgeList>* neta_edge_map)
+{
+    prof_scope_marker;
+    Map<EdgeId, RoadInfo>* road_info_map = map_create<EdgeId, RoadInfo>(arena, 1024);
+
+    for (RoadEdge& edge : road_edge_buf)
+    {
+        neta_Edge* neta_edge = neta_edge_from_road_edge(&edge, neta_edge_map);
+        if (neta_edge)
+        {
+            RoadInfo info = {};
+            info.bikeability = (F32)((neta_edge->index_bike_ft + neta_edge->index_bike_tf) / 2.0);
+            info.walkability = (F32)((neta_edge->index_walk_ft + neta_edge->index_walk_tf) / 2.0);
+            map_insert(road_info_map, edge.id, info);
+        }
+    }
+
+    return road_info_map;
+}
+
 g_internal neta_Edge*
-neta_edge_from_road_edge(RoadEdge* road_edge, Map<S64, neta_EdgeList>* edge_list_map)
+neta_edge_from_road_edge(RoadEdge* road_edge, Map<osm::WayId, neta_EdgeList>* edge_list_map)
 {
     S64 from_id = road_edge->node_id_from;
     S64 to_id = road_edge->node_id_to;

@@ -4,7 +4,7 @@ namespace osm
 {
 
 typedef U64 NodeId;
-typedef U64 WayId;
+typedef S64 WayId;
 
 enum class Result : B32
 {

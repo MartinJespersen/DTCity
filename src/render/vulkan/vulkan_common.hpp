@@ -65,7 +65,6 @@ struct vk_SwapchainResources
     VkSwapchainKHR swapchain;
     VkFormat swapchain_image_format;
     VkExtent2D swapchain_extent;
-    VK_SwapChainSupportDetails swapchain_support;
     VkSurfaceFormatKHR surface_format;
     VkPresentModeKHR present_mode;
     U32 image_count;
@@ -176,7 +175,8 @@ VK_ImageResourceDestroy(VmaAllocator allocator, VK_ImageResource image);
 static U32
 VK_SwapChainImageCountGet(VkDevice device, vk_SwapchainResources* swapchain_resources);
 static vk_SwapchainResources*
-VK_SwapChainCreate(VK_Context* vk_ctx, Vec2U32 framebuffer_dim);
+vk_swapchain_create(VK_Context* vk_ctx, VK_SwapChainSupportDetails* swapchain_info,
+                    VkExtent2D swapchain_extent);
 
 static VK_ShaderModuleInfo
 VK_ShaderStageFromSpirv(Arena* arena, VkDevice device, VkShaderStageFlagBits flag, String8 path);
@@ -200,7 +200,7 @@ static bool
 VK_IsDeviceSuitable(VK_Context* vk_ctx, VkPhysicalDevice device, VK_QueueFamilyIndexBits indexBits);
 
 static VK_SwapChainSupportDetails
-VK_QuerySwapChainSupport(Arena* arena, VkPhysicalDevice device, VkSurfaceKHR surface);
+vk_query_swapchain_support(Arena* arena, VkPhysicalDevice device, VkSurfaceKHR surface);
 
 static void
 VK_FrustumPlanesCalculate(VK_Frustum* out_frustum, const glm::mat4 matrix);
@@ -232,13 +232,13 @@ static void
 VK_DepthResourcesCreate(VK_Context* vk_context, vk_SwapchainResources* swapchain_resources);
 
 static void
-VK_RecreateSwapChain(Vec2U32 framebuffer_dim, VK_Context* vk_ctx);
+vk_swapchain_recreate(Vec2U32 framebuffer_dim);
 
 static void
 vk_sync_objects_create(VK_Context* vk_ctx);
 
 static void
-VK_SyncObjectsDestroy(VK_Context* vk_ctx);
+vk_sync_objects_destroy(VK_Context* vk_ctx);
 
 static VkCommandPool
 VK_CommandPoolCreate(VkDevice device, VkCommandPoolCreateInfo* poolInfo);
@@ -246,8 +246,8 @@ VK_CommandPoolCreate(VkDevice device, VkCommandPoolCreateInfo* poolInfo);
 static void
 VK_ColorResourcesCleanup(VK_Context* vk_ctx);
 static void
-VK_SwapChainCleanup(VkDevice device, VmaAllocator allocator,
-                    vk_SwapchainResources* swapchain_resources);
+vk_swapchain_cleanup(VkDevice device, VmaAllocator allocator,
+                     vk_SwapchainResources* swapchain_resources);
 static void
 VK_CreateInstance(VK_Context* vk_ctx);
 static void
@@ -260,7 +260,7 @@ static void
 VK_LogicalDeviceCreate(Arena* arena, VK_Context* vk_ctx);
 
 static VkExtent2D
-VK_ChooseSwapExtent(Vec2U32 framebuffer_dim, const VkSurfaceCapabilitiesKHR& capabilities);
+vk_choose_swap_extent(Vec2U32 framebuffer_dim, const VkSurfaceCapabilitiesKHR& capabilities);
 
 static Buffer<String8>
 VK_RequiredExtensionsGet(VK_Context* vk_ctx);
