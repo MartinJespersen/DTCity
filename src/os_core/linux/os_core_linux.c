@@ -1073,7 +1073,16 @@ static Guid os_make_guid() {
   guid.data4[0] |= 0x80;
   return guid;
 }
-
+////////////////////////////////
+//~ mgj: @os_hooks OS Graphical Message
+g_internal void os_graphical_message(B32 error, String8 title,
+                                     String8 message) {
+  if (error) {
+    fprintf(stderr, "[X] ");
+  }
+  fprintf(stderr, "%.*s\n", str8_varg(title));
+  fprintf(stderr, "%.*s\n\n", str8_varg(message));
+}
 ////////////////////////////////
 //~ rjf: @os_hooks Entry Points (Implemented Per-OS)
 

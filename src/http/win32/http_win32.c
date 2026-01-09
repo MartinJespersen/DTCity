@@ -72,7 +72,7 @@ static HTTP_Response HTTP_Request(Arena *arena, String8 host, String8 path,
                             MatchFlag_CaseInsensitive)) {
         port = 22;
       }
-      hostname16 = Str16From8(scratch.arena, url_hostname_part);
+      hostname16 = str16_from_8(scratch.arena, url_hostname_part);
     }
 
     //- rjf: convert method to verb wchar
@@ -112,7 +112,7 @@ static HTTP_Response HTTP_Request(Arena *arena, String8 host, String8 path,
     //- rjf: convert url parts to request parameters
     const WCHAR *path_name = L"";
     if (url_path_part.size != 0) {
-      String16 url_path_part16 = Str16From8(scratch.arena, url_path_part);
+      String16 url_path_part16 = str16_from_8(scratch.arena, url_path_part);
       path_name = (WCHAR *)url_path_part16.str;
     }
 
@@ -133,7 +133,7 @@ static HTTP_Response HTTP_Request(Arena *arena, String8 host, String8 path,
                       (char *)params->content_type.str);
       }
       String8 header = str8_list_join(scratch.arena, &header_strings, 0);
-      header16 = Str16From8(scratch.arena, header);
+      header16 = str16_from_8(scratch.arena, header);
     }
 
     //- rjf: convert body/header info to winhttp expected params

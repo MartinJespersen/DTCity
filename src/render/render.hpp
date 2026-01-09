@@ -95,6 +95,7 @@ enum r_PipelineUsageType
 template <typename T> struct r_AssetItem
 {
     r_AssetItem* next;
+    r_AssetItem* prev;
     B32 is_loaded;
     T item;
 };
@@ -216,10 +217,18 @@ g_internal void
 r_buffer_destroy(r_Handle handle);
 
 g_internal void
+r_texture_destroy_deferred(r_Handle handle);
+g_internal void
+r_buffer_destroy_deferred(r_Handle handle);
+
+g_internal void
 r_model_3d_draw(r_Model3DPipelineData pipeline_input, B32 depth_test_per_draw_call_only);
 
 g_internal r_Handle
 r_buffer_load(r_BufferInfo* buffer_info);
+
+g_internal bool
+r_is_resource_loaded(r_Handle handle);
 
 g_internal void
 r_model_3D_instance_draw(r_Handle texture_handle, r_Handle vertex_buffer_handle,

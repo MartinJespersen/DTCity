@@ -606,8 +606,13 @@ VK_ShaderModuleCreate(VkDevice device, Buffer<U8> buffer)
 static void
 VK_BufferDestroy(VmaAllocator allocator, VK_BufferAllocation* buffer_allocation)
 {
-    vmaDestroyBuffer(allocator, buffer_allocation->buffer, buffer_allocation->allocation);
-    buffer_allocation->buffer = VK_NULL_HANDLE;
+    if (buffer_allocation->buffer != VK_NULL_HANDLE)
+    {
+        MEMORY_LOG("VMA Buffer Destroyed: %p (size: %llu bytes)", buffer_allocation->buffer,
+                   buffer_allocation->size);
+        vmaDestroyBuffer(allocator, buffer_allocation->buffer, buffer_allocation->allocation);
+        buffer_allocation->buffer = VK_NULL_HANDLE;
+    }
 }
 
 static void
@@ -856,6 +861,9 @@ VK_BufferAllocationCreate(VmaAllocator allocator, VkDeviceSize size,
     {
         exit_with_error("Failed to create buffer");
     }
+
+    MEMORY_LOG("VMA Buffer Allocated: %p (size: %llu bytes, usage: 0x%x)", buffer.buffer,
+               buffer.size, buffer_usage);
 
     return buffer;
 }

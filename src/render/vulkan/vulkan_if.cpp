@@ -119,9 +119,9 @@ r_render_ctx_destroy()
 
     VK_BufferDestroy(vk_ctx->allocator, &vk_ctx->model_3D_instance_buffer);
 
-    vmaDestroyAllocator(vk_ctx->allocator);
-
     VK_AssetManagerDestroy(vk_ctx, vk_ctx->asset_manager);
+
+    vmaDestroyAllocator(vk_ctx->allocator);
 
     VK_PipelineDestroy(&vk_ctx->model_3D_pipeline);
     VK_PipelineDestroy(&vk_ctx->model_3D_instance_pipeline);
@@ -149,6 +149,7 @@ r_render_frame(Vec2U32 framebuffer_dim, B32* in_out_framebuffer_resized, ui::Cam
 
     VK_AssetManagerExecuteCmds();
     VK_AssetManagerCmdDoneCheck();
+    vk_deletion_queue_deferred_resource_deletion(vk_ctx->asset_manager->deletion_queue);
 
     vk_SwapchainResources* swapchain_resources = vk_ctx->swapchain_resources;
     if (!swapchain_resources)
@@ -340,18 +341,34 @@ r_texture_load_async(r_SamplerInfo* sampler_info, String8 texture_path,
 g_internal void
 r_texture_destroy(r_Handle handle)
 {
-    if (r_is_handle_zero(handle) == false)
-    {
-        VK_AssetManagerTextureFree(handle);
-    }
+    r_texture_destroy_deferred(handle);
 }
 
 g_internal void
 r_buffer_destroy(r_Handle handle)
 {
+    r_buffer_destroy_deferred(handle);
+}
+
+g_internal void
+r_texture_destroy_deferred(r_Handle handle)
+{
     if (r_is_handle_zero(handle) == false)
     {
-        VK_AssetManagerBufferFree(handle);
+        VK_Context* vk_ctx = VK_CtxGet();
+        vk_deletion_queue_push(vk_ctx->asset_manager->deletion_queue, handle,
+                               R_AssetItemType_Texture, VK_MAX_FRAMES_IN_FLIGHT);
+    }
+}
+
+g_internal void
+r_buffer_destroy_deferred(r_Handle handle)
+{
+    if (r_is_handle_zero(handle) == false)
+    {
+        VK_Context* vk_ctx = VK_CtxGet();
+        vk_deletion_queue_push(vk_ctx->asset_manager->deletion_queue, handle,
+                               R_AssetItemType_Buffer, VK_MAX_FRAMES_IN_FLIGHT);
     }
 }
 
@@ -445,15 +462,48 @@ r_model_3D_instance_draw(r_Handle texture_handle, r_Handle vertex_buffer_handle,
     VK_Context* vk_ctx = VK_CtxGet();
     VK_AssetManager* asset_manager = vk_ctx->asset_manager;
     r_AssetItem<VK_Buffer>* asset_vertex_buffer =
-        VK_AssetManagerItemGet(&asset_manager->buffer_list, vertex_buffer_handle);
-    r_AssetItem<VK_Buffer>* asset_index_buffer =
-        VK_AssetManagerItemGet(&asset_manager->buffer_list, index_buffer_handle);
-    r_AssetItem<VK_Texture>* asset_texture = VK_AssetManagerTextureItemGet(texture_handle);
+        (r_AssetItem<VK_Buffer>*)(vertex_buffer_handle.ptr);
+    r_AssetItem<VK_Buffer>* asset_index_buffer = (r_AssetItem<VK_Buffer>*)(index_buffer_handle.ptr);
+    r_AssetItem<VK_Texture>* asset_texture = (r_AssetItem<VK_Texture>*)(texture_handle.ptr);
 
-    if (asset_index_buffer->is_loaded && asset_texture->is_loaded)
+    if (asset_vertex_buffer->is_loaded && asset_index_buffer->is_loaded && asset_texture->is_loaded)
     {
         VK_Model3DInstanceBucketAdd(&asset_vertex_buffer->item.buffer_alloc,
                                     &asset_index_buffer->item.buffer_alloc,
                                     asset_texture->item.desc_set, instance_buffer);
     }
+}
+
+g_internal void
+r_model_3d_draw(r_Model3DPipelineData pipeline_input, B32 depth_test_per_draw_call_only)
+{
+    VK_Context* vk_ctx = VK_CtxGet();
+    VK_AssetManager* asset_manager = vk_ctx->asset_manager;
+
+    if (r_is_handle_zero(pipeline_input.index_buffer_handle) ||
+        r_is_handle_zero(pipeline_input.vertex_buffer_handle) ||
+        r_is_handle_zero(pipeline_input.texture_handle))
+        return;
+    r_AssetItem<VK_Buffer>* asset_vertex_buffer =
+        (r_AssetItem<VK_Buffer>*)(pipeline_input.vertex_buffer_handle.ptr);
+    r_AssetItem<VK_Buffer>* asset_index_buffer =
+        (r_AssetItem<VK_Buffer>*)(pipeline_input.index_buffer_handle.ptr);
+    r_AssetItem<VK_Texture>* asset_texture =
+        (r_AssetItem<VK_Texture>*)(pipeline_input.texture_handle.ptr);
+
+    if (asset_vertex_buffer->is_loaded && asset_index_buffer->is_loaded && asset_texture->is_loaded)
+    {
+        VK_Model3DBucketAdd(&asset_vertex_buffer->item.buffer_alloc,
+                            &asset_index_buffer->item.buffer_alloc, asset_texture->item.desc_set,
+                            depth_test_per_draw_call_only, pipeline_input.index_offset,
+                            pipeline_input.index_count);
+    }
+}
+
+g_internal bool
+r_is_resource_loaded(r_Handle handle)
+{
+    // TODO: Refactor asset item to not be a template
+    r_AssetItem<S64>* asset = (r_AssetItem<S64>*)handle.ptr;
+    return asset->is_loaded;
 }

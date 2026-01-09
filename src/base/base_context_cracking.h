@@ -132,15 +132,13 @@
 #endif
 
 ////////////////////////////////
+//~mgj: Debug Options
+#if defined(BUILD_DEBUG)
+#define MEMORY_DEBUG 0
+#endif
+
+////////////////////////////////
 //~ rjf: Build Option Cracking
-
-#if !defined(BUILD_SUPPLEMENTARY_UNIT)
-#define BUILD_SUPPLEMENTARY_UNIT 0
-#endif
-
-#if !defined(BUILD_ENTRY_DEFINING_UNIT)
-#define BUILD_ENTRY_DEFINING_UNIT 1
-#endif
 
 #if !defined(BUILD_CONSOLE_INTERFACE)
 #define BUILD_CONSOLE_INTERFACE 0

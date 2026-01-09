@@ -4,9 +4,12 @@ namespace city
 g_internal void
 road_destroy(Road* road)
 {
-    r_buffer_destroy(road->handles.vertex_buffer_handle);
-    r_buffer_destroy(road->handles.index_buffer_handle);
-    r_texture_destroy(road->handles.texture_handle);
+    for (U32 i = 0; i < ArrayCount(road->handles); ++i)
+    {
+        r_buffer_destroy(road->handles[i].vertex_buffer_handle);
+        r_buffer_destroy(road->handles[i].index_buffer_handle);
+        r_texture_destroy(road->handles[i].texture_handle);
+    }
 
     ArenaRelease(road->arena);
 }
@@ -131,9 +134,8 @@ road_render_buffers_create(Arena* arena, Buffer<city::RoadEdge> edge_buffer, F32
             RoadSegmentConnectionFromTwoRoadSegments(&road_segment, &road_segment_next, road_width);
         }
 
-        RoadInfo* road_info = map_get(road_info_map, edge.id);
         quad_to_buffer_add(&road_segment, vertex_buffer, index_buffer, edge.id, road_height,
-                           &cur_vertex_idx, &cur_index_idx, road_info ? road_info->bikeability : 0);
+                           &cur_vertex_idx, &cur_index_idx);
     }
 
     city::RenderBuffers render_buffers = {.vertices = vertex_buffer, .indices = index_buffer};
@@ -342,8 +344,7 @@ height_dim_add(Vec2F32 pos, F32 height)
 
 g_internal void
 quad_to_buffer_add(RoadSegment* road_segment, Buffer<r_Vertex3D> buffer, Buffer<U32> indices,
-                   U64 edge_id, F32 road_height, U32* cur_vertex_idx, U32* cur_index_idx,
-                   F32 factor)
+                   U64 edge_id, F32 road_height, U32* cur_vertex_idx, U32* cur_index_idx)
 {
     F32 road_width = Dist2F32(road_segment->start.top, road_segment->start.btm);
     F32 top_tex_scaled = Dist2F32(road_segment->start.top, road_segment->end.top) / road_width;
@@ -358,7 +359,7 @@ quad_to_buffer_add(RoadSegment* road_segment, Buffer<r_Vertex3D> buffer, Buffer<
     U32 base_index_idx = *cur_index_idx;
 
     Vec2U32 id = {.u64 = edge_id};
-    Vec4F32 color = {0.0f, 1.0f, 0.0f, factor};
+    Vec4F32 color = {0.0f, 0.0f, 0.0f, 0.0f};
 
     // quad of vertices
     buffer.data[base_vertex_idx] = {.pos = height_dim_add(road_segment->start.top, road_height),
@@ -1483,14 +1484,14 @@ road_create(String8 texture_path, String8 cache_path, String8 data_dir, Rng2F64 
     road->road_info_map =
         city::road_info_from_edge_id(road->arena, road->edge_structure.edges, edge_map);
 
-    city::RenderBuffers render_buffers = city::road_render_buffers_create(
-        road->arena, road->edge_structure.edges, road->default_road_width, road->road_height,
-        road->road_info_map);
+    road->render_buffers = city::road_render_buffers_create(road->arena, road->edge_structure.edges,
+                                                            road->default_road_width,
+                                                            road->road_height, road->road_info_map);
 
     r_BufferInfo vertex_buffer_info =
-        r_buffer_info_from_vertex_3d_buffer(render_buffers.vertices, R_BufferType_Vertex);
+        r_buffer_info_from_vertex_3d_buffer(road->render_buffers.vertices, R_BufferType_Vertex);
     r_BufferInfo index_buffer_info =
-        r_buffer_info_from_u32_index_buffer(render_buffers.indices, R_BufferType_Index);
+        r_buffer_info_from_u32_index_buffer(road->render_buffers.indices, R_BufferType_Index);
 
     road->texture_path =
         str8_path_from_str8_list(road->arena, {texture_path, S("road_texture.ktx2")});
@@ -1500,9 +1501,58 @@ road_create(String8 texture_path, String8 cache_path, String8 data_dir, Rng2F64 
     r_Handle vertex_handle = r_buffer_load(&vertex_buffer_info);
     r_Handle index_handle = r_buffer_load(&index_buffer_info);
 
-    road->handles = {vertex_handle, index_handle, texture_handle, render_buffers.indices.size, 0};
+    road->handles[road->current_handle_idx] = {vertex_handle, index_handle, texture_handle,
+                                               road->render_buffers.indices.size, 0};
 
     return road;
+}
+
+g_internal void
+road_vertex_buffer_switch(Road* road, RoadOverlayOption overlay_option)
+{
+    if (overlay_option != road->overlay_option_cur)
+    {
+        road->overlay_option_cur = overlay_option;
+
+        for (auto& vertex : road->render_buffers.vertices)
+        {
+            RoadInfo* road_info = map_get(road->road_info_map, (EdgeId)vertex.object_id.u64);
+            if (road_info)
+            {
+                Vec3F32 color = road_overlay_option_colors[(U32)overlay_option];
+                vertex.color =
+                    vec_4f32(color.x, color.y, color.z, road_info->options[(U32)overlay_option]);
+            }
+        }
+        r_BufferInfo vertex_buffer_info =
+            r_buffer_info_from_vertex_3d_buffer(road->render_buffers.vertices, R_BufferType_Vertex);
+        r_Handle vertex_handle = r_buffer_load(&vertex_buffer_info);
+
+        r_Model3DPipelineData* current_road_pipeline_data =
+            &road->handles[road->current_handle_idx];
+        U32 next_handle_idx = (road->current_handle_idx + 1) % ArrayCount(road->handles);
+        r_Model3DPipelineData* next_road_pipeline_data = &road->handles[next_handle_idx];
+
+        *next_road_pipeline_data = *current_road_pipeline_data;
+        next_road_pipeline_data->vertex_buffer_handle = vertex_handle;
+
+        road->new_vertex_handle_loading = true;
+    }
+
+    if (road->new_vertex_handle_loading)
+    {
+        U32 next_handle_idx = (road->current_handle_idx + 1) % ArrayCount(road->handles);
+        if (r_is_resource_loaded(road->handles[next_handle_idx].vertex_buffer_handle))
+        {
+            r_Model3DPipelineData* current_road_pipeline_data =
+                &road->handles[road->current_handle_idx];
+            r_buffer_destroy_deferred(current_road_pipeline_data->vertex_buffer_handle);
+            *current_road_pipeline_data = {};
+
+            road->current_handle_idx = next_handle_idx;
+            road->new_vertex_handle_loading = false;
+        }
+    }
 }
 
 g_internal EdgeStructure
@@ -1560,8 +1610,10 @@ road_info_from_edge_id(Arena* arena, Buffer<RoadEdge> road_edge_buf,
         if (neta_edge)
         {
             RoadInfo info = {};
-            info.bikeability = (F32)((neta_edge->index_bike_ft + neta_edge->index_bike_tf) / 2.0);
-            info.walkability = (F32)((neta_edge->index_walk_ft + neta_edge->index_walk_tf) / 2.0);
+            info.options[(U32)RoadOverlayOption::Bikeability_ft] = neta_edge->index_bike_ft;
+            info.options[(U32)RoadOverlayOption::Bikeability_tf] = neta_edge->index_bike_tf;
+            info.options[(U32)RoadOverlayOption::Walkability_ft] = neta_edge->index_walk_ft;
+            info.options[(U32)RoadOverlayOption::Walkability_tf] = neta_edge->index_walk_tf;
             map_insert(road_info_map, edge.id, info);
         }
     }

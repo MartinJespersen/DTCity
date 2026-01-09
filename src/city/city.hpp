@@ -11,10 +11,39 @@ struct RenderBuffers
 
 typedef S64 EdgeId;
 
+#define ROAD_OVERLAY_RED {1.0f, 0.0f, 0.0f}
+#define ROAD_OVERLAY_GREEN {0.0f, 1.0f, 0.0f}
+
+#define ROAD_OVERLAY_OPTIONS                                                                       \
+    X(None, "None", {})                                                                            \
+    X(Bikeability_ft, "Bikeability_ft", ROAD_OVERLAY_RED)                                          \
+    X(Bikeability_tf, "Bikeability_tf", ROAD_OVERLAY_RED)                                          \
+    X(Walkability_tf, "Walkability_tf", ROAD_OVERLAY_GREEN)                                        \
+    X(Walkability_ft, "Walkability_ft", ROAD_OVERLAY_GREEN)
+
+enum class RoadOverlayOption : U32
+{
+#define X(name, str, color) name,
+    ROAD_OVERLAY_OPTIONS
+#undef X
+        Count
+};
+
+read_only g_internal const char* road_overlay_option_strs[] = {
+#define X(name, str, color) str,
+    ROAD_OVERLAY_OPTIONS
+#undef X
+};
+
+read_only g_internal Vec3F32 road_overlay_option_colors[] = {
+#define X(name, str, color) color,
+    ROAD_OVERLAY_OPTIONS
+#undef X
+};
+
 struct RoadInfo
 {
-    F32 bikeability;
-    F32 walkability;
+    F32 options[(U32)RoadOverlayOption::Count];
 };
 
 struct RoadEdge
@@ -45,11 +74,15 @@ struct Road
     F32 texture_scale;
     EdgeStructure edge_structure;
     Map<EdgeId, RoadInfo>* road_info_map;
+    RenderBuffers render_buffers;
 
     ////////////////////////////////
     // Graphics API
     String8 texture_path;
-    r_Model3DPipelineData handles;
+    r_Model3DPipelineData handles[2];
+    U32 current_handle_idx;
+    bool new_vertex_handle_loading;
+    RoadOverlayOption overlay_option_cur;
     /////////////////////////
 };
 
@@ -131,8 +164,7 @@ road_render_buffers_create(Arena* arena, Buffer<city::RoadEdge> edge_buffer, F32
 
 g_internal void
 quad_to_buffer_add(RoadSegment* road_segment, Buffer<r_Vertex3D> buffer, Buffer<U32> indices,
-                   U64 edge_id, F32 road_height, U32* cur_vertex_idx, U32* cur_index_idx,
-                   F32 factor);
+                   U64 edge_id, F32 road_height, U32* cur_vertex_idx, U32* cur_index_idx);
 g_internal void
 RoadIntersectionPointsFind(Road* road, RoadSegment* in_out_segment, osm::Way* current_road_way,
                            osm::Network* node_utm_structure);
@@ -180,7 +212,8 @@ sampler_from_cgltf_sampler(gltfw_Sampler sampler);
 g_internal Road*
 road_create(String8 texture_path, String8 cache_path, String8 data_dir, Rng2F64 bbox,
             Rng2F64 utm_coords, r_SamplerInfo* sampler_info);
-
+g_internal void
+road_vertex_buffer_switch(Road* road, RoadOverlayOption overlay_option);
 g_internal EdgeStructure
 road_edge_structure_create(Arena* arena);
 g_internal Map<EdgeId, RoadInfo>*

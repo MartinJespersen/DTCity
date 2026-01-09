@@ -1759,7 +1759,7 @@ str8_from_16(Arena* arena, String16 in)
 }
 
 static String16
-Str16From8(Arena* arena, String8 in)
+str16_from_8(Arena* arena, String8 in)
 {
     String16 result = str16_zero();
     if (in.size)

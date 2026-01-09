@@ -70,6 +70,22 @@ struct VK_Pipeline
     VkDescriptorSetLayout descriptor_set_layout;
 };
 
+struct VK_PendingDeletion
+{
+    VK_PendingDeletion* next;
+    r_Handle handle;
+    U64 frame_to_delete;
+    r_AssetItemType type;
+};
+
+struct VK_DeletionQueue
+{
+    VK_PendingDeletion* first;
+    VK_PendingDeletion* last;
+    VK_PendingDeletion* free_list;
+    U64 frame_counter;
+};
+
 struct VK_AssetManager
 {
     Arena* arena;
@@ -88,6 +104,9 @@ struct VK_AssetManager
     async::Queue<VK_CmdQueueItem>* cmd_queue;
     async::Queue<async::QueueItem>* work_queue;
     VK_AssetManagerCmdList* cmd_wait_list;
+
+    // ~mgj: Deferred Deletion Queue
+    VK_DeletionQueue* deletion_queue;
 };
 
 struct VK_Model3DNode
@@ -202,7 +221,7 @@ struct VK_Context
     VK_BufferAllocation model_3D_instance_buffer;
 };
 static void
-VK_TextureDestroy(VK_Context* vk_ctx, VK_Texture* texture);
+VK_TextureDestroy(VK_Texture* texture);
 static void
 VK_ThreadSetup(async::ThreadInfo thread_info, void* input);
 
@@ -231,12 +250,27 @@ VK_CameraDescriptorSetLayoutCreate(VK_Context* vk_ctx);
 static void
 VK_CameraDescriptorSetCreate(VK_Context* vk_ctx);
 
-//~mgj: Asset Store
+//~mgj: Asset Manager
+
+g_internal VK_AssetManager*
+vk_asset_manager_get();
 static VK_AssetManager*
 VK_AssetManagerCreate(VkDevice device, U32 queue_family_index, async::Threads* threads,
                       U64 total_size_in_bytes);
 static void
 VK_AssetManagerDestroy(VK_Context* vk_ctx, VK_AssetManager* asset_stream);
+
+//~mgj: Deferred Deletion Queue
+static void
+vk_deletion_queue_push(VK_DeletionQueue* queue, r_Handle handle, r_AssetItemType type,
+                       U64 frames_in_flight);
+static void
+vk_deletion_queue_deferred_resource_deletion(VK_DeletionQueue* queue);
+static void
+vk_deletion_queue_resource_free(VK_PendingDeletion* deletion);
+static void
+vk_deletion_queue_delete_all(VK_DeletionQueue* queue);
+
 static r_AssetItem<VK_Texture>*
 VK_AssetManagerTextureItemGet(r_Handle handle);
 template <typename T>

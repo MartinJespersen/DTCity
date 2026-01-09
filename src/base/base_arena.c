@@ -41,6 +41,9 @@ static Arena *ArenaAlloc(ArenaParams *params) {
 
   // rjf: extract arena header & fill
   Arena *arena = (Arena *)base;
+  // NOTE(mgj): Unpoison header first so we can write to it (Windows may return
+  // previously-poisoned virtual addresses)
+  AsanUnpoisonMemoryRegion(base, commit_size);
   arena->current = arena;
   arena->flags = params->flags;
   arena->cmt_size = params->commit_size;
@@ -53,8 +56,6 @@ static Arena *ArenaAlloc(ArenaParams *params) {
   arena->free_size = 0;
   arena->free_last = 0;
 #endif
-  AsanPoisonMemoryRegion(base, commit_size);
-  AsanUnpoisonMemoryRegion(base, ARENA_HEADER_SIZE);
   return arena;
 }
 

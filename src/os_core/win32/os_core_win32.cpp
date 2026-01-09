@@ -271,7 +271,7 @@ os_set_thread_name(String8 name)
     // rjf: windows 10 style
     if (w32_SetThreadDescription_func)
     {
-        String16 name16 = Str16From8(scratch.arena, name);
+        String16 name16 = str16_from_8(scratch.arena, name);
         w32_SetThreadDescription_func(GetCurrentThread(), (WCHAR*)name16.str);
     }
 
@@ -327,7 +327,7 @@ os_file_open(OS_AccessFlags flags, String8 path)
 {
     OS_Handle result = {0};
     Temp scratch = ScratchBegin(0, 0);
-    String16 path16 = Str16From8(scratch.arena, path);
+    String16 path16 = str16_from_8(scratch.arena, path);
     DWORD access_flags = 0;
     DWORD share_mode = 0;
     DWORD creation_disposition = OPEN_EXISTING;
@@ -541,7 +541,7 @@ static B32
 os_delete_file_at_path(String8 path)
 {
     Temp scratch = ScratchBegin(0, 0);
-    String16 path16 = Str16From8(scratch.arena, path);
+    String16 path16 = str16_from_8(scratch.arena, path);
     B32 result = DeleteFileW((WCHAR*)path16.str);
     ScratchEnd(scratch);
     return result;
@@ -551,8 +551,8 @@ static B32
 os_copy_file_path(String8 dst, String8 src)
 {
     Temp scratch = ScratchBegin(0, 0);
-    String16 dst16 = Str16From8(scratch.arena, dst);
-    String16 src16 = Str16From8(scratch.arena, src);
+    String16 dst16 = str16_from_8(scratch.arena, dst);
+    String16 src16 = str16_from_8(scratch.arena, src);
     B32 result = CopyFileW((WCHAR*)src16.str, (WCHAR*)dst16.str, 0);
     ScratchEnd(scratch);
     return result;
@@ -562,8 +562,8 @@ static B32
 os_move_file_path(String8 dst, String8 src)
 {
     Temp scratch = ScratchBegin(0, 0);
-    String16 dst16 = Str16From8(scratch.arena, dst);
-    String16 src16 = Str16From8(scratch.arena, src);
+    String16 dst16 = str16_from_8(scratch.arena, dst);
+    String16 src16 = str16_from_8(scratch.arena, src);
     B32 result = MoveFileW((WCHAR*)src16.str, (WCHAR*)dst16.str);
     ScratchEnd(scratch);
     return result;
@@ -574,7 +574,7 @@ os_full_path_from_path(Arena* arena, String8 path)
 {
     Temp scratch = ScratchBegin(&arena, 1);
     DWORD buffer_size = Max(MAX_PATH, path.size * 2) + 1;
-    String16 path16 = Str16From8(scratch.arena, path);
+    String16 path16 = str16_from_8(scratch.arena, path);
     WCHAR* buffer = PushArrayNoZero(scratch.arena, WCHAR, buffer_size);
     DWORD path16_size = GetFullPathNameW((WCHAR*)path16.str, buffer_size, buffer, NULL);
     if (path16_size > buffer_size)
@@ -593,7 +593,7 @@ static B32
 os_file_path_exists(String8 path)
 {
     Temp scratch = ScratchBegin(0, 0);
-    String16 path16 = Str16From8(scratch.arena, path);
+    String16 path16 = str16_from_8(scratch.arena, path);
     DWORD attributes = GetFileAttributesW((WCHAR*)path16.str);
     B32 exists =
         (attributes != INVALID_FILE_ATTRIBUTES) && !!(~attributes & FILE_ATTRIBUTE_DIRECTORY);
@@ -605,7 +605,7 @@ static B32
 os_folder_path_exists(String8 path)
 {
     Temp scratch = ScratchBegin(0, 0);
-    String16 path16 = Str16From8(scratch.arena, path);
+    String16 path16 = str16_from_8(scratch.arena, path);
     DWORD attributes = GetFileAttributesW((WCHAR*)path16.str);
     B32 exists = (attributes != INVALID_FILE_ATTRIBUTES) && (attributes & FILE_ATTRIBUTE_DIRECTORY);
     ScratchEnd(scratch);
@@ -617,7 +617,7 @@ os_properties_from_file_path(String8 path)
 {
     WIN32_FIND_DATAW find_data = {0};
     Temp scratch = ScratchBegin(0, 0);
-    String16 path16 = Str16From8(scratch.arena, path);
+    String16 path16 = str16_from_8(scratch.arena, path);
     HANDLE handle = FindFirstFileW((WCHAR*)path16.str, &find_data);
     FileProperties props = {0};
     if (handle != INVALID_HANDLE_VALUE)
@@ -770,7 +770,7 @@ os_file_iter_begin(Arena* arena, String8 path, OS_FileIterFlags flags)
 {
     Temp scratch = ScratchBegin(&arena, 1);
     String8 path_with_wildcard = PushStr8Cat(scratch.arena, path, Str8Lit("\\*"));
-    String16 path16 = Str16From8(scratch.arena, path_with_wildcard);
+    String16 path16 = str16_from_8(scratch.arena, path_with_wildcard);
     OS_FileIter* iter = PushArray(arena, OS_FileIter, 1);
     iter->flags = flags;
     OS_W32_FileIter* w32_iter = (OS_W32_FileIter*)iter->memory;
@@ -914,7 +914,7 @@ os_make_directory(String8 path)
 {
     B32 result = 0;
     Temp scratch = ScratchBegin(0, 0);
-    String16 name16 = Str16From8(scratch.arena, path);
+    String16 name16 = str16_from_8(scratch.arena, path);
     WIN32_FILE_ATTRIBUTE_DATA attributes = {0};
     GetFileAttributesExW((WCHAR*)name16.str, GetFileExInfoStandard, &attributes);
     if (attributes.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)
@@ -936,7 +936,7 @@ static OS_Handle
 os_shared_memory_alloc(U64 size, String8 name)
 {
     Temp scratch = ScratchBegin(0, 0);
-    String16 name16 = Str16From8(scratch.arena, name);
+    String16 name16 = str16_from_8(scratch.arena, name);
     HANDLE file = CreateFileMappingW(INVALID_HANDLE_VALUE, 0, PAGE_READWRITE,
                                      (U32)((size & 0xffffffff00000000) >> 32),
                                      (U32)((size & 0x00000000ffffffff)), (WCHAR*)name16.str);
@@ -949,7 +949,7 @@ static OS_Handle
 os_shared_memory_open(String8 name)
 {
     Temp scratch = ScratchBegin(0, 0);
-    String16 name16 = Str16From8(scratch.arena, name);
+    String16 name16 = str16_from_8(scratch.arena, name);
     HANDLE file = OpenFileMappingW(FILE_MAP_ALL_ACCESS, 0, (WCHAR*)name16.str);
     OS_Handle result = {(U64)file};
     ScratchEnd(scratch);
@@ -1104,12 +1104,12 @@ os_process_launch(OS_ProcessLaunchParams* params)
     }
 
     //- rjf: utf-8 -> utf-16
-    String16 cmd16 = Str16From8(scratch.arena, cmd);
-    String16 dir16 = Str16From8(scratch.arena, params->path);
+    String16 cmd16 = str16_from_8(scratch.arena, cmd);
+    String16 dir16 = str16_from_8(scratch.arena, params->path);
     String16 env16 = {0};
     if (use_null_env_arg == 0)
     {
-        env16 = Str16From8(scratch.arena, env);
+        env16 = str16_from_8(scratch.arena, env);
     }
 
     //- rjf: determine creation flags
@@ -1375,7 +1375,7 @@ static OS_Handle
 OS_SemaphoreAlloc(U32 initial_count, U32 max_count, String8 name)
 {
     Temp scratch = ScratchBegin(0, 0);
-    String16 name16 = Str16From8(scratch.arena, name);
+    String16 name16 = str16_from_8(scratch.arena, name);
     HANDLE handle = CreateSemaphoreW(0, initial_count, max_count, (WCHAR*)name16.str);
     OS_Handle result = {(U64)handle};
     ScratchEnd(scratch);
@@ -1393,7 +1393,7 @@ static OS_Handle
 OS_SemaphoreOpen(String8 name)
 {
     Temp scratch = ScratchBegin(0, 0);
-    String16 name16 = Str16From8(scratch.arena, name);
+    String16 name16 = str16_from_8(scratch.arena, name);
     HANDLE handle = OpenSemaphoreW(SEMAPHORE_ALL_ACCESS, 0, (WCHAR*)name16.str);
     OS_Handle result = {(U64)handle};
     ScratchEnd(scratch);
@@ -1431,7 +1431,7 @@ static OS_Handle
 os_library_open(String8 path)
 {
     Temp scratch = ScratchBegin(0, 0);
-    String16 path16 = Str16From8(scratch.arena, path);
+    String16 path16 = str16_from_8(scratch.arena, path);
     HMODULE mod = LoadLibraryW((LPCWSTR)path16.str);
     OS_Handle result = {(U64)mod};
     ScratchEnd(scratch);
@@ -1511,6 +1511,17 @@ OS_SystemTimerRead()
     LARGE_INTEGER Value;
     QueryPerformanceCounter(&Value);
     return Value.QuadPart;
+}
+
+// ~mgj: @os_hooks Graphical Message
+g_internal void
+os_graphical_message(B32 error, String8 title, String8 message)
+{
+    Temp scratch = ScratchBegin(0, 0);
+    String16 title16 = str16_from_8(scratch.arena, title);
+    String16 message16 = str16_from_8(scratch.arena, message);
+    MessageBoxW(0, (WCHAR*)message16.str, (WCHAR*)title16.str, MB_OK | (!!error * MB_ICONERROR));
+    ScratchEnd(scratch);
 }
 
 ////////////////////////////////

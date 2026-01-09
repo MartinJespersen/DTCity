@@ -228,6 +228,8 @@ dt_main_loop(void* ptr)
     ctx->car_sim = city::car_sim_create(asset_dir, texture_dir, 100, ctx->road);
     city::CarSim* car_sim = ctx->car_sim;
 
+    city::RoadOverlayOption overlay_option_choice = city::RoadOverlayOption::None;
+
     while (ctx->running)
     {
         dt_time_update(ctx->time);
@@ -258,8 +260,11 @@ dt_main_loop(void* ptr)
                 city::RoadInfo* chosen_edge = map_get(road->road_info_map, edge->id);
                 if (chosen_edge)
                 {
-                    ImGui::Text("Bikeability: %lf", chosen_edge->bikeability);
-                    ImGui::Text("Walkability: %lf", chosen_edge->walkability);
+                    for (U32 i = 1; i < ArrayCount(chosen_edge->options); i++)
+                    {
+                        ImGui::Text("%s: %lf", city::road_overlay_option_strs[i],
+                                    chosen_edge->options[i]);
+                    }
                 }
                 ImVec2 window_size = ImGui::GetWindowSize();
                 ImVec2 window_pos = ImVec2((F32)framebuffer_dim.x - window_size.x, 0);
@@ -286,7 +291,19 @@ dt_main_loop(void* ptr)
             }
         }
 
-        r_model_3d_draw(road->handles, true);
+        ImGui::Begin("Road Overlays", nullptr);
+        ImGui::SetWindowPos(ImVec2(0, 0));
+
+        for (U32 i = 0; i < (U32)city::RoadOverlayOption::Count; i++)
+        {
+            ImGui::RadioButton(city::road_overlay_option_strs[i], (int*)&overlay_option_choice,
+                               (int)i);
+        }
+        ImGui::End();
+
+        city::road_vertex_buffer_switch(road, overlay_option_choice);
+
+        r_model_3d_draw(road->handles[road->current_handle_idx], true);
         r_model_3d_draw(buildings->roof_model_handles, false);
         r_model_3d_draw(buildings->facade_model_handles, false);
 

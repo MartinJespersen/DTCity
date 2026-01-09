@@ -2,7 +2,7 @@ If:
   PathMatch: .*
 CompileFlags:
   CompilationDatabase: build/debug
-  Add: [/FI../../src/includes.hpp]
+  Add: [/FI../../src/includes.hpp, -DVMA_IMPLEMENTATION]
 
 Index:
   Background: Build

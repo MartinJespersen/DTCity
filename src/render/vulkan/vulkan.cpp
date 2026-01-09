@@ -18,8 +18,9 @@ VK_CtxGet()
     return g_vk_ctx;
 }
 static void
-VK_TextureDestroy(VK_Context* vk_ctx, VK_Texture* texture)
+VK_TextureDestroy(VK_Texture* texture)
 {
+    VK_Context* vk_ctx = VK_CtxGet();
     if (texture->staging_buffer.buffer != 0)
     {
         VK_BufferDestroy(vk_ctx->allocator, &texture->staging_buffer);
@@ -980,6 +981,96 @@ VK_CameraCleanup(VK_Context* vk_ctx)
 }
 
 // ~mgj: Asset Streaming
+g_internal VK_AssetManager*
+vk_asset_manager_get()
+{
+    VK_Context* vk_ctx = VK_CtxGet();
+    return vk_ctx->asset_manager;
+}
+
+// ~mgj: Deferred Deletion Queue Implementation
+static void
+vk_deletion_queue_push(VK_DeletionQueue* queue, r_Handle handle, r_AssetItemType type,
+                       U64 frames_in_flight)
+{
+    VK_AssetManager* asset_manager = vk_asset_manager_get();
+    VK_PendingDeletion* deletion = nullptr;
+
+    if (queue->free_list)
+    {
+        deletion = queue->free_list;
+        SLLStackPop(queue->free_list);
+        MemoryZero(deletion, sizeof(*deletion));
+    }
+    else
+    {
+        deletion = PushStruct(asset_manager->arena, VK_PendingDeletion);
+    }
+
+    deletion->handle = handle;
+    deletion->type = type;
+    deletion->frame_to_delete = queue->frame_counter + frames_in_flight;
+
+    SLLQueuePush(queue->first, queue->last, deletion);
+
+    DEBUG_LOG("Asset ID: %llu - Queued for deferred deletion at frame %llu (current: %llu)",
+              handle.u64, deletion->frame_to_delete, queue->frame_counter);
+}
+
+static void
+vk_deletion_queue_resource_free(VK_PendingDeletion* deletion)
+{
+    VK_Context* vk_ctx = VK_CtxGet();
+    switch (deletion->type)
+    {
+        case R_AssetItemType_Buffer:
+        {
+            VK_AssetManagerBufferFree(deletion->handle);
+        }
+        break;
+        case R_AssetItemType_Texture:
+        {
+            VK_AssetManagerTextureFree(deletion->handle);
+        }
+        break;
+        default: InvalidPath; break;
+    }
+}
+
+static void
+vk_deletion_queue_deferred_resource_deletion(VK_DeletionQueue* queue)
+{
+    VK_Context* vk_ctx = VK_CtxGet();
+
+    for (VK_PendingDeletion* deletion = queue->first;
+         deletion && deletion->frame_to_delete <= queue->frame_counter; deletion = queue->first)
+    {
+        SLLQueuePop(queue->first, queue->last);
+        DEBUG_LOG("Asset ID: %llu - Executing deferred deletion at frame %llu",
+                  deletion->handle.u64, queue->frame_counter);
+
+        vk_deletion_queue_resource_free(deletion);
+        SLLStackPush(queue->free_list, deletion);
+    }
+
+    queue->frame_counter++;
+}
+
+static void
+vk_deletion_queue_delete_all(VK_DeletionQueue* queue)
+{
+    VK_Context* vk_ctx = VK_CtxGet();
+
+    for (VK_PendingDeletion* deletion = queue->first; deletion; deletion = queue->first)
+    {
+        SLLQueuePop(queue->first, queue->last);
+        DEBUG_LOG("Asset ID: %llu - Force deleting from deletion queue", deletion->handle.u64);
+
+        vk_deletion_queue_resource_free(deletion);
+
+        SLLStackPush(queue->free_list, deletion);
+    }
+}
 
 static VK_AssetManager*
 VK_AssetManagerCreate(VkDevice device, U32 queue_family_index, async::Threads* threads,
@@ -1012,6 +1103,8 @@ VK_AssetManagerCreate(VkDevice device, U32 queue_family_index, async::Threads* t
     asset_store->cmd_queue = async::QueueInit<VK_CmdQueueItem>(
         arena, cmd_queue_size, vk_ctx->queue_family_indices.graphicsFamilyIndex);
 
+    asset_store->deletion_queue = PushStruct(arena, VK_DeletionQueue);
+
     return asset_store;
 }
 static void
@@ -1024,6 +1117,7 @@ VK_AssetManagerDestroy(VK_Context* vk_ctx, VK_AssetManager* asset_store)
     }
     async::QueueDestroy(asset_store->cmd_queue);
     VK_AssetManagerCmdListDestroy(asset_store->cmd_wait_list);
+    vk_deletion_queue_delete_all(asset_store->deletion_queue);
 
     ArenaRelease(asset_store->arena);
 }
@@ -1072,6 +1166,7 @@ template <typename T>
 static r_AssetItem<T>*
 VK_AssetManagerItemGet(r_AssetItemList<T>* list, r_Handle handle)
 {
+    Assert(handle.u64 != 0);
     for (r_AssetItem<T>* item = list->first; item; item = item->next)
     {
         if (handle.u64 == (U64)item)
@@ -1107,18 +1202,19 @@ VK_AssetManagerItemCreate(r_AssetItemList<T>* list, r_AssetItem<T>** free_list)
     VK_AssetManager* asset_mng = vk_ctx->asset_manager;
     Arena* arena = asset_mng->arena;
 
-    r_AssetItem<T>* asset_item = {0};
-    if (*free_list)
+    r_AssetItem<T>* asset_item = *free_list;
+    if (asset_item)
     {
-        asset_item = *free_list;
-        SLLStackPop(asset_item);
+        SLLStackPop(*free_list);
         MemoryZero(asset_item, sizeof(*asset_item));
     }
     else
     {
         asset_item = PushStruct(arena, r_AssetItem<T>);
-        SLLQueuePushFront(list->first, list->last, asset_item);
     }
+    Assert(asset_item);
+
+    DLLPushFront(list->first, list->last, asset_item);
     return asset_item;
 }
 
@@ -1280,7 +1376,10 @@ VK_AssetManagerBufferFree(r_Handle handle)
         VK_BufferDestroy(vk_ctx->allocator, &item->item.buffer_alloc);
     }
     item->is_loaded = false;
+    DLLRemove(asset_manager->buffer_list.first, asset_manager->buffer_list.last, item);
+    SLLStackPush(vk_ctx->asset_manager->buffer_free_list, item);
 }
+
 static void
 VK_AssetManagerTextureFree(r_Handle handle)
 {
@@ -1289,13 +1388,14 @@ VK_AssetManagerTextureFree(r_Handle handle)
     r_AssetItem<VK_Texture>* item = VK_AssetManagerItemGet(&asset_manager->texture_list, handle);
     if (item->is_loaded)
     {
-        VK_TextureDestroy(vk_ctx, &item->item);
+        VK_TextureDestroy(&item->item);
     }
     item->is_loaded = false;
+    DLLRemove(asset_manager->texture_list.first, asset_manager->texture_list.last, item);
+    SLLStackPush(vk_ctx->asset_manager->texture_free_list, item);
 }
 
 // ~mgj: Rendering
-
 static void
 VK_DrawFrameReset()
 {
@@ -1353,32 +1453,6 @@ VK_Model3DInstanceBucketAdd(VK_BufferAllocation* vertex_buffer_allocation,
     instance_draw->total_instance_buffer_byte_count +=
         node->instance_buffer_offset + instance_buffer_info->buffer.size;
     SLLQueuePush(instance_draw->list.first, instance_draw->list.last, node);
-}
-
-g_internal void
-r_model_3d_draw(r_Model3DPipelineData pipeline_input, B32 depth_test_per_draw_call_only)
-{
-    VK_Context* vk_ctx = VK_CtxGet();
-    VK_AssetManager* asset_manager = vk_ctx->asset_manager;
-
-    if (r_is_handle_zero(pipeline_input.index_buffer_handle) ||
-        r_is_handle_zero(pipeline_input.vertex_buffer_handle) ||
-        r_is_handle_zero(pipeline_input.texture_handle))
-        return;
-    r_AssetItem<VK_Buffer>* asset_vertex_buffer =
-        VK_AssetManagerItemGet(&asset_manager->buffer_list, pipeline_input.vertex_buffer_handle);
-    r_AssetItem<VK_Buffer>* asset_index_buffer =
-        VK_AssetManagerItemGet(&asset_manager->buffer_list, pipeline_input.index_buffer_handle);
-    r_AssetItem<VK_Texture>* asset_texture =
-        VK_AssetManagerTextureItemGet(pipeline_input.texture_handle);
-
-    if (asset_vertex_buffer->is_loaded && asset_index_buffer->is_loaded && asset_texture->is_loaded)
-    {
-        VK_Model3DBucketAdd(&asset_vertex_buffer->item.buffer_alloc,
-                            &asset_index_buffer->item.buffer_alloc, asset_texture->item.desc_set,
-                            depth_test_per_draw_call_only, pipeline_input.index_offset,
-                            pipeline_input.index_count);
-    }
 }
 
 enum WriteType

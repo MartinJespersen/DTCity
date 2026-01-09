@@ -7,12 +7,19 @@
 #define DEBUG_LOG(message, ...)                                                                    \
     do                                                                                             \
     {                                                                                              \
-        printf("File %s Line %d: ", __FILE__, __LINE__);                                           \
+        printf("File %s:%d ", __FILE__, __LINE__);                                                 \
         fprintf(stdout, message, ##__VA_ARGS__);                                                   \
         printf("\n");                                                                              \
     } while (0)
 #else
 #define DEBUG_LOG(message, ...)
+#endif
+
+// ~mgj: Memory diagnostics
+#if MEMORY_DEBUG
+#define MEMORY_LOG(message, ...) DEBUG_LOG(message, ##__VA_ARGS__)
+#else
+#define MEMORY_LOG(message, ...)
 #endif
 
 #if BUILD_DEBUG

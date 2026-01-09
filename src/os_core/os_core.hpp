@@ -432,20 +432,11 @@ OS_SystemTimerRead();
 force_inline static U64
 OS_SystemTimerFreqGet();
 
+// ~mgj: @os_hooks OS Graphical Message
+g_internal void
+os_graphical_message(B32 error, String8 title, String8 message);
 //~ mgj: Entrypoint to the application from os layer
 void
 App(int argc, char** argv);
-
-////////////////////////////////
-//~ rjf: @os_hooks Entry Points (Implemented Per-OS)
-
-// NOTE(rjf): The implementation of `os_core` will define low-level entry
-// points if BUILD_ENTRY_DEFINING_UNIT is defined to 1. These will call
-// into the standard codebase program entry points, named "entry_point".
-
-// #if BUILD_ENTRY_DEFINING_UNIT
-// raddbg_entry_point(entry_point);
-// static void entry_point(CmdLine *cmdline);
-// #endif
 
 #endif // OS_CORE_H

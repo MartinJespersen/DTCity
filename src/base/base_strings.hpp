@@ -424,7 +424,7 @@ utf8_from_utf32_single(U8* buffer, U32 character);
 static String8
 str8_from_16(Arena* arena, String16 in);
 static String16
-Str16From8(Arena* arena, String8 in);
+str16_from_8(Arena* arena, String8 in);
 static String8
 str8_from_32(Arena* arena, String32 in);
 static String32
