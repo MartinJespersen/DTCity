@@ -474,7 +474,7 @@ vec_2f32(F32 x, F32 y);
 static Vec2F32
 Add2F32(Vec2F32 a, Vec2F32 b);
 static Vec2F32
-Sub2F32(Vec2F32 a, Vec2F32 b);
+sub_2f32(Vec2F32 a, Vec2F32 b);
 static Vec2F64
 sub_2f64(Vec2F64 a, Vec2F64 b);
 static Vec2F32
@@ -490,7 +490,7 @@ Dot2F32(Vec2F32 a, Vec2F32 b);
 static F32
 length_squared_2f32(Vec2F32 v);
 static F32
-Length2F32(Vec2F32 v);
+length_2f32(Vec2F32 v);
 static F64
 length_2f64(Vec2F64 v);
 

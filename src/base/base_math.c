@@ -25,7 +25,7 @@ static Vec2F32 Add2F32(Vec2F32 a, Vec2F32 b) {
   Vec2F32 c = {a.x + b.x, a.y + b.y};
   return c;
 }
-static Vec2F32 Sub2F32(Vec2F32 a, Vec2F32 b) {
+static Vec2F32 sub_2f32(Vec2F32 a, Vec2F32 b) {
   Vec2F32 c = {a.x - b.x, a.y - b.y};
   return c;
 }
@@ -58,7 +58,7 @@ static F32 length_squared_2f32(Vec2F32 v) {
   F32 c = v.x * v.x + v.y * v.y;
   return c;
 }
-static F32 Length2F32(Vec2F32 v) {
+static F32 length_2f32(Vec2F32 v) {
   F32 c = SqrtF32(v.x * v.x + v.y * v.y);
   return c;
 }
@@ -67,7 +67,7 @@ static F64 length_2f64(Vec2F64 v) {
   return c;
 }
 static Vec2F32 Normalize2F32(Vec2F32 v) {
-  v = Scale2F32(v, 1.f / Length2F32(v));
+  v = Scale2F32(v, 1.f / length_2f32(v));
   return v;
 }
 static Vec2F32 mix_2f32(Vec2F32 a, Vec2F32 b, F32 t) {
@@ -417,7 +417,7 @@ static Vec4S32 mix_4s32(Vec4S32 a, Vec4S32 b, F32 t) {
 }
 static F32 Dist2F32(Vec2F32 a, Vec2F32 b) {
   Vec2F32 diff = {a.x - b.x, a.y - b.y};
-  F32 c = Length2F32(diff);
+  F32 c = length_2f32(diff);
   return c;
 }
 
@@ -1046,7 +1046,7 @@ static Rng2F32 shift_2f32(Rng2F32 r, Vec2F32 x) {
 }
 static Rng2F32 pad_2f32(Rng2F32 r, F32 x) {
   Vec2F32 xv = {x, x};
-  r.min = Sub2F32(r.min, xv);
+  r.min = sub_2f32(r.min, xv);
   r.max = Add2F32(r.max, xv);
   return r;
 }

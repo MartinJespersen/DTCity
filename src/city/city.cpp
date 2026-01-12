@@ -21,15 +21,15 @@ RoadSegmentFromTwoRoadNodes(RoadSegment* out_road_segment, osm::UtmLocation node
     Vec2F32 road_0_pos = node_0.pos;
     Vec2F32 road_1_pos = node_1.pos;
 
-    Vec2F32 road_dir = Sub2F32(road_1_pos, road_0_pos);
+    Vec2F32 road_dir = sub_2f32(road_1_pos, road_0_pos);
     Vec2F32 orthogonal_vec = {road_dir.y, -road_dir.x};
     Vec2F32 normal = Normalize2F32(orthogonal_vec);
     Vec2F32 normal_scaled = Scale2F32(normal, road_width / 2.0f);
 
     out_road_segment->start.top = Add2F32(road_0_pos, normal_scaled);
-    out_road_segment->start.btm = Sub2F32(road_0_pos, normal_scaled);
+    out_road_segment->start.btm = sub_2f32(road_0_pos, normal_scaled);
     out_road_segment->end.top = Add2F32(road_1_pos, normal_scaled);
-    out_road_segment->end.btm = Sub2F32(road_1_pos, normal_scaled);
+    out_road_segment->end.btm = sub_2f32(road_1_pos, normal_scaled);
 
     out_road_segment->start.node = node_0;
     out_road_segment->end.node = node_1;
@@ -47,8 +47,8 @@ RoadSegmentConnectionFromTwoRoadSegments(RoadSegment* in_out_road_segment_0,
     Vec2F32 road1_top = in_out_road_segment_1->start.top;
     Vec2F32 shared_center = in_out_road_segment_0->end.node.pos;
 
-    Vec2F32 road0_top_dir_norm = Normalize2F32(Sub2F32(road0_top, shared_center));
-    Vec2F32 road1_top_dir_norm = Normalize2F32(Sub2F32(road1_top, shared_center));
+    Vec2F32 road0_top_dir_norm = Normalize2F32(sub_2f32(road0_top, shared_center));
+    Vec2F32 road1_top_dir_norm = Normalize2F32(sub_2f32(road1_top, shared_center));
     // take average of the two directions and normalize it
     Vec2F32 shared_top_normal =
         Normalize2F32(Div2F32(Add2F32(road0_top_dir_norm, road1_top_dir_norm), 2.0f));
@@ -57,7 +57,7 @@ RoadSegmentConnectionFromTwoRoadSegments(RoadSegment* in_out_road_segment_0,
 
     Vec2F32 shared_top_dir = Scale2F32(shared_top_normal, shared_top_len);
     Vec2F32 shared_top = Add2F32(shared_center, shared_top_dir);
-    Vec2F32 shared_btm = Sub2F32(shared_center, shared_top_dir);
+    Vec2F32 shared_btm = sub_2f32(shared_center, shared_top_dir);
 
     in_out_road_segment_0->end.btm = shared_btm;
     in_out_road_segment_0->end.top = shared_top;
@@ -673,6 +673,7 @@ car_sim_destroy(CarSim* car_sim)
 g_internal Buffer<render::Model3DInstance>
 car_sim_update(Arena* arena, CarSim* car, F64 time_delta)
 {
+    prof_scope_marker;
     Buffer<render::Model3DInstance> instance_buffer =
         BufferAlloc<render::Model3DInstance>(arena, car->cars.size);
 
@@ -685,21 +686,26 @@ car_sim_update(Arena* arena, CarSim* car, F64 time_delta)
         instance = &instance_buffer.data[car_idx];
         car_info = &car->cars.data[car_idx];
 
-        Vec3F32 target_pos = height_dim_add(car_info->target_loc.pos, car_info->cur_pos.z);
         Vec3F32 new_pos =
             add_3f32(car_info->cur_pos,
                      scale_3f32(scale_3f32(car_info->dir, car_speed_default), (F32)time_delta));
 
-        // Is the destination point in between new and old pos?
-        F32 min_x = Min(car_info->cur_pos.x, new_pos.x);
-        F32 max_x = Max(car_info->cur_pos.x, new_pos.x);
-        F32 min_y = Min(car_info->cur_pos.y, new_pos.y);
-        F32 max_y = Max(car_info->cur_pos.y, new_pos.y);
+        // find out whether target has been reached
+        Vec2F32 src_to_target = sub_2f32(car_info->target_loc.pos, car_info->source_loc.pos);
+        F32 dist_src_to_target = length_2f32(src_to_target);
+        Vec2F32 src_to_new_pos = sub_2f32(new_pos.xy, car_info->source_loc.pos);
+        F32 dist_src_to_new_pos = length_2f32(src_to_new_pos);
+
+        // At start up we reset the car's position if target has been by passed by 2 meters
+        if ((dist_src_to_new_pos - dist_src_to_target) > 2.0f)
+        {
+            new_pos = vec_3f32(car_info->target_loc.pos.x, car_info->target_loc.pos.y,
+                               car_info->cur_pos.z);
+        }
 
         // Check if the car has reached its destination. If so, find new destination and
         // direction.
-        if ((target_pos.x >= min_x && target_pos.x <= max_x) &&
-            (target_pos.y >= min_y && target_pos.y <= max_y))
+        if (dist_src_to_new_pos > dist_src_to_target)
         {
             osm::Node* node = osm::random_neighbour_node_get(car_info->target_loc.id);
             osm::UtmLocation new_target_loc = city::utm_location_find(node->id);
@@ -902,7 +908,7 @@ buildings_buffers_create(Arena* arena, F32 road_height, BuildingRenderInfo* out_
                 osm::UtmLocation node_loc = city::utm_location_find(way->node_ids[node_idx]);
                 osm::UtmLocation next_node_loc =
                     city::utm_location_find(way->node_ids[node_idx + 1]);
-                F32 side_width = Length2F32(Sub2F32(node_loc.pos, next_node_loc.pos));
+                F32 side_width = length_2f32(sub_2f32(node_loc.pos, next_node_loc.pos));
 
                 Vec2U32 id = {.u64 = (U64)way->id};
 
@@ -1162,8 +1168,8 @@ EarClipping(Arena* arena, Buffer<Vec2F32> node_buffer)
         Vec2F32 prev = node_buffer.data[prev_node_buffer_idx];
         Vec2F32 next = node_buffer.data[next_node_buffer_idx];
 
-        Vec2F32 prev_to_ear = Sub2F32(ear, prev);
-        Vec2F32 ear_to_next = Sub2F32(next, ear);
+        Vec2F32 prev_to_ear = sub_2f32(ear, prev);
+        Vec2F32 ear_to_next = sub_2f32(next, ear);
 
         F64 cross_product_z = cross_2f64_z_component(vec_2f64(prev_to_ear.x, prev_to_ear.y),
                                                      vec_2f64(ear_to_next.x, ear_to_next.y));

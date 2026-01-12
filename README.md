@@ -53,8 +53,11 @@ The combinations are:
 An example of setting up the build for the debug preset for windows is shown below:
 - cmake --preset=debug-windows
 
-To build simply run:
-- cmake --build build
+For each of the 3 different build configurations, a build directory is created (build/<configuration_name>).
+The different build configuration are: debug, release and profile.
+
+To build for debug on either windows or linux, run the following commands:
+- cmake --build build/debug
 
 ### C Macros
 The following application specific macros are used to enable address sanitization, build tools and profiling:

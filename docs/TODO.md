@@ -1,5 +1,5 @@
 # Bugs
-* Cars do not start on a road (the cause is probably due to the way each car checks whether it should change direction)
+* imgui assertion happens during array indexing operation (Assertion failed: i >= 0 && i < Size)
 * Direction or previous node is needed for random neighbor algorithm to avoid doing a u-turn when it is possible to drive straight.
 
 # Changes along the way
