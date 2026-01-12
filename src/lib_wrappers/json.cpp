@@ -146,11 +146,12 @@ way_buffer_from_simd_json(Arena* arena, String8 json)
             for (auto tag : tags_object)
             {
                 // Get key and value as string_view
-                auto key_view = tag.value.get_string();
+
+                auto key_view = tag.key;
                 auto value_view = tag.value.get_string();
 
                 // Convert to String8
-                String8 temp_key = Str8((U8*)key_view.value().data(), key_view.value().size());
+                String8 temp_key = Str8((U8*)key_view.data(), key_view.size());
                 String8 temp_value =
                     Str8((U8*)value_view.value().data(), value_view.value().size());
 
