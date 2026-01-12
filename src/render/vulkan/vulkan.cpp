@@ -436,7 +436,7 @@ thread_setup(async::ThreadInfo thread_info, void* input)
         {
             render::TextureLoadingInfo* extra_info =
                 (render::TextureLoadingInfo*)&asset_loading_info->extra_info;
-            ::Buffer<U8> tex_buf = io_file_read(scratch.arena, extra_info->tex_path);
+            ::Buffer<U8> tex_buf = io::file_read(scratch.arena, extra_info->tex_path);
             err |= texture_gpu_upload_cmd_recording(cmd, thread_input->asset_info.handle, tex_buf);
             if (err)
             {

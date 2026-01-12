@@ -85,7 +85,7 @@ neta_osm_way_to_edges_map_create(Arena* arena, String8 file_path, Rng2F64 utm_bb
     prof_scope_marker;
     using namespace simdjson;
 
-    Buffer<U8> buffer = io_file_read(arena, file_path);
+    Buffer<U8> buffer = io::file_read(arena, file_path);
 
     simdjson::ondemand::parser parser;
     simdjson::ondemand::document doc;

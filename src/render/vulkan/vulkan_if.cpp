@@ -3,7 +3,7 @@ namespace render
 
 // ~mgj: Vulkan Interface
 static void
-render_ctx_create(String8 shader_path, io_IO* io_ctx, async::Threads* thread_pool)
+render_ctx_create(String8 shader_path, io::IO* io_ctx, async::Threads* thread_pool)
 {
     ScratchScope scratch = ScratchScope(0, 0);
 
@@ -56,7 +56,7 @@ render_ctx_create(String8 shader_path, io_IO* io_ctx, async::Threads* thread_poo
     vmaCreateAllocator(&allocatorInfo, &vk_ctx->allocator);
     vk_ctx->object_id_format = VK_FORMAT_R32G32_UINT;
 
-    Vec2S32 vk_framebuffer_dim_s32 = io_wait_for_valid_framebuffer_size(io_ctx);
+    Vec2S32 vk_framebuffer_dim_s32 = io::wait_for_valid_framebuffer_size(io_ctx);
     Vec2U32 vk_framebuffer_dim_u32 = {(U32)vk_framebuffer_dim_s32.x, (U32)vk_framebuffer_dim_s32.y};
     vulkan::SwapChainSupportDetails swapchain_details =
         vulkan::query_swapchain_support(scratch.arena, vk_ctx->physical_device, vk_ctx->surface);

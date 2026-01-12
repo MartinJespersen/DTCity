@@ -256,7 +256,7 @@ create_instance(Context* vk_ctx);
 static void
 debug_messenger_setup(Context* vk_ctx);
 static void
-surface_create(Context* vk_ctx, io_IO* io_ctx);
+surface_create(Context* vk_ctx, io::IO* io_ctx);
 static void
 physical_device_pick(Context* vk_ctx);
 static void

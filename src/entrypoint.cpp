@@ -66,7 +66,7 @@ CheckVkResult(VkResult result)
 }
 
 void
-ImguiSetup(vulkan::Context* vk_ctx, io_IO* io_ctx)
+dt_imgui_setup(vulkan::Context* vk_ctx, io::IO* io_ctx)
 {
     //~mgj: Initialize ImGui
     IMGUI_CHECKVERSION();
@@ -188,7 +188,7 @@ dt_main_loop(void* ptr)
     dt_Input* input = (dt_Input*)ptr;
 
     Context* ctx = dt_ctx_get();
-    io_IO* io_ctx = ctx->io;
+    io::IO* io_ctx = ctx->io;
     os_set_thread_name(str8_c_string("Entrypoint thread"));
 
     Rng2F64 utm_coords = dt_utm_from_wgs84(input->bbox);
@@ -197,7 +197,7 @@ dt_main_loop(void* ptr)
     render::render_ctx_create(ctx->data_subdirs.data[dt_DataDirType::Shaders], io_ctx,
                               ctx->thread_pool);
     vulkan::Context* vk_ctx = vulkan::ctx_get();
-    ImguiSetup(vk_ctx, io_ctx);
+    dt_imgui_setup(vk_ctx, io_ctx);
 
     render::SamplerInfo sampler_info = {
         .min_filter = render::Filter_Linear,
@@ -235,7 +235,7 @@ dt_main_loop(void* ptr)
     {
         dt_time_update(ctx->time);
 
-        io_new_frame();
+        io::new_frame();
         render::new_frame();
         ImGui::NewFrame();
         Vec2U32 framebuffer_dim = {(U32)io_ctx->framebuffer_width, (U32)io_ctx->framebuffer_height};

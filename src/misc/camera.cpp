@@ -14,7 +14,7 @@ camera_init(Camera* camera, Vec2F32 world_offset)
 }
 
 static void
-camera_update(Camera* camera, io_IO* input, F32 time, Vec2U32 extent)
+camera_update(Camera* camera, io::IO* input, F32 time, Vec2U32 extent)
 {
     F32 mouse_sensitivity = 0.1f;
     F32 scroll_sensitivity = 0.2f;

@@ -191,7 +191,7 @@ buffer_info_from_template_buffer(Buffer<T> buffer, BufferType buffer_type, U64 t
 // ~mgj: function declaration to be implemented by backend
 
 static void
-render_ctx_create(String8 shader_path, io_IO* io_ctx, async::Threads* thread_pool);
+render_ctx_create(String8 shader_path, io::IO* io_ctx, async::Threads* thread_pool);
 static void
 render_ctx_destroy();
 static void

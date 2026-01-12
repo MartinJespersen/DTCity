@@ -168,7 +168,7 @@ command_pool_create(VkDevice device, VkCommandPoolCreateInfo* poolInfo)
 }
 
 static void
-surface_create(Context* vk_ctx, io_IO* io)
+surface_create(Context* vk_ctx, io::IO* io)
 {
     int supported = glfwVulkanSupported();
     if (supported != GLFW_TRUE)
@@ -578,7 +578,7 @@ shader_stage_from_spirv(Arena* arena, VkDevice device, VkShaderStageFlagBits fla
 {
     ShaderModuleInfo shader_module_info = {};
     shader_module_info.device = device;
-    ::Buffer<U8> shader_buffer = io_file_read(arena, path);
+    ::Buffer<U8> shader_buffer = io::file_read(arena, path);
 
     shader_module_info.info.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
     shader_module_info.info.stage = flag;

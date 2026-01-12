@@ -81,8 +81,11 @@ static String8
 CreatePathFromStrings(Arena* arena, Buffer<String8> path_elements);
 
 ////////////////////////////////////////////////////////
+namespace io
+{
 static Buffer<U8>
-io_file_read(Arena* arena, String8 filename);
+file_read(Arena* arena, String8 filename);
+}
 
 static char**
 CStrArrFromStr8Buffer(Arena* arena, Buffer<String8> buffer);

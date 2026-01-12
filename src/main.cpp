@@ -2,7 +2,7 @@
 #include "includes.cpp"
 
 static Context*
-ContextCreate(io_IO* io_ctx)
+ContextCreate(io::IO* io_ctx)
 {
     HTTP_Init();
 
@@ -11,7 +11,7 @@ ContextCreate(io_IO* io_ctx)
     Arena* app_arena = (Arena*)ArenaAlloc();
     Context* ctx = PushStruct(app_arena, Context);
     ctx->arena_permanent = app_arena;
-    ctx->io = PushStruct(app_arena, io_IO);
+    ctx->io = PushStruct(app_arena, io::IO);
     ctx->camera = PushStruct(app_arena, ui::Camera);
     ctx->time = PushStruct(app_arena, dt_Time);
     ctx->cwd = OS_GetCurrentPath(scratch.arena);
@@ -63,8 +63,9 @@ App(int argc, char** argv)
 {
     ScratchScope scratch = ScratchScope(0, 0);
 
-    io_IO* io_ctx = io_window_create(S("DTCity"), vulkan::Context::WIDTH, vulkan::Context::HEIGHT);
-    io_input_state_update(io_ctx);
+    io::IO* io_ctx =
+        io::window_create(S("DTCity"), vulkan::Context::WIDTH, vulkan::Context::HEIGHT);
+    io::input_state_update(io_ctx);
     Context* ctx = ContextCreate(io_ctx);
     dt_ctx_set(ctx);
     dt_time_init(ctx->time);
@@ -73,9 +74,9 @@ App(int argc, char** argv)
     OS_Handle thread_handle = dt_render_thread_start(ctx, &input);
     while (!glfwWindowShouldClose(ctx->io->window))
     {
-        io_input_state_update(ctx->io);
+        io::input_state_update(ctx->io);
     }
     dt_render_thread_join(thread_handle, ctx);
     ContextDestroy(ctx);
-    io_window_destroy(io_ctx);
+    io::window_destroy(io_ctx);
 }

@@ -1,18 +1,21 @@
+namespace io
+{
+
 static void
-io_framebuffer_resize_callback(GLFWwindow* window, int width, int height)
+framebuffer_resize_callback(GLFWwindow* window, int width, int height)
 {
     (void)width;
     (void)height;
 
-    io_IO* io_ctx = reinterpret_cast<io_IO*>(glfwGetWindowUserPointer(window));
+    IO* io_ctx = reinterpret_cast<IO*>(glfwGetWindowUserPointer(window));
     io_ctx->framebuffer_resized = 1;
 }
 
-static io_IO*
-io_window_create(String8 app_name, U32 window_width, U32 window_height)
+static IO*
+window_create(String8 app_name, U32 window_width, U32 window_height)
 {
     Arena* arena = ArenaAlloc();
-    io_IO* io_ctx = PushStruct(arena, io_IO);
+    IO* io_ctx = PushStruct(arena, IO);
     io_ctx->arena = arena;
 
     glfwInit();
@@ -21,14 +24,14 @@ io_window_create(String8 app_name, U32 window_width, U32 window_height)
     io_ctx->window =
         glfwCreateWindow(window_width, window_height, (char*)app_name.str, nullptr, nullptr);
     glfwSetWindowUserPointer(io_ctx->window, io_ctx);
-    glfwSetFramebufferSizeCallback(io_ctx->window, io_framebuffer_resize_callback);
-    glfwSetScrollCallback(io_ctx->window, io_scroll_callback);
+    glfwSetFramebufferSizeCallback(io_ctx->window, framebuffer_resize_callback);
+    glfwSetScrollCallback(io_ctx->window, scroll_callback);
 
     return io_ctx;
 }
 
 static void
-io_window_destroy(io_IO* io_ctx)
+window_destroy(IO* io_ctx)
 {
     glfwDestroyWindow(io_ctx->window);
     glfwTerminate();
@@ -36,9 +39,9 @@ io_window_destroy(io_IO* io_ctx)
 }
 
 static void
-io_scroll_callback(GLFWwindow* window, double xoffset, double yoffset)
+scroll_callback(GLFWwindow* window, double xoffset, double yoffset)
 {
-    io_IO* io_ctx = (io_IO*)glfwGetWindowUserPointer(window);
+    IO* io_ctx = (IO*)glfwGetWindowUserPointer(window);
     io_ctx->scroll_x = xoffset;
     io_ctx->scroll_y = yoffset;
 }
@@ -50,7 +53,7 @@ io_scroll_callback(GLFWwindow* window, double xoffset, double yoffset)
 // to the correct value.
 
 static void
-io_input_state_update(io_IO* input)
+input_state_update(IO* input)
 {
     glfwPollEvents();
 
@@ -96,7 +99,7 @@ io_input_state_update(io_IO* input)
 }
 
 static Vec2S32
-io_wait_for_valid_framebuffer_size(io_IO* io_ctx)
+wait_for_valid_framebuffer_size(IO* io_ctx)
 {
     // framebuffer update
     S32 framebuffer_width = 0;
@@ -112,7 +115,9 @@ io_wait_for_valid_framebuffer_size(io_IO* io_ctx)
 }
 
 static void
-io_new_frame()
+new_frame()
 {
     ImGui_ImplGlfw_NewFrame();
 }
+
+} // namespace io

@@ -100,8 +100,11 @@ CreatePathFromStrings(Arena* arena, Buffer<String8> path_elements)
     return result;
 }
 
+namespace io
+{
+
 static Buffer<U8>
-io_file_read(Arena* arena, String8 filename)
+file_read(Arena* arena, String8 filename)
 {
     Buffer<U8> buffer = {0};
     FILE* file = fopen((const char*)filename.str, "rb");
@@ -121,6 +124,8 @@ io_file_read(Arena* arena, String8 filename)
 
     return buffer;
 }
+
+} // namespace io
 
 //~mgj: Strings functions
 
