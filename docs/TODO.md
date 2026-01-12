@@ -1,7 +1,6 @@
 # Bugs
 * Cars do not start on a road (the cause is probably due to the way each car checks whether it should change direction)
 * Direction or previous node is needed for random neighbor algorithm to avoid doing a u-turn when it is possible to drive straight.
-* The pop up shows only value at the moment
 
 # Changes along the way
 * Make the asset manager thread safe - accessing texture and buffer lists are not thread safe at the moment

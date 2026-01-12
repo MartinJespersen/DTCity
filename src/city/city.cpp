@@ -1480,8 +1480,8 @@ road_create(String8 texture_path, String8 cache_path, String8 data_dir, Rng2F64 
     osm::structure_add(node_hashmap, http_data, osm::WayType_Road);
 
     String8 neta_path = str8_path_from_str8_list(scratch.arena, {data_dir, S("netascore.geojson")});
-    Map<S64, neta_EdgeList>* edge_map =
-        neta_osm_way_to_edges_map_create(scratch.arena, neta_path, utm_coords);
+    Map<S64, neta::EdgeList>* edge_map =
+        neta::osm_way_to_edges_map_create(scratch.arena, neta_path, utm_coords);
     if (!edge_map)
     {
         exit_with_error("Failed to initialize neta");
@@ -1518,6 +1518,7 @@ road_vertex_buffer_switch(Road* road, RoadOverlayOption overlay_option)
 {
     if (overlay_option != road->overlay_option_cur)
     {
+        prof_scope_marker_named("road_vertex_buffer_switch: 1. pass");
         road->overlay_option_cur = overlay_option;
 
         for (auto& vertex : road->render_buffers.vertices)
@@ -1550,6 +1551,7 @@ road_vertex_buffer_switch(Road* road, RoadOverlayOption overlay_option)
         U32 next_handle_idx = (road->current_handle_idx + 1) % ArrayCount(road->handles);
         if (render::is_resource_loaded(road->handles[next_handle_idx].vertex_buffer_handle))
         {
+            prof_scope_marker_named("road_vertex_buffer_switch: 2. pass");
             render::Model3DPipelineData* current_road_pipeline_data =
                 &road->handles[road->current_handle_idx];
             render::buffer_destroy_deferred(current_road_pipeline_data->vertex_buffer_handle);
@@ -1605,14 +1607,14 @@ road_edge_structure_create(Arena* arena)
 
 g_internal Map<EdgeId, RoadInfo>*
 road_info_from_edge_id(Arena* arena, Buffer<RoadEdge> road_edge_buf,
-                       Map<S64, neta_EdgeList>* neta_edge_map)
+                       Map<S64, neta::EdgeList>* neta_edge_map)
 {
     prof_scope_marker;
     Map<EdgeId, RoadInfo>* road_info_map = map_create<EdgeId, RoadInfo>(arena, 1024);
 
     for (RoadEdge& edge : road_edge_buf)
     {
-        neta_Edge* neta_edge = neta_edge_from_road_edge(&edge, neta_edge_map);
+        neta::Edge* neta_edge = edge_from_road_edge(&edge, neta_edge_map);
         if (neta_edge)
         {
             RoadInfo info = {};
@@ -1627,8 +1629,8 @@ road_info_from_edge_id(Arena* arena, Buffer<RoadEdge> road_edge_buf,
     return road_info_map;
 }
 
-g_internal neta_Edge*
-neta_edge_from_road_edge(RoadEdge* road_edge, Map<osm::WayId, neta_EdgeList>* edge_list_map)
+g_internal neta::Edge*
+edge_from_road_edge(RoadEdge* road_edge, Map<osm::WayId, neta::EdgeList>* edge_list_map)
 {
     S64 from_id = road_edge->node_id_from;
     S64 to_id = road_edge->node_id_to;
@@ -1639,15 +1641,15 @@ neta_edge_from_road_edge(RoadEdge* road_edge, Map<osm::WayId, neta_EdgeList>* ed
     Vec2F64 to_node_coord = vec_2f64(to_node_loc.pos.x, to_node_loc.pos.y);
 
     S64 way_id = road_edge->way_id;
-    neta_EdgeList* edge_list = map_get(edge_list_map, way_id);
+    neta::EdgeList* edge_list = map_get(edge_list_map, way_id);
 
-    neta_Edge* chosen_edge = {};
+    neta::Edge* chosen_edge = {};
     if (edge_list)
     {
         F64 smallest_dist = max_f64;
-        for (neta_EdgeNode* edge_node = edge_list->first; edge_node; edge_node = edge_node->next)
+        for (neta::EdgeNode* edge_node = edge_list->first; edge_node; edge_node = edge_node->next)
         {
-            neta_Edge* edge = edge_node->edge;
+            neta::Edge* edge = edge_node->edge;
             for (Vec2F64& coord : edge->coords)
             {
                 F64 from_dist = dist_2f64(coord, from_node_coord);

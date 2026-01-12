@@ -81,13 +81,5 @@
       "inherits": "profile-base",
       "generator": "Unix Makefiles"
     }
-  ],
-  "buildPresets": [
-    { "name": "debug-windows", "configurePreset": "debug-windows" },
-    { "name": "debug-linux", "configurePreset": "debug-linux" },
-    { "name": "release-windows", "configurePreset": "release-windows" },
-    { "name": "release-linux", "configurePreset": "release-linux" },
-    { "name": "profile-windows", "configurePreset": "profile-windows" },
-    { "name": "profile-linux", "configurePreset": "profile-linux" }
   ]
 }

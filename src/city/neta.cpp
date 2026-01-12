@@ -1,11 +1,14 @@
-static Result<Buffer<neta_Edge>>
-neta_edge_in_osm_area(Arena* arena, simdjson::ondemand::document& doc, Rng2F64 utm_bbox)
+namespace neta
+{
+
+static Result<Buffer<Edge>>
+edge_in_osm_area(Arena* arena, simdjson::ondemand::document& doc, Rng2F64 utm_bbox)
 {
     prof_scope_marker;
     using namespace simdjson;
 
     B32 err = false;
-    ChunkList<neta_Edge>* way_local_list = chunk_list_create<neta_Edge>(arena, 7);
+    ChunkList<Edge>* way_local_list = chunk_list_create<Edge>(arena, 7);
 
     fallback::ondemand::array feature_array;
     err |= doc.get_object()["features"].get_array().get(feature_array);
@@ -20,7 +23,7 @@ neta_edge_in_osm_area(Arena* arena, simdjson::ondemand::document& doc, Rng2F64 u
             continue;
 
         // insert into buffer to hold neta information for each edge/way
-        neta_Edge* way_local = chunk_list_get_next<neta_Edge>(arena, way_local_list);
+        Edge* way_local = chunk_list_get_next<Edge>(arena, way_local_list);
         way_local->osm_id = osm_id;
         err |= props["edge_id"].get_int64().get(way_local->edge_id);
         err |= props["index_bike_ft"].get_double().get(way_local->index_bike_ft);
@@ -74,13 +77,13 @@ neta_edge_in_osm_area(Arena* arena, simdjson::ondemand::document& doc, Rng2F64 u
             break;
     }
 
-    Buffer<neta_Edge> way_buffer = buffer_from_chunk_list<neta_Edge>(arena, way_local_list);
-    Result<Buffer<neta_Edge>> res = {.v = way_buffer, .err = err};
+    Buffer<Edge> way_buffer = buffer_from_chunk_list<Edge>(arena, way_local_list);
+    Result<Buffer<Edge>> res = {.v = way_buffer, .err = err};
     return res;
 }
 
-static Map<S64, neta_EdgeList>*
-neta_osm_way_to_edges_map_create(Arena* arena, String8 file_path, Rng2F64 utm_bbox)
+static Map<S64, EdgeList>*
+osm_way_to_edges_map_create(Arena* arena, String8 file_path, Rng2F64 utm_bbox)
 {
     prof_scope_marker;
     using namespace simdjson;
@@ -93,25 +96,25 @@ neta_osm_way_to_edges_map_create(Arena* arena, String8 file_path, Rng2F64 utm_bb
     simdjson::error_code simd_error = parser.iterate(json_padded).get(doc);
 
     B32 err = false;
-    Buffer<neta_Edge> edge_buf = {};
+    Buffer<Edge> edge_buf = {};
     if (simd_error == simdjson::error_code::SUCCESS)
     {
-        Result<Buffer<neta_Edge>> res_edges = neta_edge_in_osm_area(arena, doc, utm_bbox);
+        Result<Buffer<Edge>> res_edges = edge_in_osm_area(arena, doc, utm_bbox);
         if (!res_edges.err)
             edge_buf = res_edges.v;
     }
 
-    Map<S64, neta_EdgeList>* edge_map = map_create<S64, neta_EdgeList>(arena, 10);
+    Map<S64, EdgeList>* edge_map = map_create<S64, EdgeList>(arena, 10);
     for (U32 i = 0; i < edge_buf.size; i++)
     {
-        neta_Edge* edge = edge_buf[i];
-        neta_EdgeList* list_res = map_get(edge_map, edge->osm_id);
-        neta_EdgeNode* edge_node = PushStruct(arena, neta_EdgeNode);
+        Edge* edge = edge_buf[i];
+        EdgeList* list_res = map_get(edge_map, edge->osm_id);
+        EdgeNode* edge_node = PushStruct(arena, EdgeNode);
         edge_node->edge = edge;
 
         if (!list_res)
         {
-            neta_EdgeList dummy_edge_list = {};
+            EdgeList dummy_edge_list = {};
             list_res = map_insert(edge_map, edge->osm_id, dummy_edge_list);
         }
 
@@ -120,3 +123,5 @@ neta_osm_way_to_edges_map_create(Arena* arena, String8 file_path, Rng2F64 utm_bb
 
     return edge_map;
 }
+
+} // namespace neta

@@ -3,9 +3,12 @@
 #endif
 #include "simdjson/simdjson.h"
 
-struct neta_Edge
+namespace neta
 {
-    neta_Edge* next;
+
+struct Edge
+{
+    Edge* next;
     S64 edge_id;
     S64 osm_id;
     F64 index_bike_ft;
@@ -15,22 +18,24 @@ struct neta_Edge
     Buffer<Vec2F64> coords;
 };
 
-struct neta_EdgeNode
+struct EdgeNode
 {
-    neta_EdgeNode* next;
-    neta_Edge* edge;
+    EdgeNode* next;
+    Edge* edge;
 };
 
-struct neta_EdgeList
+struct EdgeList
 {
-    neta_EdgeNode* first;
-    neta_EdgeNode* last;
+    EdgeNode* first;
+    EdgeNode* last;
 };
 
-static Map<S64, neta_EdgeList>*
-neta_osm_way_to_edges_map_create(Arena* arena, String8 file_path, Rng2F64 utm_bbox);
+static Map<S64, EdgeList>*
+osm_way_to_edges_map_create(Arena* arena, String8 file_path, Rng2F64 utm_bbox);
 
 // private fields
-static Result<Buffer<neta_Edge>>
-neta_edge_in_osm_area(Arena* arena, simdjson::ondemand::document& doc, Rng2F64 utm_bbox);
+static Result<Buffer<Edge>>
+edge_in_osm_area(Arena* arena, simdjson::ondemand::document& doc, Rng2F64 utm_bbox);
+
+} // namespace neta
 //////////////////////////////////////////////////////////////////////////////////////

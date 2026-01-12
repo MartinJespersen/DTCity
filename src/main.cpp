@@ -66,6 +66,7 @@ App(int argc, char** argv)
     io::IO* io_ctx =
         io::window_create(S("DTCity"), vulkan::Context::WIDTH, vulkan::Context::HEIGHT);
     io::input_state_update(io_ctx);
+
     Context* ctx = ContextCreate(io_ctx);
     dt_ctx_set(ctx);
     dt_time_init(ctx->time);

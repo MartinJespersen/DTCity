@@ -218,10 +218,10 @@ g_internal EdgeStructure
 road_edge_structure_create(Arena* arena);
 g_internal Map<EdgeId, RoadInfo>*
 road_info_from_edge_id(Arena* arena, Buffer<RoadEdge> road_edge_buf,
-                       Map<S64, neta_EdgeList>* neta_edge_map);
+                       Map<S64, neta::EdgeList>* neta_edge_map);
 
-g_internal neta_Edge*
-neta_edge_from_road_edge(RoadEdge* road_edge, Map<S64, neta_EdgeList>* edge_list_map);
+g_internal neta::Edge*
+edge_from_road_edge(RoadEdge* road_edge, Map<S64, neta::EdgeList>* edge_list_map);
 
 g_internal Buffer<render::Vertex3D>
 vertex_3d_from_gltfw_vertex(Arena* arena, Buffer<gltfw_Vertex3D> in_vertex_buffer);

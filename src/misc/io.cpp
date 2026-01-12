@@ -55,6 +55,7 @@ scroll_callback(GLFWwindow* window, double xoffset, double yoffset)
 static void
 input_state_update(IO* input)
 {
+    prof_scope_marker;
     glfwPollEvents();
 
     S32 window_size_x;
