@@ -62,7 +62,7 @@ dt_render_thread_start(void* ptr);
 static void
 dt_render_thread_join(OS_Handle thread_handle, void* ptr);
 static void
-dt_imgui_setup(VK_Context* vk_ctx, io_IO* io_ctx);
+dt_imgui_setup(vulkan::Context* vk_ctx, io_IO* io_ctx);
 static void
 dt_main_loop(void* ptr);
 

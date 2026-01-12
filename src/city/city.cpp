@@ -6,9 +6,9 @@ road_destroy(Road* road)
 {
     for (U32 i = 0; i < ArrayCount(road->handles); ++i)
     {
-        r_buffer_destroy(road->handles[i].vertex_buffer_handle);
-        r_buffer_destroy(road->handles[i].index_buffer_handle);
-        r_texture_destroy(road->handles[i].texture_handle);
+        render::buffer_destroy(road->handles[i].vertex_buffer_handle);
+        render::buffer_destroy(road->handles[i].index_buffer_handle);
+        render::texture_destroy(road->handles[i].texture_handle);
     }
 
     ArenaRelease(road->arena);
@@ -86,12 +86,13 @@ tag_value_get(Arena* arena, String8 key, F32 default_width, Buffer<osm::Tag> tag
 
 g_internal city::RenderBuffers
 road_render_buffers_create(Arena* arena, Buffer<city::RoadEdge> edge_buffer, F32 default_road_width,
-                           F32 road_height, Map<EdgeId, RoadInfo>* road_info_map)
+                           F32 road_height)
 {
     prof_scope_marker;
     ScratchScope scratch = ScratchScope(0, 0);
 
-    Buffer<r_Vertex3D> vertex_buffer = BufferAlloc<r_Vertex3D>(arena, edge_buffer.size * 4);
+    Buffer<render::Vertex3D> vertex_buffer =
+        BufferAlloc<render::Vertex3D>(arena, edge_buffer.size * 4);
     Buffer<U32> index_buffer = BufferAlloc<U32>(arena, edge_buffer.size * 6);
 
     U32 cur_vertex_idx = 0;
@@ -343,7 +344,7 @@ height_dim_add(Vec2F32 pos, F32 height)
 }
 
 g_internal void
-quad_to_buffer_add(RoadSegment* road_segment, Buffer<r_Vertex3D> buffer, Buffer<U32> indices,
+quad_to_buffer_add(RoadSegment* road_segment, Buffer<render::Vertex3D> buffer, Buffer<U32> indices,
                    U64 edge_id, F32 road_height, U32* cur_vertex_idx, U32* cur_index_idx)
 {
     F32 road_width = Dist2F32(road_segment->start.top, road_segment->start.btm);
@@ -621,19 +622,20 @@ car_sim_create(String8 asset_path, String8 texture_path, U32 car_count, Road* ro
     String8 gltf_path = str8_path_from_str8_list(scratch.arena, {asset_path, S("cars/scene.gltf")});
     CgltfResult parsed_result = gltfw_gltf_read(scratch.arena, gltf_path, S("Car.013"));
     car_sim->sampler_info = sampler_from_cgltf_sampler(parsed_result.sampler);
-    Buffer<r_Vertex3D> vertex_buffer =
+    Buffer<render::Vertex3D> vertex_buffer =
         vertex_3d_from_gltfw_vertex(arena, parsed_result.vertex_buffer);
     car_sim->vertex_buffer =
-        r_buffer_info_from_vertex_3d_buffer(vertex_buffer, R_BufferType_Vertex);
+        render::buffer_info_from_vertex_3d_buffer(vertex_buffer, render::BufferType_Vertex);
     Buffer<U32> index_buffer = buffer_arena_copy(arena, parsed_result.index_buffer);
-    car_sim->index_buffer = r_buffer_info_from_u32_index_buffer(index_buffer, R_BufferType_Index);
+    car_sim->index_buffer =
+        render::buffer_info_from_u32_index_buffer(index_buffer, render::BufferType_Index);
 
     car_sim->texture_path =
         str8_path_from_str8_list(arena, {texture_path, S("car_collection.ktx2")});
-    car_sim->texture_handle = r_texture_load_async(&car_sim->sampler_info, car_sim->texture_path,
-                                                   R_PipelineUsageType_3DInstanced);
-    car_sim->vertex_handle = r_buffer_load(&car_sim->vertex_buffer);
-    car_sim->index_handle = r_buffer_load(&car_sim->index_buffer);
+    car_sim->texture_handle = render::texture_load_async(
+        &car_sim->sampler_info, car_sim->texture_path, render::PipelineUsageType_3DInstanced);
+    car_sim->vertex_handle = render::buffer_load(&car_sim->vertex_buffer);
+    car_sim->index_handle = render::buffer_load(&car_sim->index_buffer);
 
     car_sim->car_center_offset = car_center_height_offset(parsed_result.vertex_buffer);
     car_sim->cars = BufferAlloc<Car>(arena, car_count);
@@ -662,19 +664,19 @@ car_sim_create(String8 asset_path, String8 texture_path, U32 car_count, Road* ro
 g_internal void
 car_sim_destroy(CarSim* car_sim)
 {
-    r_buffer_destroy(car_sim->vertex_handle);
-    r_buffer_destroy(car_sim->index_handle);
-    r_texture_destroy(car_sim->texture_handle);
+    render::buffer_destroy(car_sim->vertex_handle);
+    render::buffer_destroy(car_sim->index_handle);
+    render::texture_destroy(car_sim->texture_handle);
     ArenaRelease(car_sim->arena);
 }
 
-g_internal Buffer<r_Model3DInstance>
+g_internal Buffer<render::Model3DInstance>
 car_sim_update(Arena* arena, CarSim* car, F64 time_delta)
 {
-    Buffer<r_Model3DInstance> instance_buffer =
-        BufferAlloc<r_Model3DInstance>(arena, car->cars.size);
+    Buffer<render::Model3DInstance> instance_buffer =
+        BufferAlloc<render::Model3DInstance>(arena, car->cars.size);
 
-    r_Model3DInstance* instance;
+    render::Model3DInstance* instance;
     city::Car* car_info;
 
     F32 car_speed_default = 5.0f; // m/s
@@ -727,7 +729,7 @@ car_sim_update(Arena* arena, CarSim* car, F64 time_delta)
 
 g_internal Buildings*
 buildings_create(String8 cache_path, String8 texture_path, F32 road_height, Rng2F64 bbox,
-                 r_SamplerInfo* sampler_info)
+                 render::SamplerInfo* sampler_info)
 {
     prof_scope_marker;
     osm::Network* network = osm::g_network;
@@ -794,20 +796,20 @@ buildings_create(String8 cache_path, String8 texture_path, F32 road_height, Rng2
         str8_path_from_str8_list(arena, {texture_path, S("brick_wall.ktx2")});
     buildings->roof_texture_path =
         str8_path_from_str8_list(arena, {texture_path, S("concrete042A.ktx2")});
-    r_Handle facade_texture_handle =
-        r_texture_load_async(sampler_info, buildings->facade_texture_path, R_PipelineUsageType_3D);
-    r_Handle roof_texture_handle =
-        r_texture_load_async(sampler_info, buildings->roof_texture_path, R_PipelineUsageType_3D);
+    render::Handle facade_texture_handle = render::texture_load_async(
+        sampler_info, buildings->facade_texture_path, render::PipelineUsageType_3D);
+    render::Handle roof_texture_handle = render::texture_load_async(
+        sampler_info, buildings->roof_texture_path, render::PipelineUsageType_3D);
 
     BuildingRenderInfo render_info;
     city::buildings_buffers_create(arena, road_height, &render_info);
-    r_BufferInfo vertex_buffer_info =
-        r_buffer_info_from_vertex_3d_buffer(render_info.vertex_buffer, R_BufferType_Vertex);
-    r_BufferInfo index_buffer_info =
-        r_buffer_info_from_u32_index_buffer(render_info.index_buffer, R_BufferType_Index);
+    render::BufferInfo vertex_buffer_info = render::buffer_info_from_vertex_3d_buffer(
+        render_info.vertex_buffer, render::BufferType_Vertex);
+    render::BufferInfo index_buffer_info = render::buffer_info_from_u32_index_buffer(
+        render_info.index_buffer, render::BufferType_Index);
 
-    r_Handle vertex_handle = r_buffer_load(&vertex_buffer_info);
-    r_Handle index_handle = r_buffer_load(&index_buffer_info);
+    render::Handle vertex_handle = render::buffer_load(&vertex_buffer_info);
+    render::Handle index_handle = render::buffer_load(&index_buffer_info);
 
     buildings->roof_model_handles = {.vertex_buffer_handle = vertex_handle,
                                      .index_buffer_handle = index_handle,
@@ -826,10 +828,10 @@ buildings_create(String8 cache_path, String8 texture_path, F32 road_height, Rng2
 g_internal void
 building_destroy(Buildings* building)
 {
-    r_buffer_destroy(building->roof_model_handles.vertex_buffer_handle);
-    r_buffer_destroy(building->roof_model_handles.index_buffer_handle);
-    r_texture_destroy(building->roof_model_handles.texture_handle);
-    r_texture_destroy(building->facade_model_handles.texture_handle);
+    render::buffer_destroy(building->roof_model_handles.vertex_buffer_handle);
+    render::buffer_destroy(building->roof_model_handles.index_buffer_handle);
+    render::texture_destroy(building->roof_model_handles.texture_handle);
+    render::texture_destroy(building->facade_model_handles.texture_handle);
     ArenaRelease(building->arena);
 }
 g_internal F64
@@ -880,7 +882,8 @@ buildings_buffers_create(Arena* arena, F32 road_height, BuildingRenderInfo* out_
         Assert(way->node_ids[0] == way->node_ids[way->node_count - 1]);
     }
 
-    Buffer<r_Vertex3D> vertex_buffer = BufferAlloc<r_Vertex3D>(scratch.arena, total_vertex_count);
+    Buffer<render::Vertex3D> vertex_buffer =
+        BufferAlloc<render::Vertex3D>(scratch.arena, total_vertex_count);
     Buffer<U32> index_buffer = BufferAlloc<U32>(scratch.arena, total_index_count);
 
     U32 base_index_idx = 0;
@@ -1014,7 +1017,8 @@ buildings_buffers_create(Arena* arena, F32 road_height, BuildingRenderInfo* out_
 
     {
         prof_scope_marker_named("buildings_buffers_create_buffer_copy");
-        Buffer<r_Vertex3D> vertex_buffer_final = BufferAlloc<r_Vertex3D>(arena, base_vertex_idx);
+        Buffer<render::Vertex3D> vertex_buffer_final =
+            BufferAlloc<render::Vertex3D>(arena, base_vertex_idx);
         Buffer<U32> index_buffer_final = BufferAlloc<U32>(arena, base_index_idx);
         BufferCopy(vertex_buffer_final, vertex_buffer, base_vertex_idx);
         BufferCopy(index_buffer_final, index_buffer, base_index_idx);
@@ -1212,17 +1216,17 @@ EarClipping(Arena* arena, Buffer<Vec2F32> node_buffer)
 }
 
 g_internal void
-land_destroy(r_Model3DPipelineDataList list)
+land_destroy(render::Model3DPipelineDataList list)
 {
-    for (r_Model3DPipelineDataNode* data = list.first; data; data = data->next)
+    for (render::Model3DPipelineDataNode* data = list.first; data; data = data->next)
     {
-        r_buffer_destroy(data->handles.index_buffer_handle);
-        r_buffer_destroy(data->handles.vertex_buffer_handle);
-        r_texture_destroy(data->handles.texture_handle);
+        render::buffer_destroy(data->handles.index_buffer_handle);
+        render::buffer_destroy(data->handles.vertex_buffer_handle);
+        render::texture_destroy(data->handles.texture_handle);
     }
 }
 
-g_internal r_Model3DPipelineDataList
+g_internal render::Model3DPipelineDataList
 land_create(Arena* arena, String8 glb_path)
 {
     ScratchScope scratch = ScratchScope(&arena, 1);
@@ -1230,35 +1234,38 @@ land_create(Arena* arena, String8 glb_path)
     gltfw_Result glb_data = gltfw_glb_read(arena, glb_path);
 
     // create render handles
-    Buffer<r_Handle> tex_handles = BufferAlloc<r_Handle>(scratch.arena, glb_data.textures.size);
+    Buffer<render::Handle> tex_handles =
+        BufferAlloc<render::Handle>(scratch.arena, glb_data.textures.size);
     {
         for (U32 i = 0; i < glb_data.textures.size; ++i)
         {
             gltfw_Texture* texture = &glb_data.textures.data[i];
-            r_SamplerInfo sampler_info = city::sampler_from_cgltf_sampler(texture->sampler);
-            tex_handles.data[i] = r_texture_handle_create(&sampler_info, R_PipelineUsageType_3D);
-            r_texture_gpu_upload_sync(tex_handles.data[i], texture->tex_buf);
+            render::SamplerInfo sampler_info = city::sampler_from_cgltf_sampler(texture->sampler);
+            tex_handles.data[i] =
+                render::texture_handle_create(&sampler_info, render::PipelineUsageType_3D);
+            render::texture_gpu_upload_sync(tex_handles.data[i], texture->tex_buf);
         }
     }
 
     // create vertex and index buffers
-    r_Model3DPipelineDataList handles_list = {};
+    render::Model3DPipelineDataList handles_list = {};
     {
         for (gltfw_Primitive* primitive = glb_data.primitives.first; primitive;
              primitive = primitive->next)
         {
-            Buffer<r_Vertex3D> vertex_buffer =
+            Buffer<render::Vertex3D> vertex_buffer =
                 vertex_3d_from_gltfw_vertex(arena, primitive->vertices);
-            r_BufferInfo vertex_buffer_info =
-                r_buffer_info_from_vertex_3d_buffer(vertex_buffer, R_BufferType_Vertex);
-            r_BufferInfo index_buffer =
-                r_buffer_info_from_u32_index_buffer(primitive->indices, R_BufferType_Index);
+            render::BufferInfo vertex_buffer_info =
+                render::buffer_info_from_vertex_3d_buffer(vertex_buffer, render::BufferType_Vertex);
+            render::BufferInfo index_buffer = render::buffer_info_from_u32_index_buffer(
+                primitive->indices, render::BufferType_Index);
 
-            r_Handle vertex_handle = r_buffer_load(&vertex_buffer_info);
-            r_Handle index_handle = r_buffer_load(&index_buffer);
-            r_Handle texture_handle = tex_handles.data[primitive->tex_idx];
+            render::Handle vertex_handle = render::buffer_load(&vertex_buffer_info);
+            render::Handle index_handle = render::buffer_load(&index_buffer);
+            render::Handle texture_handle = tex_handles.data[primitive->tex_idx];
 
-            r_Model3DPipelineDataNode* node = PushStruct(arena, r_Model3DPipelineDataNode);
+            render::Model3DPipelineDataNode* node =
+                PushStruct(arena, render::Model3DPipelineDataNode);
             node->handles = {.vertex_buffer_handle = vertex_handle,
                              .index_buffer_handle = index_handle,
                              .texture_handle = texture_handle,
@@ -1270,58 +1277,58 @@ land_create(Arena* arena, String8 glb_path)
     return handles_list;
 }
 
-g_internal r_SamplerInfo
+g_internal render::SamplerInfo
 sampler_from_cgltf_sampler(gltfw_Sampler sampler)
 {
-    r_Filter min_filter = R_Filter_Nearest;
-    r_Filter mag_filter = R_Filter_Nearest;
-    r_MipMapMode mipmap_mode = R_MipMapMode_Nearest;
-    r_SamplerAddressMode address_mode_u = R_SamplerAddressMode_Repeat;
-    r_SamplerAddressMode address_mode_v = R_SamplerAddressMode_Repeat;
+    render::Filter min_filter = render::Filter_Nearest;
+    render::Filter mag_filter = render::Filter_Nearest;
+    render::MipMapMode mipmap_mode = render::MipMapMode_Nearest;
+    render::SamplerAddressMode address_mode_u = render::SamplerAddressMode_Repeat;
+    render::SamplerAddressMode address_mode_v = render::SamplerAddressMode_Repeat;
 
     switch (sampler.min_filter)
     {
         default: break;
         case cgltf_filter_type_nearest:
         {
-            min_filter = R_Filter_Nearest;
-            mag_filter = R_Filter_Nearest;
-            mipmap_mode = R_MipMapMode_Nearest;
+            min_filter = render::Filter_Nearest;
+            mag_filter = render::Filter_Nearest;
+            mipmap_mode = render::MipMapMode_Nearest;
         }
         break;
         case cgltf_filter_type_linear:
         {
-            min_filter = R_Filter_Linear;
-            mag_filter = R_Filter_Linear;
-            mipmap_mode = R_MipMapMode_Nearest;
+            min_filter = render::Filter_Linear;
+            mag_filter = render::Filter_Linear;
+            mipmap_mode = render::MipMapMode_Nearest;
         }
         break;
         case cgltf_filter_type_nearest_mipmap_nearest:
         {
-            min_filter = R_Filter_Nearest;
-            mag_filter = R_Filter_Nearest;
-            mipmap_mode = R_MipMapMode_Nearest;
+            min_filter = render::Filter_Nearest;
+            mag_filter = render::Filter_Nearest;
+            mipmap_mode = render::MipMapMode_Nearest;
         }
         break;
         case cgltf_filter_type_linear_mipmap_nearest:
         {
-            min_filter = R_Filter_Linear;
-            mag_filter = R_Filter_Linear;
-            mipmap_mode = R_MipMapMode_Nearest;
+            min_filter = render::Filter_Linear;
+            mag_filter = render::Filter_Linear;
+            mipmap_mode = render::MipMapMode_Nearest;
         }
         break;
         case cgltf_filter_type_nearest_mipmap_linear:
         {
-            min_filter = R_Filter_Nearest;
-            mag_filter = R_Filter_Nearest;
-            mipmap_mode = R_MipMapMode_Linear;
+            mag_filter = render::Filter_Nearest;
+            min_filter = render::Filter_Nearest;
+            mipmap_mode = render::MipMapMode_Linear;
         }
         break;
         case cgltf_filter_type_linear_mipmap_linear:
         {
-            min_filter = R_Filter_Linear;
-            mag_filter = R_Filter_Linear;
-            mipmap_mode = R_MipMapMode_Linear;
+            min_filter = render::Filter_Linear;
+            mag_filter = render::Filter_Linear;
+            mipmap_mode = render::MipMapMode_Linear;
         }
         break;
     }
@@ -1333,32 +1340,32 @@ sampler_from_cgltf_sampler(gltfw_Sampler sampler)
             default: break;
             case cgltf_filter_type_nearest_mipmap_nearest:
             {
-                mag_filter = R_Filter_Nearest;
+                mag_filter = render::Filter_Nearest;
             }
             break;
             case cgltf_filter_type_linear_mipmap_nearest:
             {
-                mag_filter = R_Filter_Linear;
+                mag_filter = render::Filter_Linear;
             }
             break;
             case cgltf_filter_type_nearest_mipmap_linear:
             {
-                mag_filter = R_Filter_Nearest;
+                mag_filter = render::Filter_Nearest;
             }
             break;
             case cgltf_filter_type_linear_mipmap_linear:
             {
-                mag_filter = R_Filter_Linear;
+                mag_filter = render::Filter_Linear;
             }
             break;
             case cgltf_filter_type_nearest:
             {
-                mag_filter = R_Filter_Nearest;
+                mag_filter = render::Filter_Nearest;
             }
             break;
             case cgltf_filter_type_linear:
             {
-                mag_filter = R_Filter_Linear;
+                mag_filter = render::Filter_Linear;
             }
             break;
 
@@ -1369,29 +1376,29 @@ sampler_from_cgltf_sampler(gltfw_Sampler sampler)
     switch (sampler.wrap_s)
     {
         case cgltf_wrap_mode_clamp_to_edge:
-            address_mode_u = R_SamplerAddressMode_ClampToEdge;
+            address_mode_u = render::SamplerAddressMode_ClampToEdge;
             break;
-        case cgltf_wrap_mode_repeat: address_mode_u = R_SamplerAddressMode_Repeat; break;
+        case cgltf_wrap_mode_repeat: address_mode_u = render::SamplerAddressMode_Repeat; break;
         case cgltf_wrap_mode_mirrored_repeat:
-            address_mode_u = R_SamplerAddressMode_MirroredRepeat;
+            address_mode_u = render::SamplerAddressMode_MirroredRepeat;
             break;
     }
     switch (sampler.wrap_t)
     {
         case cgltf_wrap_mode_clamp_to_edge:
-            address_mode_v = R_SamplerAddressMode_ClampToEdge;
+            address_mode_v = render::SamplerAddressMode_ClampToEdge;
             break;
-        case cgltf_wrap_mode_repeat: address_mode_v = R_SamplerAddressMode_Repeat; break;
+        case cgltf_wrap_mode_repeat: address_mode_v = render::SamplerAddressMode_Repeat; break;
         case cgltf_wrap_mode_mirrored_repeat:
-            address_mode_v = R_SamplerAddressMode_MirroredRepeat;
+            address_mode_v = render::SamplerAddressMode_MirroredRepeat;
             break;
     }
 
-    r_SamplerInfo sampler_info = {.min_filter = min_filter,
-                                  .mag_filter = mag_filter,
-                                  .mip_map_mode = mipmap_mode,
-                                  .address_mode_u = address_mode_u,
-                                  .address_mode_v = address_mode_v};
+    render::SamplerInfo sampler_info = {.min_filter = min_filter,
+                                        .mag_filter = mag_filter,
+                                        .mip_map_mode = mipmap_mode,
+                                        .address_mode_u = address_mode_u,
+                                        .address_mode_v = address_mode_v};
 
     return sampler_info;
 }
@@ -1406,7 +1413,7 @@ str8_from_bbox(Arena* arena, Rng2F64 bbox)
 
 g_internal Road*
 road_create(String8 texture_path, String8 cache_path, String8 data_dir, Rng2F64 bbox,
-            Rng2F64 utm_coords, r_SamplerInfo* sampler_info)
+            Rng2F64 utm_coords, render::SamplerInfo* sampler_info)
 {
     prof_scope_marker;
 
@@ -1484,22 +1491,21 @@ road_create(String8 texture_path, String8 cache_path, String8 data_dir, Rng2F64 
     road->road_info_map =
         city::road_info_from_edge_id(road->arena, road->edge_structure.edges, edge_map);
 
-    road->render_buffers = city::road_render_buffers_create(road->arena, road->edge_structure.edges,
-                                                            road->default_road_width,
-                                                            road->road_height, road->road_info_map);
+    road->render_buffers = city::road_render_buffers_create(
+        road->arena, road->edge_structure.edges, road->default_road_width, road->road_height);
 
-    r_BufferInfo vertex_buffer_info =
-        r_buffer_info_from_vertex_3d_buffer(road->render_buffers.vertices, R_BufferType_Vertex);
-    r_BufferInfo index_buffer_info =
-        r_buffer_info_from_u32_index_buffer(road->render_buffers.indices, R_BufferType_Index);
+    render::BufferInfo vertex_buffer_info = render::buffer_info_from_vertex_3d_buffer(
+        road->render_buffers.vertices, render::BufferType_Vertex);
+    render::BufferInfo index_buffer_info = render::buffer_info_from_u32_index_buffer(
+        road->render_buffers.indices, render::BufferType_Index);
 
     road->texture_path =
         str8_path_from_str8_list(road->arena, {texture_path, S("road_texture.ktx2")});
 
-    r_Handle texture_handle =
-        r_texture_load_async(sampler_info, road->texture_path, R_PipelineUsageType_3D);
-    r_Handle vertex_handle = r_buffer_load(&vertex_buffer_info);
-    r_Handle index_handle = r_buffer_load(&index_buffer_info);
+    render::Handle texture_handle =
+        render::texture_load_async(sampler_info, road->texture_path, render::PipelineUsageType_3D);
+    render::Handle vertex_handle = render::buffer_load(&vertex_buffer_info);
+    render::Handle index_handle = render::buffer_load(&index_buffer_info);
 
     road->handles[road->current_handle_idx] = {vertex_handle, index_handle, texture_handle,
                                                road->render_buffers.indices.size, 0};
@@ -1524,14 +1530,14 @@ road_vertex_buffer_switch(Road* road, RoadOverlayOption overlay_option)
                     vec_4f32(color.x, color.y, color.z, road_info->options[(U32)overlay_option]);
             }
         }
-        r_BufferInfo vertex_buffer_info =
-            r_buffer_info_from_vertex_3d_buffer(road->render_buffers.vertices, R_BufferType_Vertex);
-        r_Handle vertex_handle = r_buffer_load(&vertex_buffer_info);
+        render::BufferInfo vertex_buffer_info = render::buffer_info_from_vertex_3d_buffer(
+            road->render_buffers.vertices, render::BufferType_Vertex);
+        render::Handle vertex_handle = render::buffer_load(&vertex_buffer_info);
 
-        r_Model3DPipelineData* current_road_pipeline_data =
+        render::Model3DPipelineData* current_road_pipeline_data =
             &road->handles[road->current_handle_idx];
         U32 next_handle_idx = (road->current_handle_idx + 1) % ArrayCount(road->handles);
-        r_Model3DPipelineData* next_road_pipeline_data = &road->handles[next_handle_idx];
+        render::Model3DPipelineData* next_road_pipeline_data = &road->handles[next_handle_idx];
 
         *next_road_pipeline_data = *current_road_pipeline_data;
         next_road_pipeline_data->vertex_buffer_handle = vertex_handle;
@@ -1542,11 +1548,11 @@ road_vertex_buffer_switch(Road* road, RoadOverlayOption overlay_option)
     if (road->new_vertex_handle_loading)
     {
         U32 next_handle_idx = (road->current_handle_idx + 1) % ArrayCount(road->handles);
-        if (r_is_resource_loaded(road->handles[next_handle_idx].vertex_buffer_handle))
+        if (render::is_resource_loaded(road->handles[next_handle_idx].vertex_buffer_handle))
         {
-            r_Model3DPipelineData* current_road_pipeline_data =
+            render::Model3DPipelineData* current_road_pipeline_data =
                 &road->handles[road->current_handle_idx];
-            r_buffer_destroy_deferred(current_road_pipeline_data->vertex_buffer_handle);
+            render::buffer_destroy_deferred(current_road_pipeline_data->vertex_buffer_handle);
             *current_road_pipeline_data = {};
 
             road->current_handle_idx = next_handle_idx;
@@ -1658,10 +1664,11 @@ neta_edge_from_road_edge(RoadEdge* road_edge, Map<osm::WayId, neta_EdgeList>* ed
     return chosen_edge;
 }
 
-g_internal Buffer<r_Vertex3D>
+g_internal Buffer<render::Vertex3D>
 vertex_3d_from_gltfw_vertex(Arena* arena, Buffer<gltfw_Vertex3D> in_vertex_buffer)
 {
-    Buffer<r_Vertex3D> out_vertex_buffer = BufferAlloc<r_Vertex3D>(arena, in_vertex_buffer.size);
+    Buffer<render::Vertex3D> out_vertex_buffer =
+        BufferAlloc<render::Vertex3D>(arena, in_vertex_buffer.size);
     for (U32 i = 0; i < in_vertex_buffer.size; i++)
     {
         out_vertex_buffer.data[i].pos = in_vertex_buffer.data[i].pos;

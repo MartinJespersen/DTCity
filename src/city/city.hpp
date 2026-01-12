@@ -5,7 +5,7 @@ namespace city
 
 struct RenderBuffers
 {
-    Buffer<r_Vertex3D> vertices;
+    Buffer<render::Vertex3D> vertices;
     Buffer<U32> indices;
 };
 
@@ -79,7 +79,7 @@ struct Road
     ////////////////////////////////
     // Graphics API
     String8 texture_path;
-    r_Model3DPipelineData handles[2];
+    render::Model3DPipelineData handles[2];
     U32 current_handle_idx;
     bool new_vertex_handle_loading;
     RoadOverlayOption overlay_option_cur;
@@ -120,22 +120,22 @@ struct CarSim
 
     Buffer<Car> cars;
 
-    r_BufferInfo vertex_buffer;
-    r_BufferInfo index_buffer;
+    render::BufferInfo vertex_buffer;
+    render::BufferInfo index_buffer;
 
-    r_SamplerInfo sampler_info;
+    render::SamplerInfo sampler_info;
     Rng1F32 car_center_offset;
 
-    r_Handle texture_handle;
-    r_Handle vertex_handle;
-    r_Handle index_handle;
+    render::Handle texture_handle;
+    render::Handle vertex_handle;
+    render::Handle index_handle;
 
     String8 texture_path;
 };
 
 struct BuildingRenderInfo
 {
-    Buffer<r_Vertex3D> vertex_buffer;
+    Buffer<render::Vertex3D> vertex_buffer;
     Buffer<U32> index_buffer;
     U32 roof_index_offset;
     U32 roof_index_count;
@@ -152,18 +152,18 @@ struct Buildings
     String8 roof_texture_path;
     String8 facade_texture_path;
 
-    r_Model3DPipelineData roof_model_handles;
-    r_Model3DPipelineData facade_model_handles;
+    render::Model3DPipelineData roof_model_handles;
+    render::Model3DPipelineData facade_model_handles;
 };
 
 g_internal void
 road_destroy(Road* road);
 g_internal city::RenderBuffers
 road_render_buffers_create(Arena* arena, Buffer<city::RoadEdge> edge_buffer, F32 default_road_width,
-                           F32 road_height, Map<EdgeId, RoadInfo>* road_info_map);
+                           F32 road_height);
 
 g_internal void
-quad_to_buffer_add(RoadSegment* road_segment, Buffer<r_Vertex3D> buffer, Buffer<U32> indices,
+quad_to_buffer_add(RoadSegment* road_segment, Buffer<render::Vertex3D> buffer, Buffer<U32> indices,
                    U64 edge_id, F32 road_height, U32* cur_vertex_idx, U32* cur_index_idx);
 g_internal void
 RoadIntersectionPointsFind(Road* road, RoadSegment* in_out_segment, osm::Way* current_road_way,
@@ -173,13 +173,13 @@ g_internal CarSim*
 car_sim_create(String8 asset_path, String8 texture_path, U32 car_count, Road* road);
 g_internal void
 car_sim_destroy(CarSim* car_sim);
-g_internal Buffer<r_Model3DInstance>
+g_internal Buffer<render::Model3DInstance>
 car_sim_update(Arena* arena, CarSim* car, F64 time_delta);
 
 // ~mgj: Buildings
 g_internal Buildings*
 buildings_create(String8 cache_path, String8 texture_path, F32 road_height, Rng2F64 bbox,
-                 r_SamplerInfo* sampler_info);
+                 render::SamplerInfo* sampler_info);
 g_internal void
 building_destroy(Buildings* building);
 g_internal void
@@ -203,15 +203,15 @@ g_internal B32
 cache_needs_update(String8 data_file_str, String8 cache_meta_file_path);
 g_internal String8
 str8_from_bbox(Arena* arena, Rng2F64 bbox);
-g_internal r_Model3DPipelineDataList
+g_internal render::Model3DPipelineDataList
 land_create(Arena* arena, String8 glb_path);
 g_internal void
-land_destroy(r_Model3DPipelineDataList list);
-g_internal r_SamplerInfo
+land_destroy(render::Model3DPipelineDataList list);
+g_internal render::SamplerInfo
 sampler_from_cgltf_sampler(gltfw_Sampler sampler);
 g_internal Road*
 road_create(String8 texture_path, String8 cache_path, String8 data_dir, Rng2F64 bbox,
-            Rng2F64 utm_coords, r_SamplerInfo* sampler_info);
+            Rng2F64 utm_coords, render::SamplerInfo* sampler_info);
 g_internal void
 road_vertex_buffer_switch(Road* road, RoadOverlayOption overlay_option);
 g_internal EdgeStructure
@@ -223,7 +223,7 @@ road_info_from_edge_id(Arena* arena, Buffer<RoadEdge> road_edge_buf,
 g_internal neta_Edge*
 neta_edge_from_road_edge(RoadEdge* road_edge, Map<S64, neta_EdgeList>* edge_list_map);
 
-g_internal Buffer<r_Vertex3D>
+g_internal Buffer<render::Vertex3D>
 vertex_3d_from_gltfw_vertex(Arena* arena, Buffer<gltfw_Vertex3D> in_vertex_buffer);
 
 // privates ///////////////////////////////////////////////////

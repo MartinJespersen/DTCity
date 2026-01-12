@@ -63,7 +63,7 @@ App(int argc, char** argv)
 {
     ScratchScope scratch = ScratchScope(0, 0);
 
-    io_IO* io_ctx = io_window_create(S("DTCity"), VK_Context::WIDTH, VK_Context::HEIGHT);
+    io_IO* io_ctx = io_window_create(S("DTCity"), vulkan::Context::WIDTH, vulkan::Context::HEIGHT);
     io_input_state_update(io_ctx);
     Context* ctx = ContextCreate(io_ctx);
     dt_ctx_set(ctx);

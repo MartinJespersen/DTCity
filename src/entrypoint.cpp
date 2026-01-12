@@ -66,7 +66,7 @@ CheckVkResult(VkResult result)
 }
 
 void
-ImguiSetup(VK_Context* vk_ctx, io_IO* io_ctx)
+ImguiSetup(vulkan::Context* vk_ctx, io_IO* io_ctx)
 {
     //~mgj: Initialize ImGui
     IMGUI_CHECKVERSION();
@@ -194,16 +194,17 @@ dt_main_loop(void* ptr)
     Rng2F64 utm_coords = dt_utm_from_wgs84(input->bbox);
     printf("UTM Coordinates: %f %f %f %f\n", utm_coords.min.x, utm_coords.min.y, utm_coords.max.x,
            utm_coords.max.y);
-    r_render_ctx_create(ctx->data_subdirs.data[dt_DataDirType::Shaders], io_ctx, ctx->thread_pool);
-    VK_Context* vk_ctx = VK_CtxGet();
+    render::render_ctx_create(ctx->data_subdirs.data[dt_DataDirType::Shaders], io_ctx,
+                              ctx->thread_pool);
+    vulkan::Context* vk_ctx = vulkan::ctx_get();
     ImguiSetup(vk_ctx, io_ctx);
 
-    r_SamplerInfo sampler_info = {
-        .min_filter = R_Filter_Linear,
-        .mag_filter = R_Filter_Linear,
-        .mip_map_mode = R_MipMapMode_Linear,
-        .address_mode_u = R_SamplerAddressMode_Repeat,
-        .address_mode_v = R_SamplerAddressMode_Repeat,
+    render::SamplerInfo sampler_info = {
+        .min_filter = render::Filter_Linear,
+        .mag_filter = render::Filter_Linear,
+        .mip_map_mode = render::MipMapMode_Linear,
+        .address_mode_u = render::SamplerAddressMode_Repeat,
+        .address_mode_v = render::SamplerAddressMode_Repeat,
     };
 
     U64 node_hashmap_size = 1000;
@@ -235,13 +236,13 @@ dt_main_loop(void* ptr)
         dt_time_update(ctx->time);
 
         io_new_frame();
-        r_new_frame();
+        render::new_frame();
         ImGui::NewFrame();
         Vec2U32 framebuffer_dim = {(U32)io_ctx->framebuffer_width, (U32)io_ctx->framebuffer_height};
 
         {
             ui::camera_update(ctx->camera, ctx->io, ctx->time->delta_time_sec, framebuffer_dim);
-            U64 hovered_object_id = r_latest_hovered_object_id_get();
+            U64 hovered_object_id = render::latest_hovered_object_id_get();
             city::RoadEdge** edge_ptr =
                 map_get(&road->edge_structure.edge_map, (S64)hovered_object_id);
             if (edge_ptr)
@@ -303,28 +304,29 @@ dt_main_loop(void* ptr)
 
         city::road_vertex_buffer_switch(road, overlay_option_choice);
 
-        r_model_3d_draw(road->handles[road->current_handle_idx], true);
-        r_model_3d_draw(buildings->roof_model_handles, false);
-        r_model_3d_draw(buildings->facade_model_handles, false);
+        render::model_3d_draw(road->handles[road->current_handle_idx], true);
+        render::model_3d_draw(buildings->roof_model_handles, false);
+        render::model_3d_draw(buildings->facade_model_handles, false);
 
-        Buffer<r_Model3DInstance> instance_buffer =
+        Buffer<render::Model3DInstance> instance_buffer =
             car_sim_update(vk_ctx->draw_frame_arena, car_sim, ctx->time->delta_time_sec);
 
-        r_BufferInfo instance_buffer_info =
-            r_buffer_info_from_vertex_3d_instance_buffer(instance_buffer, R_BufferType_Vertex);
+        render::BufferInfo instance_buffer_info =
+            render::buffer_info_from_vertex_3d_instance_buffer(instance_buffer,
+                                                               render::BufferType_Vertex);
 
-        r_model_3D_instance_draw(car_sim->texture_handle, car_sim->vertex_handle,
-                                 car_sim->index_handle, &instance_buffer_info);
+        render::model_3d_instance_draw(car_sim->texture_handle, car_sim->vertex_handle,
+                                       car_sim->index_handle, &instance_buffer_info);
 
-        r_render_frame(framebuffer_dim, &io_ctx->framebuffer_resized, ctx->camera,
-                       io_ctx->mouse_pos_cur_s64);
+        render::render_frame(framebuffer_dim, &io_ctx->framebuffer_resized, ctx->camera,
+                             io_ctx->mouse_pos_cur_s64);
 
         ImGui::EndFrame();
     }
-    r_gpu_work_done_wait();
+    render::gpu_work_done_wait();
 
     city::road_destroy(ctx->road);
     city::car_sim_destroy(ctx->car_sim);
     city::building_destroy(ctx->buildings);
-    r_render_ctx_destroy();
+    render::render_ctx_destroy();
 }

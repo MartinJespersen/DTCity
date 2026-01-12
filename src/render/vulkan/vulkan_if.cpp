@@ -1,13 +1,16 @@
+namespace render
+{
+
 // ~mgj: Vulkan Interface
 static void
-r_render_ctx_create(String8 shader_path, io_IO* io_ctx, async::Threads* thread_pool)
+render_ctx_create(String8 shader_path, io_IO* io_ctx, async::Threads* thread_pool)
 {
     ScratchScope scratch = ScratchScope(0, 0);
 
     Arena* arena = ArenaAlloc();
 
-    VK_Context* vk_ctx = PushStruct(arena, VK_Context);
-    VK_CtxSet(vk_ctx);
+    vulkan::Context* vk_ctx = PushStruct(arena, vulkan::Context);
+    vulkan::ctx_set(vk_ctx);
     vk_ctx->arena = arena;
     vk_ctx->render_thread_id = os_tid();
 
@@ -28,11 +31,11 @@ r_render_ctx_create(String8 shader_path, io_IO* io_ctx, async::Threads* thread_p
         vk_ctx->device_extensions.data[i] = {str8_c_string(device_extensions[i])};
     }
 
-    VK_CreateInstance(vk_ctx);
-    VK_DebugMessengerSetup(vk_ctx);
-    VK_SurfaceCreate(vk_ctx, io_ctx);
-    VK_PhysicalDevicePick(vk_ctx);
-    VK_LogicalDeviceCreate(scratch.arena, vk_ctx);
+    vulkan::create_instance(vk_ctx);
+    vulkan::debug_messenger_setup(vk_ctx);
+    vulkan::surface_create(vk_ctx, io_ctx);
+    vulkan::physical_device_pick(vk_ctx);
+    vulkan::logical_device_create(scratch.arena, vk_ctx);
 
     // ~mgj: Blitting format
     vk_ctx->blit_format = VK_FORMAT_R8G8B8A8_SRGB;
@@ -55,42 +58,44 @@ r_render_ctx_create(String8 shader_path, io_IO* io_ctx, async::Threads* thread_p
 
     Vec2S32 vk_framebuffer_dim_s32 = io_wait_for_valid_framebuffer_size(io_ctx);
     Vec2U32 vk_framebuffer_dim_u32 = {(U32)vk_framebuffer_dim_s32.x, (U32)vk_framebuffer_dim_s32.y};
-    VK_SwapChainSupportDetails swapchain_details =
-        vk_query_swapchain_support(scratch.arena, vk_ctx->physical_device, vk_ctx->surface);
+    vulkan::SwapChainSupportDetails swapchain_details =
+        vulkan::query_swapchain_support(scratch.arena, vk_ctx->physical_device, vk_ctx->surface);
     VkExtent2D swapchain_extent =
-        vk_choose_swap_extent(vk_framebuffer_dim_u32, swapchain_details.capabilities);
-    vk_ctx->swapchain_resources = vk_swapchain_create(vk_ctx, &swapchain_details, swapchain_extent);
+        vulkan::choose_swap_extent(vk_framebuffer_dim_u32, swapchain_details.capabilities);
+    vk_ctx->swapchain_resources =
+        vulkan::swapchain_create(vk_ctx, &swapchain_details, swapchain_extent);
 
     VkCommandPoolCreateInfo poolInfo{};
     poolInfo.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
     poolInfo.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
     poolInfo.queueFamilyIndex = vk_ctx->queue_family_indices.graphicsFamilyIndex;
-    vk_ctx->command_pool = VK_CommandPoolCreate(vk_ctx->device, &poolInfo);
+    vk_ctx->command_pool = vulkan::command_pool_create(vk_ctx->device, &poolInfo);
 
-    VK_CommandBuffersCreate(vk_ctx);
+    vulkan::command_buffers_create(vk_ctx);
 
-    vk_sync_objects_create(vk_ctx);
+    vulkan::sync_objects_create(vk_ctx);
 
-    VK_DescriptorPoolCreate(vk_ctx);
-    VK_CameraUniformBufferCreate(vk_ctx);
-    VK_CameraDescriptorSetLayoutCreate(vk_ctx);
-    VK_CameraDescriptorSetCreate(vk_ctx);
-    VK_ProfileBuffersCreate(vk_ctx);
+    vulkan::descriptor_pool_create(vk_ctx);
+    vulkan::camera_uniform_buffer_create(vk_ctx);
+    vulkan::camera_descriptor_set_layout_create(vk_ctx);
+    vulkan::camera_descriptor_set_create(vk_ctx);
+    vulkan::profile_buffers_create(vk_ctx);
 
     // TODO: change from 1 to much larger value
-    vk_ctx->asset_manager = VK_AssetManagerCreate(
+    vk_ctx->asset_manager = vulkan::asset_manager_create(
         vk_ctx->device, vk_ctx->queue_family_indices.graphicsFamilyIndex, thread_pool, GB(1));
 
     // ~mgj: Drawing (TODO: Move out of vulkan context to own module)
     vk_ctx->draw_frame_arena = ArenaAlloc();
-    vk_ctx->model_3D_pipeline = VK_Model3DPipelineCreate(vk_ctx, shader_path);
-    vk_ctx->model_3D_instance_pipeline = VK_Model3DInstancePipelineCreate(vk_ctx, shader_path);
+    vk_ctx->model_3D_pipeline = vulkan::model_3d_pipeline_create(vk_ctx, shader_path);
+    vk_ctx->model_3D_instance_pipeline =
+        vulkan::model_3d_instance_pipeline_create(vk_ctx, shader_path);
 }
 
 static void
-r_render_ctx_destroy()
+render_ctx_destroy()
 {
-    VK_Context* vk_ctx = VK_CtxGet();
+    vulkan::Context* vk_ctx = vulkan::ctx_get();
     ImGui_ImplVulkan_Shutdown();
     ImGui_ImplGlfw_Shutdown();
     ImGui::DestroyContext();
@@ -99,32 +104,33 @@ r_render_ctx_destroy()
 
     if (vk_ctx->enable_validation_layers)
     {
-        VK_DestroyDebugUtilsMessengerEXT(vk_ctx->instance, vk_ctx->debug_messenger, nullptr);
+        vulkan::destroy_debug_utils_messenger_ext(vk_ctx->instance, vk_ctx->debug_messenger,
+                                                  nullptr);
     }
 
-    VK_CameraCleanup(vk_ctx);
-    VK_ProfileBuffersDestroy(vk_ctx);
+    vulkan::camera_cleanup(vk_ctx);
+    vulkan::profile_buffers_destroy(vk_ctx);
 
-    vk_swapchain_cleanup(vk_ctx->device, vk_ctx->allocator, vk_ctx->swapchain_resources);
+    vulkan::swapchain_cleanup(vk_ctx->device, vk_ctx->allocator, vk_ctx->swapchain_resources);
 
     vkDestroyCommandPool(vk_ctx->device, vk_ctx->command_pool, nullptr);
 
     vkDestroySurfaceKHR(vk_ctx->instance, vk_ctx->surface, nullptr);
-    for (U32 i = 0; i < VK_MAX_FRAMES_IN_FLIGHT; i++)
+    for (U32 i = 0; i < vulkan::MAX_FRAMES_IN_FLIGHT; i++)
     {
         vkDestroyFence(vk_ctx->device, vk_ctx->in_flight_fences.data[i], nullptr);
     }
 
     vkDestroyDescriptorPool(vk_ctx->device, vk_ctx->descriptor_pool, 0);
 
-    VK_BufferDestroy(vk_ctx->allocator, &vk_ctx->model_3D_instance_buffer);
+    vulkan::buffer_destroy(vk_ctx->allocator, &vk_ctx->model_3D_instance_buffer);
 
-    VK_AssetManagerDestroy(vk_ctx, vk_ctx->asset_manager);
+    vulkan::asset_manager_destroy(vk_ctx, vk_ctx->asset_manager);
 
     vmaDestroyAllocator(vk_ctx->allocator);
 
-    VK_PipelineDestroy(&vk_ctx->model_3D_pipeline);
-    VK_PipelineDestroy(&vk_ctx->model_3D_instance_pipeline);
+    vulkan::pipeline_destroy(&vk_ctx->model_3D_pipeline);
+    vulkan::pipeline_destroy(&vk_ctx->model_3D_instance_pipeline);
 
     vkDestroyDevice(vk_ctx->device, nullptr);
     vkDestroyInstance(vk_ctx->instance, nullptr);
@@ -135,8 +141,8 @@ r_render_ctx_destroy()
 }
 
 static void
-r_render_frame(Vec2U32 framebuffer_dim, B32* in_out_framebuffer_resized, ui::Camera* camera,
-               Vec2S64 mouse_cursor_pos)
+render_frame(Vec2U32 framebuffer_dim, B32* in_out_framebuffer_resized, ui::Camera* camera,
+             Vec2S64 mouse_cursor_pos)
 {
     ScratchScope scratch = ScratchScope(0, 0);
 
@@ -144,23 +150,23 @@ r_render_frame(Vec2U32 framebuffer_dim, B32* in_out_framebuffer_resized, ui::Cam
     {
         return;
     }
-    VK_Context* vk_ctx = VK_CtxGet();
-    defer({ vk_ctx->current_frame = (vk_ctx->current_frame + 1) % VK_MAX_FRAMES_IN_FLIGHT; });
+    vulkan::Context* vk_ctx = vulkan::ctx_get();
+    defer({ vk_ctx->current_frame = (vk_ctx->current_frame + 1) % vulkan::MAX_FRAMES_IN_FLIGHT; });
 
-    VK_AssetManagerExecuteCmds();
-    VK_AssetManagerCmdDoneCheck();
-    vk_deletion_queue_deferred_resource_deletion(vk_ctx->asset_manager->deletion_queue);
+    vulkan::asset_manager_execute_cmds();
+    vulkan::asset_manager_cmd_done_check();
+    vulkan::deletion_queue_deferred_resource_deletion(vk_ctx->asset_manager->deletion_queue);
 
-    vk_SwapchainResources* swapchain_resources = vk_ctx->swapchain_resources;
+    vulkan::SwapchainResources* swapchain_resources = vk_ctx->swapchain_resources;
     if (!swapchain_resources)
     {
-        VK_SwapChainSupportDetails swapchain_details =
-            vk_query_swapchain_support(scratch.arena, vk_ctx->physical_device, vk_ctx->surface);
+        vulkan::SwapChainSupportDetails swapchain_details = vulkan::query_swapchain_support(
+            scratch.arena, vk_ctx->physical_device, vk_ctx->surface);
         VkExtent2D swapchain_extent =
-            vk_choose_swap_extent(framebuffer_dim, swapchain_details.capabilities);
+            vulkan::choose_swap_extent(framebuffer_dim, swapchain_details.capabilities);
         if (swapchain_extent.width != 0 && swapchain_extent.height != 0)
             vk_ctx->swapchain_resources =
-                vk_swapchain_create(vk_ctx, &swapchain_details, swapchain_extent);
+                vulkan::swapchain_create(vk_ctx, &swapchain_details, swapchain_extent);
         return;
     }
     VkFence* in_flight_fence = &vk_ctx->in_flight_fences.data[vk_ctx->current_frame];
@@ -184,7 +190,7 @@ r_render_frame(Vec2U32 framebuffer_dim, B32* in_out_framebuffer_resized, ui::Cam
         if (result == VK_ERROR_OUT_OF_DATE_KHR || *in_out_framebuffer_resized)
         {
             *in_out_framebuffer_resized = false;
-            vk_swapchain_recreate(framebuffer_dim);
+            vulkan::swapchain_recreate(framebuffer_dim);
             return;
         }
         else if (result != VK_SUCCESS && result != VK_SUBOPTIMAL_KHR)
@@ -202,7 +208,7 @@ r_render_frame(Vec2U32 framebuffer_dim, B32* in_out_framebuffer_resized, ui::Cam
     VK_CHECK_RESULT(vkResetFences(vk_ctx->device, 1, in_flight_fence));
     VK_CHECK_RESULT(vkResetCommandBuffer(cmd_buffer, 0));
 
-    vk_command_buffer_record(image_idx, vk_ctx->current_frame, camera, mouse_cursor_pos);
+    vulkan::command_buffer_record(image_idx, vk_ctx->current_frame, camera, mouse_cursor_pos);
 
     VkSemaphoreSubmitInfo waitSemaphoreInfo{};
     waitSemaphoreInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO;
@@ -247,7 +253,7 @@ r_render_frame(Vec2U32 framebuffer_dim, B32* in_out_framebuffer_resized, ui::Cam
         *in_out_framebuffer_resized)
     {
         *in_out_framebuffer_resized = 0;
-        vk_swapchain_recreate(framebuffer_dim);
+        vulkan::swapchain_recreate(framebuffer_dim);
     }
     else if (result != VK_SUCCESS)
     {
@@ -256,135 +262,136 @@ r_render_frame(Vec2U32 framebuffer_dim, B32* in_out_framebuffer_resized, ui::Cam
 }
 
 static void
-r_gpu_work_done_wait()
+gpu_work_done_wait()
 {
-    VK_Context* vk_ctx = VK_CtxGet();
+    vulkan::Context* vk_ctx = vulkan::ctx_get();
     vkDeviceWaitIdle(vk_ctx->device);
 }
 
 static void
-r_new_frame()
+new_frame()
 {
-    VK_Context* vk_ctx = VK_CtxGet();
+    vulkan::Context* vk_ctx = vulkan::ctx_get();
     ArenaClear(vk_ctx->draw_frame_arena);
-    vk_ctx->draw_frame = PushStruct(vk_ctx->draw_frame_arena, VK_DrawFrame);
+    vk_ctx->draw_frame = PushStruct(vk_ctx->draw_frame_arena, vulkan::DrawFrame);
     ImGui_ImplVulkan_NewFrame();
 }
 
 static U64
-r_latest_hovered_object_id_get()
+latest_hovered_object_id_get()
 {
-    VK_Context* vk_ctx = VK_CtxGet();
+    vulkan::Context* vk_ctx = vulkan::ctx_get();
     return vk_ctx->hovered_object_id;
 }
 
 // ~mgj: Texture interface functions
-g_internal r_Handle
-r_texture_handle_create(r_SamplerInfo* sampler_info, r_PipelineUsageType pipeline_usage_type)
+g_internal render::Handle
+texture_handle_create(render::SamplerInfo* sampler_info,
+                      render::PipelineUsageType pipeline_usage_type)
 {
-    VK_Context* vk_ctx = VK_CtxGet();
-    VK_AssetManager* asset_manager = vk_ctx->asset_manager;
+    vulkan::Context* vk_ctx = vulkan::ctx_get();
+    vulkan::AssetManager* asset_manager = vk_ctx->asset_manager;
     // ~mgj: Create sampler
     VkSamplerCreateInfo sampler_create_info = {};
-    VK_SamplerCreateInfoFromSamplerInfo(sampler_info, &sampler_create_info);
+    vulkan::sampler_create_info_from_sampler_info(sampler_info, &sampler_create_info);
     sampler_create_info.anisotropyEnable = VK_TRUE;
     sampler_create_info.maxAnisotropy = (F32)vk_ctx->msaa_samples;
-    VkSampler vk_sampler = VK_SamplerCreate(vk_ctx->device, &sampler_create_info);
+    VkSampler vk_sampler = vulkan::sampler_create(vk_ctx->device, &sampler_create_info);
 
     // ~mgj : Choose Descriptor Set Layout
     VkDescriptorSetLayout desc_set_layout = NULL;
     switch (pipeline_usage_type)
     {
-        case R_PipelineUsageType_3D:
+        case render::PipelineUsageType_3D:
             desc_set_layout = vk_ctx->model_3D_pipeline.descriptor_set_layout;
             break;
-        case R_PipelineUsageType_3DInstanced:
+        case render::PipelineUsageType_3DInstanced:
             desc_set_layout = vk_ctx->model_3D_instance_pipeline.descriptor_set_layout;
             break;
         default: InvalidPath;
     }
 
     // ~mgj: Assign values to texture
-    r_AssetItem<VK_Texture>* asset_item =
-        VK_AssetManagerItemCreate(&asset_manager->texture_list, &asset_manager->texture_free_list);
-    VK_Texture* texture = &asset_item->item;
+    render::AssetItem<vulkan::Texture>* asset_item = vulkan::asset_manager_item_create(
+        &asset_manager->texture_list, &asset_manager->texture_free_list);
+    vulkan::Texture* texture = &asset_item->item;
     texture->desc_set_layout = desc_set_layout;
     texture->sampler = vk_sampler;
-    r_Handle texture_handle = {.u64 = (U64)asset_item};
+    render::Handle texture_handle = {.u64 = (U64)asset_item};
 
     return texture_handle;
 }
 
-static r_Handle
-r_texture_load_async(r_SamplerInfo* sampler_info, String8 texture_path,
-                     r_PipelineUsageType pipeline_usage_type)
+static render::Handle
+texture_load_async(render::SamplerInfo* sampler_info, String8 texture_path,
+                   render::PipelineUsageType pipeline_usage_type)
 {
     ScratchScope scratch = ScratchScope(0, 0);
-    VK_Context* vk_ctx = VK_CtxGet();
-    VK_AssetManager* asset_manager = vk_ctx->asset_manager;
-    r_ThreadInput* thread_input = VK_ThreadInputCreate();
+    vulkan::Context* vk_ctx = vulkan::ctx_get();
+    vulkan::AssetManager* asset_manager = vk_ctx->asset_manager;
+    render::ThreadInput* thread_input = vulkan::thread_input_create();
 
     // ~mgj: make input ready for texture loading on thread
-    r_AssetLoadingInfo* asset_load_info = &thread_input->asset_info;
-    asset_load_info->type = R_AssetItemType_Texture;
-    r_TextureLoadingInfo* texture_load_info = &asset_load_info->extra_info.texture_info;
+    render::AssetLoadingInfo* asset_load_info = &thread_input->asset_info;
+    asset_load_info->type = render::AssetItemType_Texture;
+    render::TextureLoadingInfo* texture_load_info = &asset_load_info->extra_info.texture_info;
     texture_load_info->tex_path = push_str8_copy(thread_input->arena, texture_path);
 
-    asset_load_info->handle = r_texture_handle_create(sampler_info, pipeline_usage_type);
+    asset_load_info->handle = render::texture_handle_create(sampler_info, pipeline_usage_type);
 
-    async::QueueItem queue_input = {.data = thread_input, .worker_func = VK_ThreadSetup};
+    async::QueueItem queue_input = {.data = thread_input, .worker_func = vulkan::thread_setup};
     async::QueuePush(asset_manager->work_queue, &queue_input);
 
     return asset_load_info->handle;
 }
 
 g_internal void
-r_texture_destroy(r_Handle handle)
+texture_destroy(render::Handle handle)
 {
-    r_texture_destroy_deferred(handle);
+    texture_destroy_deferred(handle);
 }
 
 g_internal void
-r_buffer_destroy(r_Handle handle)
+buffer_destroy(render::Handle handle)
 {
-    r_buffer_destroy_deferred(handle);
+    buffer_destroy_deferred(handle);
 }
 
 g_internal void
-r_texture_destroy_deferred(r_Handle handle)
+texture_destroy_deferred(render::Handle handle)
 {
-    if (r_is_handle_zero(handle) == false)
+    if (render::is_handle_zero(handle) == false)
     {
-        VK_Context* vk_ctx = VK_CtxGet();
-        vk_deletion_queue_push(vk_ctx->asset_manager->deletion_queue, handle,
-                               R_AssetItemType_Texture, VK_MAX_FRAMES_IN_FLIGHT);
+        vulkan::Context* vk_ctx = vulkan::ctx_get();
+        vulkan::deletion_queue_push(vk_ctx->asset_manager->deletion_queue, handle,
+                                    render::AssetItemType_Texture, vulkan::MAX_FRAMES_IN_FLIGHT);
     }
 }
 
 g_internal void
-r_buffer_destroy_deferred(r_Handle handle)
+buffer_destroy_deferred(render::Handle handle)
 {
-    if (r_is_handle_zero(handle) == false)
+    if (render::is_handle_zero(handle) == false)
     {
-        VK_Context* vk_ctx = VK_CtxGet();
-        vk_deletion_queue_push(vk_ctx->asset_manager->deletion_queue, handle,
-                               R_AssetItemType_Buffer, VK_MAX_FRAMES_IN_FLIGHT);
+        vulkan::Context* vk_ctx = vulkan::ctx_get();
+        vulkan::deletion_queue_push(vk_ctx->asset_manager->deletion_queue, handle,
+                                    render::AssetItemType_Buffer, vulkan::MAX_FRAMES_IN_FLIGHT);
     }
 }
 
-static r_Handle
-r_buffer_load(r_BufferInfo* buffer_info)
+static render::Handle
+buffer_load(render::BufferInfo* buffer_info)
 {
     if (buffer_info->buffer.size == 0)
     {
         DEBUG_LOG("Zero handle created for buffer\n");
-        return r_handle_zero();
+        return render::handle_zero();
     }
 
-    VK_Context* vk_ctx = VK_CtxGet();
-    VK_AssetManager* asset_manager = vk_ctx->asset_manager;
-    r_AssetItem<VK_Buffer>* asset_item =
-        VK_AssetManagerItemCreate(&asset_manager->buffer_list, &asset_manager->buffer_free_list);
+    vulkan::Context* vk_ctx = vulkan::ctx_get();
+    vulkan::AssetManager* asset_manager = vk_ctx->asset_manager;
+    render::AssetItem<vulkan::Buffer>* asset_item = vulkan::asset_manager_item_create(
+        &asset_manager->buffer_list, &asset_manager->buffer_free_list);
 
     // ~mgj: Create buffer allocation
     VmaAllocationCreateInfo vma_info = {0};
@@ -393,38 +400,38 @@ r_buffer_load(r_BufferInfo* buffer_info)
     VkBufferUsageFlags usage_flags = {};
     switch (buffer_info->buffer_type)
     {
-        case R_BufferType_Vertex: usage_flags = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT; break;
-        case R_BufferType_Index: usage_flags = VK_BUFFER_USAGE_INDEX_BUFFER_BIT; break;
+        case render::BufferType_Vertex: usage_flags = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT; break;
+        case render::BufferType_Index: usage_flags = VK_BUFFER_USAGE_INDEX_BUFFER_BIT; break;
         default: InvalidPath;
     }
-    VK_BufferAllocation buffer =
-        VK_BufferAllocationCreate(vk_ctx->allocator, buffer_info->buffer.size,
-                                  usage_flags | VK_BUFFER_USAGE_TRANSFER_DST_BIT, vma_info);
+    vulkan::BufferAllocation buffer =
+        vulkan::buffer_allocation_create(vk_ctx->allocator, buffer_info->buffer.size,
+                                         usage_flags | VK_BUFFER_USAGE_TRANSFER_DST_BIT, vma_info);
 
     // ~mgj: Prepare Texture
-    VK_Buffer* asset_buffer = &asset_item->item;
+    vulkan::Buffer* asset_buffer = &asset_item->item;
     asset_buffer->buffer_alloc = buffer;
-    r_Handle buffer_handle = {.u64 = (U64)asset_item};
+    render::Handle buffer_handle = {.u64 = (U64)asset_item};
 
     // ~mgj: Preparing buffer loading for another thread
-    r_ThreadInput* thread_input = VK_ThreadInputCreate();
-    r_AssetLoadingInfo* asset_load_info = &thread_input->asset_info;
+    render::ThreadInput* thread_input = vulkan::thread_input_create();
+    render::AssetLoadingInfo* asset_load_info = &thread_input->asset_info;
     asset_load_info->handle = buffer_handle;
-    asset_load_info->type = R_AssetItemType_Buffer;
-    r_BufferInfo* buffer_load_info = &asset_load_info->extra_info.buffer_info;
+    asset_load_info->type = render::AssetItemType_Buffer;
+    render::BufferInfo* buffer_load_info = &asset_load_info->extra_info.buffer_info;
     *buffer_load_info = *buffer_info;
 
-    async::QueueItem queue_input = {.data = thread_input, .worker_func = VK_ThreadSetup};
+    async::QueueItem queue_input = {.data = thread_input, .worker_func = vulkan::thread_setup};
     async::QueuePush(asset_manager->work_queue, &queue_input);
 
-    r_Handle handle = {.u64 = (U64)asset_item};
+    render::Handle handle = {.u64 = (U64)asset_item};
     return handle;
 }
 
 g_internal void
-r_texture_gpu_upload_sync(r_Handle tex_handle, Buffer<U8> tex_buf)
+texture_gpu_upload_sync(render::Handle tex_handle, Buffer<U8> tex_buf)
 {
-    VK_Context* vk_ctx = VK_CtxGet();
+    vulkan::Context* vk_ctx = vulkan::ctx_get();
     VkResult result;
 
     VkCommandBufferAllocateInfo cmd_buf_alloc_info = {
@@ -437,7 +444,7 @@ r_texture_gpu_upload_sync(r_Handle tex_handle, Buffer<U8> tex_buf)
     VkCommandBufferBeginInfo begin_info = {.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
                                            .flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT};
     result = vkBeginCommandBuffer(cmd_buf, &begin_info);
-    vk_texture_gpu_upload_cmd_recording(cmd_buf, tex_handle, tex_buf);
+    vulkan::texture_gpu_upload_cmd_recording(cmd_buf, tex_handle, tex_buf);
 
     result = vkEndCommandBuffer(cmd_buf);
 
@@ -450,60 +457,63 @@ r_texture_gpu_upload_sync(r_Handle tex_handle, Buffer<U8> tex_buf)
     submit_info.commandBufferInfoCount = 1;
     submit_info.pCommandBufferInfos = &cmd_buf_info;
 
-    r_AssetItem<VK_Texture>* asset = (r_AssetItem<VK_Texture>*)tex_handle.ptr;
+    render::AssetItem<vulkan::Texture>* asset = (render::AssetItem<vulkan::Texture>*)tex_handle.ptr;
     asset->is_loaded = true;
     result = vkQueueSubmit2(vk_ctx->graphics_queue, 1, &submit_info, NULL);
 }
 
 g_internal void
-r_model_3D_instance_draw(r_Handle texture_handle, r_Handle vertex_buffer_handle,
-                         r_Handle index_buffer_handle, r_BufferInfo* instance_buffer)
+model_3d_instance_draw(render::Handle texture_handle, render::Handle vertex_buffer_handle,
+                       render::Handle index_buffer_handle, render::BufferInfo* instance_buffer)
 {
-    VK_Context* vk_ctx = VK_CtxGet();
-    VK_AssetManager* asset_manager = vk_ctx->asset_manager;
-    r_AssetItem<VK_Buffer>* asset_vertex_buffer =
-        (r_AssetItem<VK_Buffer>*)(vertex_buffer_handle.ptr);
-    r_AssetItem<VK_Buffer>* asset_index_buffer = (r_AssetItem<VK_Buffer>*)(index_buffer_handle.ptr);
-    r_AssetItem<VK_Texture>* asset_texture = (r_AssetItem<VK_Texture>*)(texture_handle.ptr);
+    vulkan::Context* vk_ctx = vulkan::ctx_get();
+    vulkan::AssetManager* asset_manager = vk_ctx->asset_manager;
+    render::AssetItem<vulkan::Buffer>* asset_vertex_buffer =
+        (render::AssetItem<vulkan::Buffer>*)(vertex_buffer_handle.ptr);
+    render::AssetItem<vulkan::Buffer>* asset_index_buffer =
+        (render::AssetItem<vulkan::Buffer>*)(index_buffer_handle.ptr);
+    render::AssetItem<vulkan::Texture>* asset_texture =
+        (render::AssetItem<vulkan::Texture>*)(texture_handle.ptr);
 
     if (asset_vertex_buffer->is_loaded && asset_index_buffer->is_loaded && asset_texture->is_loaded)
     {
-        VK_Model3DInstanceBucketAdd(&asset_vertex_buffer->item.buffer_alloc,
-                                    &asset_index_buffer->item.buffer_alloc,
-                                    asset_texture->item.desc_set, instance_buffer);
+        vulkan::model_3d_instance_bucket_add(&asset_vertex_buffer->item.buffer_alloc,
+                                             &asset_index_buffer->item.buffer_alloc,
+                                             asset_texture->item.desc_set, instance_buffer);
     }
 }
 
 g_internal void
-r_model_3d_draw(r_Model3DPipelineData pipeline_input, B32 depth_test_per_draw_call_only)
+model_3d_draw(render::Model3DPipelineData pipeline_input, B32 depth_test_per_draw_call_only)
 {
-    VK_Context* vk_ctx = VK_CtxGet();
-    VK_AssetManager* asset_manager = vk_ctx->asset_manager;
+    vulkan::Context* vk_ctx = vulkan::ctx_get();
+    vulkan::AssetManager* asset_manager = vk_ctx->asset_manager;
 
-    if (r_is_handle_zero(pipeline_input.index_buffer_handle) ||
-        r_is_handle_zero(pipeline_input.vertex_buffer_handle) ||
-        r_is_handle_zero(pipeline_input.texture_handle))
+    if (render::is_handle_zero(pipeline_input.index_buffer_handle) ||
+        render::is_handle_zero(pipeline_input.vertex_buffer_handle) ||
+        render::is_handle_zero(pipeline_input.texture_handle))
         return;
-    r_AssetItem<VK_Buffer>* asset_vertex_buffer =
-        (r_AssetItem<VK_Buffer>*)(pipeline_input.vertex_buffer_handle.ptr);
-    r_AssetItem<VK_Buffer>* asset_index_buffer =
-        (r_AssetItem<VK_Buffer>*)(pipeline_input.index_buffer_handle.ptr);
-    r_AssetItem<VK_Texture>* asset_texture =
-        (r_AssetItem<VK_Texture>*)(pipeline_input.texture_handle.ptr);
+    render::AssetItem<vulkan::Buffer>* asset_vertex_buffer =
+        (render::AssetItem<vulkan::Buffer>*)(pipeline_input.vertex_buffer_handle.ptr);
+    render::AssetItem<vulkan::Buffer>* asset_index_buffer =
+        (render::AssetItem<vulkan::Buffer>*)(pipeline_input.index_buffer_handle.ptr);
+    render::AssetItem<vulkan::Texture>* asset_texture =
+        (render::AssetItem<vulkan::Texture>*)(pipeline_input.texture_handle.ptr);
 
     if (asset_vertex_buffer->is_loaded && asset_index_buffer->is_loaded && asset_texture->is_loaded)
     {
-        VK_Model3DBucketAdd(&asset_vertex_buffer->item.buffer_alloc,
-                            &asset_index_buffer->item.buffer_alloc, asset_texture->item.desc_set,
-                            depth_test_per_draw_call_only, pipeline_input.index_offset,
-                            pipeline_input.index_count);
+        vulkan::model_3d_bucket_add(&asset_vertex_buffer->item.buffer_alloc,
+                                    &asset_index_buffer->item.buffer_alloc,
+                                    asset_texture->item.desc_set, depth_test_per_draw_call_only,
+                                    pipeline_input.index_offset, pipeline_input.index_count);
     }
 }
 
 g_internal bool
-r_is_resource_loaded(r_Handle handle)
+is_resource_loaded(render::Handle handle)
 {
     // TODO: Refactor asset item to not be a template
-    r_AssetItem<S64>* asset = (r_AssetItem<S64>*)handle.ptr;
+    render::AssetItem<S64>* asset = (render::AssetItem<S64>*)handle.ptr;
     return asset->is_loaded;
 }
+} // namespace render
