@@ -390,7 +390,7 @@ buffer_load(render::BufferInfo* buffer_info)
 
     vulkan::Context* vk_ctx = vulkan::ctx_get();
     vulkan::AssetManager* asset_manager = vk_ctx->asset_manager;
-    render::AssetItem<vulkan::Buffer>* asset_item = vulkan::asset_manager_item_create(
+    render::AssetItem<vulkan::BufferUpload>* asset_item = vulkan::asset_manager_item_create(
         &asset_manager->buffer_list, &asset_manager->buffer_free_list);
 
     // ~mgj: Create buffer allocation
@@ -409,7 +409,7 @@ buffer_load(render::BufferInfo* buffer_info)
                                          usage_flags | VK_BUFFER_USAGE_TRANSFER_DST_BIT, vma_info);
 
     // ~mgj: Prepare Texture
-    vulkan::Buffer* asset_buffer = &asset_item->item;
+    vulkan::BufferUpload* asset_buffer = &asset_item->item;
     asset_buffer->buffer_alloc = buffer;
     render::Handle buffer_handle = {.u64 = (U64)asset_item};
 
@@ -468,10 +468,10 @@ model_3d_instance_draw(render::Handle texture_handle, render::Handle vertex_buff
 {
     vulkan::Context* vk_ctx = vulkan::ctx_get();
     vulkan::AssetManager* asset_manager = vk_ctx->asset_manager;
-    render::AssetItem<vulkan::Buffer>* asset_vertex_buffer =
-        (render::AssetItem<vulkan::Buffer>*)(vertex_buffer_handle.ptr);
-    render::AssetItem<vulkan::Buffer>* asset_index_buffer =
-        (render::AssetItem<vulkan::Buffer>*)(index_buffer_handle.ptr);
+    render::AssetItem<vulkan::BufferUpload>* asset_vertex_buffer =
+        (render::AssetItem<vulkan::BufferUpload>*)(vertex_buffer_handle.ptr);
+    render::AssetItem<vulkan::BufferUpload>* asset_index_buffer =
+        (render::AssetItem<vulkan::BufferUpload>*)(index_buffer_handle.ptr);
     render::AssetItem<vulkan::Texture>* asset_texture =
         (render::AssetItem<vulkan::Texture>*)(texture_handle.ptr);
 
@@ -493,10 +493,10 @@ model_3d_draw(render::Model3DPipelineData pipeline_input, B32 depth_test_per_dra
         render::is_handle_zero(pipeline_input.vertex_buffer_handle) ||
         render::is_handle_zero(pipeline_input.texture_handle))
         return;
-    render::AssetItem<vulkan::Buffer>* asset_vertex_buffer =
-        (render::AssetItem<vulkan::Buffer>*)(pipeline_input.vertex_buffer_handle.ptr);
-    render::AssetItem<vulkan::Buffer>* asset_index_buffer =
-        (render::AssetItem<vulkan::Buffer>*)(pipeline_input.index_buffer_handle.ptr);
+    render::AssetItem<vulkan::BufferUpload>* asset_vertex_buffer =
+        (render::AssetItem<vulkan::BufferUpload>*)(pipeline_input.vertex_buffer_handle.ptr);
+    render::AssetItem<vulkan::BufferUpload>* asset_index_buffer =
+        (render::AssetItem<vulkan::BufferUpload>*)(pipeline_input.index_buffer_handle.ptr);
     render::AssetItem<vulkan::Texture>* asset_texture =
         (render::AssetItem<vulkan::Texture>*)(pipeline_input.texture_handle.ptr);
 

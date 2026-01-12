@@ -1229,9 +1229,9 @@ asset_info_buffer_cmd(VkCommandBuffer cmd, render::Handle handle, ::Buffer<T> bu
 {
     Context* vk_ctx = ctx_get();
     AssetManager* asset_manager = vk_ctx->asset_manager;
-    render::AssetItem<Buffer>* asset_item_buffer =
+    render::AssetItem<BufferUpload>* asset_item_buffer =
         asset_manager_item_get(&asset_manager->buffer_list, handle);
-    Buffer* asset_buffer = &asset_item_buffer->item;
+    BufferUpload* asset_buffer = &asset_item_buffer->item;
 
     // ~mgj: copy to staging and record copy command
     U32 buffer_byte_size = buffer.size * sizeof(T);
@@ -1283,7 +1283,7 @@ asset_manager_cmd_done_check()
             }
             else if (asset_load_info->type == render::AssetItemType_Buffer)
             {
-                render::AssetItem<Buffer>* asset =
+                render::AssetItem<BufferUpload>* asset =
                     asset_manager_item_get(&asset_manager->buffer_list, asset_load_info->handle);
                 buffer_destroy(vk_ctx->allocator, &asset->item.staging_buffer);
                 asset->item.staging_buffer.buffer = 0;
@@ -1376,7 +1376,8 @@ asset_manager_buffer_free(render::Handle handle)
 {
     Context* vk_ctx = ctx_get();
     AssetManager* asset_manager = vk_ctx->asset_manager;
-    render::AssetItem<Buffer>* item = asset_manager_item_get(&asset_manager->buffer_list, handle);
+    render::AssetItem<BufferUpload>* item =
+        asset_manager_item_get(&asset_manager->buffer_list, handle);
     if (item->is_loaded)
     {
         buffer_destroy(vk_ctx->allocator, &item->item.buffer_alloc);

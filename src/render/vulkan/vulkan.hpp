@@ -3,7 +3,7 @@
 namespace vulkan
 {
 
-struct Buffer
+struct BufferUpload
 {
     BufferAllocation buffer_alloc;
     BufferAllocation staging_buffer;
@@ -98,8 +98,8 @@ struct AssetManager
     render::AssetItem<Texture>* texture_free_list;
 
     // ~mgj: Buffers
-    render::AssetItemList<Buffer> buffer_list;
-    render::AssetItem<Buffer>* buffer_free_list;
+    render::AssetItemList<BufferUpload> buffer_list;
+    render::AssetItem<BufferUpload>* buffer_free_list;
 
     // ~mgj: Threading Buffer Commands
     ::Buffer<AssetManagerCommandPool> threaded_cmd_pools;
