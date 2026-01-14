@@ -8,6 +8,7 @@ DISABLE_WARNINGS_PUSH
 #define VMA_VULKAN_VERSION 1003000 // Vulkan 1.3
 #define VMA_DEBUG_DETECT_CORRUPTION 1
 #define VMA_DEBUG_DETECT_LEAKS 1
+#define VMA_ASSERT(x) Assert(x)
 #include "third_party/vk_mem_alloc.h"
 #include "stb_image.h"
 

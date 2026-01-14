@@ -65,6 +65,7 @@ struct SamplerInfo
     MipMapMode mip_map_mode;
     SamplerAddressMode address_mode_u;
     SamplerAddressMode address_mode_v;
+    bool unnormalized_coordinates;
 };
 
 enum BufferType
@@ -88,11 +89,14 @@ enum AssetItemType
     AssetItemType_Buffer
 };
 
-enum PipelineUsageType
+enum class PipelineLayoutType
 {
-    PipelineUsageType_Invalid,
-    PipelineUsageType_3D,
-    PipelineUsageType_3DInstanced,
+    Invalid,
+    Model3D,
+    Model3DInstance,
+    Blend3D_Tex,
+    Blend3D_ColorMap
+
 };
 
 template <typename T> struct AssetItem
@@ -114,21 +118,10 @@ struct TextureLoadingInfo
     String8 tex_path;
 };
 
-struct AssetLoadingInfo
+struct ColorMapLoadingInfo
 {
-    Handle handle;
-    AssetItemType type;
-    union
-    {
-        TextureLoadingInfo texture_info;
-        BufferInfo buffer_info;
-    } extra_info;
-};
-
-struct ThreadInput
-{
-    Arena* arena;
-    AssetLoadingInfo asset_info;
+    const U8* colormap_data;
+    U64 colormap_size;
 };
 
 struct Model3DPipelineData
@@ -153,12 +146,27 @@ struct Model3DPipelineDataList
     Model3DPipelineDataNode* last;
 };
 
+struct Blend3DPipelineData
+{
+    Handle vertex_buffer_handle;
+    Handle index_buffer_handle;
+    Handle texture_handle;
+    Handle colormap_handle;
+};
+
 struct Vertex3D
 {
     Vec3F32 pos;
     Vec2F32 uv;
     Vec2U32 object_id;
-    Vec4F32 color;
+};
+
+struct Vertex3DBlend
+{
+    Vec3F32 pos;
+    Vec2F32 uv;
+    Vec2U32 object_id;
+    Vec2F32 blend_factor;
 };
 
 struct Model3DInstance
@@ -181,6 +189,10 @@ buffer_info_from_u32_index_buffer(Buffer<U32> buffer, BufferType buffer_type);
 
 static BufferInfo
 buffer_info_from_vertex_3d_instance_buffer(Buffer<Model3DInstance> buffer, BufferType buffer_type);
+
+static render::BufferInfo
+buffer_info_from_vertex_blend_3d_buffer(Buffer<Vertex3DBlend> buffer,
+                                        render::BufferType buffer_type);
 
 // privates
 template <typename T>
@@ -206,10 +218,13 @@ latest_hovered_object_id_get();
 
 // ~mgj: Texture loading interface
 g_internal Handle
-texture_handle_create(SamplerInfo* sampler_info, PipelineUsageType pipeline_usage_type);
+texture_handle_create(SamplerInfo* sampler_info, render::PipelineLayoutType pipeline_usage_type);
 g_internal Handle
 texture_load_async(SamplerInfo* sampler_info, String8 texture_path,
-                   PipelineUsageType pipeline_usage_type);
+                   PipelineLayoutType pipeline_usage_type);
+g_internal Handle
+colormap_load_async(SamplerInfo* sampler_info, const U8* colormap_data, U64 colormap_size,
+                    PipelineLayoutType pipeline_usage_type);
 g_internal void
 texture_gpu_upload_sync(Handle tex_handle, Buffer<U8> tex_bufs);
 
@@ -225,6 +240,9 @@ buffer_destroy_deferred(Handle handle);
 
 g_internal void
 model_3d_draw(Model3DPipelineData pipeline_input, B32 depth_test_per_draw_call_only);
+
+g_internal void
+blend_3d_draw(Blend3DPipelineData pipeline_input);
 
 g_internal Handle
 buffer_load(BufferInfo* buffer_info);

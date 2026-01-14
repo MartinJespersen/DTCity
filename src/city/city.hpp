@@ -1,11 +1,13 @@
 #pragma once
 
+#include "generated/colormaps.h"
+
 namespace city
 {
 
 struct RenderBuffers
 {
-    Buffer<render::Vertex3D> vertices;
+    Buffer<render::Vertex3DBlend> vertices;
     Buffer<U32> indices;
 };
 
@@ -21,12 +23,12 @@ typedef S64 EdgeId;
     X(Walkability_tf, "Walkability_tf", ROAD_OVERLAY_GREEN)                                        \
     X(Walkability_ft, "Walkability_ft", ROAD_OVERLAY_GREEN)
 
-enum class RoadOverlayOption : U32
+enum RoadOverlayOption : U32
 {
-#define X(name, str, color) name,
+#define X(name, str, color) RoadOverlayOption_##name,
     ROAD_OVERLAY_OPTIONS
 #undef X
-        Count
+        RoadOverlayOption_Count
 };
 
 read_only g_internal const char* road_overlay_option_strs[] = {
@@ -43,7 +45,7 @@ read_only g_internal Vec3F32 road_overlay_option_colors[] = {
 
 struct RoadInfo
 {
-    F32 options[(U32)RoadOverlayOption::Count];
+    F32 options[RoadOverlayOption_Count];
 };
 
 struct RoadEdge
@@ -79,7 +81,8 @@ struct Road
     ////////////////////////////////
     // Graphics API
     String8 texture_path;
-    render::Model3DPipelineData handles[2];
+    render::Blend3DPipelineData handles[2];
+    render::Handle colormap_handles[RoadOverlayOption_Count];
     U32 current_handle_idx;
     bool new_vertex_handle_loading;
     RoadOverlayOption overlay_option_cur;
@@ -163,8 +166,9 @@ road_render_buffers_create(Arena* arena, Buffer<city::RoadEdge> edge_buffer, F32
                            F32 road_height);
 
 g_internal void
-quad_to_buffer_add(RoadSegment* road_segment, Buffer<render::Vertex3D> buffer, Buffer<U32> indices,
-                   U64 edge_id, F32 road_height, U32* cur_vertex_idx, U32* cur_index_idx);
+quad_to_buffer_add(RoadSegment* road_segment, Buffer<render::Vertex3DBlend> buffer,
+                   Buffer<U32> indices, U64 edge_id, F32 road_height, U32* cur_vertex_idx,
+                   U32* cur_index_idx);
 g_internal void
 RoadIntersectionPointsFind(Road* road, RoadSegment* in_out_segment, osm::Way* current_road_way,
                            osm::Network* node_utm_structure);

@@ -18,6 +18,14 @@ buffer_info_from_vertex_3d_buffer(Buffer<Vertex3D> buffer, render::BufferType bu
 }
 
 static render::BufferInfo
+buffer_info_from_vertex_blend_3d_buffer(Buffer<Vertex3DBlend> buffer,
+                                        render::BufferType buffer_type)
+{
+    U64 type_size = sizeof(Vertex3DBlend);
+    return render::buffer_info_from_template_buffer(buffer, buffer_type, type_size);
+}
+
+static render::BufferInfo
 buffer_info_from_u32_index_buffer(Buffer<U32> buffer, render::BufferType buffer_type)
 {
     U64 type_size = sizeof(U32);

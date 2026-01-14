@@ -223,13 +223,13 @@ dt_main_loop(void* ptr)
                                   &sampler_info);
     city::Road* road = ctx->road;
 
-    ctx->buildings = city::buildings_create(cache_dir, texture_dir, ctx->road->road_height,
-                                            input->bbox, &sampler_info);
+    ctx->buildings =
+        city::buildings_create(cache_dir, texture_dir, 10.f, input->bbox, &sampler_info);
     city::Buildings* buildings = ctx->buildings;
     ctx->car_sim = city::car_sim_create(asset_dir, texture_dir, 100, ctx->road);
     city::CarSim* car_sim = ctx->car_sim;
 
-    city::RoadOverlayOption overlay_option_choice = city::RoadOverlayOption::None;
+    city::RoadOverlayOption overlay_option_choice = city::RoadOverlayOption_None;
 
     while (ctx->running)
     {
@@ -295,7 +295,7 @@ dt_main_loop(void* ptr)
         ImGui::Begin("Road Overlays", nullptr);
         ImGui::SetWindowPos(ImVec2(0, 0));
 
-        for (U32 i = 0; i < (U32)city::RoadOverlayOption::Count; i++)
+        for (U32 i = 0; i < city::RoadOverlayOption_Count; i++)
         {
             ImGui::RadioButton(city::road_overlay_option_strs[i], (int*)&overlay_option_choice,
                                (int)i);
@@ -303,8 +303,7 @@ dt_main_loop(void* ptr)
         ImGui::End();
 
         city::road_vertex_buffer_switch(road, overlay_option_choice);
-
-        render::model_3d_draw(road->handles[road->current_handle_idx], true);
+        render::blend_3d_draw(road->handles[road->current_handle_idx]);
         render::model_3d_draw(buildings->roof_model_handles, false);
         render::model_3d_draw(buildings->facade_model_handles, false);
 

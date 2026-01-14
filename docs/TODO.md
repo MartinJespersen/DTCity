@@ -1,4 +1,5 @@
 # Bugs
+* After deleting everything in the deletion queue, delete the asset item queue and give warning if it is not empty.
 * imgui assertion happens during array indexing operation (Assertion failed: i >= 0 && i < Size)
 * Direction or previous node is needed for random neighbor algorithm to avoid doing a u-turn when it is possible to drive straight.
 
@@ -9,6 +10,9 @@
 * Cleanup entrypoint main loop
 
 # Future Improvements:
+* Improve BufferInfo creation and especially the render interface functions.
+* Descriptor set layouts are badly handled at the moment and the how it is allocated, used and destroyed should be improved.
+* make vma allocator part of the asset manager (seperate asset manager from other parts of application)
 * Layers should compile as seperate units
 * Error handling improvements - error handling should not be ExitWithError everywhere
 * Improve the conversion between UTM and WGS84 system

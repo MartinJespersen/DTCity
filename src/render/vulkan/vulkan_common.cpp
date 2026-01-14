@@ -854,12 +854,8 @@ buffer_allocation_create(VmaAllocator allocator, VkDeviceSize size, VkBufferUsag
     bufferInfo.usage = buffer_usage;
     bufferInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
 
-    VkResult res = vmaCreateBuffer(allocator, &bufferInfo, &vma_info, &buffer.buffer,
-                                   &buffer.allocation, nullptr);
-    if (res != VK_SUCCESS)
-    {
-        exit_with_error("Failed to create buffer");
-    }
+    VK_CHECK_RESULT(vmaCreateBuffer(allocator, &bufferInfo, &vma_info, &buffer.buffer,
+                                    &buffer.allocation, nullptr));
 
     MEMORY_LOG("VMA Buffer Allocated: %p (size: %llu bytes, usage: 0x%x)", buffer.buffer,
                buffer.size, buffer_usage);
@@ -1012,12 +1008,13 @@ buffer_mapped_update(VkCommandBuffer cmd_buffer, VmaAllocator allocator,
 
 static ImageViewResource
 image_view_resource_create(VkDevice device, VkImage image, VkFormat format,
-                           VkImageAspectFlags aspect_mask, U32 mipmap_level)
+                           VkImageAspectFlags aspect_mask, U32 mipmap_level,
+                           VkImageViewType image_type)
 {
     VkImageViewCreateInfo viewInfo{};
     viewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
     viewInfo.image = image;
-    viewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
+    viewInfo.viewType = image_type;
     viewInfo.format = format;
     viewInfo.subresourceRange.aspectMask = aspect_mask;
     viewInfo.subresourceRange.baseMipLevel = 0;
@@ -1034,14 +1031,15 @@ image_view_resource_create(VkDevice device, VkImage image, VkFormat format,
 static ImageAllocation
 image_allocation_create(VmaAllocator allocator, U32 width, U32 height,
                         VkSampleCountFlagBits numSamples, VkFormat format, VkImageTiling tiling,
-                        VkImageUsageFlags usage, U32 mipmap_level, VmaAllocationCreateInfo vma_info)
+                        VkImageUsageFlags usage, U32 mipmap_level, VmaAllocationCreateInfo vma_info,
+                        VkImageType image_type)
 {
     ImageAllocation image_alloc = {0};
     VkExtent3D extent = {width, height, 1};
 
     VkImageCreateInfo image_create_info = {};
     image_create_info.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
-    image_create_info.imageType = VK_IMAGE_TYPE_2D;
+    image_create_info.imageType = image_type;
     image_create_info.extent = extent;
     image_create_info.mipLevels = mipmap_level;
     image_create_info.arrayLayers = 1;
@@ -1402,6 +1400,7 @@ descriptor_set_create(Arena* arena, VkDevice device, VkDescriptorPool desc_pool,
                       VkDescriptorSetLayout desc_set_layout, VkImageView image_view,
                       VkSampler sampler)
 {
+    Context* vk_ctx = ctx_get();
     ScratchScope scratch = ScratchScope(&arena, 1);
 
     VkDescriptorSetLayout layouts[] = {desc_set_layout};
@@ -1487,7 +1486,7 @@ sampler_create_info_from_sampler_info(render::SamplerInfo* sampler,
         vk_sampler_address_mode_from_sampler_address_mode(sampler->address_mode_v);
     out_sampler_info->addressModeW = out_sampler_info->addressModeU;
     out_sampler_info->compareOp = VK_COMPARE_OP_NEVER;
-    out_sampler_info->unnormalizedCoordinates = VK_FALSE;
+    out_sampler_info->unnormalizedCoordinates = sampler->unnormalized_coordinates;
     out_sampler_info->mipmapMode = vk_sampler_mipmap_mode_from_mip_map_mode(sampler->mip_map_mode);
     out_sampler_info->mipLodBias = 0.0f;
     out_sampler_info->minLod = 0.0f;

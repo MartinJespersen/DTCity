@@ -209,8 +209,112 @@ blit_transition_image(VkCommandBuffer cmd_buf, VkImage image, VkImageLayout src_
     vkCmdPipelineBarrier2(cmd_buf, &layout_transition_info);
 }
 
+g_internal void
+colormap_texture_cmd_record(VkCommandBuffer cmd, Texture* tex, Buffer<U8> buf)
+{
+    ScratchScope scratch = ScratchScope(0, 0);
+    Context* vk_ctx = ctx_get();
+    U32 sizeof_rgb = 3;
+    U32 sizeof_f32 = sizeof(F32);
+    U32 colormap_size = buf.size / sizeof_rgb / sizeof_f32;
+    U32 staging_buffer_size = colormap_size * 4 * sizeof(F32);
+    AssertAlways(colormap_size == 256);
+    VkFormat vk_format = VK_FORMAT_R32G32B32A32_SFLOAT;
+    {
+        VkFormatProperties vk_format_properties;
+        vkGetPhysicalDeviceFormatProperties(vk_ctx->physical_device, vk_format,
+                                            &vk_format_properties);
+        if ((vk_format_properties.optimalTilingFeatures & VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT) == 0)
+        {
+            exit_with_error("Unsupported image tiling features for format %s", vk_format);
+        }
+    }
+
+    VkBufferCreateInfo staging_buf_create_info = {VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO};
+    staging_buf_create_info.size = staging_buffer_size;
+    staging_buf_create_info.usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
+
+    VmaAllocationCreateInfo staging_alloc_create_info = {};
+    staging_alloc_create_info.usage = VMA_MEMORY_USAGE_AUTO;
+    staging_alloc_create_info.flags =
+        VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT | VMA_ALLOCATION_CREATE_MAPPED_BIT;
+
+    VkBuffer staging_buf;
+    VmaAllocation staging_alloc;
+    VmaAllocationInfo staging_alloc_info;
+    vmaCreateBuffer(vk_ctx->allocator, &staging_buf_create_info, &staging_alloc_create_info,
+                    &staging_buf, &staging_alloc, &staging_alloc_info);
+
+    // Convert RGB to RGBA by adding alpha channel (1.0)
+    F32* src = (F32*)buf.data;
+    F32* dst = (F32*)staging_alloc_info.pMappedData;
+    for (U32 i = 0; i < colormap_size; i++)
+    {
+        dst[i * 4 + 0] = src[i * 3 + 0]; // R
+        dst[i * 4 + 1] = src[i * 3 + 1]; // G
+        dst[i * 4 + 2] = src[i * 3 + 2]; // B
+        dst[i * 4 + 3] = 1.0f;           // A
+    }
+
+    U32 mip_levels = 1;
+    VmaAllocationCreateInfo vma_info = {.usage = VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE};
+    ImageAllocation image_alloc =
+        image_allocation_create(vk_ctx->allocator, colormap_size, 1, VK_SAMPLE_COUNT_1_BIT,
+                                vk_format, VK_IMAGE_TILING_OPTIMAL,
+                                VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT |
+                                    VK_IMAGE_USAGE_SAMPLED_BIT,
+                                mip_levels, vma_info, VK_IMAGE_TYPE_1D);
+
+    ImageViewResource image_view_resource =
+        image_view_resource_create(vk_ctx->device, image_alloc.image, vk_format,
+                                   VK_IMAGE_ASPECT_COLOR_BIT, mip_levels, VK_IMAGE_VIEW_TYPE_1D);
+
+    VkBufferImageCopy* region = PushStruct(scratch.arena, VkBufferImageCopy);
+    *region = {.bufferOffset = 0,
+               .bufferRowLength = 0,
+               .bufferImageHeight = 0,
+               .imageSubresource = {.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+                                    .mipLevel = 0,
+                                    .baseArrayLayer = 0,
+                                    .layerCount = 1},
+               .imageOffset = {0, 0, 0},
+               .imageExtent = {colormap_size, 1, 1}};
+
+    VkImageMemoryBarrier barrier = {
+        .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
+        .srcAccessMask = 0,
+        .dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT,
+        .oldLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+        .newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+        .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+        .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+        .image = image_alloc.image,
+        .subresourceRange = {.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+                             .baseMipLevel = 0,
+                             .levelCount = mip_levels,
+                             .baseArrayLayer = 0,
+                             .layerCount = 1},
+    };
+    vkCmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0,
+                         0, NULL, 0, NULL, 1, &barrier);
+    vkCmdCopyBufferToImage(cmd, staging_buf, image_alloc.image,
+                           VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, mip_levels, region);
+
+    barrier.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+    barrier.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+    barrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+    barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+
+    vkCmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+                         0, 0, NULL, 0, NULL, 1, &barrier);
+
+    tex->image_resource = {.image_alloc = image_alloc, .image_view_resource = image_view_resource};
+    tex->staging_buffer = {
+        .buffer = staging_buf, .allocation = staging_alloc, .size = staging_buffer_size};
+}
+
 g_internal B32
-texture_cmd_record(VkCommandBuffer cmd, Texture* tex, ::Buffer<U8> tex_buf)
+texture_cmd_record(VkCommandBuffer cmd, Texture* tex, Buffer<U8> tex_buf)
 {
     Context* vk_ctx = ctx_get();
     S32 width;
@@ -369,8 +473,7 @@ texture_cmd_record(VkCommandBuffer cmd, Texture* tex, ::Buffer<U8> tex_buf)
 }
 
 g_internal B32
-texture_gpu_upload_cmd_recording(VkCommandBuffer cmd, render::Handle tex_handle,
-                                 ::Buffer<U8> tex_buf)
+texture_gpu_upload_cmd_recording(VkCommandBuffer cmd, render::Handle tex_handle, Buffer<U8> tex_buf)
 {
     Context* vk_ctx = ctx_get();
     render::AssetItem<Texture>* tex_asset = (render::AssetItem<Texture>*)tex_handle.ptr;
@@ -385,6 +488,7 @@ texture_gpu_upload_cmd_recording(VkCommandBuffer cmd, render::Handle tex_handle,
     else
     {
         err |= texture_cmd_record(cmd, tex, tex_buf);
+        Assert(!err);
     }
 
     U32 cur_thread_id = os_tid();
@@ -398,26 +502,116 @@ texture_gpu_upload_cmd_recording(VkCommandBuffer cmd, render::Handle tex_handle,
     return err;
 }
 
-static render::ThreadInput*
+static ThreadInput*
 thread_input_create()
 {
     Arena* arena = ArenaAlloc();
-    render::ThreadInput* thread_input = PushStruct(arena, render::ThreadInput);
+    ThreadInput* thread_input = PushStruct(arena, ThreadInput);
     thread_input->arena = arena;
     return thread_input;
 }
 
 static void
-thread_input_destroy(render::ThreadInput* thread_input)
+thread_input_destroy(ThreadInput* thread_input)
 {
     ArenaRelease(thread_input->arena);
 }
 
 static void
-thread_setup(async::ThreadInfo thread_info, void* input)
+buffer_loading_thread(void* data, VkCommandBuffer cmd, render::Handle handle)
+{
+    render::BufferInfo* buffer_info = (render::BufferInfo*)data;
+    Buffer<U8> buffer = buffer_info->buffer;
+    Context* vk_ctx = ctx_get();
+
+    AssetManager* asset_manager = asset_manager_get();
+    render::AssetItem<BufferUpload>* asset_item_buffer =
+        asset_manager_item_get(&asset_manager->buffer_list, handle);
+    BufferUpload* asset_buffer = &asset_item_buffer->item;
+
+    // ~mgj: copy to staging and record copy command
+    BufferAllocation staging_buffer_alloc = staging_buffer_create(vk_ctx->allocator, buffer.size);
+
+    VK_CHECK_RESULT(vmaCopyMemoryToAllocation(vk_ctx->allocator, buffer.data,
+                                              staging_buffer_alloc.allocation, 0,
+                                              staging_buffer_alloc.size));
+    VkBufferCopy copy_region = {0};
+    copy_region.size = staging_buffer_alloc.size;
+    vkCmdCopyBuffer(cmd, staging_buffer_alloc.buffer, asset_buffer->buffer_alloc.buffer, 1,
+                    &copy_region);
+
+    asset_buffer->staging_buffer = staging_buffer_alloc;
+}
+
+static void
+texture_loading_thread(void* data, VkCommandBuffer cmd, render::Handle handle)
 {
     ScratchScope scratch = ScratchScope(0, 0);
-    render::ThreadInput* thread_input = (render::ThreadInput*)input;
+    render::TextureLoadingInfo* extra_info = (render::TextureLoadingInfo*)data;
+    Buffer<U8> tex_buf = io::file_read(scratch.arena, extra_info->tex_path);
+    Assert(tex_buf.size > 0 && "Texture file not found");
+    B32 err = texture_gpu_upload_cmd_recording(cmd, handle, tex_buf);
+    if (err)
+    {
+        ERROR_LOG("Error when uploading texture - Error id: %d\n", err);
+    }
+}
+
+g_internal void
+texture_done_loading_thread(render::Handle handle)
+{
+    Context* vk_ctx = ctx_get();
+    render::AssetItem<Texture>* asset = asset_manager_texture_item_get(handle);
+    Texture* tex = &asset->item;
+    tex->desc_set = descriptor_set_create(
+        vk_ctx->arena, vk_ctx->device, vk_ctx->descriptor_pool, tex->desc_set_layout,
+        tex->image_resource.image_view_resource.image_view, tex->sampler);
+    buffer_destroy(vk_ctx->allocator, &asset->item.staging_buffer);
+    asset->is_loaded = 1;
+}
+
+g_internal void
+buffer_done_loading_thread(render::Handle handle)
+{
+    Context* vk_ctx = ctx_get();
+    AssetManager* asset_manager = vk_ctx->asset_manager;
+
+    render::AssetItem<BufferUpload>* asset =
+        asset_manager_item_get(&asset_manager->buffer_list, handle);
+    buffer_destroy(vk_ctx->allocator, &asset->item.staging_buffer);
+    asset->item.staging_buffer.buffer = 0;
+    asset->is_loaded = 1;
+}
+
+static void
+colormap_loading_thread(void* data, VkCommandBuffer cmd, render::Handle handle)
+{
+    render::ColorMapLoadingInfo* colormap_info = (render::ColorMapLoadingInfo*)data;
+    Buffer<U8> colormap_buf = {.data = (U8*)colormap_info->colormap_data,
+                               .size = colormap_info->colormap_size};
+    render::AssetItem<Texture>* asset = (render::AssetItem<Texture>*)handle.ptr;
+    Assert(asset);
+    colormap_texture_cmd_record(cmd, &asset->item, colormap_buf);
+}
+
+static void
+colormap_done_loading_thread(render::Handle handle)
+{
+    Context* vk_ctx = ctx_get();
+    render::AssetItem<Texture>* asset = asset_manager_texture_item_get(handle);
+    Texture* tex = &asset->item;
+    tex->desc_set = descriptor_set_create(
+        vk_ctx->arena, vk_ctx->device, vk_ctx->descriptor_pool, tex->desc_set_layout,
+        tex->image_resource.image_view_resource.image_view, tex->sampler);
+    buffer_destroy(vk_ctx->allocator, &asset->item.staging_buffer);
+    asset->is_loaded = 1;
+}
+
+static void
+thread_main(async::ThreadInfo thread_info, void* input)
+{
+    ScratchScope scratch = ScratchScope(0, 0);
+    ThreadInput* thread_input = (ThreadInput*)input;
 
     Context* vk_ctx = ctx_get();
     AssetManager* asset_store = vk_ctx->asset_manager;
@@ -426,33 +620,10 @@ thread_setup(async::ThreadInfo thread_info, void* input)
     VkCommandBuffer cmd =
         begin_command(vk_ctx->device, asset_store->threaded_cmd_pools.data[thread_info.thread_id]);
 
-    render::AssetLoadingInfo* asset_loading_info = &thread_input->asset_info;
-    Assert(asset_loading_info->handle.u64 != 0);
-    B32 err = false;
+    Assert(thread_input->handle.u64 != 0);
+    Assert(thread_input->loading_func && thread_input->user_data);
+    thread_input->loading_func(thread_input->user_data, cmd, thread_input->handle);
 
-    switch (asset_loading_info->type)
-    {
-        case render::AssetItemType_Texture:
-        {
-            render::TextureLoadingInfo* extra_info =
-                (render::TextureLoadingInfo*)&asset_loading_info->extra_info;
-            ::Buffer<U8> tex_buf = io::file_read(scratch.arena, extra_info->tex_path);
-            err |= texture_gpu_upload_cmd_recording(cmd, thread_input->asset_info.handle, tex_buf);
-            if (err)
-            {
-                ERROR_LOG("Error when uploading texture - Error id: %d\n", err);
-            }
-        }
-        break;
-        case render::AssetItemType_Buffer:
-        {
-            render::BufferInfo* buffer_info = (render::BufferInfo*)&asset_loading_info->extra_info;
-
-            asset_info_buffer_cmd(cmd, asset_loading_info->handle, buffer_info->buffer);
-        }
-        break;
-        default: InvalidPath;
-    }
     VK_CHECK_RESULT(vkEndCommandBuffer(cmd));
 
     // ~mgj: Enqueue the command buffer
@@ -634,9 +805,13 @@ model_3d_instance_pipeline_create(Context* vk_ctx, String8 shader_path)
         exit_with_error("failed to create graphics pipeline!");
     }
 
+    Buffer<VkDescriptorSetLayout> desc_set_layouts =
+        BufferAlloc<VkDescriptorSetLayout>(vk_ctx->arena, 1);
+    desc_set_layouts.data[0] = desc_set_layout;
+
     Pipeline pipeline_info = {.pipeline = pipeline,
                               .pipeline_layout = pipeline_layout,
-                              .descriptor_set_layout = desc_set_layout};
+                              .descriptor_set_layout = desc_set_layouts};
     return pipeline_info;
 }
 
@@ -684,7 +859,6 @@ model_3d_pipeline_create(Context* vk_ctx, String8 shader_path)
 
     U32 uv_offset = offsetof(render::Vertex3D, uv);
     U32 object_id_offset = offsetof(render::Vertex3D, object_id);
-    U32 color_offset = offsetof(render::Vertex3D, color);
 
     VkVertexInputAttributeDescription attr_desc[] = {
         {.location = 0, .binding = 0, .format = VK_FORMAT_R32G32B32_SFLOAT},
@@ -692,11 +866,7 @@ model_3d_pipeline_create(Context* vk_ctx, String8 shader_path)
         {.location = 2,
          .binding = 0,
          .format = vk_ctx->object_id_format,
-         .offset = object_id_offset},
-        {.location = 3,
-         .binding = 0,
-         .format = VK_FORMAT_R32G32B32A32_SFLOAT,
-         .offset = color_offset}};
+         .offset = object_id_offset}};
 
     VkVertexInputBindingDescription input_desc[] = {{.binding = 0,
                                                      .stride = sizeof(render::Vertex3D),
@@ -804,9 +974,188 @@ model_3d_pipeline_create(Context* vk_ctx, String8 shader_path)
         exit_with_error("failed to create graphics pipeline!");
     }
 
+    Buffer<VkDescriptorSetLayout> desc_layouts =
+        BufferAlloc<VkDescriptorSetLayout>(vk_ctx->arena, 1);
+    desc_layouts.data[0] = desc_set_layout;
+
     Pipeline pipeline_info = {.pipeline = pipeline,
                               .pipeline_layout = pipeline_layout,
-                              .descriptor_set_layout = desc_set_layout};
+                              .descriptor_set_layout = desc_layouts};
+    return pipeline_info;
+}
+
+static Pipeline
+blend_3d_pipeline_create(String8 shader_path)
+{
+    Context* vk_ctx = ctx_get();
+    ScratchScope scratch = ScratchScope(0, 0);
+
+    VkDescriptorSetLayoutBinding tex_desc_set_layout_info[] = {{
+        .binding = 0,
+        .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+        .descriptorCount = 1,
+        .stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT,
+    }};
+    VkDescriptorSetLayout tex_desc_set_layout = descriptor_set_layout_create(
+        vk_ctx->device, tex_desc_set_layout_info, ArrayCount(tex_desc_set_layout_info));
+
+    VkDescriptorSetLayoutBinding colormap_desc_set_layout_info[] = {{
+        .binding = 0,
+        .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+        .descriptorCount = 1,
+        .stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT,
+    }};
+    VkDescriptorSetLayout colormap_desc_set_layout = descriptor_set_layout_create(
+        vk_ctx->device, colormap_desc_set_layout_info, ArrayCount(colormap_desc_set_layout_info));
+
+    String8 vert_path = CreatePathFromStrings(
+        scratch.arena, Str8BufferFromCString(scratch.arena, {(char*)shader_path.str, "bin",
+                                                             "colormap_blend_3d_vert.spv"}));
+    String8 frag_path = CreatePathFromStrings(
+        scratch.arena, Str8BufferFromCString(scratch.arena, {(char*)shader_path.str, "bin",
+                                                             "colormap_blend_3d_frag.spv"}));
+
+    ShaderModuleInfo vert_shader_stage_info = shader_stage_from_spirv(
+        scratch.arena, vk_ctx->device, VK_SHADER_STAGE_VERTEX_BIT, vert_path);
+    ShaderModuleInfo frag_shader_stage_info = shader_stage_from_spirv(
+        scratch.arena, vk_ctx->device, VK_SHADER_STAGE_FRAGMENT_BIT, frag_path);
+
+    VkPipelineShaderStageCreateInfo shader_stages[] = {vert_shader_stage_info.info,
+                                                       frag_shader_stage_info.info};
+
+    VkDynamicState dynamicStates[] = {VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR,
+                                      VK_DYNAMIC_STATE_DEPTH_WRITE_ENABLE,
+                                      VK_DYNAMIC_STATE_COLOR_WRITE_ENABLE_EXT};
+
+    VkPipelineDynamicStateCreateInfo dynamic_state{};
+    dynamic_state.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
+    dynamic_state.dynamicStateCount = (U32)(ArrayCount(dynamicStates));
+    dynamic_state.pDynamicStates = dynamicStates;
+
+    VkPipelineVertexInputStateCreateInfo vertex_input_info{};
+    vertex_input_info.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
+
+    U32 uv_offset = offsetof(render::Vertex3DBlend, uv);
+    U32 object_id_offset = offsetof(render::Vertex3DBlend, object_id);
+    U32 color_offset = offsetof(render::Vertex3DBlend, blend_factor);
+
+    VkVertexInputAttributeDescription attr_desc[] = {
+        {.location = 0, .binding = 0, .format = VK_FORMAT_R32G32B32_SFLOAT},
+        {.location = 1, .binding = 0, .format = VK_FORMAT_R32G32_SFLOAT, .offset = uv_offset},
+        {.location = 2,
+         .binding = 0,
+         .format = vk_ctx->object_id_format,
+         .offset = object_id_offset},
+        {.location = 3, .binding = 0, .format = VK_FORMAT_R32G32_SFLOAT, .offset = color_offset}};
+
+    VkVertexInputBindingDescription input_desc[] = {{.binding = 0,
+                                                     .stride = sizeof(render::Vertex3DBlend),
+                                                     .inputRate = VK_VERTEX_INPUT_RATE_VERTEX}};
+
+    vertex_input_info.vertexBindingDescriptionCount = ArrayCount(input_desc);
+    vertex_input_info.vertexAttributeDescriptionCount = ArrayCount(attr_desc);
+    vertex_input_info.pVertexBindingDescriptions = input_desc;
+    vertex_input_info.pVertexAttributeDescriptions = attr_desc;
+
+    VkPipelineInputAssemblyStateCreateInfo input_assembly{};
+    input_assembly.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
+    input_assembly.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+
+    VkViewport viewport{};
+    viewport.x = 0.0f;
+    viewport.y = 0.0f;
+    viewport.width = (F32)vk_ctx->swapchain_resources->swapchain_extent.width;
+    viewport.height = (F32)vk_ctx->swapchain_resources->swapchain_extent.height;
+    viewport.minDepth = 0.0f;
+    viewport.maxDepth = 1.0f;
+
+    VkRect2D scissor{};
+    scissor.offset = {0, 0};
+    scissor.extent = vk_ctx->swapchain_resources->swapchain_extent;
+
+    VkPipelineViewportStateCreateInfo viewport_state{};
+    viewport_state.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
+    viewport_state.viewportCount = 1;
+    viewport_state.scissorCount = 1;
+    viewport_state.pViewports = &viewport;
+    viewport_state.pScissors = &scissor;
+
+    VkPipelineRasterizationStateCreateInfo rasterizer{};
+    rasterizer.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
+    rasterizer.polygonMode = VK_POLYGON_MODE_FILL;
+    rasterizer.cullMode = VK_CULL_MODE_NONE;
+    rasterizer.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
+    rasterizer.lineWidth = 1.0f;
+
+    VkPipelineMultisampleStateCreateInfo multisampling{};
+    multisampling.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
+    multisampling.sampleShadingEnable = VK_TRUE;
+    multisampling.rasterizationSamples = vk_ctx->msaa_samples;
+    multisampling.minSampleShading = 1.0f;
+
+    VkPipelineColorBlendAttachmentState color_blend_attachment{
+        .colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT |
+                          VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT};
+
+    VkPipelineColorBlendAttachmentState color_blend_attachments[] = {color_blend_attachment,
+                                                                     color_blend_attachment};
+    VkPipelineColorBlendStateCreateInfo color_blending{};
+    color_blending.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
+    color_blending.attachmentCount = ArrayCount(color_blend_attachments);
+    color_blending.pAttachments = color_blend_attachments;
+
+    VkDescriptorSetLayout descriptor_set_layouts[] = {
+        vk_ctx->camera_descriptor_set_layout, tex_desc_set_layout, colormap_desc_set_layout};
+    VkPipelineLayoutCreateInfo pipelineLayoutInfo{};
+    pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+    pipelineLayoutInfo.setLayoutCount = ArrayCount(descriptor_set_layouts);
+    pipelineLayoutInfo.pSetLayouts = descriptor_set_layouts;
+
+    VkPipelineDepthStencilStateCreateInfo depth_stencil{};
+    depth_stencil.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
+    depth_stencil.depthTestEnable = VK_TRUE;
+    depth_stencil.depthWriteEnable = VK_TRUE;
+    depth_stencil.depthCompareOp = VK_COMPARE_OP_LESS;
+
+    VkPipelineLayout pipeline_layout;
+    VK_CHECK_RESULT(
+        vkCreatePipelineLayout(vk_ctx->device, &pipelineLayoutInfo, nullptr, &pipeline_layout));
+
+    VkFormat color_attachment_formats[] = {vk_ctx->swapchain_resources->color_format,
+                                           vk_ctx->swapchain_resources->object_id_image_format};
+    VkPipelineRenderingCreateInfo pipeline_rendering_info{};
+    pipeline_rendering_info.sType = VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO;
+    pipeline_rendering_info.colorAttachmentCount = ArrayCount(color_attachment_formats);
+    pipeline_rendering_info.pColorAttachmentFormats = color_attachment_formats;
+    pipeline_rendering_info.depthAttachmentFormat = vk_ctx->swapchain_resources->depth_format;
+
+    VkGraphicsPipelineCreateInfo pipeline_create_info{};
+    pipeline_create_info.pNext = &pipeline_rendering_info;
+    pipeline_create_info.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
+    pipeline_create_info.stageCount = ArrayCount(shader_stages);
+    pipeline_create_info.pStages = shader_stages;
+    pipeline_create_info.pVertexInputState = &vertex_input_info;
+    pipeline_create_info.pInputAssemblyState = &input_assembly;
+    pipeline_create_info.pViewportState = &viewport_state;
+    pipeline_create_info.pRasterizationState = &rasterizer;
+    pipeline_create_info.pMultisampleState = &multisampling;
+    pipeline_create_info.pDepthStencilState = &depth_stencil;
+    pipeline_create_info.pColorBlendState = &color_blending;
+    pipeline_create_info.pDynamicState = &dynamic_state;
+    pipeline_create_info.layout = pipeline_layout;
+
+    VkPipeline pipeline;
+    VK_CHECK_RESULT(vkCreateGraphicsPipelines(vk_ctx->device, VK_NULL_HANDLE, 1,
+                                              &pipeline_create_info, nullptr, &pipeline));
+
+    Buffer<VkDescriptorSetLayout> desc_layouts =
+        BufferAlloc<VkDescriptorSetLayout>(vk_ctx->arena, 2);
+    desc_layouts.data[0] = tex_desc_set_layout;
+    desc_layouts.data[1] = colormap_desc_set_layout;
+
+    Pipeline pipeline_info = {.pipeline = pipeline,
+                              .pipeline_layout = pipeline_layout,
+                              .descriptor_set_layout = desc_layouts};
     return pipeline_info;
 }
 
@@ -845,9 +1194,10 @@ model_3d_instance_rendering()
     for (Model3DInstanceNode* node = vk_ctx->draw_frame->model_3D_instance_draw.list.first; node;
          node = node->next)
     {
-        vmaCopyMemoryToAllocation(vk_ctx->allocator, node->instance_buffer_info.buffer.data,
-                                  instance_buffer_alloc->allocation, node->instance_buffer_offset,
-                                  node->instance_buffer_info.buffer.size);
+        VK_CHECK_RESULT(vmaCopyMemoryToAllocation(
+            vk_ctx->allocator, node->instance_buffer_info.buffer.data,
+            instance_buffer_alloc->allocation, node->instance_buffer_offset,
+            node->instance_buffer_info.buffer.size));
         VkBuffer vertex_buffers[] = {
             node->vertex_alloc.buffer,
             instance_buffer_alloc->buffer,
@@ -867,7 +1217,6 @@ model_3d_instance_rendering()
 }
 
 // ~mgj: Camera functions
-
 static void
 camera_uniform_buffer_create(Context* vk_ctx)
 {
@@ -928,7 +1277,7 @@ camera_descriptor_set_create(Context* vk_ctx)
     Temp scratch = ScratchBegin(0, 0);
     Arena* arena = scratch.arena;
 
-    ::Buffer<VkDescriptorSetLayout> layouts =
+    Buffer<VkDescriptorSetLayout> layouts =
         BufferAlloc<VkDescriptorSetLayout>(arena, MAX_FRAMES_IN_FLIGHT);
 
     for (U32 i = 0; i < layouts.size; i++)
@@ -1129,12 +1478,12 @@ asset_manager_destroy(Context* vk_ctx, AssetManager* asset_store)
 }
 
 static void
-asset_cmd_queue_item_enqueue(U32 thread_id, VkCommandBuffer cmd, render::ThreadInput* thread_input)
+asset_cmd_queue_item_enqueue(U32 thread_id, VkCommandBuffer cmd, ThreadInput* thread_input)
 {
     AssetManager* asset_manager = ctx_get()->asset_manager;
 
     CmdQueueItem item = {.thread_input = thread_input, .thread_id = thread_id, .cmd_buffer = cmd};
-    DEBUG_LOG("Asset ID: %llu - Cmd Getting Queued", thread_input->asset_info.handle.u64);
+    DEBUG_LOG("Asset ID: %llu - Cmd Getting Queued", thread_input->handle.u64);
     async::QueuePush(asset_manager->cmd_queue, &item);
 }
 
@@ -1160,8 +1509,7 @@ asset_manager_execute_cmds()
 
             VK_CHECK_RESULT(vkQueueSubmit(vk_ctx->graphics_queue, 1, &submit_info, item.fence));
 
-            DEBUG_LOG("Asset ID: %llu - Submitted Command Buffer",
-                      item.thread_input->asset_info.handle.u64);
+            DEBUG_LOG("Asset ID: %llu - Submitted Command Buffer", item.thread_input->handle.u64);
             asset_manager_cmd_list_add(asset_store->cmd_wait_list, item);
         }
     }
@@ -1223,31 +1571,6 @@ asset_manager_item_create(render::AssetItemList<T>* list, render::AssetItem<T>**
     return asset_item;
 }
 
-template <typename T>
-static void
-asset_info_buffer_cmd(VkCommandBuffer cmd, render::Handle handle, ::Buffer<T> buffer)
-{
-    Context* vk_ctx = ctx_get();
-    AssetManager* asset_manager = vk_ctx->asset_manager;
-    render::AssetItem<BufferUpload>* asset_item_buffer =
-        asset_manager_item_get(&asset_manager->buffer_list, handle);
-    BufferUpload* asset_buffer = &asset_item_buffer->item;
-
-    // ~mgj: copy to staging and record copy command
-    U32 buffer_byte_size = buffer.size * sizeof(T);
-    BufferAllocation staging_buffer_alloc =
-        staging_buffer_create(vk_ctx->allocator, buffer_byte_size);
-
-    vmaCopyMemoryToAllocation(vk_ctx->allocator, buffer.data, staging_buffer_alloc.allocation, 0,
-                              staging_buffer_alloc.size);
-    VkBufferCopy copy_region = {0};
-    copy_region.size = staging_buffer_alloc.size;
-    vkCmdCopyBuffer(cmd, staging_buffer_alloc.buffer, asset_buffer->buffer_alloc.buffer, 1,
-                    &copy_region);
-
-    asset_buffer->staging_buffer = staging_buffer_alloc;
-}
-
 static void
 asset_manager_cmd_done_check()
 {
@@ -1267,30 +1590,31 @@ asset_manager_cmd_done_check()
                     &cmd_queue_item->cmd_buffer);
             }
 
-            render::ThreadInput* thread_input = cmd_queue_item->thread_input;
+            ThreadInput* thread_input = cmd_queue_item->thread_input;
 
-            render::AssetLoadingInfo* asset_load_info = &thread_input->asset_info;
-            if (asset_load_info->type == render::AssetItemType_Texture)
-            {
-                render::AssetItem<Texture>* asset =
-                    asset_manager_texture_item_get(asset_load_info->handle);
-                Texture* tex = &asset->item;
-                tex->desc_set = descriptor_set_create(
-                    vk_ctx->arena, vk_ctx->device, vk_ctx->descriptor_pool, tex->desc_set_layout,
-                    tex->image_resource.image_view_resource.image_view, tex->sampler);
-                buffer_destroy(vk_ctx->allocator, &asset->item.staging_buffer);
-                asset->is_loaded = 1;
-            }
-            else if (asset_load_info->type == render::AssetItemType_Buffer)
-            {
-                render::AssetItem<BufferUpload>* asset =
-                    asset_manager_item_get(&asset_manager->buffer_list, asset_load_info->handle);
-                buffer_destroy(vk_ctx->allocator, &asset->item.staging_buffer);
-                asset->item.staging_buffer.buffer = 0;
-                asset->is_loaded = 1;
-            }
-            Assert(asset_load_info->type != render::AssetItemType_Undefined);
-            DEBUG_LOG("Asset: %llu - Finished loading", asset_load_info->handle.u64);
+            Assert(thread_input->done_loading_func != nullptr);
+            thread_input->done_loading_func(thread_input->handle);
+
+            // if (asset_load_info->type == render::AssetItemType_Texture)
+            // {
+            //     render::AssetItem<Texture>* asset =
+            //         asset_manager_texture_item_get(asset_load_info->handle);
+            //     Texture* tex = &asset->item;
+            //     tex->desc_set = descriptor_set_create(
+            //         vk_ctx->arena, vk_ctx->device, vk_ctx->descriptor_pool, tex->desc_set_layout,
+            //         tex->image_resource.image_view_resource.image_view, tex->sampler);
+            //     buffer_destroy(vk_ctx->allocator, &asset->item.staging_buffer);
+            //     asset->is_loaded = 1;
+            // }
+            // else if (asset_load_info->type == render::AssetItemType_Buffer)
+            // {
+            //     render::AssetItem<BufferUpload>* asset =
+            //         asset_manager_item_get(&asset_manager->buffer_list, asset_load_info->handle);
+            //     buffer_destroy(vk_ctx->allocator, &asset->item.staging_buffer);
+            //     asset->item.staging_buffer.buffer = 0;
+            //     asset->is_loaded = 1;
+            // }
+            DEBUG_LOG("Asset: %llu - Finished loading", thread_input->handle.u64);
             vkDestroyFence(vk_ctx->device, cmd_queue_item->fence, 0);
             thread_input_destroy(cmd_queue_item->thread_input);
             asset_manager_cmd_list_item_remove(asset_manager->cmd_wait_list, cmd_queue_item);
@@ -1417,7 +1741,10 @@ pipeline_destroy(Pipeline* pipeline)
     Context* vk_ctx = ctx_get();
     vkDestroyPipeline(vk_ctx->device, pipeline->pipeline, NULL);
     vkDestroyPipelineLayout(vk_ctx->device, pipeline->pipeline_layout, NULL);
-    vkDestroyDescriptorSetLayout(vk_ctx->device, pipeline->descriptor_set_layout, NULL);
+    for (U32 i = 0; i < pipeline->descriptor_set_layout.size; i++)
+    {
+        vkDestroyDescriptorSetLayout(vk_ctx->device, pipeline->descriptor_set_layout.data[i], NULL);
+    }
 }
 
 static void
@@ -1463,12 +1790,55 @@ model_3d_instance_bucket_add(BufferAllocation* vertex_buffer_allocation,
     SLLQueuePush(instance_draw->list.first, instance_draw->list.last, node);
 }
 
+static void
+blend_3d_bucket_add(BufferAllocation* vertex_buffer_allocation,
+                    BufferAllocation* index_buffer_allocation, VkDescriptorSet texture_handle,
+                    VkDescriptorSet colormap_handle)
+{
+    Context* vk_ctx = ctx_get();
+    DrawFrame* draw_frame = vk_ctx->draw_frame;
+
+    Blend3DNode* node = PushStruct(vk_ctx->draw_frame_arena, Blend3DNode);
+    node->vertex_alloc = *vertex_buffer_allocation;
+    node->index_alloc = *index_buffer_allocation;
+    node->texture_handle = texture_handle;
+    node->colormap_handle = colormap_handle;
+
+    SLLQueuePush(draw_frame->blend_3d_list.first, draw_frame->blend_3d_list.last, node);
+}
+
 enum WriteType
 {
     WriteType_Color,
     WriteType_Depth,
     WriteType_Count
 };
+
+g_internal void
+draw_indexed_separate_depth_and_color_calls(VkCommandBuffer cmd_buffer, U32 index_offset,
+                                            U32 index_count)
+{
+    VkBool32 color_write_enabled[4] = {VK_TRUE, VK_TRUE, VK_TRUE, VK_TRUE};
+    VkBool32 color_write_disabled[4] = {};
+    for (WriteType write_type = (WriteType)0; write_type < WriteType_Count;
+         write_type = (WriteType)(write_type + 1))
+    {
+        if (write_type == WriteType_Color)
+        {
+            vkCmdSetDepthWriteEnable(cmd_buffer, VK_FALSE);
+            cmd_set_color_write_enable_ext(cmd_buffer, ArrayCount(color_write_enabled),
+                                           color_write_enabled);
+        }
+        else if (write_type == WriteType_Depth)
+        {
+            vkCmdSetDepthWriteEnable(cmd_buffer, VK_TRUE);
+            cmd_set_color_write_enable_ext(cmd_buffer, ArrayCount(color_write_disabled),
+                                           color_write_disabled);
+        }
+
+        vkCmdDrawIndexed(cmd_buffer, index_count, 1, index_offset, 0, 0);
+    }
+}
 
 static void
 model_3d_rendering()
@@ -1497,9 +1867,6 @@ model_3d_rendering()
     scissor.extent = swapchain_extent;
     vkCmdSetScissor(cmd_buffer, 0, 1, &scissor);
 
-    VkBool32 color_write_enabled[4] = {VK_TRUE, VK_TRUE, VK_TRUE, VK_TRUE};
-    VkBool32 color_write_disabled[4] = {};
-
     VkDescriptorSet descriptor_sets[2] = {vk_ctx->camera_descriptor_sets[vk_ctx->current_frame]};
 
     VkDeviceSize offsets[] = {0};
@@ -1511,26 +1878,12 @@ model_3d_rendering()
                                 descriptor_sets, 0, NULL);
         vkCmdBindVertexBuffers(cmd_buffer, 0, 1, &node->vertex_alloc.buffer, offsets);
         vkCmdBindIndexBuffer(cmd_buffer, node->index_alloc.buffer, 0, VK_INDEX_TYPE_UINT32);
+        VkBool32 color_write_enabled[4] = {VK_TRUE, VK_TRUE, VK_TRUE, VK_TRUE};
+        VkBool32 color_write_disabled[4] = {};
         if (node->depth_write_per_draw_enabled)
         {
-            for (WriteType write_type = (WriteType)0; write_type < WriteType_Count;
-                 write_type = (WriteType)(write_type + 1))
-            {
-                if (write_type == WriteType_Color)
-                {
-                    vkCmdSetDepthWriteEnable(cmd_buffer, VK_FALSE);
-                    cmd_set_color_write_enable_ext(cmd_buffer, ArrayCount(color_write_enabled),
-                                                   color_write_enabled);
-                }
-                else if (write_type == WriteType_Depth)
-                {
-                    vkCmdSetDepthWriteEnable(cmd_buffer, VK_TRUE);
-                    cmd_set_color_write_enable_ext(cmd_buffer, ArrayCount(color_write_disabled),
-                                                   color_write_disabled);
-                }
-
-                vkCmdDrawIndexed(cmd_buffer, node->index_count, 1, node->index_buffer_offset, 0, 0);
-            }
+            draw_indexed_separate_depth_and_color_calls(cmd_buffer, node->index_buffer_offset,
+                                                        node->index_count);
         }
         else
         {
@@ -1539,6 +1892,51 @@ model_3d_rendering()
                                            color_write_enabled);
             vkCmdDrawIndexed(cmd_buffer, node->index_count, 1, node->index_buffer_offset, 0, 0);
         }
+    }
+}
+
+static void
+blend_3d_rendering()
+{
+    Context* vk_ctx = ctx_get();
+    Pipeline* blend_3d_pipeline = &vk_ctx->blend_3d_pipeline;
+    DrawFrame* draw_frame = vk_ctx->draw_frame;
+
+    SwapchainResources* swapchain_resources = vk_ctx->swapchain_resources;
+    VkExtent2D swapchain_extent = swapchain_resources->swapchain_extent;
+    VkCommandBuffer cmd_buffer = vk_ctx->command_buffers.data[vk_ctx->current_frame];
+    vkCmdBindPipeline(cmd_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, blend_3d_pipeline->pipeline);
+
+    VkViewport viewport{};
+    viewport.x = 0.0f;
+    viewport.y = 0.0f;
+    viewport.width = (F32)(swapchain_extent.width);
+    viewport.height = (F32)(swapchain_extent.height);
+    viewport.minDepth = 0.0f;
+    viewport.maxDepth = 1.0f;
+    vkCmdSetViewport(cmd_buffer, 0, 1, &viewport);
+
+    VkRect2D scissor{};
+    scissor.offset = {0, 0};
+    scissor.extent = swapchain_extent;
+    vkCmdSetScissor(cmd_buffer, 0, 1, &scissor);
+
+    VkDescriptorSet descriptor_sets[3] = {vk_ctx->camera_descriptor_sets[vk_ctx->current_frame]};
+
+    VkDeviceSize offsets[] = {0};
+    for (Blend3DNode* node = draw_frame->blend_3d_list.first; node; node = node->next)
+    {
+        descriptor_sets[1] = node->texture_handle;
+        descriptor_sets[2] = node->colormap_handle;
+
+        U32 index_count = node->index_alloc.size / sizeof(U32);
+        vkCmdBindDescriptorSets(cmd_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS,
+                                blend_3d_pipeline->pipeline_layout, 0, ArrayCount(descriptor_sets),
+                                descriptor_sets, 0, NULL);
+        vkCmdBindVertexBuffers(cmd_buffer, 0, 1, &node->vertex_alloc.buffer, offsets);
+        vkCmdBindIndexBuffer(cmd_buffer, node->index_alloc.buffer, 0, VK_INDEX_TYPE_UINT32);
+
+        draw_indexed_separate_depth_and_color_calls(cmd_buffer, 0, index_count);
     }
 }
 
@@ -1715,6 +2113,7 @@ command_buffer_record(U32 image_index, U32 current_frame, ui::Camera* camera,
 
             model_3d_instance_rendering();
             model_3d_rendering();
+            blend_3d_rendering();
 
             vkCmdEndRendering(current_cmd_buf);
 

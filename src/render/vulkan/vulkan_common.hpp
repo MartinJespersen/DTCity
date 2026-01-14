@@ -159,14 +159,15 @@ staging_buffer_create(VmaAllocator allocator, VkDeviceSize size);
 static ImageAllocation
 image_allocation_create(VmaAllocator allocator, U32 width, U32 height,
                         VkSampleCountFlagBits numSamples, VkFormat format, VkImageTiling tiling,
-                        VkImageUsageFlags usage, U32 mipmap_level,
-                        VmaAllocationCreateInfo vma_info);
+                        VkImageUsageFlags usage, U32 mipmap_level, VmaAllocationCreateInfo vma_info,
+                        VkImageType image_type = VK_IMAGE_TYPE_2D);
 static void
 swapchain_image_resource_create(VkDevice device, SwapchainResources* swapchain_resources,
                                 U32 image_count);
 static ImageViewResource
 image_view_resource_create(VkDevice device, VkImage image, VkFormat format,
-                           VkImageAspectFlags aspect_mask, U32 mipmap_level);
+                           VkImageAspectFlags aspect_mask, U32 mipmap_level,
+                           VkImageViewType image_type = VK_IMAGE_VIEW_TYPE_2D);
 static void
 image_view_resource_destroy(ImageViewResource image_view_resource);
 static void
@@ -315,6 +316,7 @@ sampler_create_info_from_sampler_info(render::SamplerInfo* sampler,
         if (res != VK_SUCCESS)                                                                     \
         {                                                                                          \
             ERROR_LOG("Fatal : VkResult is %d in %s at line %d\n", res, __FILE__, __LINE__);       \
+            Trap();                                                                                \
             exit(EXIT_FAILURE);                                                                    \
         }                                                                                          \
     }

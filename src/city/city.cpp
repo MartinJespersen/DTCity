@@ -11,6 +11,11 @@ road_destroy(Road* road)
         render::texture_destroy(road->handles[i].texture_handle);
     }
 
+    for (U32 i = 0; i < ArrayCount(road->colormap_handles); ++i)
+    {
+        render::texture_destroy(road->colormap_handles[i]);
+    }
+
     ArenaRelease(road->arena);
 }
 
@@ -91,8 +96,8 @@ road_render_buffers_create(Arena* arena, Buffer<city::RoadEdge> edge_buffer, F32
     prof_scope_marker;
     ScratchScope scratch = ScratchScope(0, 0);
 
-    Buffer<render::Vertex3D> vertex_buffer =
-        BufferAlloc<render::Vertex3D>(arena, edge_buffer.size * 4);
+    Buffer<render::Vertex3DBlend> vertex_buffer =
+        BufferAlloc<render::Vertex3DBlend>(arena, edge_buffer.size * 4);
     Buffer<U32> index_buffer = BufferAlloc<U32>(arena, edge_buffer.size * 6);
 
     U32 cur_vertex_idx = 0;
@@ -344,8 +349,9 @@ height_dim_add(Vec2F32 pos, F32 height)
 }
 
 g_internal void
-quad_to_buffer_add(RoadSegment* road_segment, Buffer<render::Vertex3D> buffer, Buffer<U32> indices,
-                   U64 edge_id, F32 road_height, U32* cur_vertex_idx, U32* cur_index_idx)
+quad_to_buffer_add(RoadSegment* road_segment, Buffer<render::Vertex3DBlend> buffer,
+                   Buffer<U32> indices, U64 edge_id, F32 road_height, U32* cur_vertex_idx,
+                   U32* cur_index_idx)
 {
     F32 road_width = Dist2F32(road_segment->start.top, road_segment->start.btm);
     F32 top_tex_scaled = Dist2F32(road_segment->start.top, road_segment->end.top) / road_width;
@@ -360,25 +366,25 @@ quad_to_buffer_add(RoadSegment* road_segment, Buffer<render::Vertex3D> buffer, B
     U32 base_index_idx = *cur_index_idx;
 
     Vec2U32 id = {.u64 = edge_id};
-    Vec4F32 color = {0.0f, 0.0f, 0.0f, 0.0f};
+    Vec2F32 blend_factor = {0.0f, 0.0f};
 
     // quad of vertices
     buffer.data[base_vertex_idx] = {.pos = height_dim_add(road_segment->start.top, road_height),
                                     .uv = {uv_x_top, uv_y_start},
                                     .object_id = id,
-                                    .color = color};
+                                    .blend_factor = blend_factor};
     buffer.data[base_vertex_idx + 1] = {.pos = height_dim_add(road_segment->start.btm, road_height),
                                         .uv = {uv_x_btm, uv_y_start},
                                         .object_id = id,
-                                        .color = color};
+                                        .blend_factor = blend_factor};
     buffer.data[base_vertex_idx + 2] = {.pos = height_dim_add(road_segment->end.top, road_height),
                                         .uv = {uv_x_top, uv_y_end},
                                         .object_id = id,
-                                        .color = color};
+                                        .blend_factor = blend_factor};
     buffer.data[base_vertex_idx + 3] = {.pos = height_dim_add(road_segment->end.btm, road_height),
                                         .uv = {uv_x_btm, uv_y_end},
                                         .object_id = id,
-                                        .color = color};
+                                        .blend_factor = blend_factor};
 
     // creating quad from
     indices.data[base_index_idx] = base_vertex_idx;
@@ -633,7 +639,7 @@ car_sim_create(String8 asset_path, String8 texture_path, U32 car_count, Road* ro
     car_sim->texture_path =
         str8_path_from_str8_list(arena, {texture_path, S("car_collection.ktx2")});
     car_sim->texture_handle = render::texture_load_async(
-        &car_sim->sampler_info, car_sim->texture_path, render::PipelineUsageType_3DInstanced);
+        &car_sim->sampler_info, car_sim->texture_path, render::PipelineLayoutType::Model3DInstance);
     car_sim->vertex_handle = render::buffer_load(&car_sim->vertex_buffer);
     car_sim->index_handle = render::buffer_load(&car_sim->index_buffer);
 
@@ -803,9 +809,9 @@ buildings_create(String8 cache_path, String8 texture_path, F32 road_height, Rng2
     buildings->roof_texture_path =
         str8_path_from_str8_list(arena, {texture_path, S("concrete042A.ktx2")});
     render::Handle facade_texture_handle = render::texture_load_async(
-        sampler_info, buildings->facade_texture_path, render::PipelineUsageType_3D);
+        sampler_info, buildings->facade_texture_path, render::PipelineLayoutType::Model3D);
     render::Handle roof_texture_handle = render::texture_load_async(
-        sampler_info, buildings->roof_texture_path, render::PipelineUsageType_3D);
+        sampler_info, buildings->roof_texture_path, render::PipelineLayoutType::Model3D);
 
     BuildingRenderInfo render_info;
     city::buildings_buffers_create(arena, road_height, &render_info);
@@ -1248,7 +1254,7 @@ land_create(Arena* arena, String8 glb_path)
             gltfw_Texture* texture = &glb_data.textures.data[i];
             render::SamplerInfo sampler_info = city::sampler_from_cgltf_sampler(texture->sampler);
             tex_handles.data[i] =
-                render::texture_handle_create(&sampler_info, render::PipelineUsageType_3D);
+                render::texture_handle_create(&sampler_info, render::PipelineLayoutType::Model3D);
             render::texture_gpu_upload_sync(tex_handles.data[i], texture->tex_buf);
         }
     }
@@ -1500,7 +1506,7 @@ road_create(String8 texture_path, String8 cache_path, String8 data_dir, Rng2F64 
     road->render_buffers = city::road_render_buffers_create(
         road->arena, road->edge_structure.edges, road->default_road_width, road->road_height);
 
-    render::BufferInfo vertex_buffer_info = render::buffer_info_from_vertex_3d_buffer(
+    render::BufferInfo vertex_buffer_info = render::buffer_info_from_vertex_blend_3d_buffer(
         road->render_buffers.vertices, render::BufferType_Vertex);
     render::BufferInfo index_buffer_info = render::buffer_info_from_u32_index_buffer(
         road->render_buffers.indices, render::BufferType_Index);
@@ -1508,13 +1514,40 @@ road_create(String8 texture_path, String8 cache_path, String8 data_dir, Rng2F64 
     road->texture_path =
         str8_path_from_str8_list(road->arena, {texture_path, S("road_texture.ktx2")});
 
-    render::Handle texture_handle =
-        render::texture_load_async(sampler_info, road->texture_path, render::PipelineUsageType_3D);
+    render::Handle texture_handle = render::texture_load_async(
+        sampler_info, road->texture_path, render::PipelineLayoutType::Blend3D_Tex);
     render::Handle vertex_handle = render::buffer_load(&vertex_buffer_info);
     render::Handle index_handle = render::buffer_load(&index_buffer_info);
 
+    constexpr U64 colormap_byte_size = 256ULL * 3 * sizeof(F32);
+    U8* zero_arr = PushArray(road->arena, U8, colormap_byte_size);
+
+    // ~mgj: Load colormaps for different overlay options
+    const U8* colormap_arrays[] = {
+        zero_arr,           // RoadOverlayOption_None
+        g_colormap_inferno, // RoadOverlayOption_Bikeability_ft
+        g_colormap_plasma,  // RoadOverlayOption_Bikeability_tf
+        g_colormap_viridis, // RoadOverlayOption_Walkability_tf
+        g_colormap_magma,   // RoadOverlayOption_Walkability_ft
+    };
+
+    render::SamplerInfo colormap_sampler = {
+        .min_filter = render::Filter_Linear,
+        .mag_filter = render::Filter_Linear,
+        .mip_map_mode = render::MipMapMode_Linear,
+        .address_mode_u = render::SamplerAddressMode_MirroredRepeat,
+        .address_mode_v = render::SamplerAddressMode_ClampToEdge,
+    };
+
+    for (U32 i = 0; i < RoadOverlayOption_Count; i++)
+    {
+        road->colormap_handles[i] =
+            render::colormap_load_async(&colormap_sampler, colormap_arrays[i], colormap_byte_size,
+                                        render::PipelineLayoutType::Blend3D_ColorMap);
+    }
+
     road->handles[road->current_handle_idx] = {vertex_handle, index_handle, texture_handle,
-                                               road->render_buffers.indices.size, 0};
+                                               road->colormap_handles[RoadOverlayOption_None]};
 
     return road;
 }
@@ -1522,7 +1555,8 @@ road_create(String8 texture_path, String8 cache_path, String8 data_dir, Rng2F64 
 g_internal void
 road_vertex_buffer_switch(Road* road, RoadOverlayOption overlay_option)
 {
-    if (overlay_option != road->overlay_option_cur)
+    if (overlay_option != road->overlay_option_cur &&
+        render::is_resource_loaded(road->colormap_handles[overlay_option]))
     {
         prof_scope_marker_named("road_vertex_buffer_switch: 1. pass");
         road->overlay_option_cur = overlay_option;
@@ -1533,21 +1567,22 @@ road_vertex_buffer_switch(Road* road, RoadOverlayOption overlay_option)
             if (road_info)
             {
                 Vec3F32 color = road_overlay_option_colors[(U32)overlay_option];
-                vertex.color =
-                    vec_4f32(color.x, color.y, color.z, road_info->options[(U32)overlay_option]);
+                vertex.blend_factor = vec_2f32(road_info->options[(U32)overlay_option],
+                                               road_info->options[(U32)overlay_option]);
             }
         }
-        render::BufferInfo vertex_buffer_info = render::buffer_info_from_vertex_3d_buffer(
+        render::BufferInfo vertex_buffer_info = render::buffer_info_from_vertex_blend_3d_buffer(
             road->render_buffers.vertices, render::BufferType_Vertex);
         render::Handle vertex_handle = render::buffer_load(&vertex_buffer_info);
 
-        render::Model3DPipelineData* current_road_pipeline_data =
+        render::Blend3DPipelineData* current_road_pipeline_data =
             &road->handles[road->current_handle_idx];
         U32 next_handle_idx = (road->current_handle_idx + 1) % ArrayCount(road->handles);
-        render::Model3DPipelineData* next_road_pipeline_data = &road->handles[next_handle_idx];
+        render::Blend3DPipelineData* next_road_pipeline_data = &road->handles[next_handle_idx];
 
         *next_road_pipeline_data = *current_road_pipeline_data;
         next_road_pipeline_data->vertex_buffer_handle = vertex_handle;
+        next_road_pipeline_data->colormap_handle = road->colormap_handles[overlay_option];
 
         road->new_vertex_handle_loading = true;
     }
@@ -1555,10 +1590,11 @@ road_vertex_buffer_switch(Road* road, RoadOverlayOption overlay_option)
     if (road->new_vertex_handle_loading)
     {
         U32 next_handle_idx = (road->current_handle_idx + 1) % ArrayCount(road->handles);
-        if (render::is_resource_loaded(road->handles[next_handle_idx].vertex_buffer_handle))
+        render::Blend3DPipelineData* next_handle = &road->handles[next_handle_idx];
+        if (render::is_resource_loaded(next_handle->vertex_buffer_handle))
         {
             prof_scope_marker_named("road_vertex_buffer_switch: 2. pass");
-            render::Model3DPipelineData* current_road_pipeline_data =
+            render::Blend3DPipelineData* current_road_pipeline_data =
                 &road->handles[road->current_handle_idx];
             render::buffer_destroy_deferred(current_road_pipeline_data->vertex_buffer_handle);
             *current_road_pipeline_data = {};
@@ -1624,10 +1660,10 @@ road_info_from_edge_id(Arena* arena, Buffer<RoadEdge> road_edge_buf,
         if (neta_edge)
         {
             RoadInfo info = {};
-            info.options[(U32)RoadOverlayOption::Bikeability_ft] = neta_edge->index_bike_ft;
-            info.options[(U32)RoadOverlayOption::Bikeability_tf] = neta_edge->index_bike_tf;
-            info.options[(U32)RoadOverlayOption::Walkability_ft] = neta_edge->index_walk_ft;
-            info.options[(U32)RoadOverlayOption::Walkability_tf] = neta_edge->index_walk_tf;
+            info.options[RoadOverlayOption_Bikeability_ft] = neta_edge->index_bike_ft;
+            info.options[RoadOverlayOption_Bikeability_tf] = neta_edge->index_bike_tf;
+            info.options[RoadOverlayOption_Walkability_ft] = neta_edge->index_walk_ft;
+            info.options[RoadOverlayOption_Walkability_tf] = neta_edge->index_walk_tf;
             map_insert(road_info_map, edge.id, info);
         }
     }

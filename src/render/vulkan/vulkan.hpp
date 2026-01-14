@@ -3,6 +3,19 @@
 namespace vulkan
 {
 
+typedef void (*ThreadLoadingFunc)(void* data, VkCommandBuffer cmd, render::Handle handle);
+typedef void (*ThreadDoneLoadingFunc)(render::Handle handle);
+
+struct ThreadInput
+{
+    Arena* arena;
+    render::Handle handle;
+
+    void* user_data;
+    ThreadLoadingFunc loading_func;
+    ThreadDoneLoadingFunc done_loading_func;
+};
+
 struct BufferUpload
 {
     BufferAllocation buffer_alloc;
@@ -44,7 +57,7 @@ struct CmdQueueItem
 {
     CmdQueueItem* next;
     CmdQueueItem* prev;
-    render::ThreadInput* thread_input;
+    ThreadInput* thread_input;
     U32 thread_id;
     VkCommandBuffer cmd_buffer;
     VkFence fence;
@@ -70,7 +83,7 @@ struct Pipeline
 {
     VkPipeline pipeline;
     VkPipelineLayout pipeline_layout;
-    VkDescriptorSetLayout descriptor_set_layout;
+    Buffer<VkDescriptorSetLayout> descriptor_set_layout;
 };
 
 struct PendingDeletion
@@ -151,10 +164,26 @@ struct Model3DInstance
     U32 total_instance_buffer_byte_count;
 };
 
+struct Blend3DNode
+{
+    Blend3DNode* next;
+    BufferAllocation index_alloc;
+    BufferAllocation vertex_alloc;
+    VkDescriptorSet texture_handle;
+    VkDescriptorSet colormap_handle;
+};
+
+struct Blend3DList
+{
+    Blend3DNode* first;
+    Blend3DNode* last;
+};
+
 struct DrawFrame
 {
     Model3DNodeList model_3D_list;
     Model3DInstance model_3D_instance_draw;
+    Blend3DList blend_3d_list;
 };
 
 struct Context
@@ -213,21 +242,19 @@ struct Context
     // ~mgj: Profiling
     TracyVkCtx tracy_ctx[MAX_FRAMES_IN_FLIGHT];
 
-    // ~mgj: Font Rendering
-    VkDescriptorSetLayout font_descriptor_set_layout;
-
     // ~mgj: Rendering
     Arena* draw_frame_arena;
     DrawFrame* draw_frame;
     Pipeline model_3D_pipeline;
     Pipeline model_3D_instance_pipeline;
+    Pipeline blend_3d_pipeline;
     BufferAllocation model_3D_instance_buffer;
 };
 
 static void
 texture_destroy(Texture* texture);
 static void
-thread_setup(async::ThreadInfo thread_info, void* input);
+thread_main(async::ThreadInfo thread_info, void* input);
 
 g_internal void
 blit_transition_image(VkCommandBuffer cmd_buf, VkImage image, VkImageLayout src_layout,
@@ -236,9 +263,6 @@ g_internal void
 texture_ktx_cmd_record(VkCommandBuffer cmd, Texture* tex, ::Buffer<U8> tex_buf);
 g_internal B32
 texture_cmd_record(VkCommandBuffer cmd, Texture* tex, ::Buffer<U8> tex_buf);
-
-static void
-model_3d_instance_rendering();
 
 //~mgj: camera functions
 static void
@@ -304,20 +328,30 @@ static void
 asset_manager_texture_free(render::Handle handle);
 
 static void
-asset_cmd_queue_item_enqueue(U32 thread_id, VkCommandBuffer cmd, render::ThreadInput* thread_input);
+asset_cmd_queue_item_enqueue(U32 thread_id, VkCommandBuffer cmd, ThreadInput* thread_input);
 
-template <typename T>
 static void
-asset_info_buffer_cmd(VkCommandBuffer cmd, render::Handle handle, ::Buffer<T> buffer);
-
-static render::ThreadInput*
+buffer_loading_thread(void* data, VkCommandBuffer cmd, render::Handle handle);
+static void
+buffer_done_loading_thread(render::Handle handle);
+static void
+colormap_loading_thread(void* data, VkCommandBuffer cmd, render::Handle handle);
+static void
+colormap_done_loading_thread(render::Handle handle);
+g_internal void
+texture_loading_thread(void* data, VkCommandBuffer cmd, render::Handle handle);
+g_internal void
+texture_done_loading_thread(render::Handle handle);
+static ThreadInput*
 thread_input_create();
 static void
-thread_input_destroy(render::ThreadInput* thread_input);
+thread_input_destroy(ThreadInput* thread_input);
 
 g_internal B32
 texture_gpu_upload_cmd_recording(VkCommandBuffer cmd, render::Handle tex_handle,
                                  ::Buffer<U8> tex_buf);
+g_internal void
+colormap_texture_cmd_record(VkCommandBuffer cmd, Texture* tex, Buffer<U8> buf);
 
 // ~mgj: Vulkan Lifetime
 static void
@@ -335,14 +369,24 @@ model_3d_instance_bucket_add(BufferAllocation* vertex_buffer_allocation,
                              BufferAllocation* index_buffer_allocation,
                              VkDescriptorSet texture_handle,
                              render::BufferInfo* instance_buffer_info);
+static void
+blend_3d_bucket_add(BufferAllocation* vertex_buffer_allocation,
+                    BufferAllocation* index_buffer_allocation, VkDescriptorSet texture_handle,
+                    VkDescriptorSet colormap_handle);
 static Pipeline
 model_3d_instance_pipeline_create(Context* vk_ctx, String8 shader_path);
 static Pipeline
 model_3d_pipeline_create(Context* vk_ctx, String8 shader_path);
+static Pipeline
+blend_3d_pipeline_create(String8 shader_path);
 static void
 draw_frame_reset();
 static void
 model_3d_rendering();
+static void
+model_3d_instance_rendering();
+static void
+blend_3d_rendering();
 static void
 pipeline_destroy(Pipeline* draw_ctx);
 
@@ -356,15 +400,3 @@ static void
 profile_buffers_destroy(Context* vk_ctx);
 
 } // namespace vulkan
-
-// Handle Conversions
-#undef VK_CHECK_RESULT
-#define VK_CHECK_RESULT(f)                                                                         \
-    {                                                                                              \
-        VkResult res = (f);                                                                        \
-        if (res != VK_SUCCESS)                                                                     \
-        {                                                                                          \
-            ERROR_LOG("Fatal : VkResult is %d in %s at line %d\n", res, __FILE__, __LINE__);       \
-            Trap();                                                                                \
-        }                                                                                          \
-    }

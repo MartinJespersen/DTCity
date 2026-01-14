@@ -109,9 +109,11 @@ file_read(Arena* arena, String8 filename)
     Buffer<U8> buffer = {0};
     FILE* file = fopen((const char*)filename.str, "rb");
     defer(fclose(file));
+    Assert(file != nullptr);
     if (file == NULL)
     {
         DEBUG_LOG("failed to open file!");
+
         return buffer;
     }
 
