@@ -1595,25 +1595,6 @@ asset_manager_cmd_done_check()
             Assert(thread_input->done_loading_func != nullptr);
             thread_input->done_loading_func(thread_input->handle);
 
-            // if (asset_load_info->type == render::AssetItemType_Texture)
-            // {
-            //     render::AssetItem<Texture>* asset =
-            //         asset_manager_texture_item_get(asset_load_info->handle);
-            //     Texture* tex = &asset->item;
-            //     tex->desc_set = descriptor_set_create(
-            //         vk_ctx->arena, vk_ctx->device, vk_ctx->descriptor_pool, tex->desc_set_layout,
-            //         tex->image_resource.image_view_resource.image_view, tex->sampler);
-            //     buffer_destroy(vk_ctx->allocator, &asset->item.staging_buffer);
-            //     asset->is_loaded = 1;
-            // }
-            // else if (asset_load_info->type == render::AssetItemType_Buffer)
-            // {
-            //     render::AssetItem<BufferUpload>* asset =
-            //         asset_manager_item_get(&asset_manager->buffer_list, asset_load_info->handle);
-            //     buffer_destroy(vk_ctx->allocator, &asset->item.staging_buffer);
-            //     asset->item.staging_buffer.buffer = 0;
-            //     asset->is_loaded = 1;
-            // }
             DEBUG_LOG("Asset: %llu - Finished loading", thread_input->handle.u64);
             vkDestroyFence(vk_ctx->device, cmd_queue_item->fence, 0);
             thread_input_destroy(cmd_queue_item->thread_input);
