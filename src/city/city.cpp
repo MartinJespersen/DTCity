@@ -275,6 +275,7 @@ cache_write(String8 cache_file, String8 cache_meta_file, String8 content, String
 {
     prof_scope_marker;
     ScratchScope scratch = ScratchScope(0, 0);
+
     // ~mgj: write to cache file
     OS_Handle file_write_handle = os_file_open(OS_AccessFlag_Write, cache_file);
     U64 bytes_written = OS_FileWrite(file_write_handle, r1u64(0, content.size), content.str);
@@ -1007,11 +1008,12 @@ buildings_buffers_create(Arena* arena, F32 road_height, BuildingRenderInfo* out_
                 for (U32 idx = 0; idx < final_utm_node_buffer.size; idx += 1)
                 {
                     osm::UtmLocation node_utm = final_utm_node_buffer.data[idx];
-                    Vec2U32 id = {.u64 = node_utm.id};
+                    Vec2U32 id = {.u64 = (U64)way->id};
                     vertex_buffer.data[base_vertex_idx + idx] = {
                         .pos = height_dim_add(node_utm.pos, road_height + building_height),
                         .uv = {node_utm.pos.x, node_utm.pos.y},
-                        .object_id = id};
+                        .object_id = id,
+                    };
                 }
 
                 // index buffer fill
