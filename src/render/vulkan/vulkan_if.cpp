@@ -48,13 +48,12 @@ render_ctx_create(String8 shader_path, io::IO* io_ctx, async::Threads* thread_po
         exit_with_error("texture image format does not support linear blitting!");
     }
 
-    VmaAllocatorCreateInfo allocatorInfo = {};
-    allocatorInfo.physicalDevice = vk_ctx->physical_device;
-    allocatorInfo.device = vk_ctx->device;
-    allocatorInfo.instance = vk_ctx->instance;
-
-    vmaCreateAllocator(&allocatorInfo, &vk_ctx->allocator);
     vk_ctx->object_id_format = VK_FORMAT_R32G32_UINT;
+
+    // ~mgj: Create asset manager (includes VMA allocator)
+    vk_ctx->asset_manager = vulkan::asset_manager_create(
+        vk_ctx->physical_device, vk_ctx->device, vk_ctx->instance, vk_ctx->graphics_queue,
+        vk_ctx->queue_family_indices.graphicsFamilyIndex, thread_pool, GB(1));
 
     Vec2S32 vk_framebuffer_dim_s32 = io::wait_for_valid_framebuffer_size(io_ctx);
     Vec2U32 vk_framebuffer_dim_u32 = {(U32)vk_framebuffer_dim_s32.x, (U32)vk_framebuffer_dim_s32.y};
@@ -80,10 +79,6 @@ render_ctx_create(String8 shader_path, io::IO* io_ctx, async::Threads* thread_po
     vulkan::camera_descriptor_set_layout_create(vk_ctx);
     vulkan::camera_descriptor_set_create(vk_ctx);
     vulkan::profile_buffers_create(vk_ctx);
-
-    // TODO: change from 1 to much larger value
-    vk_ctx->asset_manager = vulkan::asset_manager_create(
-        vk_ctx->device, vk_ctx->queue_family_indices.graphicsFamilyIndex, thread_pool, GB(1));
 
     // ~mgj: Drawing (TODO: Move out of vulkan context to own module)
 
@@ -122,7 +117,8 @@ render_ctx_destroy()
     vulkan::camera_cleanup(vk_ctx);
     vulkan::profile_buffers_destroy(vk_ctx);
 
-    vulkan::swapchain_cleanup(vk_ctx->device, vk_ctx->allocator, vk_ctx->swapchain_resources);
+    vulkan::swapchain_cleanup(vk_ctx->device, vk_ctx->asset_manager->allocator,
+                              vk_ctx->swapchain_resources);
 
     vkDestroyCommandPool(vk_ctx->device, vk_ctx->command_pool, nullptr);
 
@@ -134,9 +130,7 @@ render_ctx_destroy()
 
     vkDestroyDescriptorPool(vk_ctx->device, vk_ctx->descriptor_pool, 0);
 
-    vulkan::buffer_destroy(vk_ctx->allocator, &vk_ctx->model_3D_instance_buffer);
-
-    vulkan::asset_manager_destroy(vk_ctx, vk_ctx->asset_manager);
+    vulkan::buffer_destroy(vk_ctx->asset_manager->allocator, &vk_ctx->model_3D_instance_buffer);
 
     vulkan::pipeline_destroy(&vk_ctx->model_3D_pipeline);
     vulkan::pipeline_destroy(&vk_ctx->model_3D_instance_pipeline);
@@ -144,7 +138,8 @@ render_ctx_destroy()
 
     vkDestroyDescriptorSetLayout(vk_ctx->device, vk_ctx->texture_descriptor_set_layout, nullptr);
 
-    vmaDestroyAllocator(vk_ctx->allocator);
+    // Asset manager destruction includes VMA allocator cleanup
+    vulkan::asset_manager_destroy(vk_ctx->asset_manager);
 
     vkDestroyDevice(vk_ctx->device, nullptr);
     vkDestroyInstance(vk_ctx->instance, nullptr);
@@ -432,7 +427,7 @@ buffer_load(render::BufferInfo* buffer_info)
         default: InvalidPath;
     }
     vulkan::BufferAllocation buffer =
-        vulkan::buffer_allocation_create(vk_ctx->allocator, buffer_info->buffer.size,
+        vulkan::buffer_allocation_create(asset_manager->allocator, buffer_info->buffer.size,
                                          usage_flags | VK_BUFFER_USAGE_TRANSFER_DST_BIT, vma_info);
 
     // ~mgj: Prepare Texture

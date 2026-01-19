@@ -75,7 +75,7 @@ depth_resources_create(Context* vk_ctx, SwapchainResources* swapchain_resources)
     };
 
     ImageAllocation image_alloc = image_allocation_create(
-        vk_ctx->allocator, swapchain_resources->swapchain_extent.width,
+        vk_ctx->asset_manager->allocator, swapchain_resources->swapchain_extent.width,
         swapchain_resources->swapchain_extent.height, vk_ctx->msaa_samples, depth_format,
         VK_IMAGE_TILING_OPTIMAL,
         VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT, 1, vma_info);
@@ -116,7 +116,7 @@ object_id_image_resource_create(SwapchainResources* swapchain_resources, U32 ima
         ImageViewResource* image_view_res = &object_id_image_resource->image_view_resource;
 
         *image_alloc = image_allocation_create(
-            vk_ctx->allocator, swapchain_resources->swapchain_extent.width,
+            vk_ctx->asset_manager->allocator, swapchain_resources->swapchain_extent.width,
             swapchain_resources->swapchain_extent.height, vk_ctx->msaa_samples, attachment_format,
             tiling,
             VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT |
@@ -134,7 +134,7 @@ object_id_image_resource_create(SwapchainResources* swapchain_resources, U32 ima
             &object_id_image_resolve_resource->image_view_resource;
 
         *image_resolve_alloc = image_allocation_create(
-            vk_ctx->allocator, swapchain_resources->swapchain_extent.width,
+            vk_ctx->asset_manager->allocator, swapchain_resources->swapchain_extent.width,
             swapchain_resources->swapchain_extent.height, VK_SAMPLE_COUNT_1_BIT, attachment_format,
             tiling,
             VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT |
@@ -152,7 +152,8 @@ object_id_image_resource_create(SwapchainResources* swapchain_resources, U32 ima
     swapchain_resources->object_id_image_resources = object_id_image_resources;
     swapchain_resources->object_id_image_resolve_resources = object_id_image_resolve_resources;
 
-    buffer_readback_create(vk_ctx->allocator, buffer_size, VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+    buffer_readback_create(vk_ctx->asset_manager->allocator, buffer_size,
+                           VK_BUFFER_USAGE_TRANSFER_DST_BIT,
                            &swapchain_resources->object_id_buffer_readback);
 }
 
@@ -535,13 +536,14 @@ object_id_resources_cleanup()
     SwapchainResources* swapchain_resources = vk_ctx->swapchain_resources;
     for (U32 i = 0; i < swapchain_resources->object_id_image_resources.size; i++)
     {
-        image_resource_destroy(vk_ctx->allocator,
+        image_resource_destroy(vk_ctx->asset_manager->allocator,
                                swapchain_resources->object_id_image_resources.data[i]);
-        image_resource_destroy(vk_ctx->allocator,
+        image_resource_destroy(vk_ctx->asset_manager->allocator,
                                swapchain_resources->object_id_image_resolve_resources.data[i]);
     }
 
-    buffer_readback_destroy(vk_ctx->allocator, &swapchain_resources->object_id_buffer_readback);
+    buffer_readback_destroy(vk_ctx->asset_manager->allocator,
+                            &swapchain_resources->object_id_buffer_readback);
 }
 
 static void
@@ -1084,7 +1086,7 @@ color_resources_create(Context* vk_ctx, SwapchainResources* swapchain_resources)
     };
 
     ImageAllocation image_alloc = image_allocation_create(
-        vk_ctx->allocator, swapchain_resources->swapchain_extent.width,
+        vk_ctx->asset_manager->allocator, swapchain_resources->swapchain_extent.width,
         swapchain_resources->swapchain_extent.height, vk_ctx->msaa_samples, colorFormat,
         VK_IMAGE_TILING_OPTIMAL,
         VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT, 1, vma_info);
@@ -1346,7 +1348,8 @@ swapchain_recreate(Vec2U32 framebuffer_dim)
 
     VK_CHECK_RESULT(vkDeviceWaitIdle(vk_ctx->device));
 
-    swapchain_cleanup(vk_ctx->device, vk_ctx->allocator, vk_ctx->swapchain_resources);
+    swapchain_cleanup(vk_ctx->device, vk_ctx->asset_manager->allocator,
+                      vk_ctx->swapchain_resources);
     vk_ctx->swapchain_resources = 0;
     SwapChainSupportDetails swapchain_details =
         query_swapchain_support(scratch.arena, vk_ctx->physical_device, vk_ctx->surface);

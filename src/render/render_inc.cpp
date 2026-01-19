@@ -13,5 +13,6 @@ DISABLE_WARNINGS_POP
 #include "render.cpp"
 
 #include "vulkan/vulkan_common.cpp"
+#include "vulkan/asset_manager.cpp"
 #include "vulkan/vulkan.cpp"
 #include "vulkan/vulkan_if.cpp"
