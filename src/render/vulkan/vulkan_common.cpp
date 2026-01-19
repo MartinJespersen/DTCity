@@ -1485,9 +1485,12 @@ descriptor_set_allocate_bindless(VkDevice device, VkDescriptorPool desc_pool,
 
 // Updates a single texture in a bindless descriptor set at the specified array index
 static void
-descriptor_set_update_bindless_texture(VkDevice device, VkDescriptorSet desc_set, U32 binding,
-                                       U32 array_index, VkImageView image_view, VkSampler sampler)
+descriptor_set_update_bindless_texture(U32 array_index, VkImageView image_view, VkSampler sampler)
 {
+    vulkan::Context* vk_ctx = ctx_get();
+    U32 binding = vk_ctx->texture_binding;
+    VkDescriptorSet desc_set = vk_ctx->texture_descriptor_set;
+
     VkDescriptorImageInfo image_info{};
     image_info.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
     image_info.imageView = image_view;
@@ -1502,7 +1505,7 @@ descriptor_set_update_bindless_texture(VkDevice device, VkDescriptorSet desc_set
     write.descriptorCount = 1;
     write.pImageInfo = &image_info;
 
-    vkUpdateDescriptorSets(device, 1, &write, 0, nullptr);
+    vkUpdateDescriptorSets(vk_ctx->device, 1, &write, 0, nullptr);
 }
 
 static VkDescriptorSet

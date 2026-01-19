@@ -247,8 +247,7 @@ descriptor_set_allocate_bindless(VkDevice device, VkDescriptorPool desc_pool,
 
 // Updates a single texture in a bindless descriptor set at the specified array index
 static void
-descriptor_set_update_bindless_texture(VkDevice device, VkDescriptorSet desc_set, U32 binding,
-                                       U32 array_index, VkImageView image_view, VkSampler sampler);
+descriptor_set_update_bindless_texture(U32 array_index, VkImageView image_view, VkSampler sampler);
 
 // image helpers
 

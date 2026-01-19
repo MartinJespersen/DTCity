@@ -10,10 +10,10 @@ layout(location = 1) out uvec2 out_object_id;
 
 layout(set = 1, binding = 0) uniform sampler2D texture_sampler[];
 
-layout( push_constant ) uniform constants
+layout(push_constant) uniform constants
 {
-	uint base_tex;
-	uint colormap_tex;
+    uint base_tex;
+    uint colormap_tex;
 } PushConstants;
 
 void main() {

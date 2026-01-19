@@ -1,7 +1,9 @@
 # Bugs
+* App should work without netascore geo.json file
 * After deleting everything in the deletion queue, delete the asset item queue and give warning if it is not empty.
 * imgui assertion happens during array indexing operation (Assertion failed: i >= 0 && i < Size)
 * Direction or previous node is needed for random neighbor algorithm to avoid doing a u-turn when it is possible to drive straight.
+
 
 # Changes along the way
 * Make the asset manager thread safe - accessing texture and buffer lists are not thread safe at the moment

@@ -494,9 +494,9 @@ texture_gpu_upload_cmd_recording(VkCommandBuffer cmd, render::Handle tex_handle,
     U32 cur_thread_id = os_tid();
     if (vk_ctx->render_thread_id == cur_thread_id)
     {
-        tex->desc_set = descriptor_set_create(
-            vk_ctx->arena, vk_ctx->device, vk_ctx->descriptor_pool, tex->desc_set_layout,
-            tex->image_resource.image_view_resource.image_view, tex->sampler);
+        descriptor_set_update_bindless_texture(tex->descriptor_set_idx,
+                                               tex->image_resource.image_view_resource.image_view,
+                                               tex->sampler);
     }
 
     return err;
@@ -558,19 +558,6 @@ texture_loading_thread(void* data, VkCommandBuffer cmd, render::Handle handle)
 }
 
 g_internal void
-texture_done_loading_thread(render::Handle handle)
-{
-    Context* vk_ctx = ctx_get();
-    render::AssetItem<Texture>* asset = asset_manager_texture_item_get(handle);
-    Texture* tex = &asset->item;
-    tex->desc_set = descriptor_set_create(
-        vk_ctx->arena, vk_ctx->device, vk_ctx->descriptor_pool, tex->desc_set_layout,
-        tex->image_resource.image_view_resource.image_view, tex->sampler);
-    buffer_destroy(vk_ctx->allocator, &asset->item.staging_buffer);
-    asset->is_loaded = 1;
-}
-
-g_internal void
 buffer_done_loading_thread(render::Handle handle)
 {
     Context* vk_ctx = ctx_get();
@@ -595,15 +582,15 @@ colormap_loading_thread(void* data, VkCommandBuffer cmd, render::Handle handle)
 }
 
 static void
-colormap_done_loading_thread(render::Handle handle)
+texture_done_loading(render::Handle handle)
 {
     Context* vk_ctx = ctx_get();
     render::AssetItem<Texture>* asset = asset_manager_texture_item_get(handle);
     Texture* texture = &asset->item;
 
     vulkan::descriptor_set_update_bindless_texture(
-        vk_ctx->device, vk_ctx->texture_descriptor_set, 0, texture->descriptor_set_idx,
-        texture->image_resource.image_view_resource.image_view, texture->sampler);
+        texture->descriptor_set_idx, texture->image_resource.image_view_resource.image_view,
+        texture->sampler);
 
     buffer_destroy(vk_ctx->allocator, &asset->item.staging_buffer);
     asset->is_loaded = 1;
@@ -636,15 +623,6 @@ static Pipeline
 model_3d_instance_pipeline_create(Context* vk_ctx, String8 shader_path)
 {
     ScratchScope scratch = ScratchScope(0, 0);
-
-    VkDescriptorSetLayoutBinding desc_set_layout_info = {
-        .binding = 0,
-        .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-        .descriptorCount = 1,
-        .stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT,
-    };
-    VkDescriptorSetLayout desc_set_layout =
-        descriptor_set_layout_create(vk_ctx->device, &desc_set_layout_info, 1);
 
     String8 vert_path = CreatePathFromStrings(
         scratch.arena, Str8BufferFromCString(scratch.arena, {(char*)shader_path.str, "bin",
@@ -757,11 +735,18 @@ model_3d_instance_pipeline_create(Context* vk_ctx, String8 shader_path)
     color_blending.pAttachments = color_blend_attachments;
 
     VkDescriptorSetLayout descriptor_set_layouts[] = {vk_ctx->camera_descriptor_set_layout,
-                                                      desc_set_layout};
+                                                      vk_ctx->texture_descriptor_set_layout};
+    VkPushConstantRange push_constant_range{};
+    push_constant_range.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+    push_constant_range.offset = 0;
+    push_constant_range.size = sizeof(Model3dInstancePushConstants);
+
     VkPipelineLayoutCreateInfo pipelineLayoutInfo{};
     pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
     pipelineLayoutInfo.setLayoutCount = ArrayCount(descriptor_set_layouts);
     pipelineLayoutInfo.pSetLayouts = descriptor_set_layouts;
+    pipelineLayoutInfo.pPushConstantRanges = &push_constant_range;
+    pipelineLayoutInfo.pushConstantRangeCount = 1;
 
     VkPipelineDepthStencilStateCreateInfo depth_stencil{};
     depth_stencil.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
@@ -807,13 +792,7 @@ model_3d_instance_pipeline_create(Context* vk_ctx, String8 shader_path)
         exit_with_error("failed to create graphics pipeline!");
     }
 
-    Buffer<VkDescriptorSetLayout> desc_set_layouts =
-        BufferAlloc<VkDescriptorSetLayout>(vk_ctx->arena, 1);
-    desc_set_layouts.data[0] = desc_set_layout;
-
-    Pipeline pipeline_info = {.pipeline = pipeline,
-                              .pipeline_layout = pipeline_layout,
-                              .descriptor_set_layout = desc_set_layouts};
+    Pipeline pipeline_info = {.pipeline = pipeline, .pipeline_layout = pipeline_layout};
     return pipeline_info;
 }
 
@@ -821,16 +800,6 @@ static Pipeline
 model_3d_pipeline_create(Context* vk_ctx, String8 shader_path)
 {
     ScratchScope scratch = ScratchScope(0, 0);
-
-    VkDescriptorSetLayoutBinding desc_set_layout_info = {
-        .binding = 0,
-        .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-        .descriptorCount = 1,
-        .stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT,
-    };
-
-    VkDescriptorSetLayout desc_set_layout =
-        descriptor_set_layout_create(vk_ctx->device, &desc_set_layout_info, 1);
 
     String8 vert_path = CreatePathFromStrings(
         scratch.arena,
@@ -927,11 +896,19 @@ model_3d_pipeline_create(Context* vk_ctx, String8 shader_path)
     color_blending.pAttachments = color_blend_attachments;
 
     VkDescriptorSetLayout descriptor_set_layouts[] = {vk_ctx->camera_descriptor_set_layout,
-                                                      desc_set_layout};
+                                                      vk_ctx->texture_descriptor_set_layout};
+
+    VkPushConstantRange push_constant_range{};
+    push_constant_range.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+    push_constant_range.offset = 0;
+    push_constant_range.size = sizeof(Model3dPushConstants);
+
     VkPipelineLayoutCreateInfo pipelineLayoutInfo{};
     pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
     pipelineLayoutInfo.setLayoutCount = ArrayCount(descriptor_set_layouts);
     pipelineLayoutInfo.pSetLayouts = descriptor_set_layouts;
+    pipelineLayoutInfo.pPushConstantRanges = &push_constant_range;
+    pipelineLayoutInfo.pushConstantRangeCount = 1;
 
     VkPipelineDepthStencilStateCreateInfo depth_stencil{};
     depth_stencil.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
@@ -976,13 +953,7 @@ model_3d_pipeline_create(Context* vk_ctx, String8 shader_path)
         exit_with_error("failed to create graphics pipeline!");
     }
 
-    Buffer<VkDescriptorSetLayout> desc_layouts =
-        BufferAlloc<VkDescriptorSetLayout>(vk_ctx->arena, 1);
-    desc_layouts.data[0] = desc_set_layout;
-
-    Pipeline pipeline_info = {.pipeline = pipeline,
-                              .pipeline_layout = pipeline_layout,
-                              .descriptor_set_layout = desc_layouts};
+    Pipeline pipeline_info = {.pipeline = pipeline, .pipeline_layout = pipeline_layout};
     return pipeline_info;
 }
 
@@ -1171,7 +1142,8 @@ model_3d_instance_rendering()
     BufferAllocation* instance_buffer_alloc = &vk_ctx->model_3D_instance_buffer;
     Model3DInstance* model_3D_instance_draw = &vk_ctx->draw_frame->model_3D_instance_draw;
 
-    VkDescriptorSet descriptor_sets[2] = {vk_ctx->camera_descriptor_sets[vk_ctx->current_frame]};
+    VkDescriptorSet descriptor_sets[2] = {vk_ctx->camera_descriptor_sets[vk_ctx->current_frame],
+                                          vk_ctx->texture_descriptor_set};
     buffer_alloc_create_or_resize(vk_ctx->allocator,
                                   model_3D_instance_draw->total_instance_buffer_byte_count,
                                   instance_buffer_alloc, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT);
@@ -1187,8 +1159,10 @@ model_3d_instance_rendering()
             node->vertex_alloc.buffer,
             instance_buffer_alloc->buffer,
         };
+
+        vkCmdPushConstants(cmd_buffer, pipeline->pipeline_layout, VK_SHADER_STAGE_FRAGMENT_BIT, 0,
+                           sizeof(Model3dInstancePushConstants), &node->push_constants);
         VkDeviceSize vertex_offsets[] = {0, node->instance_buffer_offset};
-        descriptor_sets[1] = {node->texture_handle};
         vkCmdBindDescriptorSets(cmd_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS,
                                 pipeline->pipeline_layout, 0, ArrayCount(descriptor_sets),
                                 descriptor_sets, 0, NULL);
@@ -1238,9 +1212,7 @@ camera_descriptor_set_layout_create(Context* vk_ctx)
     camera_desc_layout.binding = 0;
     camera_desc_layout.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
     camera_desc_layout.descriptorCount = 1;
-    camera_desc_layout.stageFlags = VK_SHADER_STAGE_VERTEX_BIT |
-                                    VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT |
-                                    VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT;
+    camera_desc_layout.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
 
     VkDescriptorSetLayoutBinding descriptor_layout_bindings[] = {camera_desc_layout};
 
@@ -1715,24 +1687,25 @@ pipeline_destroy(Pipeline* pipeline)
     Context* vk_ctx = ctx_get();
     vkDestroyPipeline(vk_ctx->device, pipeline->pipeline, NULL);
     vkDestroyPipelineLayout(vk_ctx->device, pipeline->pipeline_layout, NULL);
-    for (U32 i = 0; i < pipeline->descriptor_set_layout.size; i++)
-    {
-        vkDestroyDescriptorSetLayout(vk_ctx->device, pipeline->descriptor_set_layout.data[i], NULL);
-    }
 }
 
 static void
 model_3d_bucket_add(BufferAllocation* vertex_buffer_allocation,
-                    BufferAllocation* index_buffer_allocation, VkDescriptorSet texture_handle,
+                    BufferAllocation* index_buffer_allocation, render::Handle tex_handle,
                     B32 depth_write_per_draw_call_only, U32 index_buffer_offset, U32 index_count)
 {
     Context* vk_ctx = ctx_get();
     DrawFrame* draw_frame = vk_ctx->draw_frame;
 
+    render::AssetItem<Texture>* base_tex = asset_manager_texture_item_get(tex_handle);
+
+    Model3dPushConstants push_constants = {};
+    push_constants.tex_idx = base_tex->item.descriptor_set_idx;
+
     Model3DNode* node = PushStruct(vk_ctx->draw_frame_arena, Model3DNode);
     node->vertex_alloc = *vertex_buffer_allocation;
     node->index_alloc = *index_buffer_allocation;
-    node->texture_handle = texture_handle;
+    node->push_constants = push_constants;
     node->index_count = index_count;
     node->index_buffer_offset = index_buffer_offset;
     node->depth_write_per_draw_enabled = depth_write_per_draw_call_only;
@@ -1742,8 +1715,7 @@ model_3d_bucket_add(BufferAllocation* vertex_buffer_allocation,
 
 static void
 model_3d_instance_bucket_add(BufferAllocation* vertex_buffer_allocation,
-                             BufferAllocation* index_buffer_allocation,
-                             VkDescriptorSet texture_handle,
+                             BufferAllocation* index_buffer_allocation, render::Handle tex_handle,
                              render::BufferInfo* instance_buffer_info)
 {
     U32 align = 16;
@@ -1751,13 +1723,19 @@ model_3d_instance_bucket_add(BufferAllocation* vertex_buffer_allocation,
     DrawFrame* draw_frame = vk_ctx->draw_frame;
     Model3DInstance* instance_draw = &draw_frame->model_3D_instance_draw;
 
+    render::AssetItem<Texture>* asset_tex =
+        asset_manager_item_get(&vk_ctx->asset_manager->texture_list, tex_handle);
+    Texture* tex = &asset_tex->item;
+
+    Model3dInstancePushConstants push_constants = {.tex_idx = tex->descriptor_set_idx};
+
     Model3DInstanceNode* node = PushStruct(vk_ctx->draw_frame_arena, Model3DInstanceNode);
     U32 align_pst = instance_draw->total_instance_buffer_byte_count + (align - 1);
     align_pst -= align_pst % align;
     node->instance_buffer_offset = align_pst;
     node->vertex_alloc = *vertex_buffer_allocation;
     node->index_alloc = *index_buffer_allocation;
-    node->texture_handle = texture_handle;
+    node->push_constants = push_constants;
     node->instance_buffer_info = *instance_buffer_info;
     instance_draw->total_instance_buffer_byte_count +=
         node->instance_buffer_offset + instance_buffer_info->buffer.size;
@@ -1847,12 +1825,15 @@ model_3d_rendering()
     scissor.extent = swapchain_extent;
     vkCmdSetScissor(cmd_buffer, 0, 1, &scissor);
 
-    VkDescriptorSet descriptor_sets[2] = {vk_ctx->camera_descriptor_sets[vk_ctx->current_frame]};
+    VkDescriptorSet descriptor_sets[2] = {vk_ctx->camera_descriptor_sets[vk_ctx->current_frame],
+                                          vk_ctx->texture_descriptor_set};
 
     VkDeviceSize offsets[] = {0};
     for (Model3DNode* node = draw_frame->model_3D_list.first; node; node = node->next)
     {
-        descriptor_sets[1] = node->texture_handle;
+        vkCmdPushConstants(cmd_buffer, model_3D_pipeline->pipeline_layout,
+                           VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(Model3dPushConstants),
+                           &node->push_constants);
         vkCmdBindDescriptorSets(cmd_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS,
                                 model_3D_pipeline->pipeline_layout, 0, ArrayCount(descriptor_sets),
                                 descriptor_sets, 0, NULL);

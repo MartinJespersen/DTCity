@@ -639,8 +639,8 @@ car_sim_create(String8 asset_path, String8 texture_path, U32 car_count, Road* ro
 
     car_sim->texture_path =
         str8_path_from_str8_list(arena, {texture_path, S("car_collection.ktx2")});
-    car_sim->texture_handle = render::texture_load_async(
-        &car_sim->sampler_info, car_sim->texture_path, render::PipelineLayoutType::Model3DInstance);
+    car_sim->texture_handle =
+        render::texture_load_async(&car_sim->sampler_info, car_sim->texture_path);
     car_sim->vertex_handle = render::buffer_load(&car_sim->vertex_buffer);
     car_sim->index_handle = render::buffer_load(&car_sim->index_buffer);
 
@@ -809,10 +809,10 @@ buildings_create(String8 cache_path, String8 texture_path, F32 road_height, Rng2
         str8_path_from_str8_list(arena, {texture_path, S("brick_wall.ktx2")});
     buildings->roof_texture_path =
         str8_path_from_str8_list(arena, {texture_path, S("concrete042A.ktx2")});
-    render::Handle facade_texture_handle = render::texture_load_async(
-        sampler_info, buildings->facade_texture_path, render::PipelineLayoutType::Model3D);
-    render::Handle roof_texture_handle = render::texture_load_async(
-        sampler_info, buildings->roof_texture_path, render::PipelineLayoutType::Model3D);
+    render::Handle facade_texture_handle =
+        render::texture_load_async(sampler_info, buildings->facade_texture_path);
+    render::Handle roof_texture_handle =
+        render::texture_load_async(sampler_info, buildings->roof_texture_path);
 
     BuildingRenderInfo render_info;
     city::buildings_buffers_create(arena, road_height, &render_info);
@@ -1255,8 +1255,7 @@ land_create(Arena* arena, String8 glb_path)
         {
             gltfw_Texture* texture = &glb_data.textures.data[i];
             render::SamplerInfo sampler_info = city::sampler_from_cgltf_sampler(texture->sampler);
-            tex_handles.data[i] =
-                render::texture_handle_create(&sampler_info, render::PipelineLayoutType::Model3D);
+            tex_handles.data[i] = render::texture_handle_create(&sampler_info);
             render::texture_gpu_upload_sync(tex_handles.data[i], texture->tex_buf);
         }
     }
@@ -1516,8 +1515,7 @@ road_create(String8 texture_path, String8 cache_path, String8 data_dir, Rng2F64 
     road->texture_path =
         str8_path_from_str8_list(road->arena, {texture_path, S("road_texture.ktx2")});
 
-    render::Handle texture_handle = render::texture_load_async(
-        sampler_info, road->texture_path, render::PipelineLayoutType::Blend3D_Tex);
+    render::Handle texture_handle = render::texture_load_async(sampler_info, road->texture_path);
     render::Handle vertex_handle = render::buffer_load(&vertex_buffer_info);
     render::Handle index_handle = render::buffer_load(&index_buffer_info);
 

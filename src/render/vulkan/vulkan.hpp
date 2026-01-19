@@ -27,8 +27,6 @@ struct Texture
     BufferAllocation staging_buffer;
     ImageResource image_resource;
     VkSampler sampler;
-    VkDescriptorSetLayout desc_set_layout;
-    VkDescriptorSet desc_set;
     U32 descriptor_set_idx;
 };
 
@@ -84,7 +82,6 @@ struct Pipeline
 {
     VkPipeline pipeline;
     VkPipelineLayout pipeline_layout;
-    Buffer<VkDescriptorSetLayout> descriptor_set_layout;
 };
 
 struct PendingDeletion
@@ -126,6 +123,11 @@ struct AssetManager
     DeletionQueue* deletion_queue;
 };
 
+struct Model3dPushConstants
+{
+    U32 tex_idx;
+};
+
 struct Model3DNode
 {
     Model3DNode* next;
@@ -134,7 +136,12 @@ struct Model3DNode
     U32 index_buffer_offset;
     U32 index_count;
     BufferAllocation vertex_alloc;
-    VkDescriptorSet texture_handle;
+    Model3dPushConstants push_constants;
+};
+
+struct Model3dInstancePushConstants
+{
+    U32 tex_idx;
 };
 
 struct Model3DInstanceNode
@@ -144,7 +151,7 @@ struct Model3DInstanceNode
     BufferAllocation vertex_alloc;
     render::BufferInfo instance_buffer_info;
     U32 instance_buffer_offset;
-    VkDescriptorSet texture_handle;
+    Model3dInstancePushConstants push_constants;
 };
 
 struct Model3DNodeList
@@ -349,11 +356,9 @@ buffer_done_loading_thread(render::Handle handle);
 static void
 colormap_loading_thread(void* data, VkCommandBuffer cmd, render::Handle handle);
 static void
-colormap_done_loading_thread(render::Handle handle);
+texture_done_loading(render::Handle handle);
 g_internal void
 texture_loading_thread(void* data, VkCommandBuffer cmd, render::Handle handle);
-g_internal void
-texture_done_loading_thread(render::Handle handle);
 static ThreadInput*
 thread_input_create();
 static void
@@ -374,12 +379,11 @@ ctx_get();
 // ~mgj: Building
 static void
 model_3d_bucket_add(BufferAllocation* vertex_buffer_allocation,
-                    BufferAllocation* index_buffer_allocation, VkDescriptorSet texture_handle,
+                    BufferAllocation* index_buffer_allocation, render::Handle tex_handle,
                     B32 depth_write_per_draw_call_only, U32 index_buffer_offset, U32 index_count);
 static void
 model_3d_instance_bucket_add(BufferAllocation* vertex_buffer_allocation,
-                             BufferAllocation* index_buffer_allocation,
-                             VkDescriptorSet texture_handle,
+                             BufferAllocation* index_buffer_allocation, render::Handle tex_handle,
                              render::BufferInfo* instance_buffer_info);
 static void
 blend_3d_bucket_add(BufferAllocation* vertex_buffer_allocation,
