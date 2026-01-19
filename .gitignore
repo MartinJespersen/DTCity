@@ -10,7 +10,6 @@ build
 */BROWSE.VC.DB*
 *.zip
 *.tar.gz
-*.geojson
 *.gpkg
 *.sqlite
 *.qmd
