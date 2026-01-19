@@ -29,6 +29,7 @@ struct Texture
     VkSampler sampler;
     VkDescriptorSetLayout desc_set_layout;
     VkDescriptorSet desc_set;
+    U32 descriptor_set_idx;
 };
 
 static const U32 MAX_FRAMES_IN_FLIGHT = 2;
@@ -164,13 +165,18 @@ struct Model3DInstance
     U32 total_instance_buffer_byte_count;
 };
 
+struct Blend3dPushConstants
+{
+    U32 texture_index;
+    U32 colormap_index;
+};
+
 struct Blend3DNode
 {
     Blend3DNode* next;
     BufferAllocation index_alloc;
     BufferAllocation vertex_alloc;
-    VkDescriptorSet texture_handle;
-    VkDescriptorSet colormap_handle;
+    Blend3dPushConstants push_constants;
 };
 
 struct Blend3DList
@@ -235,6 +241,11 @@ struct Context
     BufferAllocationMapped camera_buffer_alloc_mapped[MAX_FRAMES_IN_FLIGHT];
     VkDescriptorSetLayout camera_descriptor_set_layout;
     VkDescriptorSet camera_descriptor_sets[MAX_FRAMES_IN_FLIGHT];
+
+    U32 max_texture_count;
+    U32 texture_binding;
+    VkDescriptorSetLayout texture_descriptor_set_layout;
+    VkDescriptorSet texture_descriptor_set;
 
     // ~mgj: Asset Streaming
     AssetManager* asset_manager;
@@ -303,7 +314,8 @@ static render::AssetItem<Texture>*
 asset_manager_texture_item_get(render::Handle handle);
 template <typename T>
 static render::AssetItem<T>*
-asset_manager_item_create(render::AssetItemList<T>* list, render::AssetItem<T>** free_list);
+asset_manager_item_create(render::AssetItemList<T>* list, render::AssetItem<T>** free_list,
+                          U32* out_desc_idx);
 template <typename T>
 static render::AssetItem<T>*
 asset_manager_item_get(render::AssetItemList<T>* list, render::Handle handle);
@@ -371,8 +383,8 @@ model_3d_instance_bucket_add(BufferAllocation* vertex_buffer_allocation,
                              render::BufferInfo* instance_buffer_info);
 static void
 blend_3d_bucket_add(BufferAllocation* vertex_buffer_allocation,
-                    BufferAllocation* index_buffer_allocation, VkDescriptorSet texture_handle,
-                    VkDescriptorSet colormap_handle);
+                    BufferAllocation* index_buffer_allocation, render::Handle texture_handle,
+                    render::Handle colormap_handle);
 static Pipeline
 model_3d_instance_pipeline_create(Context* vk_ctx, String8 shader_path);
 static Pipeline

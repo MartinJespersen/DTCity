@@ -229,6 +229,27 @@ static VkDescriptorSetLayout
 descriptor_set_layout_create(VkDevice device, VkDescriptorSetLayoutBinding* bindings,
                              U32 binding_count);
 
+// ~mgj: Descriptor Indexing / Bindless Descriptor Functions
+// Creates a descriptor set layout with descriptor indexing flags for bindless resources
+static VkDescriptorSetLayout
+descriptor_set_layout_create_bindless(VkDevice device, VkDescriptorSetLayoutBinding* bindings,
+                                      VkDescriptorBindingFlags* binding_flags, U32 binding_count);
+
+// Creates a descriptor set layout for a bindless texture array
+static VkDescriptorSetLayout
+descriptor_set_layout_create_bindless_textures(VkDevice device, U32 binding, U32 max_textures,
+                                               VkShaderStageFlags stage_flags);
+
+// Allocates a descriptor set with variable descriptor count for bindless arrays
+static VkDescriptorSet
+descriptor_set_allocate_bindless(VkDevice device, VkDescriptorPool desc_pool,
+                                 VkDescriptorSetLayout desc_set_layout, U32 variable_count);
+
+// Updates a single texture in a bindless descriptor set at the specified array index
+static void
+descriptor_set_update_bindless_texture(VkDevice device, VkDescriptorSet desc_set, U32 binding,
+                                       U32 array_index, VkImageView image_view, VkSampler sampler);
+
 // image helpers
 
 // queue family

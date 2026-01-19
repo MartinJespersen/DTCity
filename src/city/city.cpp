@@ -254,7 +254,7 @@ city_http_call_wrapper(Arena* arena, String8 query_str, HTTP_RequestParams* para
             break;
         }
 
-        DEBUG_LOG("DataFetch: Retrying...\n");
+        INFO_LOG("DataFetch: Retrying...");
         os_sleep_milliseconds(retry_time_interval_ms);
         retries_left -= 1;
     } while (retries_left >= 0);
@@ -1477,7 +1477,7 @@ road_create(String8 texture_path, String8 cache_path, String8 data_dir, Rng2F64 
     B8 error = true;
     while (error && json_result.error)
     {
-        ERROR_LOG("RoadCreate: Failed to create Road Data Structure\n Retrying...\n");
+        ERROR_LOG("RoadCreate: Failed to create Road Data Structure\n Retrying...");
         http_data = city::city_http_call_wrapper(scratch.arena, query_str, &params);
         if (http_data.size)
         {
@@ -1544,8 +1544,7 @@ road_create(String8 texture_path, String8 cache_path, String8 data_dir, Rng2F64 
     for (U32 i = 0; i < RoadOverlayOption_Count; i++)
     {
         road->colormap_handles[i] =
-            render::colormap_load_async(&colormap_sampler, colormap_arrays[i], colormap_byte_size,
-                                        render::PipelineLayoutType::Blend3D_ColorMap);
+            render::colormap_load_async(&colormap_sampler, colormap_arrays[i], colormap_byte_size);
     }
 
     road->handles[road->current_handle_idx] = {vertex_handle, index_handle, texture_handle,

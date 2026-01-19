@@ -22,9 +22,9 @@ render_ctx_create(String8 shader_path, io::IO* io_ctx, async::Threads* thread_po
         vk_ctx->validation_layers.data[i] = {str8_c_string(validation_layers[i])};
     }
 
-    const char* device_extensions[] = {VK_KHR_SWAPCHAIN_EXTENSION_NAME,
-                                       VK_KHR_DYNAMIC_RENDERING_EXTENSION_NAME,
-                                       VK_EXT_COLOR_WRITE_ENABLE_EXTENSION_NAME};
+    const char* device_extensions[] = {
+        VK_KHR_SWAPCHAIN_EXTENSION_NAME, VK_KHR_DYNAMIC_RENDERING_EXTENSION_NAME,
+        VK_EXT_COLOR_WRITE_ENABLE_EXTENSION_NAME, VK_EXT_DESCRIPTOR_INDEXING_EXTENSION_NAME};
     vk_ctx->device_extensions = BufferAlloc<String8>(vk_ctx->arena, ArrayCount(device_extensions));
     for (U32 i = 0; i < ArrayCount(device_extensions); i++)
     {
@@ -86,6 +86,16 @@ render_ctx_create(String8 shader_path, io::IO* io_ctx, async::Threads* thread_po
         vk_ctx->device, vk_ctx->queue_family_indices.graphicsFamilyIndex, thread_pool, GB(1));
 
     // ~mgj: Drawing (TODO: Move out of vulkan context to own module)
+
+    vk_ctx->max_texture_count = 10;
+    vk_ctx->texture_binding = 0;
+    vk_ctx->texture_descriptor_set_layout = vulkan::descriptor_set_layout_create_bindless_textures(
+        vk_ctx->device, vk_ctx->texture_binding, vk_ctx->max_texture_count,
+        VK_SHADER_STAGE_FRAGMENT_BIT);
+    vk_ctx->texture_descriptor_set = vulkan::descriptor_set_allocate_bindless(
+        vk_ctx->device, vk_ctx->descriptor_pool, vk_ctx->texture_descriptor_set_layout,
+        vk_ctx->max_texture_count);
+
     vk_ctx->draw_frame_arena = ArenaAlloc();
     vk_ctx->model_3D_pipeline = vulkan::model_3d_pipeline_create(vk_ctx, shader_path);
     vk_ctx->model_3D_instance_pipeline =
@@ -131,6 +141,8 @@ render_ctx_destroy()
     vulkan::pipeline_destroy(&vk_ctx->model_3D_pipeline);
     vulkan::pipeline_destroy(&vk_ctx->model_3D_instance_pipeline);
     vulkan::pipeline_destroy(&vk_ctx->blend_3d_pipeline);
+
+    vkDestroyDescriptorSetLayout(vk_ctx->device, vk_ctx->texture_descriptor_set_layout, nullptr);
 
     vmaDestroyAllocator(vk_ctx->allocator);
 
@@ -310,20 +322,40 @@ texture_handle_create(SamplerInfo* sampler_info, render::PipelineLayoutType pipe
             desc_set_layout = vk_ctx->model_3D_instance_pipeline.descriptor_set_layout.data[0];
             break;
         case render::PipelineLayoutType::Blend3D_Tex:
-            desc_set_layout = vk_ctx->blend_3d_pipeline.descriptor_set_layout.data[0];
-            break;
-        case render::PipelineLayoutType::Blend3D_ColorMap:
-            desc_set_layout = vk_ctx->blend_3d_pipeline.descriptor_set_layout.data[1];
-            break;
+        case render::PipelineLayoutType::Blend3D_ColorMap: break;
         default: InvalidPath;
     }
     // ~mgj: Assign values to texture
+    U32 out_idx;
     render::AssetItem<vulkan::Texture>* asset_item = vulkan::asset_manager_item_create(
-        &asset_manager->texture_list, &asset_manager->texture_free_list);
+        &asset_manager->texture_list, &asset_manager->texture_free_list, &out_idx);
     vulkan::Texture* texture = &asset_item->item;
     texture->sampler = vk_sampler;
-
     texture->desc_set_layout = desc_set_layout;
+    render::Handle texture_handle = {.u64 = (U64)asset_item};
+
+    return texture_handle;
+}
+
+g_internal Handle
+texture_handle_create(SamplerInfo* sampler_info)
+{
+    vulkan::Context* vk_ctx = vulkan::ctx_get();
+    vulkan::AssetManager* asset_manager = vk_ctx->asset_manager;
+    // ~mgj: Create sampler
+    VkSamplerCreateInfo sampler_create_info = {};
+    vulkan::sampler_create_info_from_sampler_info(sampler_info, &sampler_create_info);
+    sampler_create_info.anisotropyEnable = VK_TRUE;
+    sampler_create_info.maxAnisotropy = (F32)vk_ctx->msaa_samples;
+    VkSampler vk_sampler = vulkan::sampler_create(vk_ctx->device, &sampler_create_info);
+
+    // ~mgj: Assign values to texture
+    U32 out_idx;
+    render::AssetItem<vulkan::Texture>* asset_item = vulkan::asset_manager_item_create(
+        &asset_manager->texture_list, &asset_manager->texture_free_list, &out_idx);
+    vulkan::Texture* texture = &asset_item->item;
+    texture->sampler = vk_sampler;
+    texture->descriptor_set_idx = out_idx;
     render::Handle texture_handle = {.u64 = (U64)asset_item};
 
     return texture_handle;
@@ -344,8 +376,17 @@ texture_load_async(render::SamplerInfo* sampler_info, String8 texture_path,
     texture_load_info->tex_path = push_str8_copy(thread_input->arena, texture_path);
     thread_input->user_data = texture_load_info;
     thread_input->handle = render::texture_handle_create(sampler_info, pipeline_usage_type);
+
     thread_input->loading_func = vulkan::texture_loading_thread;
-    thread_input->done_loading_func = vulkan::texture_done_loading_thread;
+    if (pipeline_usage_type == render::PipelineLayoutType::Model3D ||
+        pipeline_usage_type == render::PipelineLayoutType::Model3DInstance)
+    {
+        thread_input->done_loading_func = vulkan::texture_done_loading_thread;
+    }
+    else
+    {
+        thread_input->done_loading_func = vulkan::colormap_done_loading_thread;
+    }
 
     async::QueueItem queue_input = {.data = thread_input, .worker_func = vulkan::thread_main};
     async::QueuePush(asset_manager->work_queue, &queue_input);
@@ -354,8 +395,7 @@ texture_load_async(render::SamplerInfo* sampler_info, String8 texture_path,
 }
 
 static render::Handle
-colormap_load_async(render::SamplerInfo* sampler_info, const U8* colormap_data, U64 colormap_size,
-                    render::PipelineLayoutType pipeline_usage_type)
+colormap_load_async(render::SamplerInfo* sampler_info, const U8* colormap_data, U64 colormap_size)
 {
     vulkan::Context* vk_ctx = vulkan::ctx_get();
     vulkan::AssetManager* asset_manager = vk_ctx->asset_manager;
@@ -367,7 +407,7 @@ colormap_load_async(render::SamplerInfo* sampler_info, const U8* colormap_data, 
     colormap_load_info->colormap_data = colormap_data;
     colormap_load_info->colormap_size = colormap_size;
 
-    thread_input->handle = render::texture_handle_create(sampler_info, pipeline_usage_type);
+    thread_input->handle = render::texture_handle_create(sampler_info);
     thread_input->user_data = colormap_load_info;
     thread_input->loading_func = vulkan::colormap_loading_thread;
     thread_input->done_loading_func = vulkan::colormap_done_loading_thread;
@@ -423,8 +463,9 @@ buffer_load(render::BufferInfo* buffer_info)
 
     vulkan::Context* vk_ctx = vulkan::ctx_get();
     vulkan::AssetManager* asset_manager = vk_ctx->asset_manager;
+    U32 out_idx;
     render::AssetItem<vulkan::BufferUpload>* asset_item = vulkan::asset_manager_item_create(
-        &asset_manager->buffer_list, &asset_manager->buffer_free_list);
+        &asset_manager->buffer_list, &asset_manager->buffer_free_list, &out_idx);
 
     // ~mgj: Create buffer allocation
     VmaAllocationCreateInfo vma_info = {0};
@@ -571,7 +612,7 @@ blend_3d_draw(render::Blend3DPipelineData pipeline_input)
     {
         vulkan::blend_3d_bucket_add(&asset_vertex_buffer->item.buffer_alloc,
                                     &asset_index_buffer->item.buffer_alloc,
-                                    asset_texture->item.desc_set, asset_colormap->item.desc_set);
+                                    pipeline_input.texture_handle, pipeline_input.colormap_handle);
     }
 }
 

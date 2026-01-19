@@ -222,9 +222,8 @@ texture_handle_create(SamplerInfo* sampler_info, render::PipelineLayoutType pipe
 g_internal Handle
 texture_load_async(SamplerInfo* sampler_info, String8 texture_path,
                    PipelineLayoutType pipeline_usage_type);
-g_internal Handle
-colormap_load_async(SamplerInfo* sampler_info, const U8* colormap_data, U64 colormap_size,
-                    PipelineLayoutType pipeline_usage_type);
+static render::Handle
+colormap_load_async(render::SamplerInfo* sampler_info, const U8* colormap_data, U64 colormap_size);
 g_internal void
 texture_gpu_upload_sync(Handle tex_handle, Buffer<U8> tex_bufs);
 

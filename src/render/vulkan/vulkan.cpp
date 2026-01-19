@@ -599,10 +599,12 @@ colormap_done_loading_thread(render::Handle handle)
 {
     Context* vk_ctx = ctx_get();
     render::AssetItem<Texture>* asset = asset_manager_texture_item_get(handle);
-    Texture* tex = &asset->item;
-    tex->desc_set = descriptor_set_create(
-        vk_ctx->arena, vk_ctx->device, vk_ctx->descriptor_pool, tex->desc_set_layout,
-        tex->image_resource.image_view_resource.image_view, tex->sampler);
+    Texture* texture = &asset->item;
+
+    vulkan::descriptor_set_update_bindless_texture(
+        vk_ctx->device, vk_ctx->texture_descriptor_set, 0, texture->descriptor_set_idx,
+        texture->image_resource.image_view_resource.image_view, texture->sampler);
+
     buffer_destroy(vk_ctx->allocator, &asset->item.staging_buffer);
     asset->is_loaded = 1;
 }
@@ -990,24 +992,6 @@ blend_3d_pipeline_create(String8 shader_path)
     Context* vk_ctx = ctx_get();
     ScratchScope scratch = ScratchScope(0, 0);
 
-    VkDescriptorSetLayoutBinding tex_desc_set_layout_info[] = {{
-        .binding = 0,
-        .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-        .descriptorCount = 1,
-        .stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT,
-    }};
-    VkDescriptorSetLayout tex_desc_set_layout = descriptor_set_layout_create(
-        vk_ctx->device, tex_desc_set_layout_info, ArrayCount(tex_desc_set_layout_info));
-
-    VkDescriptorSetLayoutBinding colormap_desc_set_layout_info[] = {{
-        .binding = 0,
-        .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-        .descriptorCount = 1,
-        .stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT,
-    }};
-    VkDescriptorSetLayout colormap_desc_set_layout = descriptor_set_layout_create(
-        vk_ctx->device, colormap_desc_set_layout_info, ArrayCount(colormap_desc_set_layout_info));
-
     String8 vert_path = CreatePathFromStrings(
         scratch.arena, Str8BufferFromCString(scratch.arena, {(char*)shader_path.str, "bin",
                                                              "colormap_blend_3d_vert.spv"}));
@@ -1104,12 +1088,20 @@ blend_3d_pipeline_create(String8 shader_path)
     color_blending.attachmentCount = ArrayCount(color_blend_attachments);
     color_blending.pAttachments = color_blend_attachments;
 
-    VkDescriptorSetLayout descriptor_set_layouts[] = {
-        vk_ctx->camera_descriptor_set_layout, tex_desc_set_layout, colormap_desc_set_layout};
+    VkDescriptorSetLayout descriptor_set_layouts[] = {vk_ctx->camera_descriptor_set_layout,
+                                                      vk_ctx->texture_descriptor_set_layout};
+
+    VkPushConstantRange push_constant_range{};
+    push_constant_range.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+    push_constant_range.offset = 0;
+    push_constant_range.size = sizeof(Blend3dPushConstants);
+
     VkPipelineLayoutCreateInfo pipelineLayoutInfo{};
     pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
     pipelineLayoutInfo.setLayoutCount = ArrayCount(descriptor_set_layouts);
     pipelineLayoutInfo.pSetLayouts = descriptor_set_layouts;
+    pipelineLayoutInfo.pPushConstantRanges = &push_constant_range;
+    pipelineLayoutInfo.pushConstantRangeCount = 1;
 
     VkPipelineDepthStencilStateCreateInfo depth_stencil{};
     depth_stencil.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
@@ -1148,14 +1140,7 @@ blend_3d_pipeline_create(String8 shader_path)
     VK_CHECK_RESULT(vkCreateGraphicsPipelines(vk_ctx->device, VK_NULL_HANDLE, 1,
                                               &pipeline_create_info, nullptr, &pipeline));
 
-    Buffer<VkDescriptorSetLayout> desc_layouts =
-        BufferAlloc<VkDescriptorSetLayout>(vk_ctx->arena, 2);
-    desc_layouts.data[0] = tex_desc_set_layout;
-    desc_layouts.data[1] = colormap_desc_set_layout;
-
-    Pipeline pipeline_info = {.pipeline = pipeline,
-                              .pipeline_layout = pipeline_layout,
-                              .descriptor_set_layout = desc_layouts};
+    Pipeline pipeline_info = {.pipeline = pipeline, .pipeline_layout = pipeline_layout};
     return pipeline_info;
 }
 
@@ -1549,11 +1534,19 @@ asset_manager_texture_item_get(render::Handle handle)
 
 template <typename T>
 static render::AssetItem<T>*
-asset_manager_item_create(render::AssetItemList<T>* list, render::AssetItem<T>** free_list)
+asset_manager_item_create(render::AssetItemList<T>* list, render::AssetItem<T>** free_list,
+                          U32* out_desc_idx)
 {
     Context* vk_ctx = ctx_get();
     AssetManager* asset_mng = vk_ctx->asset_manager;
     Arena* arena = asset_mng->arena;
+
+    U32 i = 0;
+    for (render::AssetItem<T>* node = list->first; node; node = node->next)
+    {
+        i++;
+    }
+    *out_desc_idx = i;
 
     render::AssetItem<T>* asset_item = *free_list;
     if (asset_item)
@@ -1773,8 +1766,8 @@ model_3d_instance_bucket_add(BufferAllocation* vertex_buffer_allocation,
 
 static void
 blend_3d_bucket_add(BufferAllocation* vertex_buffer_allocation,
-                    BufferAllocation* index_buffer_allocation, VkDescriptorSet texture_handle,
-                    VkDescriptorSet colormap_handle)
+                    BufferAllocation* index_buffer_allocation, render::Handle texture_handle,
+                    render::Handle colormap_handle)
 {
     Context* vk_ctx = ctx_get();
     DrawFrame* draw_frame = vk_ctx->draw_frame;
@@ -1782,8 +1775,14 @@ blend_3d_bucket_add(BufferAllocation* vertex_buffer_allocation,
     Blend3DNode* node = PushStruct(vk_ctx->draw_frame_arena, Blend3DNode);
     node->vertex_alloc = *vertex_buffer_allocation;
     node->index_alloc = *index_buffer_allocation;
-    node->texture_handle = texture_handle;
-    node->colormap_handle = colormap_handle;
+
+    render::AssetItem<Texture>* base_tex = asset_manager_texture_item_get(texture_handle);
+    render::AssetItem<Texture>* colormap_tex = asset_manager_texture_item_get(colormap_handle);
+    Assert(base_tex);
+    Assert(colormap_tex);
+
+    node->push_constants = {.texture_index = base_tex->item.descriptor_set_idx,
+                            .colormap_index = colormap_tex->item.descriptor_set_idx};
 
     SLLQueuePush(draw_frame->blend_3d_list.first, draw_frame->blend_3d_list.last, node);
 }
@@ -1902,14 +1901,15 @@ blend_3d_rendering()
     scissor.extent = swapchain_extent;
     vkCmdSetScissor(cmd_buffer, 0, 1, &scissor);
 
-    VkDescriptorSet descriptor_sets[3] = {vk_ctx->camera_descriptor_sets[vk_ctx->current_frame]};
+    VkDescriptorSet descriptor_sets[2] = {vk_ctx->camera_descriptor_sets[vk_ctx->current_frame],
+                                          vk_ctx->texture_descriptor_set};
 
     VkDeviceSize offsets[] = {0};
     for (Blend3DNode* node = draw_frame->blend_3d_list.first; node; node = node->next)
     {
-        descriptor_sets[1] = node->texture_handle;
-        descriptor_sets[2] = node->colormap_handle;
-
+        vkCmdPushConstants(cmd_buffer, blend_3d_pipeline->pipeline_layout,
+                           VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(Blend3dPushConstants),
+                           &node->push_constants);
         U32 index_count = node->index_alloc.size / sizeof(U32);
         vkCmdBindDescriptorSets(cmd_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS,
                                 blend_3d_pipeline->pipeline_layout, 0, ArrayCount(descriptor_sets),

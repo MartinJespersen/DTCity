@@ -268,10 +268,26 @@ logical_device_create(Arena* arena, Context* vk_ctx)
     };
 
     // setup linked list of device features
+    VkPhysicalDeviceDescriptorIndexingFeatures descriptor_indexing_features{};
+    descriptor_indexing_features.sType =
+        VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_INDEXING_FEATURES;
+    descriptor_indexing_features.shaderSampledImageArrayNonUniformIndexing = VK_TRUE;
+    descriptor_indexing_features.shaderStorageBufferArrayNonUniformIndexing = VK_FALSE;
+    descriptor_indexing_features.shaderStorageImageArrayNonUniformIndexing = VK_FALSE;
+    descriptor_indexing_features.shaderUniformBufferArrayNonUniformIndexing = VK_FALSE;
+    descriptor_indexing_features.descriptorBindingSampledImageUpdateAfterBind = VK_TRUE;
+    descriptor_indexing_features.descriptorBindingStorageImageUpdateAfterBind = VK_FALSE;
+    descriptor_indexing_features.descriptorBindingStorageBufferUpdateAfterBind = VK_FALSE;
+    descriptor_indexing_features.descriptorBindingUniformBufferUpdateAfterBind = VK_FALSE;
+    descriptor_indexing_features.descriptorBindingPartiallyBound = VK_TRUE;
+    descriptor_indexing_features.descriptorBindingVariableDescriptorCount = VK_TRUE;
+    descriptor_indexing_features.runtimeDescriptorArray = VK_TRUE;
+    descriptor_indexing_features.pNext = &colorWriteEnableFeatures;
+
     VkPhysicalDeviceSynchronization2Features sync2_features{};
     sync2_features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SYNCHRONIZATION_2_FEATURES;
     sync2_features.synchronization2 = VK_TRUE;
-    sync2_features.pNext = &colorWriteEnableFeatures;
+    sync2_features.pNext = &descriptor_indexing_features;
 
     VkPhysicalDeviceDynamicRenderingFeatures dynamic_rendering_features{};
     dynamic_rendering_features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DYNAMIC_RENDERING_FEATURES;
@@ -1367,7 +1383,8 @@ descriptor_pool_create(Context* vk_ctx)
     poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
     poolInfo.poolSizeCount = pool_size_count;
     poolInfo.pPoolSizes = pool_sizes;
-
+    // Enable update after bind for descriptor indexing support
+    poolInfo.flags = VK_DESCRIPTOR_POOL_CREATE_UPDATE_AFTER_BIND_BIT;
     poolInfo.maxSets = 20;
 
     if (vkCreateDescriptorPool(vk_ctx->device, &poolInfo, nullptr, &vk_ctx->descriptor_pool) !=
@@ -1393,6 +1410,99 @@ descriptor_set_layout_create(VkDevice device, VkDescriptorSetLayoutBinding* bind
     }
 
     return desc_set_layout;
+}
+
+// ~mgj: Descriptor Indexing / Bindless Descriptor Set Layout Creation
+// Creates a descriptor set layout with descriptor indexing flags for bindless resources
+static VkDescriptorSetLayout
+descriptor_set_layout_create_bindless(VkDevice device, VkDescriptorSetLayoutBinding* bindings,
+                                      VkDescriptorBindingFlags* binding_flags, U32 binding_count)
+{
+    VkDescriptorSetLayoutBindingFlagsCreateInfo binding_flags_info{};
+    binding_flags_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_BINDING_FLAGS_CREATE_INFO;
+    binding_flags_info.bindingCount = binding_count;
+    binding_flags_info.pBindingFlags = binding_flags;
+
+    VkDescriptorSetLayoutCreateInfo layoutInfo{};
+    layoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+    layoutInfo.pNext = &binding_flags_info;
+    layoutInfo.flags = VK_DESCRIPTOR_SET_LAYOUT_CREATE_UPDATE_AFTER_BIND_POOL_BIT;
+    layoutInfo.bindingCount = binding_count;
+    layoutInfo.pBindings = bindings;
+
+    VkDescriptorSetLayout desc_set_layout;
+    if (vkCreateDescriptorSetLayout(device, &layoutInfo, nullptr, &desc_set_layout) != VK_SUCCESS)
+    {
+        exit_with_error("failed to create bindless descriptor set layout!");
+    }
+
+    return desc_set_layout;
+}
+
+// Creates a descriptor set layout for a bindless texture array
+// max_textures: Maximum number of textures in the array (can be partially bound)
+static VkDescriptorSetLayout
+descriptor_set_layout_create_bindless_textures(VkDevice device, U32 binding, U32 max_textures,
+                                               VkShaderStageFlags stage_flags)
+{
+    VkDescriptorSetLayoutBinding layout_binding{};
+    layout_binding.binding = binding;
+    layout_binding.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+    layout_binding.descriptorCount = max_textures;
+    layout_binding.stageFlags = stage_flags;
+    layout_binding.pImmutableSamplers = nullptr;
+
+    VkDescriptorBindingFlags binding_flags = VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT |
+                                             VK_DESCRIPTOR_BINDING_UPDATE_AFTER_BIND_BIT |
+                                             VK_DESCRIPTOR_BINDING_VARIABLE_DESCRIPTOR_COUNT_BIT;
+
+    return descriptor_set_layout_create_bindless(device, &layout_binding, &binding_flags, 1);
+}
+
+// Allocates a descriptor set with variable descriptor count for bindless arrays
+static VkDescriptorSet
+descriptor_set_allocate_bindless(VkDevice device, VkDescriptorPool desc_pool,
+                                 VkDescriptorSetLayout desc_set_layout, U32 variable_count)
+{
+    VkDescriptorSetVariableDescriptorCountAllocateInfo variable_count_info{};
+    variable_count_info.sType =
+        VK_STRUCTURE_TYPE_DESCRIPTOR_SET_VARIABLE_DESCRIPTOR_COUNT_ALLOCATE_INFO;
+    variable_count_info.descriptorSetCount = 1;
+    variable_count_info.pDescriptorCounts = &variable_count;
+
+    VkDescriptorSetAllocateInfo allocInfo{};
+    allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+    allocInfo.pNext = &variable_count_info;
+    allocInfo.descriptorPool = desc_pool;
+    allocInfo.descriptorSetCount = 1;
+    allocInfo.pSetLayouts = &desc_set_layout;
+
+    VkDescriptorSet desc_set;
+    VK_CHECK_RESULT(vkAllocateDescriptorSets(device, &allocInfo, &desc_set));
+
+    return desc_set;
+}
+
+// Updates a single texture in a bindless descriptor set at the specified array index
+static void
+descriptor_set_update_bindless_texture(VkDevice device, VkDescriptorSet desc_set, U32 binding,
+                                       U32 array_index, VkImageView image_view, VkSampler sampler)
+{
+    VkDescriptorImageInfo image_info{};
+    image_info.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+    image_info.imageView = image_view;
+    image_info.sampler = sampler;
+
+    VkWriteDescriptorSet write{};
+    write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+    write.dstSet = desc_set;
+    write.dstBinding = binding;
+    write.dstArrayElement = array_index;
+    write.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+    write.descriptorCount = 1;
+    write.pImageInfo = &image_info;
+
+    vkUpdateDescriptorSets(device, 1, &write, 0, nullptr);
 }
 
 static VkDescriptorSet
