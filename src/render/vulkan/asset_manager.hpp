@@ -120,6 +120,42 @@ asset_manager_create(VkPhysicalDevice physical_device, VkDevice device, VkInstan
 static void
 asset_manager_destroy(AssetManager* asset_manager);
 
+//~mgj: Buffer Allocation Functions (VMA)
+// buffer usage patterns with VMA:
+// https://gpuopen-librariesandsdks.github.io/VulkanMemoryAllocator/html/usage_patterns.html
+static BufferAllocation
+buffer_allocation_create(VkDeviceSize size, VkBufferUsageFlags buffer_usage,
+                         VmaAllocationCreateInfo vma_info);
+static void
+buffer_destroy(BufferAllocation* buffer_allocation);
+static void
+buffer_mapped_destroy(BufferAllocationMapped* mapped_buffer);
+static BufferAllocationMapped
+buffer_mapped_create(VkDeviceSize size, VkBufferUsageFlags buffer_usage);
+static void
+buffer_mapped_update(VkCommandBuffer cmd_buffer, BufferAllocationMapped mapped_buffer);
+static BufferAllocation
+staging_buffer_create(VkDeviceSize size);
+static void
+buffer_alloc_create_or_resize(U32 total_buffer_byte_count, BufferAllocation* buffer_alloc,
+                              VkBufferUsageFlags usage);
+static void
+buffer_readback_create(VkDeviceSize size, VkBufferUsageFlags buffer_usage,
+                       BufferReadback* out_buffer_readback);
+static void
+buffer_readback_destroy(BufferReadback* out_buffer_readback);
+
+//~mgj: Image Allocation Functions (VMA)
+static ImageAllocation
+image_allocation_create(U32 width, U32 height, VkSampleCountFlagBits numSamples, VkFormat format,
+                        VkImageTiling tiling, VkImageUsageFlags usage, U32 mipmap_level,
+                        VmaAllocationCreateInfo vma_info,
+                        VkImageType image_type = VK_IMAGE_TYPE_2D);
+static void
+image_allocation_destroy(ImageAllocation image_alloc);
+static void
+image_resource_destroy(ImageResource image);
+
 //~mgj: Deferred Deletion Queue
 static void
 deletion_queue_push(DeletionQueue* queue, render::Handle handle, render::AssetItemType type,

@@ -110,10 +110,6 @@ road_render_buffers_create(Arena* arena, Buffer<city::RoadEdge> edge_buffer, F32
         osm::Way* way = &way_node->way;
 
         F32 road_width = tag_value_get(scratch.arena, S("width"), default_road_width, way->tags);
-        if (road_width != default_road_width)
-        {
-            printf("Road width is not default: %f\n", road_width);
-        }
 
         RoadSegment road_segment;
         RoadSegmentFromTwoRoadNodes(&road_segment, start_node, end_node, default_road_width);

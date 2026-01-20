@@ -131,36 +131,7 @@ struct Frustum
 // ~mgj: Globals
 static PFN_vkCmdSetColorWriteEnableEXT cmd_set_color_write_enable_ext = VK_NULL_HANDLE;
 
-// buffer usage patterns with VMA:
-// https://gpuopen-librariesandsdks.github.io/VulkanMemoryAllocator/html/usage_patterns.html
-static BufferAllocation
-buffer_allocation_create(VmaAllocator allocator, VkDeviceSize size, VkBufferUsageFlags buffer_usage,
-                         VmaAllocationCreateInfo vma_info);
-static void
-buffer_mapped_update(VkCommandBuffer cmd_buffer, VmaAllocator allocator,
-                     BufferAllocationMapped mapped_buffer);
-
-static BufferAllocationMapped
-buffer_mapped_create(VmaAllocator allocator, VkDeviceSize size, VkBufferUsageFlags buffer_usage);
-static void
-buffer_destroy(VmaAllocator allocator, BufferAllocation* buffer_allocation);
-static void
-buffer_mapped_destroy(VmaAllocator allocator, BufferAllocationMapped* mapped_buffer);
-
-static void
-buffer_readback_create(VmaAllocator allocator, VkDeviceSize size, VkBufferUsageFlags buffer_usage,
-                       BufferReadback* out_buffer_readback);
-static void
-buffer_readback_destroy(VmaAllocator allocator, BufferReadback* out_buffer_readback);
-static BufferAllocation
-staging_buffer_create(VmaAllocator allocator, VkDeviceSize size);
-
-// ~mgj: Images
-static ImageAllocation
-image_allocation_create(VmaAllocator allocator, U32 width, U32 height,
-                        VkSampleCountFlagBits numSamples, VkFormat format, VkImageTiling tiling,
-                        VkImageUsageFlags usage, U32 mipmap_level, VmaAllocationCreateInfo vma_info,
-                        VkImageType image_type = VK_IMAGE_TYPE_2D);
+// ~mgj: Images (non-VMA functions remain here)
 static void
 swapchain_image_resource_create(VkDevice device, SwapchainResources* swapchain_resources,
                                 U32 image_count);
@@ -170,11 +141,6 @@ image_view_resource_create(VkDevice device, VkImage image, VkFormat format,
                            VkImageViewType image_type = VK_IMAGE_VIEW_TYPE_2D);
 static void
 image_view_resource_destroy(ImageViewResource image_view_resource);
-static void
-image_allocation_destroy(VmaAllocator allocator, ImageAllocation image_alloc);
-
-static void
-image_resource_destroy(VmaAllocator allocator, ImageResource image);
 
 // ~mgj: Swapchain functions
 static U32
@@ -187,10 +153,6 @@ static ShaderModuleInfo
 shader_stage_from_spirv(Arena* arena, VkDevice device, VkShaderStageFlagBits flag, String8 path);
 static VkShaderModule
 shader_module_create(VkDevice device, Buffer<U8> buffer);
-
-static void
-buffer_alloc_create_or_resize(VmaAllocator allocator, U32 total_buffer_byte_count,
-                              BufferAllocation* buffer_alloc, VkBufferUsageFlags usage);
 
 static QueueFamilyIndices
 queue_family_indices_from_bit_fields(QueueFamilyIndexBits queueFamilyBits);
@@ -269,9 +231,9 @@ static VkCommandPool
 command_pool_create(VkDevice device, VkCommandPoolCreateInfo* poolInfo);
 
 static void
-color_resources_cleanup(Context* vk_ctx);
+color_resources_cleanup(ImageResource color_image_resource);
 static void
-swapchain_cleanup(VkDevice device, VmaAllocator allocator, SwapchainResources* swapchain_resources);
+swapchain_cleanup(VkDevice device, SwapchainResources* swapchain_resources);
 static void
 create_instance(Context* vk_ctx);
 static void

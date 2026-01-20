@@ -545,8 +545,7 @@ model_3d_instance_rendering()
 
     VkDescriptorSet descriptor_sets[2] = {vk_ctx->camera_descriptor_sets[vk_ctx->current_frame],
                                           vk_ctx->texture_descriptor_set};
-    buffer_alloc_create_or_resize(vk_ctx->asset_manager->allocator,
-                                  model_3D_instance_draw->total_instance_buffer_byte_count,
+    buffer_alloc_create_or_resize(model_3D_instance_draw->total_instance_buffer_byte_count,
                                   instance_buffer_alloc, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT);
 
     for (Model3DInstanceNode* node = vk_ctx->draw_frame->model_3D_instance_draw.list.first; node;
@@ -585,8 +584,8 @@ camera_uniform_buffer_create(Context* vk_ctx)
 
     for (U32 i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
     {
-        vk_ctx->camera_buffer_alloc_mapped[i] = buffer_mapped_create(
-            vk_ctx->asset_manager->allocator, camera_buffer_size, buffer_usage);
+        vk_ctx->camera_buffer_alloc_mapped[i] =
+            buffer_mapped_create(camera_buffer_size, buffer_usage);
     }
 }
 
@@ -603,8 +602,7 @@ camera_uniform_buffer_update(Context* vk_ctx, ui::Camera* camera, Vec2F32 screen
     ubo->view = camera->view_matrix;
     ubo->proj = camera->projection_matrix;
 
-    buffer_mapped_update(vk_ctx->command_buffers.data[current_frame],
-                         vk_ctx->asset_manager->allocator, *buffer);
+    buffer_mapped_update(vk_ctx->command_buffers.data[current_frame], *buffer);
 }
 
 static void
@@ -687,8 +685,7 @@ camera_cleanup(Context* vk_ctx)
 {
     for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
     {
-        buffer_mapped_destroy(vk_ctx->asset_manager->allocator,
-                              &vk_ctx->camera_buffer_alloc_mapped[i]);
+        buffer_mapped_destroy(&vk_ctx->camera_buffer_alloc_mapped[i]);
     }
 
     vkDestroyDescriptorSetLayout(vk_ctx->device, vk_ctx->camera_descriptor_set_layout, NULL);

@@ -75,9 +75,8 @@ depth_resources_create(Context* vk_ctx, SwapchainResources* swapchain_resources)
     };
 
     ImageAllocation image_alloc = image_allocation_create(
-        vk_ctx->asset_manager->allocator, swapchain_resources->swapchain_extent.width,
-        swapchain_resources->swapchain_extent.height, vk_ctx->msaa_samples, depth_format,
-        VK_IMAGE_TILING_OPTIMAL,
+        swapchain_resources->swapchain_extent.width, swapchain_resources->swapchain_extent.height,
+        vk_ctx->msaa_samples, depth_format, VK_IMAGE_TILING_OPTIMAL,
         VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT, 1, vma_info);
 
     ImageViewResource image_view_resource = image_view_resource_create(
@@ -115,13 +114,13 @@ object_id_image_resource_create(SwapchainResources* swapchain_resources, U32 ima
         ImageAllocation* image_alloc = &object_id_image_resource->image_alloc;
         ImageViewResource* image_view_res = &object_id_image_resource->image_view_resource;
 
-        *image_alloc = image_allocation_create(
-            vk_ctx->asset_manager->allocator, swapchain_resources->swapchain_extent.width,
-            swapchain_resources->swapchain_extent.height, vk_ctx->msaa_samples, attachment_format,
-            tiling,
-            VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT |
-                VK_IMAGE_USAGE_TRANSFER_SRC_BIT,
-            1, vma_info);
+        *image_alloc = image_allocation_create(swapchain_resources->swapchain_extent.width,
+                                               swapchain_resources->swapchain_extent.height,
+                                               vk_ctx->msaa_samples, attachment_format, tiling,
+                                               VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT |
+                                                   VK_IMAGE_USAGE_TRANSFER_DST_BIT |
+                                                   VK_IMAGE_USAGE_TRANSFER_SRC_BIT,
+                                               1, vma_info);
 
         *image_view_res = image_view_resource_create(
             vk_ctx->device, image_alloc->image, attachment_format, VK_IMAGE_ASPECT_COLOR_BIT, 1);
@@ -134,7 +133,7 @@ object_id_image_resource_create(SwapchainResources* swapchain_resources, U32 ima
             &object_id_image_resolve_resource->image_view_resource;
 
         *image_resolve_alloc = image_allocation_create(
-            vk_ctx->asset_manager->allocator, swapchain_resources->swapchain_extent.width,
+            swapchain_resources->swapchain_extent.width,
             swapchain_resources->swapchain_extent.height, VK_SAMPLE_COUNT_1_BIT, attachment_format,
             tiling,
             VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT |
@@ -152,8 +151,7 @@ object_id_image_resource_create(SwapchainResources* swapchain_resources, U32 ima
     swapchain_resources->object_id_image_resources = object_id_image_resources;
     swapchain_resources->object_id_image_resolve_resources = object_id_image_resolve_resources;
 
-    buffer_readback_create(vk_ctx->asset_manager->allocator, buffer_size,
-                           VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+    buffer_readback_create(buffer_size, VK_BUFFER_USAGE_TRANSFER_DST_BIT,
                            &swapchain_resources->object_id_buffer_readback);
 }
 
@@ -518,15 +516,15 @@ check_device_extension_support(Context* vk_ctx, VkPhysicalDevice device)
 }
 
 static void
-color_resources_cleanup(VmaAllocator allocator, ImageResource color_image_resource)
+color_resources_cleanup(ImageResource color_image_resource)
 {
-    image_resource_destroy(allocator, color_image_resource);
+    image_resource_destroy(color_image_resource);
 }
 
 static void
-depth_resources_cleanup(VmaAllocator allocator, ImageResource depth_image_resource)
+depth_resources_cleanup(ImageResource depth_image_resource)
 {
-    image_resource_destroy(allocator, depth_image_resource);
+    image_resource_destroy(depth_image_resource);
 }
 
 static void
@@ -536,14 +534,11 @@ object_id_resources_cleanup()
     SwapchainResources* swapchain_resources = vk_ctx->swapchain_resources;
     for (U32 i = 0; i < swapchain_resources->object_id_image_resources.size; i++)
     {
-        image_resource_destroy(vk_ctx->asset_manager->allocator,
-                               swapchain_resources->object_id_image_resources.data[i]);
-        image_resource_destroy(vk_ctx->asset_manager->allocator,
-                               swapchain_resources->object_id_image_resolve_resources.data[i]);
+        image_resource_destroy(swapchain_resources->object_id_image_resources.data[i]);
+        image_resource_destroy(swapchain_resources->object_id_image_resolve_resources.data[i]);
     }
 
-    buffer_readback_destroy(vk_ctx->asset_manager->allocator,
-                            &swapchain_resources->object_id_buffer_readback);
+    buffer_readback_destroy(&swapchain_resources->object_id_buffer_readback);
 }
 
 static void
@@ -621,57 +616,6 @@ shader_module_create(VkDevice device, ::Buffer<U8> buffer)
     }
 
     return shaderModule;
-}
-
-static void
-buffer_destroy(VmaAllocator allocator, BufferAllocation* buffer_allocation)
-{
-    if (buffer_allocation->buffer != VK_NULL_HANDLE)
-    {
-        MEMORY_LOG("VMA Buffer Destroyed: %p (size: %llu bytes)", buffer_allocation->buffer,
-                   buffer_allocation->size);
-        vmaDestroyBuffer(allocator, buffer_allocation->buffer, buffer_allocation->allocation);
-        buffer_allocation->buffer = VK_NULL_HANDLE;
-    }
-}
-
-static void
-buffer_mapped_destroy(VmaAllocator allocator, BufferAllocationMapped* mapped_buffer)
-{
-    buffer_destroy(allocator, &mapped_buffer->buffer_alloc);
-    buffer_destroy(allocator, &mapped_buffer->staging_buffer_alloc);
-    ArenaRelease(mapped_buffer->arena);
-}
-
-static BufferAllocation
-staging_buffer_create(VmaAllocator allocator, VkDeviceSize size)
-{
-    VmaAllocationCreateInfo vma_staging_info = {0};
-    vma_staging_info.usage = VMA_MEMORY_USAGE_AUTO;
-    vma_staging_info.flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT;
-    vma_staging_info.requiredFlags = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT;
-    BufferAllocation staging_buffer = buffer_allocation_create(
-        allocator, size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, vma_staging_info);
-    return staging_buffer;
-}
-
-static void
-buffer_alloc_create_or_resize(VmaAllocator allocator, U32 total_buffer_byte_count,
-                              BufferAllocation* buffer_alloc, VkBufferUsageFlags usage)
-{
-    if (total_buffer_byte_count > buffer_alloc->size)
-    {
-        buffer_destroy(allocator, buffer_alloc);
-
-        VmaAllocationCreateInfo vma_info = {0};
-        vma_info.usage = VMA_MEMORY_USAGE_AUTO;
-        vma_info.flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT |
-                         VMA_ALLOCATION_CREATE_MAPPED_BIT;
-        vma_info.requiredFlags = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT;
-
-        *buffer_alloc =
-            buffer_allocation_create(allocator, total_buffer_byte_count, usage, vma_info);
-    }
 }
 
 static QueueFamilyIndices
@@ -842,188 +786,6 @@ image_view_resource_destroy(ImageViewResource image_view_resource)
     vkDestroyImageView(image_view_resource.device, image_view_resource.image_view, 0);
 }
 
-static void
-image_allocation_destroy(VmaAllocator allocator, ImageAllocation image_alloc)
-{
-    vmaDestroyImage(allocator, image_alloc.image, image_alloc.allocation);
-}
-
-static void
-image_resource_destroy(VmaAllocator allocator, ImageResource image)
-{
-    image_view_resource_destroy(image.image_view_resource);
-    image_allocation_destroy(allocator, image.image_alloc);
-}
-
-static BufferAllocation
-buffer_allocation_create(VmaAllocator allocator, VkDeviceSize size, VkBufferUsageFlags buffer_usage,
-                         VmaAllocationCreateInfo vma_info)
-{
-    BufferAllocation buffer = {};
-    buffer.size = size;
-    if (size == 0)
-    {
-        buffer.size = 64; // this avoids errors when creating buffers with zero size
-    }
-
-    VkBufferCreateInfo bufferInfo = {};
-    bufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
-    bufferInfo.size = buffer.size;
-    bufferInfo.usage = buffer_usage;
-    bufferInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
-
-    VK_CHECK_RESULT(vmaCreateBuffer(allocator, &bufferInfo, &vma_info, &buffer.buffer,
-                                    &buffer.allocation, nullptr));
-
-    MEMORY_LOG("VMA Buffer Allocated: %p (size: %llu bytes, usage: 0x%x)", buffer.buffer,
-               buffer.size, buffer_usage);
-
-    return buffer;
-}
-
-static void
-buffer_readback_create(VmaAllocator allocator, VkDeviceSize size, VkBufferUsageFlags buffer_usage,
-                       BufferReadback* out_buffer_readback)
-{
-    VkBufferCreateInfo bufCreateInfo = {VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO};
-    bufCreateInfo.size = size;
-    bufCreateInfo.usage = VK_BUFFER_USAGE_TRANSFER_DST_BIT | buffer_usage;
-
-    VmaAllocationCreateInfo allocCreateInfo = {};
-    allocCreateInfo.usage = VMA_MEMORY_USAGE_AUTO;
-    allocCreateInfo.flags =
-        VMA_ALLOCATION_CREATE_HOST_ACCESS_RANDOM_BIT | VMA_ALLOCATION_CREATE_MAPPED_BIT;
-
-    VkBuffer buf;
-    VmaAllocation alloc;
-    VmaAllocationInfo allocInfo;
-    VK_CHECK_RESULT(
-        vmaCreateBuffer(allocator, &bufCreateInfo, &allocCreateInfo, &buf, &alloc, &allocInfo));
-
-    out_buffer_readback->mapped_ptr = allocInfo.pMappedData;
-    out_buffer_readback->buffer_alloc = {.buffer = buf, .allocation = alloc, .size = size};
-}
-
-static void
-buffer_readback_destroy(VmaAllocator allocator, BufferReadback* out_buffer_readback)
-{
-    vmaDestroyBuffer(allocator, out_buffer_readback->buffer_alloc.buffer,
-                     out_buffer_readback->buffer_alloc.allocation);
-}
-
-// inspiration:
-// https://gpuopen-librariesandsdks.github.io/VulkanMemoryAllocator/html/usage_patterns.html
-static BufferAllocationMapped
-buffer_mapped_create(VmaAllocator allocator, VkDeviceSize size, VkBufferUsageFlags buffer_usage)
-{
-    Arena* arena = ArenaAlloc();
-
-    VmaAllocationCreateInfo vma_info = {0};
-    vma_info.usage = VMA_MEMORY_USAGE_AUTO;
-    vma_info.flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT |
-                     VMA_ALLOCATION_CREATE_HOST_ACCESS_ALLOW_TRANSFER_INSTEAD_BIT |
-                     VMA_ALLOCATION_CREATE_MAPPED_BIT;
-
-    BufferAllocation buffer = buffer_allocation_create(
-        allocator, size, buffer_usage | VK_BUFFER_USAGE_TRANSFER_DST_BIT, vma_info);
-
-    VkMemoryPropertyFlags mem_prop_flags;
-    vmaGetAllocationMemoryProperties(allocator, buffer.allocation, &mem_prop_flags);
-
-    VmaAllocationInfo alloc_info;
-    vmaGetAllocationInfo(allocator, buffer.allocation, &alloc_info);
-
-    BufferAllocationMapped mapped_buffer = {.buffer_alloc = buffer,
-                                            .mapped_ptr = alloc_info.pMappedData,
-                                            .mem_prop_flags = mem_prop_flags,
-                                            .arena = arena};
-
-    if (!mapped_buffer.mapped_ptr)
-    {
-        mapped_buffer.mapped_ptr = (void*)PushArray(mapped_buffer.arena, U8, size);
-
-        vma_info = {0};
-        vma_info.usage = VMA_MEMORY_USAGE_CPU_ONLY;
-        vma_info.flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT |
-                         VMA_ALLOCATION_CREATE_MAPPED_BIT;
-
-        mapped_buffer.staging_buffer_alloc =
-            buffer_allocation_create(allocator, size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, vma_info);
-    }
-
-    return mapped_buffer;
-}
-
-static void
-buffer_mapped_update(VkCommandBuffer cmd_buffer, VmaAllocator allocator,
-                     BufferAllocationMapped mapped_buffer)
-{
-    if (mapped_buffer.mem_prop_flags & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT)
-    {
-        if ((mapped_buffer.mem_prop_flags & VK_MEMORY_PROPERTY_HOST_COHERENT_BIT) == 0)
-        {
-            vmaFlushAllocation(allocator, mapped_buffer.buffer_alloc.allocation, 0,
-                               mapped_buffer.buffer_alloc.size);
-        }
-
-        VkBufferMemoryBarrier buf_mem_barrier = {VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER};
-        buf_mem_barrier.srcAccessMask = VK_ACCESS_HOST_WRITE_BIT;
-        buf_mem_barrier.dstAccessMask = VK_ACCESS_UNIFORM_READ_BIT;
-        buf_mem_barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-        buf_mem_barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-        buf_mem_barrier.buffer = mapped_buffer.buffer_alloc.buffer;
-        buf_mem_barrier.offset = 0;
-        buf_mem_barrier.size = VK_WHOLE_SIZE;
-
-        vkCmdPipelineBarrier(cmd_buffer, VK_PIPELINE_STAGE_HOST_BIT,
-                             VK_PIPELINE_STAGE_VERTEX_SHADER_BIT, 0, 0, nullptr, 1,
-                             &buf_mem_barrier, 0, nullptr);
-    }
-    else
-    {
-        if (vmaCopyMemoryToAllocation(allocator, mapped_buffer.mapped_ptr,
-                                      mapped_buffer.staging_buffer_alloc.allocation, 0,
-                                      mapped_buffer.buffer_alloc.size))
-        {
-            exit_with_error("BufferMappedUpdate: Could not copy data to staging buffer");
-        }
-
-        VkBufferMemoryBarrier bufMemBarrier = {VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER};
-        bufMemBarrier.srcAccessMask = VK_ACCESS_HOST_WRITE_BIT;
-        bufMemBarrier.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
-        bufMemBarrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-        bufMemBarrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-        bufMemBarrier.buffer = mapped_buffer.staging_buffer_alloc.buffer;
-        bufMemBarrier.offset = 0;
-        bufMemBarrier.size = VK_WHOLE_SIZE;
-
-        vkCmdPipelineBarrier(cmd_buffer, VK_PIPELINE_STAGE_HOST_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT,
-                             0, 0, nullptr, 1, &bufMemBarrier, 0, nullptr);
-
-        VkBufferCopy bufCopy = {
-            0,
-            0,
-            mapped_buffer.buffer_alloc.size,
-        };
-
-        vkCmdCopyBuffer(cmd_buffer, mapped_buffer.staging_buffer_alloc.buffer,
-                        mapped_buffer.buffer_alloc.buffer, 1, &bufCopy);
-
-        VkBufferMemoryBarrier bufMemBarrier2 = {VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER};
-        bufMemBarrier2.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
-        bufMemBarrier2.dstAccessMask = VK_ACCESS_UNIFORM_READ_BIT;
-        bufMemBarrier2.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-        bufMemBarrier2.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-        bufMemBarrier2.buffer = mapped_buffer.buffer_alloc.buffer;
-        bufMemBarrier2.offset = 0;
-        bufMemBarrier2.size = VK_WHOLE_SIZE;
-
-        vkCmdPipelineBarrier(cmd_buffer, VK_PIPELINE_STAGE_TRANSFER_BIT,
-                             VK_PIPELINE_STAGE_VERTEX_SHADER_BIT, 0, 0, nullptr, 1, &bufMemBarrier2,
-                             0, nullptr);
-    }
-}
-
 static ImageViewResource
 image_view_resource_create(VkDevice device, VkImage image, VkFormat format,
                            VkImageAspectFlags aspect_mask, U32 mipmap_level,
@@ -1046,36 +808,6 @@ image_view_resource_create(VkDevice device, VkImage image, VkFormat format,
     return {.image_view = view, .device = device};
 }
 
-static ImageAllocation
-image_allocation_create(VmaAllocator allocator, U32 width, U32 height,
-                        VkSampleCountFlagBits numSamples, VkFormat format, VkImageTiling tiling,
-                        VkImageUsageFlags usage, U32 mipmap_level, VmaAllocationCreateInfo vma_info,
-                        VkImageType image_type)
-{
-    ImageAllocation image_alloc = {0};
-    VkExtent3D extent = {width, height, 1};
-
-    VkImageCreateInfo image_create_info = {};
-    image_create_info.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
-    image_create_info.imageType = image_type;
-    image_create_info.extent = extent;
-    image_create_info.mipLevels = mipmap_level;
-    image_create_info.arrayLayers = 1;
-    image_create_info.format = format;
-    image_create_info.tiling = tiling;
-    image_create_info.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-    image_create_info.usage = usage;
-    image_create_info.samples = numSamples;
-    image_create_info.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
-
-    VmaAllocationInfo alloc_info;
-    VK_CHECK_RESULT(vmaCreateImage(allocator, &image_create_info, &vma_info, &image_alloc.image,
-                                   &image_alloc.allocation, &alloc_info))
-    image_alloc.size = alloc_info.size;
-    image_alloc.extent = extent;
-    return image_alloc;
-}
-
 static void
 color_resources_create(Context* vk_ctx, SwapchainResources* swapchain_resources)
 {
@@ -1086,9 +818,8 @@ color_resources_create(Context* vk_ctx, SwapchainResources* swapchain_resources)
     };
 
     ImageAllocation image_alloc = image_allocation_create(
-        vk_ctx->asset_manager->allocator, swapchain_resources->swapchain_extent.width,
-        swapchain_resources->swapchain_extent.height, vk_ctx->msaa_samples, colorFormat,
-        VK_IMAGE_TILING_OPTIMAL,
+        swapchain_resources->swapchain_extent.width, swapchain_resources->swapchain_extent.height,
+        vk_ctx->msaa_samples, colorFormat, VK_IMAGE_TILING_OPTIMAL,
         VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT, 1, vma_info);
 
     ImageViewResource color_image_view = image_view_resource_create(
@@ -1314,7 +1045,7 @@ swapchain_create(Context* vk_ctx, SwapChainSupportDetails* swapchain_info,
 }
 
 static void
-swapchain_cleanup(VkDevice device, VmaAllocator allocator, SwapchainResources* swapchain_resources)
+swapchain_cleanup(VkDevice device, SwapchainResources* swapchain_resources)
 {
     for (U32 i = 0; i < swapchain_resources->image_count; i++)
     {
@@ -1324,8 +1055,8 @@ swapchain_cleanup(VkDevice device, VmaAllocator allocator, SwapchainResources* s
                            nullptr);
     }
 
-    color_resources_cleanup(allocator, swapchain_resources->color_image_resource);
-    depth_resources_cleanup(allocator, swapchain_resources->depth_image_resource);
+    color_resources_cleanup(swapchain_resources->color_image_resource);
+    depth_resources_cleanup(swapchain_resources->depth_image_resource);
     object_id_resources_cleanup();
 
     for (size_t i = 0; i < swapchain_resources->image_resources.size; i++)
@@ -1348,8 +1079,7 @@ swapchain_recreate(Vec2U32 framebuffer_dim)
 
     VK_CHECK_RESULT(vkDeviceWaitIdle(vk_ctx->device));
 
-    swapchain_cleanup(vk_ctx->device, vk_ctx->asset_manager->allocator,
-                      vk_ctx->swapchain_resources);
+    swapchain_cleanup(vk_ctx->device, vk_ctx->swapchain_resources);
     vk_ctx->swapchain_resources = 0;
     SwapChainSupportDetails swapchain_details =
         query_swapchain_support(scratch.arena, vk_ctx->physical_device, vk_ctx->surface);

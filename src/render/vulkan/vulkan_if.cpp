@@ -117,8 +117,7 @@ render_ctx_destroy()
     vulkan::camera_cleanup(vk_ctx);
     vulkan::profile_buffers_destroy(vk_ctx);
 
-    vulkan::swapchain_cleanup(vk_ctx->device, vk_ctx->asset_manager->allocator,
-                              vk_ctx->swapchain_resources);
+    vulkan::swapchain_cleanup(vk_ctx->device, vk_ctx->swapchain_resources);
 
     vkDestroyCommandPool(vk_ctx->device, vk_ctx->command_pool, nullptr);
 
@@ -130,7 +129,7 @@ render_ctx_destroy()
 
     vkDestroyDescriptorPool(vk_ctx->device, vk_ctx->descriptor_pool, 0);
 
-    vulkan::buffer_destroy(vk_ctx->asset_manager->allocator, &vk_ctx->model_3D_instance_buffer);
+    vulkan::buffer_destroy(&vk_ctx->model_3D_instance_buffer);
 
     vulkan::pipeline_destroy(&vk_ctx->model_3D_pipeline);
     vulkan::pipeline_destroy(&vk_ctx->model_3D_instance_pipeline);
@@ -426,9 +425,8 @@ buffer_load(render::BufferInfo* buffer_info)
         case render::BufferType_Index: usage_flags = VK_BUFFER_USAGE_INDEX_BUFFER_BIT; break;
         default: InvalidPath;
     }
-    vulkan::BufferAllocation buffer =
-        vulkan::buffer_allocation_create(asset_manager->allocator, buffer_info->buffer.size,
-                                         usage_flags | VK_BUFFER_USAGE_TRANSFER_DST_BIT, vma_info);
+    vulkan::BufferAllocation buffer = vulkan::buffer_allocation_create(
+        buffer_info->buffer.size, usage_flags | VK_BUFFER_USAGE_TRANSFER_DST_BIT, vma_info);
 
     // ~mgj: Prepare Texture
     vulkan::BufferUpload* asset_buffer = &asset_item->item;
