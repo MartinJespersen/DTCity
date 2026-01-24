@@ -10,7 +10,6 @@ struct BufferAllocation
 {
     VkBuffer buffer;
     VmaAllocation allocation;
-    VmaAllocationInfo allocation_info;
 };
 
 struct BufferAllocationMapped
@@ -182,6 +181,8 @@ static void
 buffer_mapped_update(VkCommandBuffer cmd_buffer, BufferAllocationMapped mapped_buffer);
 static BufferAllocation
 staging_buffer_create(VkDeviceSize size);
+static BufferAllocation
+staging_buffer_mapped_create(VkDeviceSize size);
 static void
 buffer_alloc_create_or_resize(U32 total_buffer_byte_count, BufferAllocation* buffer_alloc,
                               VkBufferUsageFlags usage);
