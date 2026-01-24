@@ -569,7 +569,7 @@ model_3d_instance_rendering()
         vkCmdBindVertexBuffers(cmd_buffer, 0, 2, vertex_buffers, vertex_offsets);
         U32 instance_count =
             U32(node->instance_buffer_info.buffer.size / node->instance_buffer_info.type_size);
-        U32 index_count = U32(node->index_alloc.size / sizeof(U32));
+        U32 index_count = buffer_allocation_size_get(&node->index_alloc) / sizeof(U32);
         vkCmdBindIndexBuffer(cmd_buffer, node->index_alloc.buffer, 0, VK_INDEX_TYPE_UINT32);
         vkCmdDrawIndexed(cmd_buffer, index_count, instance_count, 0, 0, 0);
     }
@@ -910,7 +910,7 @@ blend_3d_rendering()
         vkCmdPushConstants(cmd_buffer, blend_3d_pipeline->pipeline_layout,
                            VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(Blend3dPushConstants),
                            &node->push_constants);
-        U32 index_count = node->index_alloc.size / sizeof(U32);
+        U32 index_count = buffer_allocation_size_get(&node->index_alloc) / sizeof(U32);
         vkCmdBindDescriptorSets(cmd_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS,
                                 blend_3d_pipeline->pipeline_layout, 0, ArrayCount(descriptor_sets),
                                 descriptor_sets, 0, NULL);

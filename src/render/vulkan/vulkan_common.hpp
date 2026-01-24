@@ -5,49 +5,6 @@ namespace vulkan
 
 struct Context;
 
-struct BufferAllocation
-{
-    VkBuffer buffer;
-    VmaAllocation allocation;
-    VkDeviceSize size;
-};
-
-struct BufferAllocationMapped
-{
-    BufferAllocation buffer_alloc;
-    void* mapped_ptr;
-    VkMemoryPropertyFlags mem_prop_flags;
-
-    BufferAllocation staging_buffer_alloc;
-    Arena* arena;
-};
-
-struct BufferReadback
-{
-    BufferAllocation buffer_alloc;
-    void* mapped_ptr;
-};
-
-struct ImageAllocation
-{
-    VkImage image;
-    VmaAllocation allocation;
-    VkDeviceSize size;
-    VkExtent3D extent;
-};
-
-struct ImageViewResource
-{
-    VkImageView image_view;
-    VkDevice device;
-};
-
-struct ImageResource
-{
-    ImageAllocation image_alloc;
-    ImageViewResource image_view_resource;
-};
-
 struct ImageSwapchainResource
 {
     VkImage image;
@@ -213,6 +170,9 @@ descriptor_set_update_bindless_texture(U32 array_index, VkImageView image_view, 
 
 // image helpers
 
+g_internal void
+blit_transition_image(VkCommandBuffer cmd_buf, VkImage image, VkImageLayout src_layout,
+                      VkImageLayout dst_layout, U32 mip_level);
 // queue family
 
 static void

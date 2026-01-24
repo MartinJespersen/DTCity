@@ -19,6 +19,6 @@ DISABLE_WARNINGS_POP
 
 // ~mgj: user lib includes
 #include "render.hpp"
-#include "vulkan/vulkan_common.hpp"
 #include "vulkan/asset_manager.hpp"
+#include "vulkan/vulkan_common.hpp"
 #include "vulkan/vulkan.hpp"

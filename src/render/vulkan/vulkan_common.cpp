@@ -808,6 +808,34 @@ image_view_resource_create(VkDevice device, VkImage image, VkFormat format,
     return {.image_view = view, .device = device};
 }
 
+g_internal void
+blit_transition_image(VkCommandBuffer cmd_buf, VkImage image, VkImageLayout src_layout,
+                      VkImageLayout dst_layout, U32 mip_level)
+{
+    // ~mgj: Transition color attachment images for presentation or transfer
+    VkImageMemoryBarrier2 barrier{};
+    barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2;
+    barrier.srcStageMask = VK_PIPELINE_STAGE_2_TRANSFER_BIT;
+    barrier.srcAccessMask = VK_ACCESS_2_TRANSFER_WRITE_BIT;
+    barrier.dstStageMask = VK_PIPELINE_STAGE_2_TRANSFER_BIT;
+    barrier.dstAccessMask = VK_ACCESS_2_TRANSFER_READ_BIT;
+    barrier.oldLayout = src_layout;
+    barrier.newLayout = dst_layout;
+    barrier.image = image;
+    barrier.subresourceRange = {.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+                                .baseMipLevel = mip_level,
+                                .levelCount = 1,
+                                .baseArrayLayer = 0,
+                                .layerCount = 1};
+
+    VkImageMemoryBarrier2 barriers[] = {barrier};
+    VkDependencyInfo layout_transition_info = {.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
+                                               .imageMemoryBarrierCount = ArrayCount(barriers),
+                                               .pImageMemoryBarriers = barriers};
+
+    vkCmdPipelineBarrier2(cmd_buf, &layout_transition_info);
+}
+
 static void
 color_resources_create(Context* vk_ctx, SwapchainResources* swapchain_resources)
 {

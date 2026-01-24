@@ -156,40 +156,11 @@ texture_ktx_cmd_record(VkCommandBuffer cmd, Texture* tex, ::Buffer<U8> tex_buf)
 
         tex->image_resource = {.image_alloc = image_alloc,
                                .image_view_resource = image_view_resource};
-        tex->staging_buffer = {
-            .buffer = staging_buf, .allocation = staging_alloc, .size = ktx_texture->dataSize};
+        tex->staging_buffer = {.buffer = staging_buf, .allocation = staging_alloc};
 
         ktxTexture_Destroy((ktxTexture*)ktx_texture);
     }
     Assert(ktxresult == KTX_SUCCESS);
-}
-
-g_internal void
-blit_transition_image(VkCommandBuffer cmd_buf, VkImage image, VkImageLayout src_layout,
-                      VkImageLayout dst_layout, U32 mip_level)
-{
-    // ~mgj: Transition color attachment images for presentation or transfer
-    VkImageMemoryBarrier2 barrier{};
-    barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2;
-    barrier.srcStageMask = VK_PIPELINE_STAGE_2_TRANSFER_BIT;
-    barrier.srcAccessMask = VK_ACCESS_2_TRANSFER_WRITE_BIT;
-    barrier.dstStageMask = VK_PIPELINE_STAGE_2_TRANSFER_BIT;
-    barrier.dstAccessMask = VK_ACCESS_2_TRANSFER_READ_BIT;
-    barrier.oldLayout = src_layout;
-    barrier.newLayout = dst_layout;
-    barrier.image = image;
-    barrier.subresourceRange = {.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
-                                .baseMipLevel = mip_level,
-                                .levelCount = 1,
-                                .baseArrayLayer = 0,
-                                .layerCount = 1};
-
-    VkImageMemoryBarrier2 barriers[] = {barrier};
-    VkDependencyInfo layout_transition_info = {.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
-                                               .imageMemoryBarrierCount = ArrayCount(barriers),
-                                               .pImageMemoryBarriers = barriers};
-
-    vkCmdPipelineBarrier2(cmd_buf, &layout_transition_info);
 }
 
 g_internal void
@@ -282,8 +253,7 @@ colormap_texture_cmd_record(VkCommandBuffer cmd, Texture* tex, Buffer<U8> buf)
                          0, 0, NULL, 0, NULL, 1, &barrier);
 
     tex->image_resource = {.image_alloc = image_alloc, .image_view_resource = image_view_resource};
-    tex->staging_buffer = {
-        .buffer = staging_buf, .allocation = staging_alloc, .size = staging_buffer_size};
+    tex->staging_buffer = {.buffer = staging_buf, .allocation = staging_alloc};
 }
 
 g_internal B32
@@ -439,8 +409,7 @@ texture_cmd_record(VkCommandBuffer cmd, Texture* tex, Buffer<U8> tex_buf)
         stbi_image_free(image_data);
         tex->image_resource = {.image_alloc = image_alloc,
                                .image_view_resource = image_view_resource};
-        tex->staging_buffer = {
-            .buffer = staging_buf, .allocation = staging_alloc, .size = total_size};
+        tex->staging_buffer = {.buffer = staging_buf, .allocation = staging_alloc};
     };
     return err;
 }
@@ -481,6 +450,16 @@ thread_input_destroy(ThreadInput* thread_input)
     ArenaRelease(thread_input->arena);
 }
 
+g_internal U32
+buffer_allocation_size_get(BufferAllocation* buffer_allocation)
+{
+    if (!buffer_allocation->allocation)
+    {
+        return 0;
+    }
+    return buffer_allocation->allocation->GetSize();
+}
+
 static void
 buffer_loading_thread(void* data, VkCommandBuffer cmd, render::Handle handle)
 {
@@ -494,12 +473,12 @@ buffer_loading_thread(void* data, VkCommandBuffer cmd, render::Handle handle)
 
     // ~mgj: copy to staging and record copy command
     BufferAllocation staging_buffer_alloc = staging_buffer_create(buffer.size);
-
+    U32 staging_buffer_size = buffer_allocation_size_get(&staging_buffer_alloc);
     VK_CHECK_RESULT(vmaCopyMemoryToAllocation(asset_manager->allocator, buffer.data,
                                               staging_buffer_alloc.allocation, 0,
-                                              staging_buffer_alloc.size));
+                                              staging_buffer_size));
     VkBufferCopy copy_region = {0};
-    copy_region.size = staging_buffer_alloc.size;
+    copy_region.size = staging_buffer_size;
     vkCmdCopyBuffer(cmd, staging_buffer_alloc.buffer, asset_buffer->buffer_alloc.buffer, 1,
                     &copy_region);
 
@@ -970,15 +949,10 @@ buffer_allocation_create(VkDeviceSize size, VkBufferUsageFlags buffer_usage,
 {
     AssetManager* asset_manager = asset_manager_get();
     BufferAllocation buffer = {};
-    buffer.size = size;
-    if (size == 0)
-    {
-        buffer.size = 64; // this avoids errors when creating buffers with zero size
-    }
 
     VkBufferCreateInfo bufferInfo = {};
     bufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
-    bufferInfo.size = buffer.size;
+    bufferInfo.size = size;
     bufferInfo.usage = buffer_usage;
     bufferInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
 
@@ -1025,11 +999,32 @@ staging_buffer_create(VkDeviceSize size)
     return staging_buffer;
 }
 
+static BufferAllocation
+staging_buffer_mapped_create(VkDeviceSize size)
+{
+    AssetManager* asset_manager = asset_manager_get();
+    VkBufferCreateInfo staging_buf_create_info = {VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO};
+    staging_buf_create_info.size = size;
+    staging_buf_create_info.usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
+
+    VmaAllocationCreateInfo staging_alloc_create_info = {};
+    staging_alloc_create_info.usage = VMA_MEMORY_USAGE_AUTO;
+    staging_alloc_create_info.flags =
+        VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT | VMA_ALLOCATION_CREATE_MAPPED_BIT;
+
+    BufferAllocation staging_buf_alloc = {};
+    vmaCreateBuffer(asset_manager->allocator, &staging_buf_create_info, &staging_alloc_create_info,
+                    &staging_buf_alloc.buffer, &staging_buf_alloc.allocation,
+                    &staging_buf_alloc.allocation_info);
+
+    return staging_buf_alloc;
+}
+
 static void
 buffer_alloc_create_or_resize(U32 total_buffer_byte_count, BufferAllocation* buffer_alloc,
                               VkBufferUsageFlags usage)
 {
-    if (total_buffer_byte_count > buffer_alloc->size)
+    if (total_buffer_byte_count > buffer_allocation_size_get(buffer_alloc))
     {
         buffer_destroy(buffer_alloc);
 
@@ -1091,13 +1086,14 @@ static void
 buffer_mapped_update(VkCommandBuffer cmd_buffer, BufferAllocationMapped mapped_buffer)
 {
     AssetManager* asset_manager = asset_manager_get();
+    U32 mapped_buffer_size = buffer_allocation_size_get(&mapped_buffer.buffer_alloc);
 
     if (mapped_buffer.mem_prop_flags & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT)
     {
         if ((mapped_buffer.mem_prop_flags & VK_MEMORY_PROPERTY_HOST_COHERENT_BIT) == 0)
         {
             vmaFlushAllocation(asset_manager->allocator, mapped_buffer.buffer_alloc.allocation, 0,
-                               mapped_buffer.buffer_alloc.size);
+                               mapped_buffer_size);
         }
 
         VkBufferMemoryBarrier buf_mem_barrier = {VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER};
@@ -1117,7 +1113,7 @@ buffer_mapped_update(VkCommandBuffer cmd_buffer, BufferAllocationMapped mapped_b
     {
         if (vmaCopyMemoryToAllocation(asset_manager->allocator, mapped_buffer.mapped_ptr,
                                       mapped_buffer.staging_buffer_alloc.allocation, 0,
-                                      mapped_buffer.buffer_alloc.size))
+                                      mapped_buffer_size))
         {
             exit_with_error("BufferMappedUpdate: Could not copy data to staging buffer");
         }
@@ -1137,7 +1133,7 @@ buffer_mapped_update(VkCommandBuffer cmd_buffer, BufferAllocationMapped mapped_b
         VkBufferCopy bufCopy = {
             0,
             0,
-            mapped_buffer.buffer_alloc.size,
+            mapped_buffer_size,
         };
 
         vkCmdCopyBuffer(cmd_buffer, mapped_buffer.staging_buffer_alloc.buffer,
@@ -1173,14 +1169,12 @@ buffer_readback_create(VkDeviceSize size, VkBufferUsageFlags buffer_usage,
     allocCreateInfo.flags =
         VMA_ALLOCATION_CREATE_HOST_ACCESS_RANDOM_BIT | VMA_ALLOCATION_CREATE_MAPPED_BIT;
 
-    VkBuffer buf;
-    VmaAllocation alloc;
-    VmaAllocationInfo allocInfo;
     VK_CHECK_RESULT(vmaCreateBuffer(asset_manager->allocator, &bufCreateInfo, &allocCreateInfo,
-                                    &buf, &alloc, &allocInfo));
+                                    &out_buffer_readback->buffer_alloc.buffer,
+                                    &out_buffer_readback->buffer_alloc.allocation,
+                                    &out_buffer_readback->buffer_alloc.allocation_info));
 
-    out_buffer_readback->mapped_ptr = allocInfo.pMappedData;
-    out_buffer_readback->buffer_alloc = {.buffer = buf, .allocation = alloc, .size = size};
+    out_buffer_readback->mapped_ptr = out_buffer_readback->buffer_alloc.allocation_info.pMappedData;
 }
 
 static void

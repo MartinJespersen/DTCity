@@ -6,6 +6,48 @@ namespace vulkan
 typedef void (*ThreadLoadingFunc)(void* data, VkCommandBuffer cmd, render::Handle handle);
 typedef void (*ThreadDoneLoadingFunc)(render::Handle handle);
 
+struct BufferAllocation
+{
+    VkBuffer buffer;
+    VmaAllocation allocation;
+    VmaAllocationInfo allocation_info;
+};
+
+struct BufferAllocationMapped
+{
+    BufferAllocation buffer_alloc;
+    void* mapped_ptr;
+    VkMemoryPropertyFlags mem_prop_flags;
+
+    BufferAllocation staging_buffer_alloc;
+    Arena* arena;
+};
+
+struct BufferReadback
+{
+    BufferAllocation buffer_alloc;
+    void* mapped_ptr;
+};
+
+struct ImageAllocation
+{
+    VkImage image;
+    VmaAllocation allocation;
+    VkDeviceSize size;
+    VkExtent3D extent;
+};
+
+struct ImageViewResource
+{
+    VkImageView image_view;
+    VkDevice device;
+};
+struct ImageResource
+{
+    ImageAllocation image_alloc;
+    ImageViewResource image_view_resource;
+};
+
 struct ThreadInput
 {
     Arena* arena;
@@ -126,6 +168,10 @@ asset_manager_destroy(AssetManager* asset_manager);
 static BufferAllocation
 buffer_allocation_create(VkDeviceSize size, VkBufferUsageFlags buffer_usage,
                          VmaAllocationCreateInfo vma_info);
+
+g_internal U32
+buffer_allocation_size_get(BufferAllocation* buffer_allocation);
+
 static void
 buffer_destroy(BufferAllocation* buffer_allocation);
 static void
@@ -206,9 +252,6 @@ asset_cmd_queue_item_enqueue(U32 thread_id, VkCommandBuffer cmd, ThreadInput* th
 //~mgj: Texture Functions
 static void
 texture_destroy(Texture* texture);
-g_internal void
-blit_transition_image(VkCommandBuffer cmd_buf, VkImage image, VkImageLayout src_layout,
-                      VkImageLayout dst_layout, U32 mip_level);
 g_internal void
 texture_ktx_cmd_record(VkCommandBuffer cmd, Texture* tex, ::Buffer<U8> tex_buf);
 g_internal B32
