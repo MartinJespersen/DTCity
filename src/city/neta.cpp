@@ -57,7 +57,6 @@ edge_in_osm_area(Arena* arena, simdjson::ondemand::document& doc, Rng2F64 utm_bb
             F64 coord_arr[2] = {};
             for (auto coord : coords)
             {
-                F64 lat, lon;
                 err |= coord.get_double().get(coord_arr[arr_idx]);
 
                 arr_idx += 1;
@@ -95,7 +94,6 @@ osm_way_to_edges_map_create(Arena* arena, String8 file_path, Rng2F64 utm_bbox)
     simdjson::padded_string json_padded((char*)buffer.data, buffer.size);
     simdjson::error_code simd_error = parser.iterate(json_padded).get(doc);
 
-    B32 err = false;
     Buffer<Edge> edge_buf = {};
     if (simd_error == simdjson::error_code::SUCCESS)
     {

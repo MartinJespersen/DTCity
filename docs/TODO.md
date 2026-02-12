@@ -1,9 +1,16 @@
+# Before commiting
+* tile transform might need to be passed to shader as a uniform buffer
+
+# Before Push
+* Reconsider async loading for none cesium objects.
+* Make the vcpkg overlay port work for cesium instead of the using the local repo.
+* look at the descriptor index alloc and free functions again.
+* Remove the printf logging and find way to log the queue messages
+
 # Bugs
-* App should work without netascore geo.json file
 * After deleting everything in the deletion queue, delete the asset item queue and give warning if it is not empty.
 * imgui assertion happens during array indexing operation (Assertion failed: i >= 0 && i < Size)
 * Direction or previous node is needed for random neighbor algorithm to avoid doing a u-turn when it is possible to drive straight.
-
 
 # Changes along the way
 * Make the asset manager thread safe - accessing texture and buffer lists are not thread safe at the moment
@@ -12,6 +19,7 @@
 * Cleanup entrypoint main loop
 
 # Future Improvements:
+* Create a draw layer 
 * Improve BufferInfo creation and especially the render interface functions.
 * Descriptor set layouts are badly handled at the moment and the how it is allocated, used and destroyed should be improved.
 * make vma allocator part of the asset manager (seperate asset manager from other parts of application)

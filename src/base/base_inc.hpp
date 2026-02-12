@@ -10,7 +10,6 @@
 
 #include "base_diagnostics.hpp"
 
-DISABLE_WARNINGS_PUSH
 #include "base_core.hpp"
 #include "base_profile.hpp"
 #include "base_arena.h"
@@ -18,12 +17,7 @@ DISABLE_WARNINGS_PUSH
 #include "base_random.hpp"
 #include "base_strings.hpp"
 #include "base_thread_context.h"
-// #include "base_command_line.h"
-// #include "base_markup.h"
-// #include "base_meta.h"
-// #include "base_entry_point.h"
 #include "container.hpp"
 #include "os_core/os_core_inc.hpp"
-DISABLE_WARNINGS_POP
 
 #endif // BASE_INC_H

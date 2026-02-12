@@ -114,8 +114,8 @@ struct Context
     Arena* arena;
     U32 render_thread_id;
 
-    ::Buffer<String8> validation_layers;
-    ::Buffer<String8> device_extensions;
+    Buffer<String8> validation_layers;
+    Buffer<String8> device_extensions;
 
     VkInstance instance;
     VkDebugUtilsMessengerEXT debug_messenger;
@@ -129,9 +129,9 @@ struct Context
     VkQueue present_queue;
 
     VkCommandPool command_pool;
-    ::Buffer<VkCommandBuffer> command_buffers;
+    Buffer<VkCommandBuffer> command_buffers;
 
-    ::Buffer<VkFence> in_flight_fences;
+    Buffer<VkFence> in_flight_fences;
     U32 current_frame;
     U32 cur_img_idx;
 

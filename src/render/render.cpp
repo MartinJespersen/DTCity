@@ -1,11 +1,29 @@
 namespace render
 {
 ////////////////////////////////////////////////////////
+// ~mgj: ThreadInput
+static render::ThreadInput*
+thread_input_create()
+{
+    Arena* arena = arena_alloc();
+    Assert(arena);
+    render::ThreadInput* thread_input = PushStruct(arena, render::ThreadInput);
+    thread_input->arena = arena;
+    return thread_input;
+}
+
+static void
+thread_input_destroy(render::ThreadInput* thread_input)
+{
+    arena_release(thread_input->arena);
+}
+
+////////////////////////////////////////////////////////
 // ~mgj: Handles
 static render::Handle
 handle_zero()
 {
-    render::Handle handle = {};
+    render::Handle handle = render::Handle(nullptr, 0, render::HandleType::Undefined);
     return handle;
 }
 
@@ -44,6 +62,22 @@ static bool
 is_handle_zero(render::Handle handle)
 {
     return handle.ptr == 0;
+}
+
+static void
+handle_list_push(Arena* arena, render::HandleList* list, render::Handle handle)
+{
+    render::HandleNode* node = PushStruct(arena, render::HandleNode);
+    node->handle = handle;
+    SLLQueuePush(list->first, list->last, node);
+    list->count++;
+}
+
+static render::Handle
+handle_list_first_handle(render::HandleList* list)
+{
+    Assert(list->first);
+    return list->first->handle;
 }
 
 // privates

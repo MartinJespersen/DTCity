@@ -4,12 +4,10 @@
 ////////////////////////////////
 //~ rjf: Third Party Includes
 
-DISABLE_WARNINGS_PUSH
 #define STB_SPRINTF_IMPLEMENTATION
 #define STB_SPRINTF_STATIC
 #include "third_party/stb_sprintf.h"
 #include "third_party/meow_hash_x64_aesni.h"
-DISABLE_WARNINGS_POP
 ////////////////////////////////
 //~ NOTE(allen): String <-> Integer Tables
 

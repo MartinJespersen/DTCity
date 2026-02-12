@@ -1,8 +1,9 @@
 // ~mgj: Third party includes
-DISABLE_WARNINGS_PUSH
 #include <vulkan/vulkan_core.h>
 #undef VK_CHECK_RESULT
+#ifndef KHRONOS_STATIC
 #define KHRONOS_STATIC
+#endif
 #include "ktx.h"
 #include "ktxvulkan.h"
 #define VMA_VULKAN_VERSION 1003000 // Vulkan 1.3
@@ -11,8 +12,6 @@ DISABLE_WARNINGS_PUSH
 #define VMA_ASSERT(x) Assert(x)
 #include "third_party/vk_mem_alloc.h"
 #include "stb_image.h"
-
-DISABLE_WARNINGS_POP
 
 #include "third_party/tracy/tracy/TracyVulkan.hpp"
 #include "third_party/tracy/tracy/Tracy.hpp"

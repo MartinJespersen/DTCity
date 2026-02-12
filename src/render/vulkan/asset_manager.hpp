@@ -3,9 +3,6 @@
 namespace vulkan
 {
 
-typedef void (*ThreadLoadingFunc)(void* data, VkCommandBuffer cmd, render::Handle handle);
-typedef void (*ThreadDoneLoadingFunc)(render::Handle handle);
-
 struct BufferAllocation
 {
     VkBuffer buffer;
@@ -40,21 +37,31 @@ struct ImageViewResource
 {
     VkImageView image_view;
     VkDevice device;
+
+    ImageViewResource(VkDevice device, VkImage image, VkFormat format,
+                      VkImageAspectFlags aspect_mask, U32 mipmap_level, VkImageViewType image_type);
 };
+
 struct ImageResource
 {
     ImageAllocation image_alloc;
     ImageViewResource image_view_resource;
+
+    ImageResource(ImageAllocation image_alloc, ImageViewResource image_view_resource)
+        : image_alloc(image_alloc), image_view_resource(image_view_resource)
+    {
+    }
 };
 
-struct ThreadInput
+struct ImageAllocationResource
 {
-    Arena* arena;
-    render::Handle handle;
+    ImageResource image_resource;
+    BufferAllocation staging_buffer_alloc;
 
-    void* user_data;
-    ThreadLoadingFunc loading_func;
-    ThreadDoneLoadingFunc done_loading_func;
+    ImageAllocationResource(ImageResource image_resource, BufferAllocation staging_buffer_alloc)
+        : image_resource(image_resource), staging_buffer_alloc(staging_buffer_alloc)
+    {
+    }
 };
 
 struct BufferUpload
@@ -65,7 +72,7 @@ struct BufferUpload
 
 struct Texture
 {
-    BufferAllocation staging_buffer;
+    BufferAllocation staging_allocation;
     ImageResource image_resource;
     VkSampler sampler;
     U32 descriptor_set_idx;
@@ -81,9 +88,8 @@ struct CmdQueueItem
 {
     CmdQueueItem* next;
     CmdQueueItem* prev;
-    ThreadInput* thread_input;
+    render::ThreadInput* thread_input;
     U32 thread_id;
-    VkCommandBuffer cmd_buffer;
     VkFence fence;
 };
 
@@ -103,12 +109,23 @@ template <typename T> struct AssetList
     render::AssetItem<T>* free_list;
 };
 
+// ~mgj: Stable index allocator for bindless descriptor array slots.
+// Uses a free list of returned indices, falling back to a monotonic counter.
+struct DescriptorIndexAllocator
+{
+    U32* free_indices;
+    U32 free_count;
+    U32 free_capacity;
+    U32 next_index;
+    U32 max_index;
+};
+
 struct PendingDeletion
 {
     PendingDeletion* next;
+    PendingDeletion* prev;
     render::Handle handle;
     U64 frame_to_delete;
-    render::AssetItemType type;
 };
 
 struct DeletionQueue
@@ -127,22 +144,29 @@ struct AssetManager
     VmaAllocator allocator;
 
     // ~mgj: Textures
+    OS_Handle texture_mutex;
     render::AssetItemList<Texture> texture_list;
-    render::AssetItem<Texture>* texture_free_list;
+    render::AssetItemList<Texture> texture_free_list;
 
     // ~mgj: Buffers
+    OS_Handle buffer_mutex;
     render::AssetItemList<BufferUpload> buffer_list;
-    render::AssetItem<BufferUpload>* buffer_free_list;
+    render::AssetItemList<BufferUpload> buffer_free_list;
 
     // ~mgj: Threading Buffer Commands
     ::Buffer<AssetManagerCommandPool> threaded_cmd_pools;
     U64 total_size;
     async::Queue<CmdQueueItem>* cmd_queue;
     async::Queue<async::QueueItem>* work_queue;
+    async::Threads* threads;
     AssetManagerCmdList* cmd_wait_list;
+
+    // ~mgj: Bindless descriptor index allocator
+    DescriptorIndexAllocator descriptor_index_allocator;
 
     // ~mgj: Deferred Deletion Queue
     DeletionQueue* deletion_queue;
+    OS_Handle deletion_queue_mutex;
 
     // ~mgj: Vulkan resources needed for asset operations
     VkDevice device;
@@ -203,10 +227,17 @@ image_allocation_destroy(ImageAllocation image_alloc);
 static void
 image_resource_destroy(ImageResource image);
 
+//~mgj: Descriptor Index Allocator
+static void
+descriptor_index_allocator_init(DescriptorIndexAllocator* alloc, Arena* arena, U32 max_index);
+static U32
+descriptor_index_allocate(DescriptorIndexAllocator* alloc);
+static void
+descriptor_index_free(DescriptorIndexAllocator* alloc, U32 index);
+
 //~mgj: Deferred Deletion Queue
 static void
-deletion_queue_push(DeletionQueue* queue, render::Handle handle, render::AssetItemType type,
-                    U64 frames_in_flight);
+deletion_queue_push(DeletionQueue* queue, render::Handle handle, U64 frames_in_flight);
 static void
 deletion_queue_deferred_resource_deletion(DeletionQueue* queue);
 static void
@@ -215,23 +246,28 @@ static void
 deletion_queue_delete_all(DeletionQueue* queue);
 
 //~mgj: Asset Item Management
+
+static render::AssetItem<BufferUpload>*
+asset_manager_buffer_item_get(render::Handle handle);
 static render::AssetItem<Texture>*
 asset_manager_texture_item_get(render::Handle handle);
 template <typename T>
-static render::AssetItem<T>*
-asset_manager_item_create(render::AssetItemList<T>* list, render::AssetItem<T>** free_list,
-                          U32* out_desc_idx);
+static render::Handle
+asset_manager_item_create(render::AssetItemList<T>* list, render::AssetItemList<T>* free_list,
+                          render::HandleType handle_type);
 template <typename T>
 static render::AssetItem<T>*
-asset_manager_item_get(render::AssetItemList<T>* list, render::Handle handle);
+asset_manager_item_get(render::Handle handle);
 
+g_internal ImageAllocationResource
+texture_upload_with_blitting(VkCommandBuffer cmd, render::TextureUploadData* data);
 //~mgj: Command Management
 static void
 asset_manager_execute_cmds();
 static void
 asset_manager_cmd_done_check();
 static VkCommandBuffer
-begin_command(VkDevice device, AssetManagerCommandPool threaded_cmd_pool);
+begin_command(VkDevice device, AssetManagerCommandPool* threaded_cmd_pool);
 static AssetManagerCmdList*
 asset_manager_cmd_list_create();
 static void
@@ -248,7 +284,7 @@ static void
 asset_manager_texture_free(render::Handle handle);
 
 static void
-asset_cmd_queue_item_enqueue(U32 thread_id, VkCommandBuffer cmd, ThreadInput* thread_input);
+asset_cmd_queue_item_enqueue(U32 thread_id, render::ThreadInput* thread_input);
 
 //~mgj: Texture Functions
 static void
@@ -256,7 +292,7 @@ texture_destroy(Texture* texture);
 g_internal void
 texture_ktx_cmd_record(VkCommandBuffer cmd, Texture* tex, ::Buffer<U8> tex_buf);
 g_internal B32
-texture_cmd_record(VkCommandBuffer cmd, Texture* tex, ::Buffer<U8> tex_buf);
+texture_cmd_record_with_stb(VkCommandBuffer cmd, Texture* tex, ::Buffer<U8> tex_buf);
 g_internal B32
 texture_gpu_upload_cmd_recording(VkCommandBuffer cmd, render::Handle tex_handle,
                                  ::Buffer<U8> tex_buf);
@@ -265,21 +301,26 @@ colormap_texture_cmd_record(VkCommandBuffer cmd, Texture* tex, Buffer<U8> buf);
 
 //~mgj: Loading Thread Functions
 static void
-buffer_loading_thread(void* data, VkCommandBuffer cmd, render::Handle handle);
+buffer_loading_thread(void* data, render::ThreadInput* thread_input);
 static void
-buffer_done_loading_thread(render::Handle handle);
-static void
-colormap_loading_thread(void* data, VkCommandBuffer cmd, render::Handle handle);
-static void
-texture_done_loading(render::Handle handle);
+colormap_loading_thread(void* data, render::ThreadInput* thread_input);
 g_internal void
-texture_loading_thread(void* data, VkCommandBuffer cmd, render::Handle handle);
-static ThreadInput*
-thread_input_create();
-static void
-thread_input_destroy(ThreadInput* thread_input);
+texture_loading_thread(void* data, render::ThreadInput* thread_input);
+g_internal void
+texture_loading_from_path_thread(void* data, render::ThreadInput* thread_input);
 
 static void
 thread_main(async::ThreadInfo thread_info, void* input);
 
 } // namespace vulkan
+
+#define VK_CHECK_RESULT(f)                                                                         \
+    {                                                                                              \
+        VkResult res = (f);                                                                        \
+        if (res != VK_SUCCESS)                                                                     \
+        {                                                                                          \
+            ERROR_LOG("Fatal : VkResult is %d in %s at line %d\n", res, __FILE__, __LINE__);       \
+            Trap();                                                                                \
+            exit(EXIT_FAILURE);                                                                    \
+        }                                                                                          \
+    }

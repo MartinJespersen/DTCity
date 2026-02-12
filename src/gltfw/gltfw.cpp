@@ -1,7 +1,5 @@
-DISABLE_WARNINGS_PUSH
 #define CGLTF_IMPLEMENTATION
 #include "third_party/cgltf.h"
-DISABLE_WARNINGS_POP
 
 static CgltfNode*
 ChildrenNodesDepthFirstPreOrder(Arena* arena, CgltfNode** stack, CgltfNode* node)
@@ -213,7 +211,7 @@ gltfw_primitive_create(Arena* arena, cgltf_data* data, cgltf_primitive* in_prim)
     cgltf_material* material = in_prim->material;
     cgltf_pbr_metallic_roughness* pbr_material = &material->pbr_metallic_roughness;
     cgltf_texture_view* texture_view = &pbr_material->base_color_texture;
-    primitive->tex_idx = cgltf_texture_index(data, texture_view->texture);
+    primitive->tex_idx = (U32)cgltf_texture_index(data, texture_view->texture);
 
     cgltf_accessor* accessor_indices = in_prim->indices;
     primitive->indices = BufferAlloc<U32>(arena, accessor_indices->count);
@@ -323,9 +321,6 @@ gltfw_glb_read(Arena* arena, String8 glb_path)
     ScratchScope scratch = ScratchScope(&arena, 1);
     cgltf_options options = {};
     cgltf_data* data = NULL;
-
-    cgltf_accessor* accessor_position = NULL;
-    cgltf_accessor* accessor_uv = NULL;
 
     options.memory.user_data = arena;
     options.memory.alloc_func = gltfw_alloc_func;

@@ -2,7 +2,7 @@
 g_internal void
 osm::structure_init(U64 node_hashmap_size, U64 way_hashmap_size, Rng2F64 utm_coords)
 {
-    Arena* arena = ArenaAlloc();
+    Arena* arena = arena_alloc();
     Buffer<osm::NodeList> utm_node_hashmap = BufferAlloc<osm::NodeList>(arena, node_hashmap_size);
     Buffer<osm::WayList> way_hashmap = BufferAlloc<osm::WayList>(arena, way_hashmap_size);
     Map<osm::NodeId, osm::UtmLocation>* utm_location_map =
@@ -19,7 +19,7 @@ osm::structure_init(U64 node_hashmap_size, U64 way_hashmap_size, Rng2F64 utm_coo
 g_internal void
 osm::structure_cleanup()
 {
-    ArenaRelease(osm::g_network->arena);
+    arena_release(osm::g_network->arena);
 }
 
 g_internal void
@@ -89,7 +89,7 @@ osm::wgs_node_find(Buffer<osm::RoadNodeList> node_hashmap, U64 node_id)
 }
 
 g_internal osm::WayNode*
-osm::way_find(U64 way_id)
+osm::way_find(WayId way_id)
 {
     osm::Network* network = osm::g_network;
     osm::WayList* way_list = &network->way_hashmap.data[way_id % network->way_hashmap.size];

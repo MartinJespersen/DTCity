@@ -1,13 +1,10 @@
 // ~mgj: third party libs
-DISABLE_WARNINGS_PUSH
 #define VMA_IMPLEMENTATION
 #include "third_party/vk_mem_alloc.h"
 
 #define STB_IMAGE_IMPLEMENTATION
 #define STB_IMAGE_STATIC
 #include "third_party/stb_image.h"
-
-DISABLE_WARNINGS_POP
 
 // ~mgj: user libs
 #include "render.cpp"

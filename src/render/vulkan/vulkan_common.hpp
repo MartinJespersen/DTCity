@@ -138,7 +138,7 @@ sampler_create(VkDevice device, VkSamplerCreateInfo* sampler_info);
 
 // ~mgj: Descriptor Related Functions
 static void
-descriptor_pool_create(Context* vk_ctx);
+descriptor_pool_create(Context* vk_ctx, U32 max_textures);
 static VkDescriptorSet
 descriptor_set_create(Arena* arena, VkDevice device, VkDescriptorPool desc_pool,
                       VkDescriptorSetLayout desc_set_layout, VkImageView image_view,
@@ -251,14 +251,3 @@ sampler_create_info_from_sampler_info(render::SamplerInfo* sampler,
                                       VkSamplerCreateInfo* out_sampler_info);
 
 } // namespace vulkan
-
-#define VK_CHECK_RESULT(f)                                                                         \
-    {                                                                                              \
-        VkResult res = (f);                                                                        \
-        if (res != VK_SUCCESS)                                                                     \
-        {                                                                                          \
-            ERROR_LOG("Fatal : VkResult is %d in %s at line %d\n", res, __FILE__, __LINE__);       \
-            Trap();                                                                                \
-            exit(EXIT_FAILURE);                                                                    \
-        }                                                                                          \
-    }

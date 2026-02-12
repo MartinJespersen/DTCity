@@ -6,7 +6,7 @@ CompileFlags:
 
 Index:
   Background: Build
-  StandardLibrary: true
+  StandardLibrary: false
 
 Diagnostics:
   UnusedIncludes: None

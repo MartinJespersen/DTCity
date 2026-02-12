@@ -4,25 +4,26 @@
 #include <cstdlib>
 #include <cstring>
 
+// cesium native libraries
+#include "cesium/cesium_native_headers.hpp"
+
 #undef APIENTRY
 #define GLFW_INCLUDE_VULKAN
 #include <GLFW/glfw3.h>
 #undef APIENTRY
 
 #include "base/base_inc.hpp"
-DISABLE_WARNINGS_PUSH
 //////////////////////////////////////////////
 // mgj: third party libs
 #define GLM_FORCE_RADIANS
 #define GLM_FORCE_DEPTH_ZERO_TO_ONE
 #define GLM_FORCE_DEFAULT_ALIGNED_GENTYPES
-#include "third_party/glm/glm.hpp"
-#include "third_party/glm/gtc/matrix_transform.hpp"
+#include "glm/glm.hpp"
+#include "glm/gtc/matrix_transform.hpp"
 #define IM_ASSERT(x) Assert(x)
 #include "third_party/imgui/imgui_inc.hpp"
 //////////////////////////////////////////////
 #include "os_core/os_core_inc.hpp"
-DISABLE_WARNINGS_POP
 
 // user defined: [hpp]
 #include "async/async.hpp"
@@ -33,4 +34,5 @@ DISABLE_WARNINGS_POP
 #include "gltfw/gltfw.hpp"
 #include "osm/osm.hpp"
 #include "city/city_inc.hpp"
+#include "cesium/cesium_tileset.hpp"
 #include "entrypoint.hpp"

@@ -696,7 +696,7 @@ static void
 draw_frame_reset()
 {
     Context* vk_ctx = ctx_get();
-    ArenaClear(vk_ctx->draw_frame_arena);
+    arena_clear(vk_ctx->draw_frame_arena);
     vk_ctx->draw_frame = PushStruct(vk_ctx->draw_frame_arena, DrawFrame);
 }
 
@@ -717,19 +717,21 @@ model_3d_bucket_add(BufferAllocation* vertex_buffer_allocation,
     DrawFrame* draw_frame = vk_ctx->draw_frame;
 
     render::AssetItem<Texture>* base_tex = asset_manager_texture_item_get(tex_handle);
+    if (base_tex)
+    {
+        Model3dPushConstants push_constants = {};
+        push_constants.tex_idx = base_tex->item.descriptor_set_idx;
 
-    Model3dPushConstants push_constants = {};
-    push_constants.tex_idx = base_tex->item.descriptor_set_idx;
+        Model3DNode* node = PushStruct(vk_ctx->draw_frame_arena, Model3DNode);
+        node->vertex_alloc = *vertex_buffer_allocation;
+        node->index_alloc = *index_buffer_allocation;
+        node->push_constants = push_constants;
+        node->index_count = index_count;
+        node->index_buffer_offset = index_buffer_offset;
+        node->depth_write_per_draw_enabled = depth_write_per_draw_call_only;
 
-    Model3DNode* node = PushStruct(vk_ctx->draw_frame_arena, Model3DNode);
-    node->vertex_alloc = *vertex_buffer_allocation;
-    node->index_alloc = *index_buffer_allocation;
-    node->push_constants = push_constants;
-    node->index_count = index_count;
-    node->index_buffer_offset = index_buffer_offset;
-    node->depth_write_per_draw_enabled = depth_write_per_draw_call_only;
-
-    SLLQueuePush(draw_frame->model_3D_list.first, draw_frame->model_3D_list.last, node);
+        SLLQueuePush(draw_frame->model_3D_list.first, draw_frame->model_3D_list.last, node);
+    }
 }
 
 static void
@@ -742,23 +744,25 @@ model_3d_instance_bucket_add(BufferAllocation* vertex_buffer_allocation,
     DrawFrame* draw_frame = vk_ctx->draw_frame;
     Model3DInstance* instance_draw = &draw_frame->model_3D_instance_draw;
 
-    render::AssetItem<Texture>* asset_tex =
-        asset_manager_item_get(&vk_ctx->asset_manager->texture_list, tex_handle);
-    Texture* tex = &asset_tex->item;
+    render::AssetItem<Texture>* asset_tex = asset_manager_texture_item_get(tex_handle);
+    if (asset_tex)
+    {
+        Texture* tex = &asset_tex->item;
 
-    Model3dInstancePushConstants push_constants = {.tex_idx = tex->descriptor_set_idx};
+        Model3dInstancePushConstants push_constants = {.tex_idx = tex->descriptor_set_idx};
 
-    Model3DInstanceNode* node = PushStruct(vk_ctx->draw_frame_arena, Model3DInstanceNode);
-    U32 align_pst = instance_draw->total_instance_buffer_byte_count + (align - 1);
-    align_pst -= align_pst % align;
-    node->instance_buffer_offset = align_pst;
-    node->vertex_alloc = *vertex_buffer_allocation;
-    node->index_alloc = *index_buffer_allocation;
-    node->push_constants = push_constants;
-    node->instance_buffer_info = *instance_buffer_info;
-    instance_draw->total_instance_buffer_byte_count +=
-        node->instance_buffer_offset + instance_buffer_info->buffer.size;
-    SLLQueuePush(instance_draw->list.first, instance_draw->list.last, node);
+        Model3DInstanceNode* node = PushStruct(vk_ctx->draw_frame_arena, Model3DInstanceNode);
+        U32 align_pst = instance_draw->total_instance_buffer_byte_count + (align - 1);
+        align_pst -= align_pst % align;
+        node->instance_buffer_offset = align_pst;
+        node->vertex_alloc = *vertex_buffer_allocation;
+        node->index_alloc = *index_buffer_allocation;
+        node->push_constants = push_constants;
+        node->instance_buffer_info = *instance_buffer_info;
+        instance_draw->total_instance_buffer_byte_count +=
+            node->instance_buffer_offset + instance_buffer_info->buffer.size;
+        SLLQueuePush(instance_draw->list.first, instance_draw->list.last, node);
+    }
 }
 
 static void
@@ -777,6 +781,10 @@ blend_3d_bucket_add(BufferAllocation* vertex_buffer_allocation,
     render::AssetItem<Texture>* colormap_tex = asset_manager_texture_item_get(colormap_handle);
     Assert(base_tex);
     Assert(colormap_tex);
+    if (!base_tex || !colormap_tex)
+    {
+        return;
+    }
 
     node->push_constants = {.texture_index = base_tex->item.descriptor_set_idx,
                             .colormap_index = colormap_tex->item.descriptor_set_idx};
@@ -859,7 +867,6 @@ model_3d_rendering()
         vkCmdBindVertexBuffers(cmd_buffer, 0, 1, &node->vertex_alloc.buffer, offsets);
         vkCmdBindIndexBuffer(cmd_buffer, node->index_alloc.buffer, 0, VK_INDEX_TYPE_UINT32);
         VkBool32 color_write_enabled[4] = {VK_TRUE, VK_TRUE, VK_TRUE, VK_TRUE};
-        VkBool32 color_write_disabled[4] = {};
         if (node->depth_write_per_draw_enabled)
         {
             draw_indexed_separate_depth_and_color_calls(cmd_buffer, node->index_buffer_offset,

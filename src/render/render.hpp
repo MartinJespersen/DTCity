@@ -4,17 +4,85 @@ namespace render
 {
 
 ////////////////////////////////
-//~ mgj: Handle Type
-union Handle
+//~ mgj: Handle Types
+enum class HandleType : U32
 {
-    void* ptr;
-    U64 u64;
-    U32 u32[2];
-    U16 u16[4];
-    static_assert(sizeof(ptr) == 8, "ptr should be 8 bytes");
+    Undefined,
+    Texture,
+    Buffer
 };
 
+struct Handle
+{
+    union
+    {
+        void* ptr;
+        U64 u64;
+        U32 u32[2];
+        U16 u16[4];
+        static_assert(sizeof(ptr) == 8, "ptr should be 8 bytes");
+    };
+    U64 gen_id;
+    HandleType type;
+
+    Handle() : ptr(nullptr), gen_id(0), type(HandleType::Undefined)
+    {
+    }
+
+    Handle(void* ptr, U64 gen_id, HandleType asset_type)
+        : ptr(ptr), gen_id(gen_id), type(asset_type)
+    {
+    }
+
+    static Handle
+    texture_handle_create();
+
+    static Handle
+    buffer_handle_create();
+};
+
+struct HandleNode
+{
+    HandleNode* next;
+    render::Handle handle;
+};
+
+struct HandleList
+{
+    render::HandleNode* first;
+    render::HandleNode* last;
+    U32 count;
+};
+
+////////////////////////////////
+struct ThreadInput;
+typedef void (*ThreadLoadingFunc)(void* data, ThreadInput* thread_input);
+typedef void (*ThreadDoneLoadingFunc)(HandleList handles);
+struct ThreadInput
+{
+    Arena* arena;
+    render::HandleList handles;
+
+    void* cmd_buffer;
+    void* user_data;
+    ThreadLoadingFunc loading_func;
+    ThreadDoneLoadingFunc done_loading_func;
+};
 /////////////////////////////////
+
+typedef void* FuncData;
+typedef void* (*Func)(ThreadInput* thread_input, FuncData data);
+struct ThreadSyncCallback
+{
+    FuncData data;
+    Func function;
+
+    ThreadSyncCallback(FuncData data, Func func) : data(data), function(func)
+    {
+    }
+};
+/////////////////////////////////
+
 enum ResourceKind
 {
     ResourceKind_Static,
@@ -82,13 +150,6 @@ struct BufferInfo
     BufferType buffer_type;
 };
 
-enum AssetItemType
-{
-    AssetItemType_Undefined,
-    AssetItemType_Texture,
-    AssetItemType_Buffer
-};
-
 enum class PipelineLayoutType
 {
     Invalid,
@@ -103,6 +164,7 @@ template <typename T> struct AssetItem
 {
     AssetItem* next;
     AssetItem* prev;
+    U64 gen_id;
     B32 is_loaded;
     T item;
 };
@@ -111,6 +173,7 @@ template <typename T> struct AssetItemList
 {
     AssetItem<T>* first;
     AssetItem<T>* last;
+    U32 count;
 };
 
 struct TextureLoadingInfo
@@ -177,10 +240,58 @@ struct Model3DInstance
     glm::vec4 w_basis;
 };
 
+struct TextureUploadData
+{
+    U32 width;
+    U32 height;
+    U32 num_channels;
+    U32 bytes_per_channel;
+    U8* data;
+    U32 data_byte_size;
+
+    static TextureUploadData
+    init(U8* data, U32 width, U32 height, U32 num_channels, U32 bytes_per_channel,
+         U32 data_byte_size)
+    {
+        TextureUploadData result = {};
+        result.width = width;
+        result.height = height;
+        result.num_channels = num_channels;
+        result.bytes_per_channel = bytes_per_channel;
+        result.data = data;
+        result.data_byte_size = data_byte_size;
+        return result;
+    }
+
+    static TextureUploadData
+    init(U8* data, U32 width, U32 height, U32 num_channels, U32 bytes_per_channel)
+    {
+        TextureUploadData result = {};
+        result.width = width;
+        result.height = height;
+        result.num_channels = num_channels;
+        result.bytes_per_channel = bytes_per_channel;
+        result.data = data;
+        result.data_byte_size = width * height * num_channels * bytes_per_channel;
+        return result;
+    }
+};
+
+static ThreadInput*
+thread_input_create();
+static void
+thread_input_destroy(ThreadInput* thread_input);
+
 static Handle
 handle_zero();
 static bool
 is_handle_zero(Handle handle);
+static bool
+is_handle_loaded(Handle handle);
+static void
+handle_list_push(Arena* arena, HandleList* list, Handle handle);
+static Handle
+handle_list_first_handle(HandleList* list);
 static BufferInfo
 buffer_info_from_vertex_3d_buffer(Buffer<Vertex3D> buffer, BufferType buffer_type);
 
@@ -221,29 +332,35 @@ g_internal Handle
 texture_handle_create(SamplerInfo* sampler_info);
 g_internal Handle
 texture_load_async(SamplerInfo* sampler_info, String8 texture_path);
+g_internal render::Handle
+texture_load_async(render::SamplerInfo* sampler_info, TextureUploadData* tex_upload_info);
 static render::Handle
 colormap_load_async(render::SamplerInfo* sampler_info, const U8* colormap_data, U64 colormap_size);
 g_internal void
 texture_gpu_upload_sync(Handle tex_handle, Buffer<U8> tex_bufs);
 
+g_internal Handle
+texture_load_sync(render::SamplerInfo* sampler_info, TextureUploadData* tex_data,
+                  VkCommandBuffer cmd);
 g_internal void
-texture_destroy(Handle handle);
+handle_destroy(Handle handle);
 g_internal void
-buffer_destroy(Handle handle);
+handle_destroy_deferred(Handle handle);
 
 g_internal void
-texture_destroy_deferred(Handle handle);
-g_internal void
-buffer_destroy_deferred(Handle handle);
+handle_done_loading(render::HandleList handles);
 
 g_internal void
-model_3d_draw(Model3DPipelineData pipeline_input, B32 depth_test_per_draw_call_only);
+model_3d_draw(Model3DPipelineData pipeline_input);
 
 g_internal void
 blend_3d_draw(Blend3DPipelineData pipeline_input);
 
 g_internal Handle
 buffer_load(BufferInfo* buffer_info);
+
+g_internal Handle
+buffer_load_sync(VkCommandBuffer cmd, render::BufferInfo* buffer_info);
 
 g_internal bool
 is_resource_loaded(Handle handle);
@@ -252,4 +369,6 @@ g_internal void
 model_3d_instance_draw(Handle texture_handle, Handle vertex_buffer_handle,
                        Handle index_buffer_handle, BufferInfo* instance_buffer);
 
+g_internal void*
+thread_cmd_buffer_record(ThreadInput* thread_input, ThreadSyncCallback callback);
 } // namespace render

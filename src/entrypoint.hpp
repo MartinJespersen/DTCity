@@ -33,6 +33,7 @@ struct Context
     String8 data_dir;
     Buffer<String8> data_subdirs;
 
+    Arena* arena_frame;
     Arena* arena_permanent;
 
     io::IO* io;
@@ -41,6 +42,7 @@ struct Context
     city::Road* road;
     city::CarSim* car_sim;
     city::Buildings* buildings;
+    cesium::TilesetRenderer* cesium_tileset;
 
     async::Threads* thread_pool;
 };

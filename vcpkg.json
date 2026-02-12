@@ -3,7 +3,27 @@
     { "name": "ktx", "features": ["vulkan"] },
     "vulkan-loader",
     "glfw3",
-    { "name": "glslang", "features": ["tools"] }
+    { "name": "glslang", "features": ["tools"] },
+    "asyncplusplus",
+    "fmt",
+    "spdlog",
+    "curl",
+    "draco",
+    "meshoptimizer",
+    "libwebp",
+    "libjpeg-turbo",
+    "ada-url",
+    "s2geometry",
+    "modp-base64",
+    "zlib",
+    "zstd",
+    "sqlite3",
+    "tinyxml2",
+    "openssl",
+    "abseil",
+    "rapidjson",
+    "expected-lite",
+    "spz"
   ],
   "overrides": [
     {
@@ -21,6 +41,14 @@
     {
       "name": "glslang",
       "version": "15.1.0"
+    },
+    {
+      "name": "abseil",
+      "version": "20250512.1"
+    },
+    {
+      "name": "s2geometry",
+      "version": "0.11.1"
     }
   ]
 }

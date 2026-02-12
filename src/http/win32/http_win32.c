@@ -6,7 +6,7 @@
 
 static void HTTP_Init() {
   if (http_w32_state == 0) {
-    Arena *arena = ArenaAlloc();
+    Arena *arena = arena_alloc();
     http_w32_state = PushArray(arena, HTTP_W32_State, 1);
     http_w32_state->arena = arena;
     http_w32_state->hSession =

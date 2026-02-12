@@ -1,9 +1,6 @@
 // layers - [cpp]
-DISABLE_WARNINGS_PUSH
-
 #include "base/base_inc.cpp"
 #include "os_core/os_core_inc.cpp"
-DISABLE_WARNINGS_POP
 
 #include "http/http_inc.cpp"
 #include "async/async.cpp"
@@ -13,4 +10,5 @@ DISABLE_WARNINGS_POP
 #include "misc/misc_inc.cpp"
 #include "osm/osm.cpp"
 #include "city/city_inc.cpp"
+#include "cesium/cesium_tileset.cpp"
 #include "entrypoint.cpp"

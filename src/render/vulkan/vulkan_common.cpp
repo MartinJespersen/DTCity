@@ -82,8 +82,7 @@ depth_resources_create(Context* vk_ctx, SwapchainResources* swapchain_resources)
     ImageViewResource image_view_resource = image_view_resource_create(
         vk_ctx->device, image_alloc.image, depth_format, VK_IMAGE_ASPECT_DEPTH_BIT, 1);
 
-    swapchain_resources->depth_image_resource = {.image_alloc = image_alloc,
-                                                 .image_view_resource = image_view_resource};
+    swapchain_resources->depth_image_resource = ImageResource(image_alloc, image_view_resource);
 }
 
 static void
@@ -783,13 +782,15 @@ frustum_planes_calculate(Frustum* out_frustum, const glm::mat4 matrix)
 static void
 image_view_resource_destroy(ImageViewResource image_view_resource)
 {
-    vkDestroyImageView(image_view_resource.device, image_view_resource.image_view, 0);
+    if (image_view_resource.image_view)
+    {
+        vkDestroyImageView(image_view_resource.device, image_view_resource.image_view, 0);
+    }
 }
 
-static ImageViewResource
-image_view_resource_create(VkDevice device, VkImage image, VkFormat format,
-                           VkImageAspectFlags aspect_mask, U32 mipmap_level,
-                           VkImageViewType image_type)
+ImageViewResource::ImageViewResource(VkDevice device, VkImage image, VkFormat format,
+                                     VkImageAspectFlags aspect_mask, U32 mipmap_level,
+                                     VkImageViewType image_type)
 {
     VkImageViewCreateInfo viewInfo{};
     viewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
@@ -805,7 +806,17 @@ image_view_resource_create(VkDevice device, VkImage image, VkFormat format,
     VkImageView view;
     VK_CHECK_RESULT(vkCreateImageView(device, &viewInfo, nullptr, &view));
 
-    return {.image_view = view, .device = device};
+    Assert(view != VK_NULL_HANDLE);
+    this->image_view = view;
+    this->device = device;
+}
+
+static ImageViewResource
+image_view_resource_create(VkDevice device, VkImage image, VkFormat format,
+                           VkImageAspectFlags aspect_mask, U32 mipmap_level,
+                           VkImageViewType image_type)
+{
+    return ImageViewResource(device, image, format, aspect_mask, mipmap_level, image_type);
 }
 
 g_internal void
@@ -853,8 +864,7 @@ color_resources_create(Context* vk_ctx, SwapchainResources* swapchain_resources)
     ImageViewResource color_image_view = image_view_resource_create(
         vk_ctx->device, image_alloc.image, colorFormat, VK_IMAGE_ASPECT_COLOR_BIT, 1);
 
-    swapchain_resources->color_image_resource = {.image_alloc = image_alloc,
-                                                 .image_view_resource = color_image_view};
+    swapchain_resources->color_image_resource = ImageResource(image_alloc, color_image_view);
 }
 
 static void
@@ -984,7 +994,7 @@ static SwapchainResources*
 swapchain_create(Context* vk_ctx, SwapChainSupportDetails* swapchain_info,
                  VkExtent2D swapchain_extent)
 {
-    Arena* arena = ArenaAlloc();
+    Arena* arena = arena_alloc();
     SwapchainResources* swapchain_resources = PushStruct(arena, SwapchainResources);
     swapchain_resources->arena = arena;
 
@@ -1091,12 +1101,11 @@ swapchain_cleanup(VkDevice device, SwapchainResources* swapchain_resources)
     {
         image_view_resource_destroy(
             swapchain_resources->image_resources.data[i].image_view_resource);
-        swapchain_resources->image_resources.data[i].image_view_resource = {0};
     }
 
     vkDestroySwapchainKHR(device, swapchain_resources->swapchain, nullptr);
     swapchain_resources->swapchain = VK_NULL_HANDLE;
-    ArenaRelease(swapchain_resources->arena);
+    arena_release(swapchain_resources->arena);
 }
 
 static void
@@ -1132,11 +1141,11 @@ sampler_create(VkDevice device, VkSamplerCreateInfo* sampler_info)
 
 // ~mgj: Descriptor Related Functions
 static void
-descriptor_pool_create(Context* vk_ctx)
+descriptor_pool_create(Context* vk_ctx, U32 max_textures)
 {
     VkDescriptorPoolSize pool_sizes[] = {
         {VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 6}, // 2 for both camera buffer and terrain buffer
-        {VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 20},
+        {VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 20 + max_textures},
     };
     U32 pool_size_count = ArrayCount(pool_sizes);
 
@@ -1248,6 +1257,8 @@ descriptor_set_allocate_bindless(VkDevice device, VkDescriptorPool desc_pool,
 static void
 descriptor_set_update_bindless_texture(U32 array_index, VkImageView image_view, VkSampler sampler)
 {
+    Assert(image_view);
+    Assert(sampler);
     vulkan::Context* vk_ctx = ctx_get();
     U32 binding = vk_ctx->texture_binding;
     VkDescriptorSet desc_set = vk_ctx->texture_descriptor_set;
@@ -1274,7 +1285,6 @@ descriptor_set_create(Arena* arena, VkDevice device, VkDescriptorPool desc_pool,
                       VkDescriptorSetLayout desc_set_layout, VkImageView image_view,
                       VkSampler sampler)
 {
-    Context* vk_ctx = ctx_get();
     ScratchScope scratch = ScratchScope(&arena, 1);
 
     VkDescriptorSetLayout layouts[] = {desc_set_layout};

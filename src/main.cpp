@@ -8,9 +8,10 @@ ContextCreate(io::IO* io_ctx)
 
     ScratchScope scratch = ScratchScope(0, 0);
     //~mgj: app context setup
-    Arena* app_arena = (Arena*)ArenaAlloc();
+    Arena* app_arena = (Arena*)arena_alloc();
     Context* ctx = PushStruct(app_arena, Context);
     ctx->arena_permanent = app_arena;
+    ctx->arena_frame = arena_alloc();
     ctx->io = PushStruct(app_arena, io::IO);
     ctx->camera = PushStruct(app_arena, ui::Camera);
     ctx->time = PushStruct(app_arena, dt_Time);
@@ -44,18 +45,17 @@ ContextCreate(io::IO* io_ctx)
 
     // ~mgj: -2 as 2 are used for Main thread and IO thread
     U32 thread_count = OS_GetSystemInfo()->logical_processor_count - 2;
-    U32 queue_size = 10; // TODO: should be increased
+    U32 queue_size = 1000; // TODO: should be increased
     ctx->thread_pool = async::WorkerThreadsCreate(app_arena, thread_count, queue_size);
 
     return ctx;
 }
 
 static void
-ContextDestroy(Context* ctx)
+ctx_destroy(Context* ctx)
 {
-    // TODO: This should probably be uncommented
-    // async::WorkerThreadDestroy(ctx->thread_pool);
-    ArenaRelease(ctx->arena_permanent);
+    async::WorkerThreadsDestroy(ctx->thread_pool);
+    arena_release(ctx->arena_permanent);
 }
 
 void
@@ -78,6 +78,7 @@ App(int argc, char** argv)
         io::input_state_update(ctx->io);
     }
     dt_render_thread_join(thread_handle, ctx);
-    ContextDestroy(ctx);
     io::window_destroy(io_ctx);
+    arena_release(ctx->arena_frame);
+    ctx_destroy(ctx);
 }

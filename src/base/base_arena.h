@@ -69,10 +69,10 @@ static Arena*
 ArenaAlloc(ArenaParams* params);
 
 static Arena*
-ArenaAlloc();
+arena_alloc();
 
 static void
-ArenaRelease(Arena* arena);
+arena_release(Arena* arena);
 
 //- rjf: arena push/pop/pos core functions
 static void*
@@ -84,7 +84,7 @@ ArenaPopTo(Arena* arena, U64 pos);
 
 //- rjf: arena push/pop helpers
 static void
-ArenaClear(Arena* arena);
+arena_clear(Arena* arena);
 static void
 arena_pop(Arena* arena, U64 amt);
 

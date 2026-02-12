@@ -11,6 +11,7 @@
 #include <timeapi.h>
 #include <tlhelp32.h>
 #include <Shlobj.h>
+#include <shellapi.h>
 #include <processthreadsapi.h>
 #pragma comment(lib, "user32")
 #pragma comment(lib, "winmm")

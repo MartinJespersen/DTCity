@@ -1727,9 +1727,9 @@ win32_exception_filter(EXCEPTION_POINTERS* exception_ptrs)
                             if (dbg_SymGetLineFromAddrW64(process, address, &line_displacement,
                                                           &line))
                             {
-                                buflen += wnsprintfW(
-                                    buffer + buflen, ArrayCount(buffer) - buflen, L", %s line %u",
-                                    PathFindFileNameW(line.FileName), line.LineNumber);
+                                buflen += wnsprintfW(buffer + buflen, ArrayCount(buffer) - buflen,
+                                                     L", %s:%u", PathFindFileNameW(line.FileName),
+                                                     line.LineNumber);
                             }
                         }
                         else
@@ -1866,7 +1866,7 @@ w32_entry_point_caller(int argc, WCHAR** wargv)
     TCTX_InitAndEquip(&tctx);
 
     //- rjf: set up dynamically-alloc'd state
-    Arena* arena = ArenaAlloc();
+    Arena* arena = arena_alloc();
     {
         os_w32_state.arena = arena;
         {
@@ -1925,7 +1925,7 @@ w32_entry_point_caller(int argc, WCHAR** wargv)
         }
     }
     //- rjf: set up entity storage InitializeCriticalSection(&os_w32_state.entity_mutex);
-    os_w32_state.entity_arena = ArenaAlloc();
+    os_w32_state.entity_arena = arena_alloc();
     InitializeCriticalSection(&os_w32_state.entity_mutex);
 
     App(argc, argv);

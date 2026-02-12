@@ -14,7 +14,7 @@ framebuffer_resize_callback(GLFWwindow* window, int width, int height)
 static IO*
 window_create(String8 app_name, U32 window_width, U32 window_height)
 {
-    Arena* arena = ArenaAlloc();
+    Arena* arena = arena_alloc();
     IO* io_ctx = PushStruct(arena, IO);
     io_ctx->arena = arena;
 
@@ -35,7 +35,7 @@ window_destroy(IO* io_ctx)
 {
     glfwDestroyWindow(io_ctx->window);
     glfwTerminate();
-    ArenaRelease(io_ctx->arena);
+    arena_release(io_ctx->arena);
 }
 
 static void

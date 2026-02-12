@@ -1,8 +1,6 @@
 #pragma once
 // ~mgj: libs[h/hpp]
-DISABLE_WARNINGS_PUSH
 #include "third_party/utm.h"
-DISABLE_WARNINGS_POP
 
 #include "third_party/simdjson/simdjson.h"
 

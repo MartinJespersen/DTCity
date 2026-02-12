@@ -10,7 +10,7 @@ static void TCTX_InitAndEquip(TCTX *tctx) {
   MemoryZeroStruct(tctx);
   Arena **arena_ptr = tctx->arenas;
   for (U64 i = 0; i < ArrayCount(tctx->arenas); i += 1, arena_ptr += 1) {
-    *arena_ptr = ArenaAlloc();
+    *arena_ptr = arena_alloc();
   }
   Assert(!tctx->log);
   tctx->log = LogAlloc();
@@ -20,7 +20,7 @@ static void TCTX_InitAndEquip(TCTX *tctx) {
 
 static void TCTX_Release() {
   for (U64 i = 0; i < ArrayCount(tctx_thread_local->arenas); i += 1) {
-    ArenaRelease(tctx_thread_local->arenas[i]);
+    arena_release(tctx_thread_local->arenas[i]);
   }
   Assert(tctx_thread_local->log);
   LogRelease(tctx_thread_local->log);
@@ -80,13 +80,13 @@ static void tctx_read_srcloc(char **file_name, U64 *line_number) {
 //~ mgj: Log Creation/Selection
 
 static Log *LogAlloc() {
-  Arena *arena = ArenaAlloc();
+  Arena *arena = arena_alloc();
   Log *log = PushArray(arena, Log, 1);
   log->arena = arena;
   return log;
 }
 
-static void LogRelease(Log *log) { ArenaRelease(log->arena); }
+static void LogRelease(Log *log) { arena_release(log->arena); }
 
 ////////////////////////////////
 //~ mgj: Log Building/Clearing

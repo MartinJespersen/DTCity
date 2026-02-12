@@ -6,17 +6,17 @@ road_destroy(Road* road)
 {
     for (U32 i = 0; i < ArrayCount(road->handles); ++i)
     {
-        render::buffer_destroy(road->handles[i].vertex_buffer_handle);
-        render::buffer_destroy(road->handles[i].index_buffer_handle);
-        render::texture_destroy(road->handles[i].texture_handle);
+        render::handle_destroy(road->handles[i].vertex_buffer_handle);
+        render::handle_destroy(road->handles[i].index_buffer_handle);
+        render::handle_destroy(road->handles[i].texture_handle);
     }
 
     for (U32 i = 0; i < ArrayCount(road->colormap_handles); ++i)
     {
-        render::texture_destroy(road->colormap_handles[i]);
+        render::handle_destroy(road->colormap_handles[i]);
     }
 
-    ArenaRelease(road->arena);
+    arena_release(road->arena);
 }
 
 g_internal void
@@ -447,8 +447,8 @@ RoadIntersectionPointsFind(Road* road, RoadSegment* in_out_segment, osm::Way* cu
                 AdjacentNodeLL* adj_node_ll = {};
                 for (U32 node_idx = 0; node_idx < way->node_count; node_idx++)
                 {
-                    U64 node_id = way->node_ids[node_idx];
-                    if (node_id == node->id)
+                    U64 way_node_id = way->node_ids[node_idx];
+                    if (way_node_id == node->id)
                     {
                         if (node_idx > 0)
                         {
@@ -616,7 +616,7 @@ car_sim_create(String8 asset_path, String8 texture_path, U32 car_count, Road* ro
     prof_scope_marker;
     ScratchScope scratch = ScratchScope(0, 0);
 
-    Arena* arena = ArenaAlloc();
+    Arena* arena = arena_alloc();
 
     CarSim* car_sim = PushStruct(arena, CarSim);
     car_sim->arena = arena;
@@ -659,7 +659,6 @@ car_sim_create(String8 asset_path, String8 texture_path, U32 car_count, Road* ro
             vec_2f32(target_loc.pos.x - source_loc.pos.x, target_loc.pos.y - source_loc.pos.y);
         car->dir = normalize_3f32(height_dim_add(dir, 0));
     }
-    ui::Camera* camera = dt_ctx_get()->camera;
 
     return car_sim;
 }
@@ -667,10 +666,10 @@ car_sim_create(String8 asset_path, String8 texture_path, U32 car_count, Road* ro
 g_internal void
 car_sim_destroy(CarSim* car_sim)
 {
-    render::buffer_destroy(car_sim->vertex_handle);
-    render::buffer_destroy(car_sim->index_handle);
-    render::texture_destroy(car_sim->texture_handle);
-    ArenaRelease(car_sim->arena);
+    render::handle_destroy(car_sim->vertex_handle);
+    render::handle_destroy(car_sim->index_handle);
+    render::handle_destroy(car_sim->texture_handle);
+    arena_release(car_sim->arena);
 }
 
 g_internal Buffer<render::Model3DInstance>
@@ -741,9 +740,8 @@ buildings_create(String8 cache_path, String8 texture_path, F32 road_height, Rng2
                  render::SamplerInfo* sampler_info)
 {
     prof_scope_marker;
-    osm::Network* network = osm::g_network;
     ScratchScope scratch = ScratchScope(0, 0);
-    Arena* arena = ArenaAlloc();
+    Arena* arena = arena_alloc();
     Buildings* buildings = PushStruct(arena, Buildings);
     buildings->arena = arena;
     buildings->cache_file_name = push_str8_copy(arena, S("openapi_node_ways_buildings.json"));
@@ -837,11 +835,11 @@ buildings_create(String8 cache_path, String8 texture_path, F32 road_height, Rng2
 g_internal void
 building_destroy(Buildings* building)
 {
-    render::buffer_destroy(building->roof_model_handles.vertex_buffer_handle);
-    render::buffer_destroy(building->roof_model_handles.index_buffer_handle);
-    render::texture_destroy(building->roof_model_handles.texture_handle);
-    render::texture_destroy(building->facade_model_handles.texture_handle);
-    ArenaRelease(building->arena);
+    render::handle_destroy(building->roof_model_handles.vertex_buffer_handle);
+    render::handle_destroy(building->roof_model_handles.index_buffer_handle);
+    render::handle_destroy(building->roof_model_handles.texture_handle);
+    render::handle_destroy(building->facade_model_handles.texture_handle);
+    arena_release(building->arena);
 }
 g_internal F64
 cross_2f64_z_component(Vec2F64 a, Vec2F64 b)
@@ -1230,9 +1228,9 @@ land_destroy(render::Model3DPipelineDataList list)
 {
     for (render::Model3DPipelineDataNode* data = list.first; data; data = data->next)
     {
-        render::buffer_destroy(data->handles.index_buffer_handle);
-        render::buffer_destroy(data->handles.vertex_buffer_handle);
-        render::texture_destroy(data->handles.texture_handle);
+        render::handle_destroy(data->handles.index_buffer_handle);
+        render::handle_destroy(data->handles.vertex_buffer_handle);
+        render::handle_destroy(data->handles.texture_handle);
     }
 }
 
@@ -1427,7 +1425,7 @@ road_create(String8 texture_path, String8 cache_path, String8 data_dir, Rng2F64 
     prof_scope_marker;
 
     ScratchScope scratch = ScratchScope(0, 0);
-    Arena* arena = ArenaAlloc();
+    Arena* arena = arena_alloc();
 
     Road* road = PushStruct(arena, Road);
 
@@ -1591,7 +1589,7 @@ road_vertex_buffer_switch(Road* road, RoadOverlayOption overlay_option)
             prof_scope_marker_named("road_vertex_buffer_switch: 2. pass");
             render::Blend3DPipelineData* current_road_pipeline_data =
                 &road->handles[road->current_handle_idx];
-            render::buffer_destroy_deferred(current_road_pipeline_data->vertex_buffer_handle);
+            render::handle_destroy_deferred(current_road_pipeline_data->vertex_buffer_handle);
             *current_road_pipeline_data = {};
 
             road->current_handle_idx = next_handle_idx;

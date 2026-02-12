@@ -1,0 +1,21 @@
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+index abcdefg..1234567 100644
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -72,6 +72,8 @@ install(
+ )
+ 
+ # CLI Tools
++option(SPZ_BUILD_CLI_TOOLS "Build CLI tools" ON)
++if(SPZ_BUILD_CLI_TOOLS)
+ add_executable(ply_to_spz cli_tools/src/ply_to_spz.cpp)
+ target_link_libraries(ply_to_spz PRIVATE spz)
+ target_include_directories(ply_to_spz PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
+@@ -86,6 +88,7 @@ target_include_directories(spz_info PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
+ install(TARGETS ply_to_spz spz_to_ply spz_info
+   RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
+ )
++endif()
+ 
+ # --- Python Bindings Option ---
+ option(BUILD_PYTHON_BINDINGS "Build Python bindings using nanobind" OFF)

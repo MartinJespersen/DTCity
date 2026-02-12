@@ -15,10 +15,7 @@ static void
 texture_destroy(Texture* texture)
 {
     AssetManager* asset_manager = asset_manager_get();
-    if (texture->staging_buffer.buffer != 0)
-    {
-        buffer_destroy(&texture->staging_buffer);
-    }
+    buffer_destroy(&texture->staging_allocation);
     image_resource_destroy(texture->image_resource);
     vkDestroySampler(asset_manager->device, texture->sampler, nullptr);
 }
@@ -37,7 +34,7 @@ ktx2_check(U8* buf, U64 size)
 }
 
 g_internal void
-texture_ktx_cmd_record(VkCommandBuffer cmd, Texture* tex, ::Buffer<U8> tex_buf)
+texture_ktx_cmd_record(VkCommandBuffer cmd, Texture* tex, Buffer<U8> tex_buf)
 {
     ScratchScope scratch = ScratchScope(0, 0);
     AssetManager* asset_manager = asset_manager_get();
@@ -46,8 +43,6 @@ texture_ktx_cmd_record(VkCommandBuffer cmd, Texture* tex, ::Buffer<U8> tex_buf)
     ktx_error_code_e ktxresult =
         ktxTexture2_CreateFromMemory(tex_buf.data, tex_buf.size, NULL, &ktx_texture);
 
-    BufferAllocation staging = {};
-
     if (ktxresult == KTX_SUCCESS)
     {
         U32 mip_levels = ktx_texture->numLevels;
@@ -55,7 +50,7 @@ texture_ktx_cmd_record(VkCommandBuffer cmd, Texture* tex, ::Buffer<U8> tex_buf)
         U32 base_height = ktx_texture->baseHeight;
         U32 base_depth = ktx_texture->baseDepth;
 
-        ::Buffer<U32> mip_level_offsets = BufferAlloc<U32>(scratch.arena, mip_levels);
+        Buffer<U32> mip_level_offsets = BufferAlloc<U32>(scratch.arena, mip_levels);
         for (U32 i = 0; i < ktx_texture->numLevels; ++i)
         {
             ktx_size_t offset;
@@ -65,7 +60,7 @@ texture_ktx_cmd_record(VkCommandBuffer cmd, Texture* tex, ::Buffer<U8> tex_buf)
             {
                 exit_with_error("Failed to get image offset for mipmap level %u", i);
             }
-            mip_level_offsets.data[i] = offset;
+            mip_level_offsets.data[i] = (U32)offset;
         }
 
         VkFormat vk_format = ktxTexture2_GetVkFormat(ktx_texture);
@@ -142,9 +137,8 @@ texture_ktx_cmd_record(VkCommandBuffer cmd, Texture* tex, ::Buffer<U8> tex_buf)
                              VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0, 0, NULL, 0, NULL, 1,
                              &barrier);
 
-        tex->image_resource = {.image_alloc = image_alloc,
-                               .image_view_resource = image_view_resource};
-        tex->staging_buffer = staging_allocation;
+        tex->image_resource = ImageResource(image_alloc, image_view_resource);
+        tex->staging_allocation = staging_allocation;
 
         ktxTexture_Destroy((ktxTexture*)ktx_texture);
     }
@@ -230,18 +224,135 @@ colormap_texture_cmd_record(VkCommandBuffer cmd, Texture* tex, Buffer<U8> buf)
     vkCmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
                          0, 0, NULL, 0, NULL, 1, &barrier);
 
-    tex->image_resource = {.image_alloc = image_alloc, .image_view_resource = image_view_resource};
-    tex->staging_buffer = staging_allocation;
+    tex->image_resource = ImageResource(image_alloc, image_view_resource);
+    tex->staging_allocation = staging_allocation;
+}
+
+g_internal ImageAllocationResource
+texture_upload_with_blitting(VkCommandBuffer cmd, render::TextureUploadData* data)
+{
+    AssetManager* asset_manager = asset_manager_get();
+    U32 mip_levels = floor(log2f(Max(data->width, data->height))) + 1;
+    VkFormat vk_format = VK_FORMAT_R8G8B8A8_SRGB;
+
+    BufferAllocation staging_allocation = staging_buffer_mapped_create(data->data_byte_size);
+    // upload base mip level
+
+    VmaAllocationCreateInfo vma_info = {.usage = VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE};
+    ImageAllocation image_alloc = image_allocation_create(
+        data->width, data->height, VK_SAMPLE_COUNT_1_BIT, vk_format, VK_IMAGE_TILING_OPTIMAL,
+        VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT |
+            VK_IMAGE_USAGE_SAMPLED_BIT,
+        mip_levels, vma_info);
+
+    // TODO: Implement error handling
+    VK_CHECK_RESULT(vmaCopyMemoryToAllocation(asset_manager->allocator, data->data,
+                                              staging_allocation.allocation, 0,
+                                              data->data_byte_size));
+
+    ImageViewResource image_view_resource = image_view_resource_create(
+        asset_manager->device, image_alloc.image, vk_format, VK_IMAGE_ASPECT_COLOR_BIT, mip_levels);
+
+    VkImageMemoryBarrier barrier = {
+        .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
+        .srcAccessMask = 0,
+        .dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT,
+        .oldLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+        .newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+        .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+        .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+        .image = image_alloc.image,
+        .subresourceRange = {.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+                             .baseMipLevel = 0,
+                             .levelCount = mip_levels,
+                             .baseArrayLayer = 0,
+                             .layerCount = 1},
+    };
+    vkCmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0,
+                         0, NULL, 0, NULL, 1, &barrier);
+
+    VkBufferImageCopy region;
+    region.bufferOffset = 0;
+    region.bufferRowLength = 0;
+    region.bufferImageHeight = 0;
+    region.imageSubresource = {.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+                               .mipLevel = 0,
+                               .baseArrayLayer = 0,
+                               .layerCount = 1};
+    region.imageOffset = {.x = 0, .y = 0, .z = 0};
+    region.imageExtent = {.width = (U32)data->width, .height = (U32)data->height, .depth = 1};
+
+    vkCmdCopyBufferToImage(cmd, staging_allocation.buffer, image_alloc.image,
+                           VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &region);
+
+    S32 dst_img_width = data->width;
+    S32 dst_img_height = data->height;
+    for (U32 blit_lvl = 1; blit_lvl < mip_levels; blit_lvl++)
+    {
+        S32 src_img_width = dst_img_width;
+        S32 src_img_height = dst_img_height;
+        dst_img_width = Max((src_img_width >> 1), 1);
+        dst_img_height = Max((src_img_height >> 1), 1);
+
+        blit_transition_image(cmd, image_alloc.image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                              VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, blit_lvl - 1);
+
+        VkImageBlit2 image_blit = {
+            .sType = VK_STRUCTURE_TYPE_IMAGE_BLIT_2,
+            .srcSubresource =
+                {
+                    .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+                    .mipLevel = blit_lvl - 1,
+                    .baseArrayLayer = 0,
+                    .layerCount = 1,
+                },
+            .srcOffsets =
+                {
+                    {0, 0, 0},
+                    {src_img_width, src_img_height, 1},
+                },
+            .dstSubresource =
+                {
+                    .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+                    .mipLevel = blit_lvl,
+                    .baseArrayLayer = 0,
+                    .layerCount = 1,
+                },
+            .dstOffsets =
+                {
+                    {0, 0, 0},
+                    {dst_img_width, dst_img_height, 1},
+                },
+        };
+
+        VkBlitImageInfo2 blit_info = {
+            .sType = VK_STRUCTURE_TYPE_BLIT_IMAGE_INFO_2,
+            .srcImage = image_alloc.image,
+            .srcImageLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+            .dstImage = image_alloc.image,
+            .dstImageLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+            .regionCount = 1,
+            .pRegions = &image_blit,
+            .filter = VK_FILTER_NEAREST,
+        };
+        vkCmdBlitImage2(cmd, &blit_info);
+        blit_transition_image(cmd, image_alloc.image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+                              VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, blit_lvl - 1);
+    }
+    blit_transition_image(cmd, image_alloc.image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                          VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, mip_levels - 1);
+
+    ImageAllocationResource image_allocation_resource = ImageAllocationResource(
+        ImageResource(image_alloc, image_view_resource), staging_allocation);
+    return image_allocation_resource;
 }
 
 g_internal B32
-texture_cmd_record(VkCommandBuffer cmd, Texture* tex, Buffer<U8> tex_buf)
+texture_cmd_record_with_stb(VkCommandBuffer cmd, Texture* tex, Buffer<U8> tex_buf)
 {
-    AssetManager* asset_manager = asset_manager_get();
     S32 width;
     S32 height;
     S32 desired_num_channels = STBI_rgb_alpha;
-    U8* data;
     U8* image_data = stbi_load_from_memory(tex_buf.data, tex_buf.size, &width, &height, NULL,
                                            desired_num_channels);
     B32 err = false;
@@ -250,144 +361,13 @@ texture_cmd_record(VkCommandBuffer cmd, Texture* tex, Buffer<U8> tex_buf)
     Assert(image_data);
     if (image_data)
     {
-        U64 total_size = (U64)width * (U64)height * (U64)desired_num_channels;
-        U32 mip_levels = floor(log2f(Max(width, height))) + 1;
-        VkFormat vk_format = VK_FORMAT_R8G8B8A8_SRGB;
-
-        // upload base mip level
-        VkBufferCreateInfo staging_buf_create_info = {VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO};
-        staging_buf_create_info.size = total_size;
-        staging_buf_create_info.usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
-
-        VmaAllocationCreateInfo staging_alloc_create_info = {};
-        staging_alloc_create_info.usage = VMA_MEMORY_USAGE_AUTO;
-        staging_alloc_create_info.flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT |
-                                          VMA_ALLOCATION_CREATE_MAPPED_BIT;
-
-        VkBuffer staging_buf;
-        VmaAllocation staging_alloc;
-        VmaAllocationInfo staging_alloc_info;
-        err |= vmaCreateBuffer(asset_manager->allocator, &staging_buf_create_info,
-                               &staging_alloc_create_info, &staging_buf, &staging_alloc,
-                               &staging_alloc_info);
-        if (err)
-        {
-            return err;
-        }
-
-        VmaAllocationCreateInfo alloc_create_info = {
-            .flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT};
-        VmaAllocationCreateInfo vma_info = {.usage = VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE};
-        ImageAllocation image_alloc = image_allocation_create(
-            width, height, VK_SAMPLE_COUNT_1_BIT, vk_format, VK_IMAGE_TILING_OPTIMAL,
-            VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT |
-                VK_IMAGE_USAGE_SAMPLED_BIT,
-            mip_levels, vma_info);
-
-        err |= vmaCopyMemoryToAllocation(asset_manager->allocator, image_data, staging_alloc, 0,
-                                         total_size);
-        if (err)
-        {
-            return err;
-        }
-
-        ImageViewResource image_view_resource =
-            image_view_resource_create(asset_manager->device, image_alloc.image, vk_format,
-                                       VK_IMAGE_ASPECT_COLOR_BIT, mip_levels);
-
-        VkImageMemoryBarrier barrier = {
-            .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
-            .srcAccessMask = 0,
-            .dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT,
-            .oldLayout = VK_IMAGE_LAYOUT_UNDEFINED,
-            .newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-            .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-            .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-            .image = image_alloc.image,
-            .subresourceRange = {.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
-                                 .baseMipLevel = 0,
-                                 .levelCount = mip_levels,
-                                 .baseArrayLayer = 0,
-                                 .layerCount = 1},
-        };
-        vkCmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT,
-                             0, 0, NULL, 0, NULL, 1, &barrier);
-
-        VkBufferImageCopy region;
-        region.bufferOffset = 0;
-        region.bufferRowLength = 0;
-        region.bufferImageHeight = 0;
-        region.imageSubresource = {.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
-                                   .mipLevel = 0,
-                                   .baseArrayLayer = 0,
-                                   .layerCount = 1};
-        region.imageOffset = {.x = 0, .y = 0, .z = 0};
-        region.imageExtent = {.width = (U32)width, .height = (U32)height, .depth = 1};
-
-        vkCmdCopyBufferToImage(cmd, staging_buf, image_alloc.image,
-                               VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &region);
-
-        S32 dst_img_width = width;
-        S32 dst_img_height = height;
-        for (U32 blit_lvl = 1; blit_lvl < mip_levels; blit_lvl++)
-        {
-            S32 src_img_width = dst_img_width;
-            S32 src_img_height = dst_img_height;
-            dst_img_width = Max((src_img_width >> 1), 1);
-            dst_img_height = Max((src_img_height >> 1), 1);
-
-            blit_transition_image(cmd, image_alloc.image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-                                  VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, blit_lvl - 1);
-
-            VkImageBlit2 image_blit = {
-                .sType = VK_STRUCTURE_TYPE_IMAGE_BLIT_2,
-                .srcSubresource =
-                    {
-                        .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
-                        .mipLevel = blit_lvl - 1,
-                        .baseArrayLayer = 0,
-                        .layerCount = 1,
-                    },
-                .srcOffsets =
-                    {
-                        {0, 0, 0},
-                        {src_img_width, src_img_height, 1},
-                    },
-                .dstSubresource =
-                    {
-                        .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
-                        .mipLevel = blit_lvl,
-                        .baseArrayLayer = 0,
-                        .layerCount = 1,
-                    },
-                .dstOffsets =
-                    {
-                        {0, 0, 0},
-                        {dst_img_width, dst_img_height, 1},
-                    },
-            };
-
-            VkBlitImageInfo2 blit_info = {
-                .sType = VK_STRUCTURE_TYPE_BLIT_IMAGE_INFO_2,
-                .srcImage = image_alloc.image,
-                .srcImageLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
-                .dstImage = image_alloc.image,
-                .dstImageLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-                .regionCount = 1,
-                .pRegions = &image_blit,
-                .filter = VK_FILTER_NEAREST,
-            };
-            vkCmdBlitImage2(cmd, &blit_info);
-            blit_transition_image(cmd, image_alloc.image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
-                                  VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, blit_lvl - 1);
-        }
-        blit_transition_image(cmd, image_alloc.image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-                              VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, mip_levels - 1);
-
-        stbi_image_free(image_data);
-        tex->image_resource = {.image_alloc = image_alloc,
-                               .image_view_resource = image_view_resource};
-        tex->staging_buffer = {.buffer = staging_buf, .allocation = staging_alloc};
+        constexpr U32 bytes_per_pixel = 1;
+        render::TextureUploadData tex_data = render::TextureUploadData::init(
+            image_data, (U32)width, (U32)height, (U32)desired_num_channels, bytes_per_pixel);
+        ImageAllocationResource image_allocation_resource =
+            texture_upload_with_blitting(cmd, &tex_data);
+        tex->image_resource = image_allocation_resource.image_resource;
+        tex->staging_allocation = image_allocation_resource.staging_buffer_alloc;
     };
     return err;
 }
@@ -406,26 +386,11 @@ texture_gpu_upload_cmd_recording(VkCommandBuffer cmd, render::Handle tex_handle,
     }
     else
     {
-        err |= texture_cmd_record(cmd, tex, tex_buf);
+        err |= texture_cmd_record_with_stb(cmd, tex, tex_buf);
         Assert(!err);
     }
 
     return err;
-}
-
-static ThreadInput*
-thread_input_create()
-{
-    Arena* arena = ArenaAlloc();
-    ThreadInput* thread_input = PushStruct(arena, ThreadInput);
-    thread_input->arena = arena;
-    return thread_input;
-}
-
-static void
-thread_input_destroy(ThreadInput* thread_input)
-{
-    ArenaRelease(thread_input->arena);
 }
 
 g_internal U32
@@ -440,129 +405,183 @@ buffer_allocation_size_get(BufferAllocation* buffer_allocation)
 }
 
 static void
-buffer_loading_thread(void* data, VkCommandBuffer cmd, render::Handle handle)
+buffer_loading_thread(void* data, render::ThreadInput* thread_input)
 {
+    Assert(thread_input->handles.count == 1);
+    render::Handle handle = render::handle_list_first_handle(&thread_input->handles);
     render::BufferInfo* buffer_info = (render::BufferInfo*)data;
     Buffer<U8> buffer = buffer_info->buffer;
     AssetManager* asset_manager = asset_manager_get();
 
-    render::AssetItem<BufferUpload>* asset_item_buffer =
-        asset_manager_item_get(&asset_manager->buffer_list, handle);
-    BufferUpload* asset_buffer = &asset_item_buffer->item;
-
     // ~mgj: copy to staging and record copy command
     BufferAllocation staging_buffer_alloc = staging_buffer_create(buffer.size);
-    U32 staging_buffer_size = buffer_allocation_size_get(&staging_buffer_alloc);
     VK_CHECK_RESULT(vmaCopyMemoryToAllocation(asset_manager->allocator, buffer.data,
-                                              staging_buffer_alloc.allocation, 0,
-                                              staging_buffer_size));
-    VkBufferCopy copy_region = {0};
-    copy_region.size = staging_buffer_size;
-    vkCmdCopyBuffer(cmd, staging_buffer_alloc.buffer, asset_buffer->buffer_alloc.buffer, 1,
-                    &copy_region);
+                                              staging_buffer_alloc.allocation, 0, buffer.size));
 
-    asset_buffer->staging_buffer = staging_buffer_alloc;
+    OS_MutexScopeW(asset_manager->buffer_mutex)
+    {
+        render::AssetItem<BufferUpload>* asset_item_buffer =
+            asset_manager_item_get<BufferUpload>(handle);
+        if (asset_item_buffer)
+        {
+            BufferUpload* asset_buffer = &asset_item_buffer->item;
+
+            VkBufferCopy copy_region = {0};
+            copy_region.size = buffer.size;
+            vkCmdCopyBuffer((VkCommandBuffer)thread_input->cmd_buffer, staging_buffer_alloc.buffer,
+                            asset_buffer->buffer_alloc.buffer, 1, &copy_region);
+
+            asset_buffer->staging_buffer = staging_buffer_alloc;
+        }
+        else
+        {
+            DEBUG_LOG("buffer_loading_thread: Asset Item: %llu - Not Found", handle.u64);
+            buffer_destroy(&staging_buffer_alloc);
+        }
+    }
+}
+
+g_internal void
+texture_loading_thread(void* data, render::ThreadInput* thread_input)
+{
+    Assert(thread_input->handles.count == 1);
+    render::Handle handle = render::handle_list_first_handle(&thread_input->handles);
+    AssetManager* asset_manager = asset_manager_get();
+    render::TextureUploadData* texture = (render::TextureUploadData*)data;
+    Assert(texture);
+    ImageAllocationResource image_allocation_resource =
+        texture_upload_with_blitting((VkCommandBuffer)thread_input->cmd_buffer, texture);
+
+    OS_MutexScopeW(asset_manager->texture_mutex)
+    {
+        render::AssetItem<Texture>* tex_asset = asset_manager_item_get<Texture>(handle);
+        if (tex_asset)
+        {
+            tex_asset->item.image_resource = image_allocation_resource.image_resource;
+            tex_asset->item.staging_allocation = image_allocation_resource.staging_buffer_alloc;
+        }
+        else
+        {
+            buffer_destroy(&image_allocation_resource.staging_buffer_alloc);
+            image_resource_destroy(image_allocation_resource.image_resource);
+            DEBUG_LOG("texture_loading_thread: Asset Item: %llu - Not Found", handle.u64);
+        }
+    }
 }
 
 static void
-texture_loading_thread(void* data, VkCommandBuffer cmd, render::Handle handle)
+texture_loading_from_path_thread(void* data, render::ThreadInput* thread_input)
 {
+    Assert(thread_input->handles.count == 1);
+    render::Handle handle = render::handle_list_first_handle(&thread_input->handles);
     ScratchScope scratch = ScratchScope(0, 0);
     render::TextureLoadingInfo* extra_info = (render::TextureLoadingInfo*)data;
     Buffer<U8> tex_buf = io::file_read(scratch.arena, extra_info->tex_path);
     Assert(tex_buf.size > 0 && "Texture file not found");
-    B32 err = texture_gpu_upload_cmd_recording(cmd, handle, tex_buf);
+    B32 err = texture_gpu_upload_cmd_recording((VkCommandBuffer)thread_input->cmd_buffer, handle,
+                                               tex_buf);
     if (err)
     {
         ERROR_LOG("Error when uploading texture - Error id: %d\n", err);
     }
 }
 
-g_internal void
-buffer_done_loading_thread(render::Handle handle)
-{
-    AssetManager* asset_manager = asset_manager_get();
-
-    render::AssetItem<BufferUpload>* asset =
-        asset_manager_item_get(&asset_manager->buffer_list, handle);
-    buffer_destroy(&asset->item.staging_buffer);
-    asset->item.staging_buffer.buffer = 0;
-    asset->is_loaded = 1;
-}
-
 static void
-colormap_loading_thread(void* data, VkCommandBuffer cmd, render::Handle handle)
+colormap_loading_thread(void* data, render::ThreadInput* thread_input)
 {
+    Assert(thread_input->handles.count == 1);
+    render::Handle handle = render::handle_list_first_handle(&thread_input->handles);
     render::ColorMapLoadingInfo* colormap_info = (render::ColorMapLoadingInfo*)data;
     Buffer<U8> colormap_buf = {.data = (U8*)colormap_info->colormap_data,
                                .size = colormap_info->colormap_size};
     render::AssetItem<Texture>* asset = (render::AssetItem<Texture>*)handle.ptr;
     Assert(asset);
-    colormap_texture_cmd_record(cmd, &asset->item, colormap_buf);
-}
-
-static void
-texture_done_loading(render::Handle handle)
-{
-    AssetManager* asset_manager = asset_manager_get();
-    render::AssetItem<Texture>* asset = asset_manager_texture_item_get(handle);
-    Texture* texture = &asset->item;
-
-    vulkan::descriptor_set_update_bindless_texture(
-        texture->descriptor_set_idx, texture->image_resource.image_view_resource.image_view,
-        texture->sampler);
-
-    buffer_destroy(&asset->item.staging_buffer);
-    asset->is_loaded = 1;
+    colormap_texture_cmd_record((VkCommandBuffer)thread_input->cmd_buffer, &asset->item,
+                                colormap_buf);
 }
 
 static void
 thread_main(async::ThreadInfo thread_info, void* input)
 {
     ScratchScope scratch = ScratchScope(0, 0);
-    ThreadInput* thread_input = (ThreadInput*)input;
+    render::ThreadInput* thread_input = (render::ThreadInput*)input;
 
     AssetManager* asset_manager = asset_manager_get();
 
     // ~mgj: Record the command buffer
-    VkCommandBuffer cmd = begin_command(
-        asset_manager->device, asset_manager->threaded_cmd_pools.data[thread_info.thread_id]);
+    thread_input->cmd_buffer = begin_command(
+        asset_manager->device, &asset_manager->threaded_cmd_pools.data[thread_info.thread_id]);
 
-    Assert(thread_input->handle.u64 != 0);
+    Assert(thread_input->handles.count > 0);
     Assert(thread_input->loading_func && thread_input->user_data);
-    thread_input->loading_func(thread_input->user_data, cmd, thread_input->handle);
+    Assert(thread_input->done_loading_func != nullptr);
+    thread_input->loading_func(thread_input->user_data, thread_input);
 
-    VK_CHECK_RESULT(vkEndCommandBuffer(cmd));
+    VK_CHECK_RESULT(vkEndCommandBuffer((VkCommandBuffer)thread_input->cmd_buffer));
 
     // ~mgj: Enqueue the command buffer
-    asset_cmd_queue_item_enqueue(thread_info.thread_id, cmd, thread_input);
+    asset_cmd_queue_item_enqueue(thread_info.thread_id, thread_input);
+}
+
+// ~mgj: Descriptor Index Allocator
+static void
+descriptor_index_allocator_init(DescriptorIndexAllocator* alloc, Arena* arena, U32 max_index)
+{
+    alloc->free_indices = PushArray(arena, U32, max_index);
+    alloc->free_count = 0;
+    alloc->free_capacity = max_index;
+    alloc->next_index = 0;
+    alloc->max_index = max_index;
+}
+
+static U32
+descriptor_index_allocate(DescriptorIndexAllocator* alloc)
+{
+    U32 index = 0;
+    if (alloc->free_count > 0)
+    {
+        index = alloc->free_indices[--alloc->free_count];
+    }
+    else
+    {
+        Assert(alloc->next_index < alloc->max_index);
+        index = alloc->next_index++;
+    }
+    return index;
+}
+
+static void
+descriptor_index_free(DescriptorIndexAllocator* alloc, U32 index)
+{
+    Assert(alloc->free_count < alloc->free_capacity);
+    alloc->free_indices[alloc->free_count++] = index;
 }
 
 // ~mgj: Deferred Deletion Queue Implementation
 static void
-deletion_queue_push(DeletionQueue* queue, render::Handle handle, render::AssetItemType type,
-                    U64 frames_in_flight)
+deletion_queue_push(DeletionQueue* queue, render::Handle handle, U64 frames_in_flight)
 {
     AssetManager* asset_manager = asset_manager_get();
     PendingDeletion* deletion = nullptr;
 
-    if (queue->free_list)
+    OS_MutexScopeW(asset_manager->deletion_queue_mutex)
     {
-        deletion = queue->free_list;
-        SLLStackPop(queue->free_list);
-        MemoryZero(deletion, sizeof(*deletion));
+        if (queue->free_list)
+        {
+            deletion = queue->free_list;
+            SLLStackPop(queue->free_list);
+            MemoryZero(deletion, sizeof(*deletion));
+        }
+        else
+        {
+            deletion = PushStruct(asset_manager->arena, PendingDeletion);
+        }
+
+        deletion->handle = handle;
+        deletion->frame_to_delete = queue->frame_counter + frames_in_flight;
+
+        DLLPushBack(queue->first, queue->last, deletion);
     }
-    else
-    {
-        deletion = PushStruct(asset_manager->arena, PendingDeletion);
-    }
-
-    deletion->handle = handle;
-    deletion->type = type;
-    deletion->frame_to_delete = queue->frame_counter + frames_in_flight;
-
-    SLLQueuePush(queue->first, queue->last, deletion);
-
     DEBUG_LOG("Asset ID: %llu - Queued for deferred deletion at frame %llu (current: %llu)",
               handle.u64, deletion->frame_to_delete, queue->frame_counter);
 }
@@ -570,14 +589,14 @@ deletion_queue_push(DeletionQueue* queue, render::Handle handle, render::AssetIt
 static void
 deletion_queue_resource_free(PendingDeletion* deletion)
 {
-    switch (deletion->type)
+    switch (deletion->handle.type)
     {
-        case render::AssetItemType_Buffer:
+        case render::HandleType::Buffer:
         {
             asset_manager_buffer_free(deletion->handle);
         }
         break;
-        case render::AssetItemType_Texture:
+        case render::HandleType::Texture:
         {
             asset_manager_texture_free(deletion->handle);
         }
@@ -589,31 +608,41 @@ deletion_queue_resource_free(PendingDeletion* deletion)
 static void
 deletion_queue_deferred_resource_deletion(DeletionQueue* queue)
 {
-    for (PendingDeletion* deletion = queue->first;
-         deletion && deletion->frame_to_delete <= queue->frame_counter; deletion = queue->first)
+    AssetManager* asset_manager = asset_manager_get();
+    OS_MutexScopeW(asset_manager->deletion_queue_mutex)
     {
-        SLLQueuePop(queue->first, queue->last);
-        DEBUG_LOG("Asset ID: %llu - Executing deferred deletion at frame %llu",
-                  deletion->handle.u64, queue->frame_counter);
+        for (PendingDeletion* deletion = queue->first;
+             deletion && deletion->frame_to_delete <= queue->frame_counter;)
+        {
+            PendingDeletion* next = deletion->next;
+            DLLRemove(queue->first, queue->last, deletion);
+            DEBUG_LOG("Asset ID: %llu - Executing deferred deletion at frame %llu",
+                      deletion->handle.u64, queue->frame_counter);
 
-        deletion_queue_resource_free(deletion);
-        SLLStackPush(queue->free_list, deletion);
+            deletion_queue_resource_free(deletion);
+            SLLStackPush(queue->free_list, deletion);
+            deletion = next;
+        }
+        queue->frame_counter++;
     }
-
-    queue->frame_counter++;
 }
 
 static void
 deletion_queue_delete_all(DeletionQueue* queue)
 {
-    for (PendingDeletion* deletion = queue->first; deletion; deletion = queue->first)
+    AssetManager* asset_manager = asset_manager_get();
+    OS_MutexScopeW(asset_manager->deletion_queue_mutex)
     {
-        SLLQueuePop(queue->first, queue->last);
-        DEBUG_LOG("Asset ID: %llu - Force deleting from deletion queue", deletion->handle.u64);
+        for (PendingDeletion* deletion = queue->first; deletion;)
+        {
+            PendingDeletion* next = deletion->next;
+            DLLRemove(queue->first, queue->last, deletion);
+            DEBUG_LOG("Asset ID: %llu - Force deleting from deletion queue", deletion->handle.u64);
 
-        deletion_queue_resource_free(deletion);
-
-        SLLStackPush(queue->free_list, deletion);
+            deletion_queue_resource_free(deletion);
+            SLLStackPush(queue->free_list, deletion);
+            deletion = next;
+        }
     }
 }
 
@@ -622,14 +651,14 @@ asset_manager_create(VkPhysicalDevice physical_device, VkDevice device, VkInstan
                      VkQueue graphics_queue, U32 queue_family_index, async::Threads* threads,
                      U64 total_size_in_bytes)
 {
-    Arena* arena = ArenaAlloc();
+    Arena* arena = arena_alloc();
     AssetManager* asset_manager = PushStruct(arena, AssetManager);
     asset_manager->arena = arena;
     asset_manager->total_size = total_size_in_bytes;
     asset_manager->work_queue = threads->msg_queue;
+    asset_manager->threads = threads;
     asset_manager->threaded_cmd_pools =
         BufferAlloc<AssetManagerCommandPool>(arena, threads->thread_handles.size);
-    asset_manager->texture_free_list = nullptr;
 
     // Store device references
     asset_manager->device = device;
@@ -660,7 +689,14 @@ asset_manager_create(VkPhysicalDevice physical_device, VkDevice device, VkInstan
     asset_manager->cmd_queue =
         async::QueueInit<CmdQueueItem>(arena, cmd_queue_size, queue_family_index);
 
+    descriptor_index_allocator_init(&asset_manager->descriptor_index_allocator, arena, 5000);
+
     asset_manager->deletion_queue = PushStruct(arena, DeletionQueue);
+    asset_manager->deletion_queue_mutex = OS_RWMutexAlloc();
+
+    // ~mgj: Mutex for asset operations (Textures and Buffers)
+    asset_manager->texture_mutex = OS_RWMutexAlloc();
+    asset_manager->buffer_mutex = OS_RWMutexAlloc();
 
     // Set global pointer
     g_asset_manager = asset_manager;
@@ -671,29 +707,53 @@ asset_manager_create(VkPhysicalDevice physical_device, VkDevice device, VkInstan
 static void
 asset_manager_destroy(AssetManager* asset_manager)
 {
+    // 1. Drain all pending work while workers are still running normally.
+    //    Workers finish current items and push to cmd_queue, which the drain
+    //    loop submits to the GPU and waits for completion.
+    asset_manager_cmd_list_destroy(asset_manager->cmd_wait_list);
+
+    // 3. Clean up remaining resources (workers are stopped, no mutex needed)
+    async::QueueDestroy(asset_manager->cmd_queue);
+    deletion_queue_delete_all(asset_manager->deletion_queue);
+    for (render::AssetItem<BufferUpload>* item = asset_manager->buffer_list.first; item != NULL;
+         item = item->next)
+    {
+        buffer_destroy(&item->item.buffer_alloc);
+        buffer_destroy(&item->item.staging_buffer);
+    }
+
+    for (render::AssetItem<Texture>* item = asset_manager->texture_list.first; item != NULL;
+         item = item->next)
+    {
+        descriptor_index_free(&asset_manager->descriptor_index_allocator,
+                              item->item.descriptor_set_idx);
+        texture_destroy(&item->item);
+    }
+
     for (U32 i = 0; i < asset_manager->threaded_cmd_pools.size; i++)
     {
         vkDestroyCommandPool(asset_manager->device,
                              asset_manager->threaded_cmd_pools.data[i].cmd_pool, 0);
         OS_MutexRelease(asset_manager->threaded_cmd_pools.data[i].mutex);
     }
-    async::QueueDestroy(asset_manager->cmd_queue);
-    asset_manager_cmd_list_destroy(asset_manager->cmd_wait_list);
-    deletion_queue_delete_all(asset_manager->deletion_queue);
+
+    OS_MutexRelease(asset_manager->texture_mutex);
+    OS_MutexRelease(asset_manager->buffer_mutex);
 
     vmaDestroyAllocator(asset_manager->allocator);
 
-    g_asset_manager = nullptr;
-    ArenaRelease(asset_manager->arena);
+    arena_release(asset_manager->arena);
 }
 
 static void
-asset_cmd_queue_item_enqueue(U32 thread_id, VkCommandBuffer cmd, ThreadInput* thread_input)
+asset_cmd_queue_item_enqueue(U32 thread_id, render::ThreadInput* thread_input)
 {
     AssetManager* asset_manager = asset_manager_get();
 
-    CmdQueueItem item = {.thread_input = thread_input, .thread_id = thread_id, .cmd_buffer = cmd};
-    DEBUG_LOG("Asset ID: %llu - Cmd Getting Queued", thread_input->handle.u64);
+    CmdQueueItem item = {.thread_input = thread_input, .thread_id = thread_id};
+    DEBUG_LOG("Asset ID: %llu - Cmd Getting Queued",
+              thread_input->handles.first ? thread_input->handles.first->handle.u64 : 0);
+    Assert(thread_input->cmd_buffer != VK_NULL_HANDLE);
     async::QueuePush(asset_manager->cmd_queue, &item);
 }
 
@@ -710,7 +770,7 @@ asset_manager_execute_cmds()
             VkSubmitInfo submit_info{};
             submit_info.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
             submit_info.commandBufferCount = 1;
-            submit_info.pCommandBuffers = &item.cmd_buffer;
+            submit_info.pCommandBuffers = (VkCommandBuffer*)&item.thread_input->cmd_buffer;
 
             VkFenceCreateInfo fence_info{};
             fence_info.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
@@ -720,7 +780,11 @@ asset_manager_execute_cmds()
             VK_CHECK_RESULT(
                 vkQueueSubmit(asset_manager->graphics_queue, 1, &submit_info, item.fence));
 
-            DEBUG_LOG("Asset ID: %llu - Submitted Command Buffer", item.thread_input->handle.u64);
+            DEBUG_LOG("Asset ID: %llu - Submitted Command Buffer",
+                      item.thread_input->handles.first
+                          ? item.thread_input->handles.first->handle.u64
+                          : 0);
+            Assert(item.thread_input->done_loading_func);
             asset_manager_cmd_list_add(asset_manager->cmd_wait_list, item);
         }
     }
@@ -728,55 +792,62 @@ asset_manager_execute_cmds()
 
 template <typename T>
 static render::AssetItem<T>*
-asset_manager_item_get(render::AssetItemList<T>* list, render::Handle handle)
+asset_manager_item_get(render::Handle handle)
 {
     Assert(handle.u64 != 0);
-    for (render::AssetItem<T>* item = list->first; item; item = item->next)
-    {
-        if (handle.u64 == (U64)item)
-        {
-            return item;
-        }
-    }
+    render::AssetItem<T>* asset_item = (render::AssetItem<T>*)handle.ptr;
+    if (asset_item && asset_item->gen_id == handle.gen_id)
+        return asset_item;
 
     if (!render::is_handle_zero(handle))
     {
-        exit_with_error("Asset ID: %llu - Not Found", handle.u64);
+        DEBUG_LOG("Asset ID: %llu - Not Found", handle.u64);
     }
 
     return 0;
+}
+
+static render::AssetItem<BufferUpload>*
+asset_manager_buffer_item_get(render::Handle handle)
+{
+    AssetManager* asset_manager = asset_manager_get();
+    render::AssetItem<BufferUpload>* asset_item_buffer = {};
+    OS_MutexScopeR(asset_manager->buffer_mutex)
+    {
+        asset_item_buffer = asset_manager_item_get<BufferUpload>(handle);
+    }
+    return asset_item_buffer;
 }
 
 static render::AssetItem<Texture>*
 asset_manager_texture_item_get(render::Handle handle)
 {
     AssetManager* asset_manager = asset_manager_get();
-
-    render::AssetItem<Texture>* asset_item_texture =
-        asset_manager_item_get(&asset_manager->texture_list, handle);
+    render::AssetItem<Texture>* asset_item_texture = {};
+    OS_MutexScopeR(asset_manager->texture_mutex)
+    {
+        asset_item_texture = asset_manager_item_get<Texture>(handle);
+    }
     return asset_item_texture;
 }
 
+// ~mgj: As it is right now, this function needs to be protected by a mutex like object as it is
+// used by multiple threads.
 template <typename T>
-static render::AssetItem<T>*
-asset_manager_item_create(render::AssetItemList<T>* list, render::AssetItem<T>** free_list,
-                          U32* out_desc_idx)
+static render::Handle
+asset_manager_item_create(render::AssetItemList<T>* list, render::AssetItemList<T>* free_list,
+                          render::HandleType handle_type)
 {
     AssetManager* asset_manager = asset_manager_get();
     Arena* arena = asset_manager->arena;
 
-    U32 i = 0;
-    for (render::AssetItem<T>* node = list->first; node; node = node->next)
-    {
-        i++;
-    }
-    *out_desc_idx = i;
-
-    render::AssetItem<T>* asset_item = *free_list;
+    render::AssetItem<T>* asset_item = free_list->first;
     if (asset_item)
     {
-        SLLStackPop(*free_list);
-        MemoryZero(asset_item, sizeof(*asset_item));
+        DLLRemove(free_list->first, free_list->last, asset_item);
+        MemoryZero(&asset_item->item, sizeof(T));
+        free_list->count--;
+        asset_item->gen_id++;
     }
     else
     {
@@ -784,8 +855,12 @@ asset_manager_item_create(render::AssetItemList<T>* list, render::AssetItem<T>**
     }
     Assert(asset_item);
 
-    DLLPushFront(list->first, list->last, asset_item);
-    return asset_item;
+    DLLPushBack(list->first, list->last, asset_item);
+    list->count++;
+
+    Assert(asset_item);
+    render::Handle handle = render::Handle(asset_item, asset_item->gen_id, handle_type);
+    return handle;
 }
 
 static void
@@ -798,22 +873,23 @@ asset_manager_cmd_done_check()
         VkResult result = vkGetFenceStatus(asset_manager->device, cmd_queue_item->fence);
         if (result == VK_SUCCESS)
         {
+            render::ThreadInput* thread_input = cmd_queue_item->thread_input;
             OS_MutexScope(asset_manager->threaded_cmd_pools.data[cmd_queue_item->thread_id].mutex)
             {
                 vkFreeCommandBuffers(
                     asset_manager->device,
                     asset_manager->threaded_cmd_pools.data[cmd_queue_item->thread_id].cmd_pool, 1,
-                    &cmd_queue_item->cmd_buffer);
+                    (VkCommandBuffer*)&thread_input->cmd_buffer);
             }
 
-            ThreadInput* thread_input = cmd_queue_item->thread_input;
-
+            Assert(thread_input->handles.count > 0);
+            Assert(thread_input->loading_func != nullptr);
             Assert(thread_input->done_loading_func != nullptr);
-            thread_input->done_loading_func(thread_input->handle);
+            thread_input->done_loading_func(thread_input->handles);
 
-            DEBUG_LOG("Asset: %llu - Finished loading", thread_input->handle.u64);
+            DEBUG_LOG("Asset: %llu - Finished loading", thread_input->handles.first->handle.u64);
             vkDestroyFence(asset_manager->device, cmd_queue_item->fence, 0);
-            thread_input_destroy(cmd_queue_item->thread_input);
+            render::thread_input_destroy(cmd_queue_item->thread_input);
             asset_manager_cmd_list_item_remove(asset_manager->cmd_wait_list, cmd_queue_item);
         }
         else if (result != VK_NOT_READY)
@@ -825,18 +901,18 @@ asset_manager_cmd_done_check()
 }
 
 static VkCommandBuffer
-begin_command(VkDevice device, AssetManagerCommandPool threaded_cmd_pool)
+begin_command(VkDevice device, AssetManagerCommandPool* threaded_cmd_pool)
 {
     VkCommandBufferAllocateInfo allocInfo{};
     allocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
     allocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
-    allocInfo.commandPool = threaded_cmd_pool.cmd_pool;
+    allocInfo.commandPool = threaded_cmd_pool->cmd_pool;
     allocInfo.commandBufferCount = 1;
 
     VkCommandBuffer commandBuffer;
-    OS_MutexScope(threaded_cmd_pool.mutex)
+    OS_MutexScope(threaded_cmd_pool->mutex)
     {
-        vkAllocateCommandBuffers(device, &allocInfo, &commandBuffer);
+        VK_CHECK_RESULT(vkAllocateCommandBuffers(device, &allocInfo, &commandBuffer));
     }
 
     VkCommandBufferBeginInfo beginInfo{};
@@ -851,20 +927,35 @@ begin_command(VkDevice device, AssetManagerCommandPool threaded_cmd_pool)
 static AssetManagerCmdList*
 asset_manager_cmd_list_create()
 {
-    Arena* arena = ArenaAlloc();
+    Arena* arena = arena_alloc();
     AssetManagerCmdList* cmd_list = PushStruct(arena, AssetManagerCmdList);
     cmd_list->arena = arena;
     return cmd_list;
 }
 
+static B32
+asset_manager_has_pending_work(AssetManagerCmdList* cmd_wait_list)
+{
+    AssetManager* asset_manager = asset_manager_get();
+    B32 cmd_queue_empty =
+        asset_manager->cmd_queue->next_index == asset_manager->cmd_queue->fill_index;
+    B32 work_queue_empty =
+        asset_manager->work_queue->next_index == asset_manager->work_queue->fill_index;
+    B32 workers_busy = asset_manager->threads->in_flight_count.load() > 0;
+    return cmd_wait_list->list_first || !cmd_queue_empty || !work_queue_empty || workers_busy;
+}
+
 static void
 asset_manager_cmd_list_destroy(AssetManagerCmdList* cmd_wait_list)
 {
-    while (cmd_wait_list->list_first)
+    AssetManager* asset_manager = asset_manager_get();
+    while (asset_manager_has_pending_work(cmd_wait_list))
     {
+        asset_manager_execute_cmds();
+        vkDeviceWaitIdle(asset_manager->device);
         asset_manager_cmd_done_check();
     }
-    ArenaRelease(cmd_wait_list->arena);
+    arena_release(cmd_wait_list->arena);
 }
 
 static void
@@ -875,12 +966,14 @@ asset_manager_cmd_list_add(AssetManagerCmdList* cmd_list, CmdQueueItem item)
     {
         item_copy = cmd_list->free_list;
         SLLStackPop(cmd_list->free_list);
+        MemoryZeroStruct(item_copy);
     }
     else
     {
         item_copy = PushStruct(cmd_list->arena, CmdQueueItem);
     }
     *item_copy = item;
+    Assert(item.thread_input->done_loading_func);
     DLLPushBack(cmd_list->list_first, cmd_list->list_last, item_copy);
 }
 
@@ -892,33 +985,52 @@ asset_manager_cmd_list_item_remove(AssetManagerCmdList* cmd_list, CmdQueueItem* 
     SLLStackPush(cmd_list->free_list, item);
 }
 
+template <typename T>
+static void
+asset_manager_item_free(render::AssetItem<T>* item, render::AssetItemList<T>* list,
+                        render::AssetItemList<T>* free_list)
+{
+    item->is_loaded = false;
+    item->gen_id++;
+    DLLRemove(list->first, list->last, item);
+    list->count--;
+    DLLPushBack(free_list->first, free_list->last, item);
+    free_list->count++;
+}
+
 static void
 asset_manager_buffer_free(render::Handle handle)
 {
     AssetManager* asset_manager = asset_manager_get();
-    render::AssetItem<BufferUpload>* item =
-        asset_manager_item_get(&asset_manager->buffer_list, handle);
-    if (item->is_loaded)
+    render::AssetItem<BufferUpload>* item = asset_manager_buffer_item_get(handle);
+    if (item)
     {
-        buffer_destroy(&item->item.buffer_alloc);
+        OS_MutexScopeW(asset_manager->buffer_mutex)
+        {
+            buffer_destroy(&item->item.buffer_alloc);
+            buffer_destroy(&item->item.staging_buffer);
+            asset_manager_item_free(item, &asset_manager->buffer_list,
+                                    &asset_manager->buffer_free_list);
+        }
     }
-    item->is_loaded = false;
-    DLLRemove(asset_manager->buffer_list.first, asset_manager->buffer_list.last, item);
-    SLLStackPush(asset_manager->buffer_free_list, item);
 }
 
 static void
 asset_manager_texture_free(render::Handle handle)
 {
     AssetManager* asset_manager = asset_manager_get();
-    render::AssetItem<Texture>* item = asset_manager_item_get(&asset_manager->texture_list, handle);
-    if (item->is_loaded)
+    render::AssetItem<Texture>* item = asset_manager_texture_item_get(handle);
+    if (item)
     {
-        texture_destroy(&item->item);
+        OS_MutexScopeW(asset_manager->texture_mutex)
+        {
+            descriptor_index_free(&asset_manager->descriptor_index_allocator,
+                                  item->item.descriptor_set_idx);
+            texture_destroy(&item->item);
+            asset_manager_item_free(item, &asset_manager->texture_list,
+                                    &asset_manager->texture_free_list);
+        }
     }
-    item->is_loaded = false;
-    DLLRemove(asset_manager->texture_list.first, asset_manager->texture_list.last, item);
-    SLLStackPush(asset_manager->texture_free_list, item);
 }
 
 //~mgj: Buffer Allocation Functions (VMA)
@@ -963,7 +1075,7 @@ buffer_mapped_destroy(BufferAllocationMapped* mapped_buffer)
 {
     buffer_destroy(&mapped_buffer->buffer_alloc);
     buffer_destroy(&mapped_buffer->staging_buffer_alloc);
-    ArenaRelease(mapped_buffer->arena);
+    arena_release(mapped_buffer->arena);
 }
 
 static BufferAllocation
@@ -1022,7 +1134,7 @@ static BufferAllocationMapped
 buffer_mapped_create(VkDeviceSize size, VkBufferUsageFlags buffer_usage)
 {
     AssetManager* asset_manager = asset_manager_get();
-    Arena* arena = ArenaAlloc();
+    Arena* arena = arena_alloc();
 
     VmaAllocationCreateInfo vma_info = {0};
     vma_info.usage = VMA_MEMORY_USAGE_AUTO;
@@ -1197,8 +1309,11 @@ image_allocation_create(U32 width, U32 height, VkSampleCountFlagBits numSamples,
 static void
 image_allocation_destroy(ImageAllocation image_alloc)
 {
-    AssetManager* asset_manager = asset_manager_get();
-    vmaDestroyImage(asset_manager->allocator, image_alloc.image, image_alloc.allocation);
+    if (image_alloc.image)
+    {
+        AssetManager* asset_manager = asset_manager_get();
+        vmaDestroyImage(asset_manager->allocator, image_alloc.image, image_alloc.allocation);
+    }
 }
 
 static void

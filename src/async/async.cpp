@@ -39,9 +39,28 @@ QueuePush(Queue<T>* queue, T* data)
         queue->fill_index = (fill_index + 1) % queue->queue_size;
         Assert(queue->fill_index != queue->next_index);
     }
-    OS_SemaphoreDrop(queue->semaphore_empty);
     item = &queue->items[fill_index];
     *item = *data;
+    OS_SemaphoreDrop(queue->semaphore_empty);
+}
+
+template <typename T>
+static B32
+QueueTryPush(Queue<T>* queue, T* data)
+{
+    B32 success = OS_SemaphoreTake(queue->semaphore_full, 0);
+    if (!success)
+        return false; // Queue full, couldn't push
+
+    U32 fill_index;
+    OS_MutexScopeW(queue->mutex)
+    {
+        fill_index = queue->fill_index;
+        queue->fill_index = (fill_index + 1) % queue->queue_size;
+    }
+    queue->items[fill_index] = *data;
+    OS_SemaphoreDrop(queue->semaphore_empty);
+    return true;
 }
 
 template <typename T>
@@ -74,6 +93,7 @@ ThreadWorker(void* data)
 
     os_set_thread_name(PushStr8F(scratch.arena, "ThreadWorker: %zu", thread_id));
     ThreadInfo thread_info;
+    t_cur_thread_id = thread_id;
     thread_info.thread_id = thread_id;
     thread_info.queue = queue;
 
@@ -98,11 +118,13 @@ ThreadWorker(void* data)
             OS_SemaphoreTake(queue->semaphore_empty, max_U64);
             is_waiting = 0;
         }
-        else
+        else if (!(*input->kill_switch))
         {
             OS_SemaphoreDrop(queue->semaphore_full);
             QueueItem item = queue->items[cur_index];
+            input->in_flight_count->fetch_add(1);
             item.worker_func(thread_info, item.data);
+            input->in_flight_count->fetch_sub(1);
         }
     }
 }
@@ -114,6 +136,7 @@ WorkerThreadsCreate(Arena* arena, U32 thread_count, U32 queue_size)
     thread_info->thread_handles = BufferAlloc<OS_Handle>(arena, thread_count);
     thread_info->msg_queue = queue;
     thread_info->kill_switch = 0;
+    thread_info->in_flight_count.store(0);
 
     for (U32 i = 0; i < thread_count; i++)
     {
@@ -122,6 +145,7 @@ WorkerThreadsCreate(Arena* arena, U32 thread_count, U32 queue_size)
         input->thread_count = thread_count;
         input->thread_id = i;
         input->kill_switch = &thread_info->kill_switch;
+        input->in_flight_count = &thread_info->in_flight_count;
         thread_info->thread_handles.data[i] = OS_ThreadLaunch(ThreadWorker, input, NULL);
     }
 
@@ -129,9 +153,10 @@ WorkerThreadsCreate(Arena* arena, U32 thread_count, U32 queue_size)
 }
 
 static void
-WorkerThreadDestroy(Threads* thread_info)
+WorkerThreadsDestroy(Threads* thread_info)
 {
     thread_info->kill_switch = 1;
+
     for (U32 i = 0; i < thread_info->thread_handles.size; i++)
     {
         OS_ThreadJoin(thread_info->thread_handles.data[i], max_U32);

@@ -32,17 +32,23 @@ if (MSVC)
         string(REPLACE "/Zi" "/Z7" CMAKE_CXX_FLAGS_RELWITHDEBINFO "${CMAKE_CXX_FLAGS_RELWITHDEBINFO}")
         string(REPLACE "/Zi" "/Z7" CMAKE_C_FLAGS_RELWITHDEBINFO "${CMAKE_C_FLAGS_RELWITHDEBINFO}")
         message(DEBUG "New flags: ${CMAKE_CXX_FLAGS_DEBUG}")
+
+        add_compile_options(
+   /Z7
+  )
     endif()
-    add_compile_options(
+    target_compile_options(city PRIVATE
         /W4
         /wd4201  /wd4005 /wd4838 /wd4244 /wd4996 /wd4310 /wd4245 /wd4100 /wd4505
         /EHsc
+        /utf-8
+        /Zc:__cplusplus
     )
 
     add_compile_definitions(BUILD_CONSOLE_INTERFACE ON)
 
-    string(APPEND ASAN_LINK_FLAGS "/INCREMENTAL:NO")
-    string(APPEND ASAN_COMPILE_FLAGS "/fsanitize=address")
+    list(APPEND ASAN_LINK_FLAGS /INCREMENTAL:NO)
+    list(APPEND ASAN_COMPILE_FLAGS /fsanitize=address /D_DISABLE_STRING_ANNOTATION /D_DISABLE_VECTOR_ANNOTATION)
 elseif(CMAKE_COMPILER_IS_GNUCXX)
     target_compile_options(city PRIVATE
     -maes
@@ -58,8 +64,8 @@ elseif(CMAKE_COMPILER_IS_GNUCXX)
         target_compile_options(city PRIVATE -w)
     endif()
 
-    string(APPEND ASAN_LINK_FLAGS "-fsanitize=address")
-    string(APPEND ASAN_COMPILE_FLAGS "-fsanitize=address")
+    list(APPEND ASAN_LINK_FLAGS -fsanitize=address)
+    list(APPEND ASAN_COMPILE_FLAGS -fsanitize=address)
 else()
     message(FATAL_ERROR "Unsupported compiler")
 endif()
@@ -118,14 +124,46 @@ target_sources(city
     src/main.cpp
 )
 
-
-include_directories(
+target_include_directories(city SYSTEM PRIVATE
     ${THIRD_PARTY_LIBS_DIR}
 )
 
+# KTX from vcpkg (with Vulkan support) - cesium-native's KTX doesn't include ktxvulkan.h
 find_package(Ktx CONFIG REQUIRED)
 find_package(glfw3 CONFIG REQUIRED)
 find_package(Vulkan REQUIRED)
+
+# Third-party dependencies for cesium-native (from vcpkg)
+find_package(Async++ CONFIG REQUIRED)
+find_package(fmt CONFIG REQUIRED)
+find_package(spdlog CONFIG REQUIRED)
+find_package(CURL CONFIG REQUIRED)
+find_package(draco CONFIG REQUIRED)
+find_package(meshoptimizer CONFIG REQUIRED)
+find_package(WebP CONFIG REQUIRED)
+find_package(libjpeg-turbo CONFIG REQUIRED)
+find_package(ada CONFIG REQUIRED)
+find_package(s2 CONFIG REQUIRED)
+# modp-base64 has no CMake config, create imported target
+add_library(modp_base64 STATIC IMPORTED)
+find_library(MODP_BASE64_LIBRARY_RELEASE NAMES libmodpbase64 PATHS "${_VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/lib" NO_DEFAULT_PATH)
+find_library(MODP_BASE64_LIBRARY_DEBUG NAMES libmodpbase64 PATHS "${_VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/debug/lib" NO_DEFAULT_PATH)
+set_target_properties(modp_base64 PROPERTIES
+    IMPORTED_LOCATION "${MODP_BASE64_LIBRARY_RELEASE}"
+    IMPORTED_LOCATION_DEBUG "${MODP_BASE64_LIBRARY_DEBUG}")
+
+find_package(spz CONFIG REQUIRED)
+find_package(ZLIB REQUIRED)
+find_package(zstd CONFIG REQUIRED)
+find_package(unofficial-sqlite3 CONFIG REQUIRED)
+find_package(tinyxml2 CONFIG REQUIRED)
+find_package(OpenSSL REQUIRED)
+find_package(absl CONFIG REQUIRED)
+
+# Cesium Native - must be built separately
+# Set CESIUM_NATIVE_DIR to point to your cesium-native build directory
+list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
+find_package(CesiumNative)
 
 # city executable specifics
 add_dependencies(city CompileShaders)
@@ -134,7 +172,70 @@ target_link_directories(city PRIVATE
         ${PLATFORM_LIB_ARTIFACT_DIR}
 )
 target_sources(city PRIVATE src/third_party/simdjson/simdjson.cpp src/third_party/imgui/imgui_inc.cpp)
-target_link_libraries(city PRIVATE glfw KTX::ktx Vulkan::Vulkan)
+target_link_libraries(city PRIVATE
+    glfw
+    KTX::ktx
+    Vulkan::Vulkan
+)
+
+
+# Include cesium headers BEFORE other includes to avoid dependency conflicts
+target_include_directories(city SYSTEM BEFORE PRIVATE ${CESIUM_NATIVE_INCLUDE_DIR})
+
+# Link Cesium Native libraries
+target_link_libraries(city PRIVATE CESIUM_NATIVE::CESIUM_NATIVE)
+
+# Link third-party dependencies for cesium-native (from vcpkg)
+target_link_libraries(city PRIVATE
+    Async++
+    fmt::fmt
+    spdlog::spdlog
+    CURL::libcurl
+    draco::draco
+    meshoptimizer::meshoptimizer
+    WebP::webp
+    WebP::webpdecoder
+    WebP::sharpyuv
+    libjpeg-turbo::jpeg-static
+    libjpeg-turbo::turbojpeg-static
+    ada::ada
+    s2::s2
+    modp_base64
+    ZLIB::ZLIB
+    zstd::libzstd
+    unofficial::sqlite3::sqlite3
+    tinyxml2::tinyxml2
+    OpenSSL::SSL
+    OpenSSL::Crypto
+    absl::base
+    absl::strings
+    absl::status
+    absl::statusor
+    absl::hash
+    absl::time
+    absl::synchronization
+    absl::log
+    absl::log_internal_check_op
+    absl::log_internal_message
+    absl::log_internal_nullguard
+    absl::log_internal_format
+    absl::log_internal_globals
+    absl::log_internal_log_sink_set
+    absl::raw_logging_internal
+    absl::cord
+    absl::int128
+    absl::str_format
+    spz::spz
+)
+
+# Cesium-native requires some additional compile definitions
+target_compile_definitions(city PRIVATE
+        SPDLOG_COMPILED_LIB
+        GLM_FORCE_XYZW_ONLY
+        GLM_FORCE_EXPLICIT_CTOR
+        GLM_FORCE_SIZE_T_LENGTH
+        LIBASYNC_STATIC
+    )
 
 add_custom_target(clang-tidy-check
     COMMAND clang-tidy -p ${CMAKE_BINARY_DIR} "src/main.cpp"

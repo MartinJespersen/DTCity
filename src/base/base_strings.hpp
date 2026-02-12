@@ -6,9 +6,7 @@
 
 ////////////////////////////////
 //~ rjf: Third Party Includes
-DISABLE_WARNINGS_PUSH
 #include "third_party/stb_sprintf.h"
-DISABLE_WARNINGS_POP
 ////////////////////////////////
 //~ rjf: String Types
 

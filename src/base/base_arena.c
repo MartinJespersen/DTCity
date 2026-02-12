@@ -59,7 +59,7 @@ static Arena *ArenaAlloc(ArenaParams *params) {
   return arena;
 }
 
-static Arena *ArenaAlloc() {
+static Arena *arena_alloc() {
   ArenaParams arena_params = {};
   arena_params.reserve_size = arena_default_reserve_size;
   arena_params.commit_size = arena_default_commit_size;
@@ -67,7 +67,7 @@ static Arena *ArenaAlloc() {
   return ArenaAlloc(&arena_params);
 }
 
-static void ArenaRelease(Arena *arena) {
+static void arena_release(Arena *arena) {
   for (Arena *n = arena->current, *prev = 0; n != 0; n = prev) {
     prev = n->prev;
     os_release(n, n->res);
@@ -193,7 +193,7 @@ static void ArenaPopTo(Arena *arena, U64 pos) {
 
 //- rjf: arena push/pop helpers
 
-static void ArenaClear(Arena *arena) { ArenaPopTo(arena, 0); }
+static void arena_clear(Arena *arena) { ArenaPopTo(arena, 0); }
 
 static void arena_pop(Arena *arena, U64 amt) {
   U64 pos_old = arena_pos(arena);

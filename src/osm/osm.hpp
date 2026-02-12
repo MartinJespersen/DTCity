@@ -149,7 +149,7 @@ structure_add(Buffer<RoadNodeList> node_hashmap, String8 json, WayType key_type)
 g_internal TagResult
 tag_find(Arena* arena, Buffer<Tag> tags, String8 tag_to_find);
 g_internal WayNode*
-way_find(U64 way_id);
+way_find(WayId way_id);
 g_internal UtmLocation
 utm_location_get(U64 node_id);
 g_internal Node*

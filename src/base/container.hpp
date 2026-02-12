@@ -184,7 +184,7 @@ template <typename T>
 T*
 chunk_list_get_next(Arena* arena, ChunkList<T>* list);
 template <typename T>
-Buffer<T>
+static Buffer<T>
 buffer_from_chunk_list(Arena* arena, ChunkList<T>* list);
 
 // defer implementation
