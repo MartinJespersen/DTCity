@@ -233,11 +233,11 @@ dt_main_loop(void* ptr)
     // Use the tileset's geographic location as the origin for the local coordinate system
     // The tileset at C:/ByModel is located at approximately:
     // ECEF: (3502387.3, 634289.2, 5280930.5) -> Geodetic: (10.265119° lon, 56.197934° lat)
-    F64 tileset_lon = 10.265119;
-    F64 tileset_lat = 56.197934;
+    F64 tileset_lon = 10.3013;
+    F64 tileset_lat = 56.2621;
 
     // Load local 3D Tiles tileset
-    const char* tileset_url = "file:///C:/ByModel/tileset.json";
+    const char* tileset_url = "file:///C:/ByModel/5km_6235_580/tileset.json";
     ctx->cesium_tileset = cesium::tileset_renderer_create(
         ctx->arena_permanent, ctx->thread_pool, tileset_url, tileset_lon, tileset_lat, 0.0);
 

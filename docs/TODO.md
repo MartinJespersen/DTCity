@@ -18,6 +18,12 @@
 * Change the naming convention for functions from PascalCase to snake_case
 * Cleanup entrypoint main loop
 
+# Tools to look at
+* Clang ThreadSanitizer (for detecting race conditions)
+* WhiteBox (by Andrew Reece) 
+* /fsanitize=fuzzer option in MSVC 
+
+
 # Future Improvements:
 * Create a draw layer 
 * Improve BufferInfo creation and especially the render interface functions.
