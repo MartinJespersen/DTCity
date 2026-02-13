@@ -18,9 +18,7 @@
         "ASAN_ENABLED": "ON",
         "BUILD_DEBUG": "ON",
         "VCPKG_TARGET_TRIPLET": "x64-windows-static-md-asan",
-        "VCPKG_OVERLAY_TRIPLETS": "${sourceDir}/triplets",
-        "CESIUM_NATIVE_DIR": "C:/repos/cesium-native/build",
-        "CESIUM_NATIVE_INSTALL_DIR": "C:/cesium-native-install"
+        "VCPKG_OVERLAY_TRIPLETS": "${sourceDir}/triplets"
       }
     },
     {
@@ -76,9 +74,7 @@
       "inherits": "profile-base",
       "generator": "Ninja",
       "cacheVariables": {
-        "VCPKG_TARGET_TRIPLET": "x64-windows-static-md",
-        "CESIUM_NATIVE_DIR": "C:/repos/cesium-native/build",
-        "CESIUM_NATIVE_INSTALL_DIR": "C:/cesium-native-install"
+        "VCPKG_TARGET_TRIPLET": "x64-windows-static-md"
       }
     },
     {

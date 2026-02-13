@@ -4,26 +4,8 @@
     "vulkan-loader",
     "glfw3",
     { "name": "glslang", "features": ["tools"] },
-    "asyncplusplus",
-    "fmt",
-    "spdlog",
-    "curl",
-    "draco",
-    "meshoptimizer",
-    "libwebp",
-    "libjpeg-turbo",
-    "ada-url",
-    "s2geometry",
-    "modp-base64",
-    "zlib",
-    "zstd",
-    "sqlite3",
-    "tinyxml2",
-    "openssl",
-    "abseil",
-    "rapidjson",
-    "expected-lite",
-    "spz"
+    "cesium-native",
+    "abseil"
   ],
   "overrides": [
     {

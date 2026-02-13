@@ -133,37 +133,10 @@ find_package(Ktx CONFIG REQUIRED)
 find_package(glfw3 CONFIG REQUIRED)
 find_package(Vulkan REQUIRED)
 
-# Third-party dependencies for cesium-native (from vcpkg)
-find_package(Async++ CONFIG REQUIRED)
-find_package(fmt CONFIG REQUIRED)
-find_package(spdlog CONFIG REQUIRED)
-find_package(CURL CONFIG REQUIRED)
-find_package(draco CONFIG REQUIRED)
-find_package(meshoptimizer CONFIG REQUIRED)
-find_package(WebP CONFIG REQUIRED)
-find_package(libjpeg-turbo CONFIG REQUIRED)
-find_package(ada CONFIG REQUIRED)
-find_package(s2 CONFIG REQUIRED)
-# modp-base64 has no CMake config, create imported target
-add_library(modp_base64 STATIC IMPORTED)
-find_library(MODP_BASE64_LIBRARY_RELEASE NAMES libmodpbase64 PATHS "${_VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/lib" NO_DEFAULT_PATH)
-find_library(MODP_BASE64_LIBRARY_DEBUG NAMES libmodpbase64 PATHS "${_VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/debug/lib" NO_DEFAULT_PATH)
-set_target_properties(modp_base64 PROPERTIES
-    IMPORTED_LOCATION "${MODP_BASE64_LIBRARY_RELEASE}"
-    IMPORTED_LOCATION_DEBUG "${MODP_BASE64_LIBRARY_DEBUG}")
+# Cesium Native (from vcpkg overlay port)
+find_package(cesium-native CONFIG REQUIRED)
 
-find_package(spz CONFIG REQUIRED)
-find_package(ZLIB REQUIRED)
-find_package(zstd CONFIG REQUIRED)
-find_package(unofficial-sqlite3 CONFIG REQUIRED)
-find_package(tinyxml2 CONFIG REQUIRED)
-find_package(OpenSSL REQUIRED)
 find_package(absl CONFIG REQUIRED)
-
-# Cesium Native - must be built separately
-# Set CESIUM_NATIVE_DIR to point to your cesium-native build directory
-list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
-find_package(CesiumNative)
 
 # city executable specifics
 add_dependencies(city CompileShaders)
@@ -179,34 +152,30 @@ target_link_libraries(city PRIVATE
 )
 
 
-# Include cesium headers BEFORE other includes to avoid dependency conflicts
-target_include_directories(city SYSTEM BEFORE PRIVATE ${CESIUM_NATIVE_INCLUDE_DIR})
-
-# Link Cesium Native libraries
-target_link_libraries(city PRIVATE CESIUM_NATIVE::CESIUM_NATIVE)
-
-# Link third-party dependencies for cesium-native (from vcpkg)
+# Link Cesium Native libraries (transitive dependencies resolved via vcpkg config)
 target_link_libraries(city PRIVATE
-    Async++
-    fmt::fmt
-    spdlog::spdlog
-    CURL::libcurl
-    draco::draco
-    meshoptimizer::meshoptimizer
-    WebP::webp
-    WebP::webpdecoder
-    WebP::sharpyuv
-    libjpeg-turbo::jpeg-static
-    libjpeg-turbo::turbojpeg-static
-    ada::ada
-    s2::s2
-    modp_base64
-    ZLIB::ZLIB
-    zstd::libzstd
-    unofficial::sqlite3::sqlite3
-    tinyxml2::tinyxml2
-    OpenSSL::SSL
-    OpenSSL::Crypto
+    Cesium3DTilesSelection
+    Cesium3DTilesContent
+    Cesium3DTilesReader
+    Cesium3DTiles
+    CesiumGltfContent
+    CesiumGltfReader
+    CesiumGltf
+    CesiumRasterOverlays
+    CesiumQuantizedMeshTerrain
+    CesiumGeospatial
+    CesiumGeometry
+    CesiumAsync
+    CesiumJsonReader
+    CesiumUtility
+    CesiumCurl
+    Cesium3DTilesWriter
+    CesiumGltfWriter
+    CesiumJsonWriter
+    CesiumIonClient
+    CesiumITwinClient
+    CesiumClientCommon
+    CesiumVectorData
     absl::base
     absl::strings
     absl::status
@@ -225,7 +194,6 @@ target_link_libraries(city PRIVATE
     absl::cord
     absl::int128
     absl::str_format
-    spz::spz
 )
 
 # Cesium-native requires some additional compile definitions

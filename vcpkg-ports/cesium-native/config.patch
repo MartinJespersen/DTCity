@@ -1,0 +1,15 @@
+diff --git a/cmake/config/Config.cmake.in b/cmake/config/Config.cmake.in
+--- a/cmake/config/Config.cmake.in
++++ b/cmake/config/Config.cmake.in
+@@ -33,4 +33,11 @@
+     find_dependency(CURL REQUIRED)
+ endif()
+ 
++# picosha2 is header-only and has no CMake config; create the imported target
++if(NOT TARGET picosha2::picosha2)
++    add_library(picosha2::picosha2 INTERFACE IMPORTED)
++    find_path(PICOSHA2_INCLUDE_DIR picosha2.h)
++    set_target_properties(picosha2::picosha2 PROPERTIES INTERFACE_INCLUDE_DIRECTORIES "${PICOSHA2_INCLUDE_DIR}")
++endif()
++
+ include("${CMAKE_CURRENT_LIST_DIR}/cesium-nativeTargets.cmake")
