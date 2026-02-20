@@ -15,8 +15,13 @@ layout(set = 0, binding = 0) uniform UBO_Camera
     vec2 viewport_dim;
 } camera_ubo;
 
+layout(set = 2, binding = 0) uniform UBO_Model
+{
+    mat4 model;
+} model_ubo;
+
 void main() {
-    gl_Position = camera_ubo.projection * camera_ubo.view * vec4(in_position, 1.0);
+    gl_Position = camera_ubo.projection * camera_ubo.view * model_ubo.model * vec4(in_position, 1.0);
     out_uv = in_uv;
     out_object_id = in_object_id;
 }

@@ -18,6 +18,7 @@ union Vec2F32
         F32 y;
     };
     F32 v[2];
+    glm::vec2 vec;
 };
 
 typedef union Vec2F64 Vec2F64;
@@ -98,6 +99,28 @@ union Vec3F32
         Vec2F32 yz;
     };
     F32 v[3];
+};
+
+typedef union Vec3F64 Vec3F64;
+union Vec3F64
+{
+    struct
+    {
+        F64 x;
+        F64 y;
+        F64 z;
+    };
+    struct
+    {
+        Vec2F64 xy;
+        F64 _z0;
+    };
+    struct
+    {
+        F64 _x0;
+        Vec2F64 yz;
+    };
+    F64 v[3];
 };
 
 typedef union Vec3S32 Vec3S32;
@@ -472,11 +495,25 @@ mix_1f64(F64 a, F64 b, F64 t);
 static Vec2F32
 vec_2f32(F32 x, F32 y);
 static Vec2F32
-Add2F32(Vec2F32 a, Vec2F32 b);
+add_2f32(Vec2F32 a, Vec2F32 b);
 static Vec2F32
 sub_2f32(Vec2F32 a, Vec2F32 b);
 static Vec2F64
+add_2f64(Vec2F64 a, Vec2F64 b);
+static Vec2F64
 sub_2f64(Vec2F64 a, Vec2F64 b);
+static Vec2F64
+div_2f64(Vec2F64 a, F64 x);
+static Vec2F64
+scale_2f64(Vec2F64 v, F64 s);
+static F64
+dot_2f64(Vec2F64 a, Vec2F64 b);
+static Vec2F64
+normalize_2f64(Vec2F64 v);
+static Vec2F32
+vec2f32_from_64(Vec2F64 v);
+static Vec2F64
+vec2f64_from_32(Vec2F32 v);
 static Vec2F32
 Mul2F32(Vec2F32 a, Vec2F32 b);
 static Vec2F32
@@ -484,7 +521,7 @@ Div2F32(Vec2F32 a, Vec2F32 b);
 static Vec2F32
 Div2F32(Vec2F32 a, F32 x);
 static Vec2F32
-Scale2F32(Vec2F32 v, F32 s);
+scale_2f32(Vec2F32 v, F32 s);
 static F32
 Dot2F32(Vec2F32 a, Vec2F32 b);
 static F32
@@ -495,11 +532,11 @@ static F64
 length_2f64(Vec2F64 v);
 
 static Vec2F32
-Normalize2F32(Vec2F32 v);
+normalize_2f32(Vec2F32 v);
 static Vec2F32
 mix_2f32(Vec2F32 a, Vec2F32 b, F32 t);
 static F32
-Dist2F32(Vec2F32 a, Vec2F32 b);
+dist_2f32(Vec2F32 a, Vec2F32 b);
 static F64
 dist_2f64(Vec2F64 a, Vec2F64 b);
 static Vec2F64
@@ -602,6 +639,22 @@ static Vec3F32
 mix_3f32(Vec3F32 a, Vec3F32 b, F32 t);
 static Vec3F32
 cross_3f32(Vec3F32 a, Vec3F32 b);
+
+#define v3f64(x, y, z) vec_3f64((x), (y), (z))
+static Vec3F64
+vec_3f64(F64 x, F64 y, F64 z);
+static Vec3F64
+add_3f64(Vec3F64 a, Vec3F64 b);
+static Vec3F64
+sub_3f64(Vec3F64 a, Vec3F64 b);
+static Vec3F64
+scale_3f64(Vec3F64 v, F64 s);
+static F64
+length_3f64(Vec3F64 v);
+static Vec3F64
+normalize_3f64(Vec3F64 v);
+static Vec3F32
+vec3f32_from_64(Vec3F64 v);
 
 #define v3s32(x, y, z) vec_3s32((x), (y), (z))
 static Vec3S32

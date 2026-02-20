@@ -91,20 +91,16 @@ struct Node
     WayList way_queue; // Linked list of RoadWays sharing this node
 };
 
-struct UtmLocation
+struct EcefLocation
 {
     NodeId id;
-    union
-    {
-        Vec2F32 pos;
-        glm::vec2 vec;
-    };
+    Vec3F64 pos;
 };
 
-UtmLocation
-utm_location_create(U64 id, Vec2F32 pos)
+EcefLocation
+ecef_location_create(U64 id, Vec3F64 pos)
 {
-    UtmLocation loc = {.id = id, .pos = pos};
+    EcefLocation loc = {.id = id, .pos = pos};
     return loc;
 }
 
@@ -125,8 +121,7 @@ struct Network
 {
     Arena* arena;
     Buffer<NodeList> utm_node_hashmap; // key is the node id
-    Vec2F64 utm_center_offset;         // used for centering utm coordinate based on bounding box
-    Map<NodeId, UtmLocation>* utm_location_map;
+    Map<NodeId, EcefLocation>* ecef_location_map;
 
     Buffer<WayList> way_hashmap;         // view into way buffers
     Buffer<Way> ways_arr[WayType_Count]; // buffer storage
@@ -141,7 +136,7 @@ read_only g_internal Node g_road_node_utm = {nullptr, 0, {}, {}};
 
 // Public
 g_internal void
-structure_init(U64 node_hashmap_size, U64 way_hashmap_size, Rng2F64 utm_coords);
+structure_init(U64 node_hashmap_size, U64 way_hashmap_size);
 g_internal void
 structure_cleanup();
 g_internal void
@@ -150,8 +145,8 @@ g_internal TagResult
 tag_find(Arena* arena, Buffer<Tag> tags, String8 tag_to_find);
 g_internal WayNode*
 way_find(WayId way_id);
-g_internal UtmLocation
-utm_location_get(U64 node_id);
+g_internal EcefLocation
+location_get(U64 node_id);
 g_internal Node*
 node_get(U64 node_id);
 g_internal Node*

@@ -155,10 +155,10 @@ dt_interpret_input(int argc, char** argv)
     if (use_default)
     {
         // Initialize default values
-        bbox->min.x = 10.298996;
-        bbox->min.y = 56.301587;
-        bbox->max.x = 10.333500;
-        bbox->max.y = 56.322391;
+        bbox->min.x = 10.291206;
+        bbox->min.y = 56.253108;
+        bbox->max.x = 10.37349;
+        bbox->max.y = 56.29715;
         INFO_LOG("Using default values:\nlon_btm_left=%lf, lat_btm_left=%lf, lon_top_right=%lf, "
                  "lat_top_right=%lf\n",
                  bbox->min.x, bbox->min.y, bbox->max.x, bbox->max.y);
@@ -209,25 +209,13 @@ dt_main_loop(void* ptr)
 
     U64 node_hashmap_size = 1000;
     U64 way_hashmap_size = 100;
-    osm::structure_init(node_hashmap_size, way_hashmap_size, utm_coords);
+    osm::structure_init(node_hashmap_size, way_hashmap_size);
 
     String8 cache_dir = ctx->data_subdirs.data[dt_DataDirType::Cache];
     String8 texture_dir = ctx->data_subdirs.data[dt_DataDirType::Texture];
     String8 asset_dir = ctx->data_subdirs.data[dt_DataDirType::Assets];
 
-    osm::Network* osm_network = osm::g_network;
-    ui::camera_init(ctx->camera,
-                    vec_2f32(osm_network->utm_center_offset.x, osm_network->utm_center_offset.y));
-
-    // ctx->road = city::road_create(texture_dir, cache_dir, ctx->data_dir, input->bbox, utm_coords,
-    //                               &sampler_info);
-    // city::Road* road = ctx->road;
-
-    // ctx->buildings =
-    //     city::buildings_create(cache_dir, texture_dir, 10.f, input->bbox, &sampler_info);
-    // city::Buildings* buildings = ctx->buildings;
-    // ctx->car_sim = city::car_sim_create(asset_dir, texture_dir, 1000, ctx->road);
-    // city::CarSim* car_sim = ctx->car_sim;
+    ui::camera_init(ctx->camera);
 
     // Initialize Cesium 3D Tiles
     // Use the tileset's geographic location as the origin for the local coordinate system
@@ -241,7 +229,27 @@ dt_main_loop(void* ptr)
     ctx->cesium_tileset = cesium::tileset_renderer_create(
         ctx->arena_permanent, ctx->thread_pool, tileset_url, tileset_lon, tileset_lat, 0.0);
 
+    glm::dmat4 ecef_to_local =
+        ctx->cesium_tileset->local_coord_system->getEcefToLocalTransformation();
+
+    ctx->buildings = city::buildings_create(cache_dir, texture_dir, 10.f, input->bbox,
+                                            &sampler_info, ecef_to_local);
+    city::Buildings* buildings = ctx->buildings;
+    // ctx->car_sim = city::car_sim_create(asset_dir, texture_dir, 1000, ctx->road);
+
     city::RoadOverlayOption overlay_option_choice = city::RoadOverlayOption_None;
+
+    ctx->road = city::road_create(texture_dir, cache_dir, ctx->data_dir, input->bbox, utm_coords,
+                                  &sampler_info, ecef_to_local);
+    {
+        Buffer<city::RoadSegmentCorners> road_segments =
+            ctx->road->road_build_result.road_segment_corners;
+        render::BufferInfo road_seg_info =
+            render::BufferInfo(road_segments, render::BufferType_StorageBuffer);
+        ctx->road_segment_buffer_handle = render::buffer_load_async(&road_seg_info);
+        ctx->road_segment_descriptor_handle = render::road_segment_descriptor_load_async(
+            ctx->arena_permanent, ctx->road_segment_buffer_handle);
+    }
 
     while (ctx->running)
     {
@@ -255,54 +263,55 @@ dt_main_loop(void* ptr)
 
         {
             ui::camera_update(ctx->camera, ctx->io, ctx->time->delta_time_sec, framebuffer_dim);
-            // U64 hovered_object_id = render::latest_hovered_object_id_get();
-            // city::RoadEdge** edge_ptr =
-            //     map_get(&road->edge_structure.edge_map, (S64)hovered_object_id);
-            // if (edge_ptr)
-            // {
-            //     city::RoadEdge* edge = *edge_ptr;
-            //     osm::WayNode* way_node = osm::way_find(edge->way_id);
-            //     osm::Way* way = &way_node->way;
+            U64 hovered_object_id = render::latest_hovered_object_id_get();
+            printf("ID: %llu\n", hovered_object_id);
+            city::RoadEdge** edge_ptr =
+                map_get(&ctx->road->edge_structure.edge_map, (S64)hovered_object_id);
+            if (edge_ptr)
+            {
+                city::RoadEdge* edge = *edge_ptr;
+                osm::WayNode* way_node = osm::way_find(edge->way_id);
+                osm::Way* way = &way_node->way;
 
-            //     bool open = true;
-            //     ImGui::Begin("Object Info", &open, ImGuiWindowFlags_AlwaysAutoResize);
-            //     for (osm::Tag& tag : way->tags)
-            //     {
-            //         ImGui::Text("%s: %s", (char*)tag.key.str, (char*)tag.value.str);
-            //     }
+                bool open = true;
+                ImGui::Begin("Object Info", &open, ImGuiWindowFlags_AlwaysAutoResize);
+                for (osm::Tag& tag : way->tags)
+                {
+                    ImGui::Text("%s: %s", (char*)tag.key.str, (char*)tag.value.str);
+                }
 
-            //     city::RoadInfo* chosen_edge = map_get(road->road_info_map, edge->id);
-            //     if (chosen_edge)
-            //     {
-            //         for (U32 i = 1; i < ArrayCount(chosen_edge->options); i++)
-            //         {
-            //             ImGui::Text("%s: %lf", city::road_overlay_option_strs[i],
-            //                         chosen_edge->options[i]);
-            //         }
-            //     }
-            //     ImVec2 window_size = ImGui::GetWindowSize();
-            //     ImVec2 window_pos = ImVec2((F32)framebuffer_dim.x - window_size.x, 0);
-            //     ImGui::SetWindowPos(window_pos, ImGuiCond_Always);
+                city::RoadInfo* chosen_edge = map_get(ctx->road->road_info_map, edge->id);
+                if (chosen_edge)
+                {
+                    for (U32 i = 1; i < ArrayCount(chosen_edge->options); i++)
+                    {
+                        ImGui::Text("%s: %lf", city::road_overlay_option_strs[i],
+                                    chosen_edge->options[i]);
+                    }
+                }
+                ImVec2 window_size = ImGui::GetWindowSize();
+                ImVec2 window_pos = ImVec2((F32)framebuffer_dim.x - window_size.x, 0);
+                ImGui::SetWindowPos(window_pos, ImGuiCond_Always);
 
-            //     ImGui::End();
-            // }
-            // osm::WayNode* way_node = osm::way_find(hovered_object_id);
-            // if (way_node)
-            // {
-            //     osm::Way* way = &way_node->way;
-            //     bool open = true;
-            //     ImGui::Begin("Object Info", &open, ImGuiWindowFlags_AlwaysAutoResize);
-            //     for (U32 tag_idx = 0; tag_idx < way->tags.size; tag_idx += 1)
-            //     {
-            //         osm::Tag* tag = &way->tags.data[tag_idx];
-            //         ImGui::Text("%s: %s", (char*)tag->key.str, (char*)tag->value.str);
-            //     }
-            //     ImVec2 window_size = ImGui::GetWindowSize();
-            //     ImVec2 window_pos = ImVec2((F32)framebuffer_dim.x - window_size.x, 0);
-            //     ImGui::SetWindowPos(window_pos, ImGuiCond_Always);
+                ImGui::End();
+            }
+            osm::WayNode* way_node = osm::way_find(hovered_object_id);
+            if (way_node)
+            {
+                osm::Way* way = &way_node->way;
+                bool open = true;
+                ImGui::Begin("Object Info", &open, ImGuiWindowFlags_AlwaysAutoResize);
+                for (U32 tag_idx = 0; tag_idx < way->tags.size; tag_idx += 1)
+                {
+                    osm::Tag* tag = &way->tags.data[tag_idx];
+                    ImGui::Text("%s: %s", (char*)tag->key.str, (char*)tag->value.str);
+                }
+                ImVec2 window_size = ImGui::GetWindowSize();
+                ImVec2 window_pos = ImVec2((F32)framebuffer_dim.x - window_size.x, 0);
+                ImGui::SetWindowPos(window_pos, ImGuiCond_Always);
 
-            //     ImGui::End();
-            // }
+                ImGui::End();
+            }
         }
 
         ImGui::Begin("Road Overlays", nullptr);
@@ -316,9 +325,9 @@ dt_main_loop(void* ptr)
         ImGui::End();
 
         // city::road_vertex_buffer_switch(road, overlay_option_choice);
-        // render::blend_3d_draw(road->handles[road->current_handle_idx]);
-        // render::model_3d_draw(buildings->roof_model_handles, false);
-        // render::model_3d_draw(buildings->facade_model_handles, false);
+        render::blend_3d_draw(ctx->road->handles[ctx->road->current_handle_idx]);
+        // render::model_3d_draw(buildings->roof_model_handles);
+        // render::model_3d_draw(buildings->facade_model_handles);
 
         // Buffer<render::Model3DInstance> instance_buffer =
         //     car_sim_update(vk_ctx->draw_frame_arena, car_sim, ctx->time->delta_time_sec);
@@ -331,15 +340,12 @@ dt_main_loop(void* ptr)
         //                                car_sim->index_handle, &instance_buffer_info);
 
         // Update and render Cesium 3D Tiles
-        printf("Buffer list count: %u\n", vk_ctx->asset_manager->buffer_list.count);
-        printf("Buffer Free list count: %u\n", vk_ctx->asset_manager->buffer_free_list.count);
-        printf("Texture list count: %u\n", vk_ctx->asset_manager->texture_list.count);
-        printf("Texture Free list count: %u\n", vk_ctx->asset_manager->texture_free_list.count);
         if (ctx->cesium_tileset)
         {
             cesium::tileset_update_view(dt_ctx_get()->arena_frame, ctx->cesium_tileset, ctx->camera,
                                         framebuffer_dim, ctx->time->delta_time_sec);
-            cesium::tileset_render(ctx->cesium_tileset);
+            cesium::tileset_render(ctx->cesium_tileset, ctx->road_segment_descriptor_handle,
+                                   ctx->road_segment_buffer_handle);
         }
 
         render::render_frame(framebuffer_dim, &io_ctx->framebuffer_resized, ctx->camera,

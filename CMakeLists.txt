@@ -7,6 +7,7 @@ set(SHADER_DIR ${CMAKE_CURRENT_SOURCE_DIR}/data/shaders)
 set(SHADER_BINARY_DIR ${CMAKE_CURRENT_SOURCE_DIR}/data/shaders/bin)
 set(ASAN_LINK_FLAGS "")
 set(ASAN_COMPILE_FLAGS "")
+set(GLSL_SHADER_FLAGS "")
 set(ALL_TARGETS city)
 
 option(BUILD_DEBUG "Enable Additional Debugging Information (e.g Vulkan Validation Layers)" OFF)
@@ -15,6 +16,7 @@ option(ASAN_ENABLED "Enable Address Sanitizer" OFF)
 # cmake macro -> compiler macro
 if(BUILD_DEBUG)
     add_compile_definitions(BUILD_DEBUG=1)
+    list(APPEND GLSL_SHADER_FLAGS -gVS)
 endif()
 
 if(ASAN_ENABLED)
@@ -94,6 +96,7 @@ endif()
 file(GLOB_RECURSE GLSL_SOURCE_FILES
     "${SHADER_DIR}/*.vert"
     "${SHADER_DIR}/*.frag"
+    "${SHADER_DIR}/*.comp"
 )
 
 
@@ -110,7 +113,7 @@ foreach(GLSL ${GLSL_SOURCE_FILES})
     add_custom_command(
         OUTPUT ${SPIRV}
         COMMAND ${CMAKE_COMMAND} -E make_directory "${SHADER_BINARY_DIR}"
-        COMMAND ${GLSL_VALIDATOR} -V ${GLSL} -o ${SPIRV}
+        COMMAND ${GLSL_VALIDATOR} -V ${GLSL} ${GLSL_SHADER_FLAGS} -o ${SPIRV}
         DEPENDS ${GLSL}
         COMMENT "Compiling ${FILE_NAME} to SPIR-V"
     )

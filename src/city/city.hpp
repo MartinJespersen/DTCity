@@ -4,14 +4,29 @@
 
 namespace city
 {
+typedef S64 EdgeId;
+enum RoadSegmentCornerCoord
+{
+    RoadSegmentCornerCoord_TopLeft,
+    RoadSegmentCornerCoord_TopRight,
+    RoadSegmentCornerCoord_BottomRight,
+    RoadSegmentCornerCoord_BottomLeft,
+    RoadSegmentCornerCoord_Count
+};
 
-struct RenderBuffers
+struct RoadSegmentCorners
+{
+    EdgeId edge_id;
+    Vec2F32 corners[RoadSegmentCornerCoord_Count];
+};
+static_assert(sizeof(RoadSegmentCorners) == 40, "size of road segment might not match shader size");
+
+struct RoadBuildResult
 {
     Buffer<render::Vertex3DBlend> vertices;
     Buffer<U32> indices;
+    Buffer<RoadSegmentCorners> road_segment_corners;
 };
-
-typedef S64 EdgeId;
 
 #define ROAD_OVERLAY_RED {1.0f, 0.0f, 0.0f}
 #define ROAD_OVERLAY_GREEN {0.0f, 1.0f, 0.0f}
@@ -76,7 +91,7 @@ struct Road
     F32 texture_scale;
     EdgeStructure edge_structure;
     Map<EdgeId, RoadInfo>* road_info_map;
-    RenderBuffers render_buffers;
+    RoadBuildResult road_build_result;
 
     ////////////////////////////////
     // Graphics API
@@ -97,9 +112,9 @@ struct AdjacentNodeLL
 
 struct RoadCrossSection
 {
-    Vec2F32 top;
-    Vec2F32 btm;
-    osm::UtmLocation node;
+    Vec2F64 top;
+    Vec2F64 btm;
+    osm::EcefLocation node;
 };
 
 struct RoadSegment
@@ -110,10 +125,10 @@ struct RoadSegment
 
 struct Car
 {
-    Vec3F32 cur_pos;
-    osm::UtmLocation source_loc;
-    osm::UtmLocation target_loc;
-    Vec3F32 dir;
+    Vec3F64 cur_pos;
+    osm::EcefLocation source_loc;
+    osm::EcefLocation target_loc;
+    Vec3F64 dir;
     F32 speed;
 };
 
@@ -161,12 +176,12 @@ struct Buildings
 
 g_internal void
 road_destroy(Road* road);
-g_internal city::RenderBuffers
-road_render_buffers_create(Arena* arena, Buffer<city::RoadEdge> edge_buffer, F32 default_road_width,
-                           F32 road_height);
+g_internal city::RoadBuildResult
+road_segment_build(Arena* arena, Buffer<city::RoadEdge> edge_buffer, F32 default_road_width,
+                   F32 road_height, glm::dmat4& ecef_to_local);
 
 g_internal void
-quad_to_buffer_add(RoadSegment* road_segment, Buffer<render::Vertex3DBlend> buffer,
+quad_to_buffer_add(RoadSegmentCorners* road_segment, Buffer<render::Vertex3DBlend> buffer,
                    Buffer<U32> indices, U64 edge_id, F32 road_height, U32* cur_vertex_idx,
                    U32* cur_index_idx);
 g_internal void
@@ -183,13 +198,13 @@ car_sim_update(Arena* arena, CarSim* car, F64 time_delta);
 // ~mgj: Buildings
 g_internal Buildings*
 buildings_create(String8 cache_path, String8 texture_path, F32 road_height, Rng2F64 bbox,
-                 render::SamplerInfo* sampler_info);
+                 render::SamplerInfo* sampler_info, glm::dmat4 ecef_to_local);
 g_internal void
 building_destroy(Buildings* building);
 g_internal void
-buildings_buffers_create(Arena* arena, F32 road_height, BuildingRenderInfo* out_render_info);
+buildings_buffers_create(Arena* arena, F32 road_height, glm::dmat4& ecef_to_local, BuildingRenderInfo* out_render_info);
 g_internal Buffer<U32>
-EarClipping(Arena* arena, Buffer<Vec2F32> node_buffer);
+EarClipping(Arena* arena, Buffer<Vec2F64> node_buffer);
 
 // ~mgj: HTTP and caching
 g_internal String8
@@ -215,7 +230,7 @@ g_internal render::SamplerInfo
 sampler_from_cgltf_sampler(gltfw_Sampler sampler);
 g_internal Road*
 road_create(String8 texture_path, String8 cache_path, String8 data_dir, Rng2F64 bbox,
-            Rng2F64 utm_coords, render::SamplerInfo* sampler_info);
+            Rng2F64 utm_coords, render::SamplerInfo* sampler_info, glm::dmat4 ecef_to_local);
 g_internal void
 road_vertex_buffer_switch(Road* road, RoadOverlayOption overlay_option);
 g_internal EdgeStructure
@@ -232,10 +247,6 @@ vertex_3d_from_gltfw_vertex(Arena* arena, Buffer<gltfw_Vertex3D> in_vertex_buffe
 
 // privates ///////////////////////////////////////////////////
 
-g_internal Vec2F32
-world_position_offset_adjust(Vec2F32 position);
-g_internal osm::UtmLocation
+g_internal osm::EcefLocation
 random_utm_road_node_get();
-g_internal osm::UtmLocation
-utm_location_find(U64 node_id);
 } // namespace city

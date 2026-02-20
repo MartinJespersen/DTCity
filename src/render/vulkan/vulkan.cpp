@@ -136,7 +136,7 @@ model_3d_instance_pipeline_create(Context* vk_ctx, String8 shader_path)
     color_blending.pAttachments = color_blend_attachments;
 
     VkDescriptorSetLayout descriptor_set_layouts[] = {vk_ctx->camera_descriptor_set_layout,
-                                                      vk_ctx->texture_descriptor_set_layout};
+                                                      vk_ctx->bindless_descriptor_set_layout};
     VkPushConstantRange push_constant_range{};
     push_constant_range.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
     push_constant_range.offset = 0;
@@ -297,7 +297,8 @@ model_3d_pipeline_create(Context* vk_ctx, String8 shader_path)
     color_blending.pAttachments = color_blend_attachments;
 
     VkDescriptorSetLayout descriptor_set_layouts[] = {vk_ctx->camera_descriptor_set_layout,
-                                                      vk_ctx->texture_descriptor_set_layout};
+                                                      vk_ctx->bindless_descriptor_set_layout,
+                                                      vk_ctx->model_matrix_descriptor_set_layout};
 
     VkPushConstantRange push_constant_range{};
     push_constant_range.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
@@ -461,7 +462,7 @@ blend_3d_pipeline_create(String8 shader_path)
     color_blending.pAttachments = color_blend_attachments;
 
     VkDescriptorSetLayout descriptor_set_layouts[] = {vk_ctx->camera_descriptor_set_layout,
-                                                      vk_ctx->texture_descriptor_set_layout};
+                                                      vk_ctx->bindless_descriptor_set_layout};
 
     VkPushConstantRange push_constant_range{};
     push_constant_range.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
@@ -516,13 +517,174 @@ blend_3d_pipeline_create(String8 shader_path)
     return pipeline_info;
 }
 
+static Pipeline
+road_intersection_pipeline_create(String8 shader_path)
+{
+    Context* vk_ctx = ctx_get();
+    ScratchScope scratch = ScratchScope(0, 0);
+
+    String8 comp_path = CreatePathFromStrings(
+        scratch.arena, Str8BufferFromCString(scratch.arena, {(char*)shader_path.str, "bin",
+                                                             "road_intersection_comp.spv"}));
+
+    ShaderModuleInfo comp_shader_stage_info = shader_stage_from_spirv(
+        scratch.arena, vk_ctx->device, VK_SHADER_STAGE_COMPUTE_BIT, comp_path);
+
+    VkPushConstantRange push_constant_range{};
+    push_constant_range.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
+    push_constant_range.offset = 0;
+    push_constant_range.size = sizeof(RoadIntersectionPushConstants);
+
+    // Set 0: Road segments (storage buffer, binding 0)
+    vk_ctx->road_segment_descriptor_set_layout = descriptor_set_layout_create(
+        vk_ctx->device,
+        {{0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, NULL}});
+
+    // Set 1: Vertex buffer (binding 0) + Index buffer (binding 1)
+    vk_ctx->storage_buffer_descriptor_set_layout = descriptor_set_layout_create(
+        vk_ctx->device,
+        {{0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, NULL},
+         {1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, NULL}});
+
+    VkDescriptorSetLayout set_layouts[] = {vk_ctx->road_segment_descriptor_set_layout,
+                                           vk_ctx->storage_buffer_descriptor_set_layout};
+
+    VkPipelineLayoutCreateInfo pipeline_layout_info{};
+    pipeline_layout_info.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+    pipeline_layout_info.setLayoutCount = ArrayCount(set_layouts);
+    pipeline_layout_info.pSetLayouts = set_layouts;
+    pipeline_layout_info.pushConstantRangeCount = 1;
+    pipeline_layout_info.pPushConstantRanges = &push_constant_range;
+
+    VkPipelineLayout pipeline_layout;
+    VK_CHECK_RESULT(
+        vkCreatePipelineLayout(vk_ctx->device, &pipeline_layout_info, nullptr, &pipeline_layout));
+
+    VkComputePipelineCreateInfo pipeline_create_info{};
+    pipeline_create_info.sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO;
+    pipeline_create_info.stage = comp_shader_stage_info.info;
+    pipeline_create_info.layout = pipeline_layout;
+
+    VkPipeline pipeline;
+    VK_CHECK_RESULT(vkCreateComputePipelines(vk_ctx->device, VK_NULL_HANDLE, 1,
+                                             &pipeline_create_info, nullptr, &pipeline));
+
+    Pipeline pipeline_info = {.pipeline = pipeline, .pipeline_layout = pipeline_layout};
+    return pipeline_info;
+}
+
+g_internal DescriptorSetInfo
+descriptor_set_road_segment(VkDevice device, VkDescriptorPool desc_pool, void* data)
+{
+    RoadSegmentDescriptor* buffer_desc = (RoadSegmentDescriptor*)data;
+
+    VkDescriptorSetLayout desc_set_layout = descriptor_set_layout_create(
+        device, {{0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, NULL}});
+
+    VkDescriptorSet desc_set = descriptor_set_alloc(device, desc_pool, {desc_set_layout});
+
+    VkDescriptorBufferInfo buffer_info{};
+    buffer_info.buffer = buffer_desc->road_segment_buffer;
+    buffer_info.offset = 0;
+    buffer_info.range = VK_WHOLE_SIZE;
+
+    VkWriteDescriptorSet write{};
+    write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+    write.dstSet = desc_set;
+    write.dstBinding = 0;
+    write.dstArrayElement = 0;
+    write.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+    write.descriptorCount = 1;
+    write.pBufferInfo = &buffer_info;
+
+    descriptor_set_update(device, {write});
+
+    return DescriptorSetInfo(desc_set, desc_set_layout);
+}
+
+static void
+road_intersection_bucket_add(VkDescriptorSet storage_buffer_set, VkDescriptorSet road_segment,
+                             VkBuffer road_segment_buffer, U32 index_count,
+                             U32 road_segment_buffer_size)
+{
+    Context* vk_ctx = ctx_get();
+    RoadIntersectionNode* node = PushStruct(vk_ctx->draw_frame_arena, RoadIntersectionNode);
+    node->road_segment_set = road_segment;
+    node->storage_buffer_set = storage_buffer_set;
+    node->road_segment_buffer = road_segment_buffer;
+    node->index_count = index_count;
+    node->road_segment_buffer_size = road_segment_buffer_size;
+    SLLQueuePush(vk_ctx->draw_frame->road_intersection_list.first,
+                 vk_ctx->draw_frame->road_intersection_list.last, node);
+}
+
+g_internal void
+road_intersection_compute()
+{
+    Context* vk_ctx = ctx_get();
+    DrawFrame* draw_frame = vk_ctx->draw_frame;
+    RoadIntersectionList* list = &draw_frame->road_intersection_list;
+
+    if (!list->first)
+        return;
+
+    VkCommandBuffer cmd_buffer = vk_ctx->command_buffers.data[vk_ctx->current_frame];
+    TracyVkZone(vk_ctx->tracy_ctx[vk_ctx->current_frame], cmd_buffer,
+                "road_intersection_compute"); // NOLINT
+
+    Pipeline* pipeline = &vk_ctx->road_intersection_pipeline;
+
+    vkCmdBindPipeline(cmd_buffer, VK_PIPELINE_BIND_POINT_COMPUTE, pipeline->pipeline);
+
+    for (RoadIntersectionNode* node = list->first; node; node = node->next)
+    {
+        U32 triangle_count = node->index_count / 3;
+        RoadIntersectionPushConstants push_constants = {};
+        push_constants.road_segment_buffer_elem_count =
+            node->road_segment_buffer_size / sizeof(city::RoadSegmentCorners);
+        push_constants.invocation_count = triangle_count;
+
+        vkCmdPushConstants(cmd_buffer, pipeline->pipeline_layout, VK_SHADER_STAGE_COMPUTE_BIT, 0,
+                           sizeof(RoadIntersectionPushConstants), &push_constants);
+
+        VkDescriptorSet desc_sets[] = {node->road_segment_set, node->storage_buffer_set};
+        vkCmdBindDescriptorSets(cmd_buffer, VK_PIPELINE_BIND_POINT_COMPUTE,
+                                pipeline->pipeline_layout, 0, ArrayCount(desc_sets), desc_sets, 0,
+                                NULL);
+
+        U32 workgroup_count =
+            (triangle_count + 255) / 256; // 256 is the workgroup size specified in the shader
+        vkCmdDispatch(cmd_buffer, workgroup_count, 1, 1);
+
+        VkBufferMemoryBarrier2 barrier = {.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER_2,
+                                          .srcStageMask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+                                          .srcAccessMask = VK_ACCESS_2_SHADER_WRITE_BIT,
+                                          .dstStageMask = VK_PIPELINE_STAGE_2_VERTEX_INPUT_BIT,
+                                          .dstAccessMask = VK_ACCESS_2_VERTEX_ATTRIBUTE_READ_BIT,
+                                          .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+                                          .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+                                          .buffer = node->road_segment_buffer,
+                                          .offset = 0,
+                                          .size = node->road_segment_buffer_size};
+        VkDependencyInfo dep_info = {.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
+                                     .bufferMemoryBarrierCount = 1,
+                                     .pBufferMemoryBarriers = &barrier};
+
+        vkCmdPipelineBarrier2(cmd_buffer, &dep_info);
+    }
+
+} // namespace vulkan
+
 static void
 model_3d_instance_rendering()
 {
     Context* vk_ctx = ctx_get();
+    VkCommandBuffer cmd_buffer = vk_ctx->command_buffers.data[vk_ctx->current_frame];
+    TracyVkZone(vk_ctx->tracy_ctx[vk_ctx->current_frame], cmd_buffer,
+                "model_3d_instance_rendering");
+
     SwapchainResources* swapchain_resources = vk_ctx->swapchain_resources;
     VkExtent2D swapchain_extent = swapchain_resources->swapchain_extent;
-    VkCommandBuffer cmd_buffer = vk_ctx->command_buffers.data[vk_ctx->current_frame];
     Pipeline* pipeline = &vk_ctx->model_3D_instance_pipeline;
 
     VkViewport viewport{};
@@ -544,7 +706,7 @@ model_3d_instance_rendering()
     Model3DInstance* model_3D_instance_draw = &vk_ctx->draw_frame->model_3D_instance_draw;
 
     VkDescriptorSet descriptor_sets[2] = {vk_ctx->camera_descriptor_sets[vk_ctx->current_frame],
-                                          vk_ctx->texture_descriptor_set};
+                                          vk_ctx->bindless_descriptor_set};
     buffer_alloc_create_or_resize(model_3D_instance_draw->total_instance_buffer_byte_count,
                                   instance_buffer_alloc, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT);
 
@@ -680,6 +842,79 @@ camera_descriptor_set_create(Context* vk_ctx)
     ScratchEnd(scratch);
 }
 
+g_internal DescriptorSetInfo
+descriptor_set_uniform_buffer(VkDevice device, VkDescriptorPool desc_pool, void* data)
+{
+    UniformBufferDescriptor* buffer_desc = (UniformBufferDescriptor*)data;
+
+    VkDescriptorSetLayout desc_set_layout = descriptor_set_layout_create(
+        device, {{0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1, VK_SHADER_STAGE_VERTEX_BIT, NULL}});
+
+    VkDescriptorSet desc_set = descriptor_set_alloc(device, desc_pool, {desc_set_layout});
+
+    VkDescriptorBufferInfo buffer_info{};
+    buffer_info.buffer = buffer_desc->uniform_buffer;
+    buffer_info.offset = 0;
+    buffer_info.range = VK_WHOLE_SIZE;
+
+    VkWriteDescriptorSet uniform_buffer_write{};
+    uniform_buffer_write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+    uniform_buffer_write.dstSet = desc_set;
+    uniform_buffer_write.dstBinding = 0;
+    uniform_buffer_write.dstArrayElement = 0;
+    uniform_buffer_write.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+    uniform_buffer_write.descriptorCount = 1;
+    uniform_buffer_write.pBufferInfo = &buffer_info;
+
+    descriptor_set_update(device, {uniform_buffer_write});
+
+    return DescriptorSetInfo(desc_set, desc_set_layout);
+}
+
+g_internal DescriptorSetInfo
+descriptor_set_storage_buffers(VkDevice device, VkDescriptorPool desc_pool, void* data)
+{
+    StorageBufferDescriptor* buffer_desc = (StorageBufferDescriptor*)data;
+
+    VkDescriptorSetLayout desc_set_layout = descriptor_set_layout_create(
+        device, {{0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, NULL},
+                 {1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, NULL}});
+
+    VkDescriptorSet desc_set = descriptor_set_alloc(device, desc_pool, {desc_set_layout});
+
+    VkDescriptorBufferInfo vertex_buffer_info{};
+    vertex_buffer_info.buffer = buffer_desc->vertex_buffer;
+    vertex_buffer_info.offset = 0;
+    vertex_buffer_info.range = VK_WHOLE_SIZE;
+
+    VkDescriptorBufferInfo index_buffer_info{};
+    index_buffer_info.buffer = buffer_desc->index_buffer;
+    index_buffer_info.offset = 0;
+    index_buffer_info.range = VK_WHOLE_SIZE;
+
+    VkWriteDescriptorSet vertex_write{};
+    vertex_write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+    vertex_write.dstSet = desc_set;
+    vertex_write.dstBinding = 0;
+    vertex_write.dstArrayElement = 0;
+    vertex_write.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+    vertex_write.descriptorCount = 1;
+    vertex_write.pBufferInfo = &vertex_buffer_info;
+
+    VkWriteDescriptorSet index_write{};
+    index_write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+    index_write.dstSet = desc_set;
+    index_write.dstBinding = 1;
+    index_write.dstArrayElement = 0;
+    index_write.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+    index_write.descriptorCount = 1;
+    index_write.pBufferInfo = &index_buffer_info;
+
+    descriptor_set_update(device, {vertex_write, index_write});
+
+    return DescriptorSetInfo(desc_set, desc_set_layout);
+}
+
 static void
 camera_cleanup(Context* vk_ctx)
 {
@@ -711,12 +946,13 @@ pipeline_destroy(Pipeline* pipeline)
 static void
 model_3d_bucket_add(BufferAllocation* vertex_buffer_allocation,
                     BufferAllocation* index_buffer_allocation, render::Handle tex_handle,
-                    B32 depth_write_per_draw_call_only, U32 index_buffer_offset, U32 index_count)
+                    B32 depth_write_per_draw_call_only, U32 index_buffer_offset, U32 index_count,
+                    VkDescriptorSet model_matrix)
 {
     Context* vk_ctx = ctx_get();
     DrawFrame* draw_frame = vk_ctx->draw_frame;
 
-    render::AssetItem<Texture>* base_tex = asset_manager_texture_item_get(tex_handle);
+    render::AssetItem<TextureHandle>* base_tex = asset_manager_texture_item_get(tex_handle);
     if (base_tex)
     {
         Model3dPushConstants push_constants = {};
@@ -729,6 +965,7 @@ model_3d_bucket_add(BufferAllocation* vertex_buffer_allocation,
         node->index_count = index_count;
         node->index_buffer_offset = index_buffer_offset;
         node->depth_write_per_draw_enabled = depth_write_per_draw_call_only;
+        node->model_matrix = model_matrix;
 
         SLLQueuePush(draw_frame->model_3D_list.first, draw_frame->model_3D_list.last, node);
     }
@@ -744,10 +981,10 @@ model_3d_instance_bucket_add(BufferAllocation* vertex_buffer_allocation,
     DrawFrame* draw_frame = vk_ctx->draw_frame;
     Model3DInstance* instance_draw = &draw_frame->model_3D_instance_draw;
 
-    render::AssetItem<Texture>* asset_tex = asset_manager_texture_item_get(tex_handle);
+    render::AssetItem<TextureHandle>* asset_tex = asset_manager_texture_item_get(tex_handle);
     if (asset_tex)
     {
-        Texture* tex = &asset_tex->item;
+        TextureHandle* tex = &asset_tex->item;
 
         Model3dInstancePushConstants push_constants = {.tex_idx = tex->descriptor_set_idx};
 
@@ -777,8 +1014,9 @@ blend_3d_bucket_add(BufferAllocation* vertex_buffer_allocation,
     node->vertex_alloc = *vertex_buffer_allocation;
     node->index_alloc = *index_buffer_allocation;
 
-    render::AssetItem<Texture>* base_tex = asset_manager_texture_item_get(texture_handle);
-    render::AssetItem<Texture>* colormap_tex = asset_manager_texture_item_get(colormap_handle);
+    render::AssetItem<TextureHandle>* base_tex = asset_manager_texture_item_get(texture_handle);
+    render::AssetItem<TextureHandle>* colormap_tex =
+        asset_manager_texture_item_get(colormap_handle);
     Assert(base_tex);
     Assert(colormap_tex);
     if (!base_tex || !colormap_tex)
@@ -829,12 +1067,14 @@ static void
 model_3d_rendering()
 {
     Context* vk_ctx = ctx_get();
+    VkCommandBuffer cmd_buffer = vk_ctx->command_buffers.data[vk_ctx->current_frame];
+    TracyVkZone(vk_ctx->tracy_ctx[vk_ctx->current_frame], cmd_buffer, "model_3d_rendering");
+
     Pipeline* model_3D_pipeline = &vk_ctx->model_3D_pipeline;
     DrawFrame* draw_frame = vk_ctx->draw_frame;
 
     SwapchainResources* swapchain_resources = vk_ctx->swapchain_resources;
     VkExtent2D swapchain_extent = swapchain_resources->swapchain_extent;
-    VkCommandBuffer cmd_buffer = vk_ctx->command_buffers.data[vk_ctx->current_frame];
 
     vkCmdBindPipeline(cmd_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, model_3D_pipeline->pipeline);
 
@@ -852,12 +1092,13 @@ model_3d_rendering()
     scissor.extent = swapchain_extent;
     vkCmdSetScissor(cmd_buffer, 0, 1, &scissor);
 
-    VkDescriptorSet descriptor_sets[2] = {vk_ctx->camera_descriptor_sets[vk_ctx->current_frame],
-                                          vk_ctx->texture_descriptor_set};
+    VkDescriptorSet descriptor_sets[3] = {vk_ctx->camera_descriptor_sets[vk_ctx->current_frame],
+                                          vk_ctx->bindless_descriptor_set};
 
     VkDeviceSize offsets[] = {0};
     for (Model3DNode* node = draw_frame->model_3D_list.first; node; node = node->next)
     {
+        descriptor_sets[2] = node->model_matrix;
         vkCmdPushConstants(cmd_buffer, model_3D_pipeline->pipeline_layout,
                            VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(Model3dPushConstants),
                            &node->push_constants);
@@ -886,12 +1127,14 @@ static void
 blend_3d_rendering()
 {
     Context* vk_ctx = ctx_get();
+    VkCommandBuffer cmd_buffer = vk_ctx->command_buffers.data[vk_ctx->current_frame];
+    TracyVkZone(vk_ctx->tracy_ctx[vk_ctx->current_frame], cmd_buffer, "blend_3d_rendering");
+
     Pipeline* blend_3d_pipeline = &vk_ctx->blend_3d_pipeline;
     DrawFrame* draw_frame = vk_ctx->draw_frame;
 
     SwapchainResources* swapchain_resources = vk_ctx->swapchain_resources;
     VkExtent2D swapchain_extent = swapchain_resources->swapchain_extent;
-    VkCommandBuffer cmd_buffer = vk_ctx->command_buffers.data[vk_ctx->current_frame];
     vkCmdBindPipeline(cmd_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, blend_3d_pipeline->pipeline);
 
     VkViewport viewport{};
@@ -909,7 +1152,7 @@ blend_3d_rendering()
     vkCmdSetScissor(cmd_buffer, 0, 1, &scissor);
 
     VkDescriptorSet descriptor_sets[2] = {vk_ctx->camera_descriptor_sets[vk_ctx->current_frame],
-                                          vk_ctx->texture_descriptor_set};
+                                          vk_ctx->bindless_descriptor_set};
 
     VkDeviceSize offsets[] = {0};
     for (Blend3DNode* node = draw_frame->blend_3d_list.first; node; node = node->next)
@@ -1097,6 +1340,8 @@ command_buffer_record(U32 image_index, U32 current_frame, ui::Camera* camera,
                         (F32)vk_ctx->swapchain_resources->swapchain_extent.height},
                 current_frame);
 
+            road_intersection_compute();
+
             vkCmdBeginRendering(current_cmd_buf, &rendering_info);
 
             model_3d_instance_rendering();
@@ -1184,6 +1429,22 @@ command_buffer_record(U32 image_index, U32 current_frame, ui::Camera* camera,
                 mouse_position_screen_coords.y <
                     vk_ctx->swapchain_resources->swapchain_extent.height)
             {
+                VkBufferMemoryBarrier2 readback_barrier = {
+                    .sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER_2,
+                    .srcStageMask = VK_PIPELINE_STAGE_2_COPY_BIT,
+                    .srcAccessMask = VK_ACCESS_2_TRANSFER_WRITE_BIT,
+                    .dstStageMask = VK_PIPELINE_STAGE_2_COPY_BIT,
+                    .dstAccessMask = VK_ACCESS_2_TRANSFER_WRITE_BIT,
+                    .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+                    .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+                    .buffer = swapchain_resource->object_id_buffer_readback.buffer_alloc.buffer,
+                    .offset = 0,
+                    .size = VK_WHOLE_SIZE};
+                VkDependencyInfo readback_dep_info = {.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
+                                                      .bufferMemoryBarrierCount = 1,
+                                                      .pBufferMemoryBarriers = &readback_barrier};
+                vkCmdPipelineBarrier2(current_cmd_buf, &readback_dep_info);
+
                 VkBufferImageCopy buffer_image_copy[] = {{
                     .imageSubresource = {.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
                                          .mipLevel = 0,

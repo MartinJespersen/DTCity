@@ -1,19 +1,15 @@
 
 g_internal void
-osm::structure_init(U64 node_hashmap_size, U64 way_hashmap_size, Rng2F64 utm_coords)
+osm::structure_init(U64 node_hashmap_size, U64 way_hashmap_size)
 {
     Arena* arena = arena_alloc();
     Buffer<osm::NodeList> utm_node_hashmap = BufferAlloc<osm::NodeList>(arena, node_hashmap_size);
     Buffer<osm::WayList> way_hashmap = BufferAlloc<osm::WayList>(arena, way_hashmap_size);
-    Map<osm::NodeId, osm::UtmLocation>* utm_location_map =
-        map_create<osm::NodeId, osm::UtmLocation>(arena, node_hashmap_size);
-
-    F64 center_transform_x = -(utm_coords.min.x + utm_coords.max.x) / 2.0;
-    F64 center_transform_y = -(utm_coords.min.y + utm_coords.max.y) / 2.0;
-    Vec2F64 utm_center_offset = {center_transform_x, center_transform_y};
+    Map<osm::NodeId, osm::EcefLocation>* utm_location_map =
+        map_create<osm::NodeId, osm::EcefLocation>(arena, node_hashmap_size);
 
     osm::g_network = PushStruct(arena, osm::Network);
-    *osm::g_network = {arena, utm_node_hashmap, utm_center_offset, utm_location_map, way_hashmap};
+    *osm::g_network = {arena, utm_node_hashmap, utm_location_map, way_hashmap};
 }
 
 g_internal void
@@ -53,15 +49,16 @@ osm::structure_add(Buffer<osm::RoadNodeList> node_hashmap, String8 json, osm::Wa
             if (inserted)
             {
                 osm::WgsNode* node_coord = osm::wgs_node_find(node_hashmap, node_id);
-                double x, y;
-                char node_utm_zone[10];
-                UTM::LLtoUTM(node_coord->lat, node_coord->lon, y, x, node_utm_zone);
 
-                String8 utm_zone_str = str8_c_string(node_utm_zone);
-                node_utm->utm_zone = push_str8_copy(arena, utm_zone_str);
+                // Cartographic to ECEF transformation
+                CesiumGeospatial::Cartographic origin_cartographic(
+                    glm::radians(node_coord->lon), glm::radians(node_coord->lat), 0);
+                glm::dvec3 coord_ecef =
+                    CesiumGeospatial::Ellipsoid::WGS84.cartographicToCartesian(origin_cartographic);
+                EcefLocation loc = ecef_location_create(
+                    node_id, vec_3f64(coord_ecef.x, coord_ecef.y, coord_ecef.z));
 
-                UtmLocation loc = utm_location_create(node_id, vec_2f32(x, y));
-                map_insert(network->utm_location_map, node_id, loc);
+                map_insert(network->ecef_location_map, node_id, loc);
 
                 chunk_list_insert(scratch.arena, node_id_chunk_list, node_id);
             }
@@ -123,16 +120,16 @@ osm::tag_find(Arena* arena, Buffer<osm::Tag> tags, String8 tag_to_find)
     return result;
 }
 
-g_internal osm::UtmLocation
-osm::utm_location_get(NodeId node_id)
+g_internal osm::EcefLocation
+osm::location_get(NodeId node_id)
 {
     prof_scope_marker;
-    UtmLocation* loc = map_get(osm::g_network->utm_location_map, node_id);
+    EcefLocation* loc = map_get(osm::g_network->ecef_location_map, node_id);
     if (loc)
     {
         return *loc;
     }
-    Assert(0 && "Node not found in hash map");
+    Assert("Node not found in hash map");
     return {};
 }
 

@@ -206,6 +206,16 @@ create_instance(Context* vk_ctx)
     createInfo.ppEnabledExtensionNames = CStrArrFromStr8Buffer(scratch.arena, extensions);
 
     VkDebugUtilsMessengerCreateInfoEXT debugCreateInfo{};
+    VkValidationFeatureEnableEXT gpu_av_enables[] = {
+        VK_VALIDATION_FEATURE_ENABLE_GPU_ASSISTED_EXT,
+        VK_VALIDATION_FEATURE_ENABLE_GPU_ASSISTED_RESERVE_BINDING_SLOT_EXT,
+        VK_VALIDATION_FEATURE_ENABLE_DEBUG_PRINTF_EXT,
+        VK_VALIDATION_FEATURE_ENABLE_SYNCHRONIZATION_VALIDATION_EXT};
+    VkValidationFeaturesEXT validation_features{};
+    validation_features.sType = VK_STRUCTURE_TYPE_VALIDATION_FEATURES_EXT;
+    validation_features.enabledValidationFeatureCount = ArrayCount(gpu_av_enables);
+    validation_features.pEnabledValidationFeatures = gpu_av_enables;
+
     if (vk_ctx->enable_validation_layers)
     {
         createInfo.enabledLayerCount = (U32)vk_ctx->validation_layers.size;
@@ -213,7 +223,15 @@ create_instance(Context* vk_ctx)
             CStrArrFromStr8Buffer(scratch.arena, vk_ctx->validation_layers);
 
         populate_debug_messenger_create_info(debugCreateInfo);
-        createInfo.pNext = (VkDebugUtilsMessengerCreateInfoEXT*)&debugCreateInfo;
+        if (vk_ctx->enable_gpu_assisted_validation)
+        {
+            validation_features.pNext = &debugCreateInfo;
+            createInfo.pNext = &validation_features;
+        }
+        else
+        {
+            createInfo.pNext = &debugCreateInfo;
+        }
     }
     else
     {
@@ -260,8 +278,14 @@ logical_device_create(Arena* arena, Context* vk_ctx)
     deviceFeatures.geometryShader = VK_TRUE;
     deviceFeatures.fillModeNonSolid = VK_TRUE;
 
+    VkPhysicalDeviceBufferDeviceAddressFeatures buffer_device_address_features{};
+    buffer_device_address_features.sType =
+        VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_BUFFER_DEVICE_ADDRESS_FEATURES;
+    buffer_device_address_features.bufferDeviceAddress = VK_TRUE;
+
     VkPhysicalDeviceColorWriteEnableFeaturesEXT colorWriteEnableFeatures = {
         .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_COLOR_WRITE_ENABLE_FEATURES_EXT,
+        .pNext = &buffer_device_address_features,
         .colorWriteEnable = VK_TRUE,
     };
 
@@ -270,12 +294,12 @@ logical_device_create(Arena* arena, Context* vk_ctx)
     descriptor_indexing_features.sType =
         VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_INDEXING_FEATURES;
     descriptor_indexing_features.shaderSampledImageArrayNonUniformIndexing = VK_TRUE;
-    descriptor_indexing_features.shaderStorageBufferArrayNonUniformIndexing = VK_FALSE;
+    descriptor_indexing_features.shaderStorageBufferArrayNonUniformIndexing = VK_TRUE;
     descriptor_indexing_features.shaderStorageImageArrayNonUniformIndexing = VK_FALSE;
     descriptor_indexing_features.shaderUniformBufferArrayNonUniformIndexing = VK_FALSE;
     descriptor_indexing_features.descriptorBindingSampledImageUpdateAfterBind = VK_TRUE;
     descriptor_indexing_features.descriptorBindingStorageImageUpdateAfterBind = VK_FALSE;
-    descriptor_indexing_features.descriptorBindingStorageBufferUpdateAfterBind = VK_FALSE;
+    descriptor_indexing_features.descriptorBindingStorageBufferUpdateAfterBind = VK_TRUE;
     descriptor_indexing_features.descriptorBindingUniformBufferUpdateAfterBind = VK_FALSE;
     descriptor_indexing_features.descriptorBindingPartiallyBound = VK_TRUE;
     descriptor_indexing_features.descriptorBindingVariableDescriptorCount = VK_TRUE;
@@ -1144,8 +1168,9 @@ static void
 descriptor_pool_create(Context* vk_ctx, U32 max_textures)
 {
     VkDescriptorPoolSize pool_sizes[] = {
-        {VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 6}, // 2 for both camera buffer and terrain buffer
-        {VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 20 + max_textures},
+        {VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, max_textures},
+        {VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, max_textures},
+        {VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, max_textures},
     };
     U32 pool_size_count = ArrayCount(pool_sizes);
 
@@ -1155,13 +1180,50 @@ descriptor_pool_create(Context* vk_ctx, U32 max_textures)
     poolInfo.pPoolSizes = pool_sizes;
     // Enable update after bind for descriptor indexing support
     poolInfo.flags = VK_DESCRIPTOR_POOL_CREATE_UPDATE_AFTER_BIND_BIT;
-    poolInfo.maxSets = 20;
+    poolInfo.maxSets = max_textures;
 
     if (vkCreateDescriptorPool(vk_ctx->device, &poolInfo, nullptr, &vk_ctx->descriptor_pool) !=
         VK_SUCCESS)
     {
         exit_with_error("failed to create descriptor pool!");
     }
+}
+
+static VkDescriptorSetLayout
+descriptor_set_layout_create(VkDevice device,
+                             std::initializer_list<VkDescriptorSetLayoutBinding> bindings)
+{
+    VkDescriptorSetLayoutCreateInfo layoutInfo{};
+    layoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+    layoutInfo.bindingCount = (U32)bindings.size();
+    layoutInfo.pBindings = bindings.begin();
+
+    VkDescriptorSetLayout desc_set_layout;
+    VK_CHECK_RESULT(vkCreateDescriptorSetLayout(device, &layoutInfo, nullptr, &desc_set_layout));
+
+    return desc_set_layout;
+}
+
+g_internal VkDescriptorSet
+descriptor_set_alloc(VkDevice device, VkDescriptorPool desc_pool,
+                     std::initializer_list<VkDescriptorSetLayout> layouts)
+{
+    VkDescriptorSetAllocateInfo allocInfo{};
+    allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+    allocInfo.descriptorPool = desc_pool;
+    allocInfo.descriptorSetCount = (U32)layouts.size();
+    allocInfo.pSetLayouts = layouts.begin();
+
+    VkDescriptorSet desc_set;
+    VK_CHECK_RESULT(vkAllocateDescriptorSets(device, &allocInfo, &desc_set));
+
+    return desc_set;
+}
+
+static void
+descriptor_set_update(VkDevice device, std::initializer_list<VkWriteDescriptorSet> writes)
+{
+    vkUpdateDescriptorSets(device, (U32)writes.size(), writes.begin(), 0, nullptr);
 }
 
 static VkDescriptorSetLayout
@@ -1209,24 +1271,23 @@ descriptor_set_layout_create_bindless(VkDevice device, VkDescriptorSetLayoutBind
     return desc_set_layout;
 }
 
-// Creates a descriptor set layout for a bindless texture array
-// max_textures: Maximum number of textures in the array (can be partially bound)
+// Creates a descriptor set layout for bindless textures
 static VkDescriptorSetLayout
-descriptor_set_layout_create_bindless_textures(VkDevice device, U32 binding, U32 max_textures,
-                                               VkShaderStageFlags stage_flags)
+descriptor_set_layout_create_bindless_textures(VkDevice device, U32 texture_binding,
+                                               U32 max_textures, VkShaderStageFlags stage_flags)
 {
-    VkDescriptorSetLayoutBinding layout_binding{};
-    layout_binding.binding = binding;
-    layout_binding.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-    layout_binding.descriptorCount = max_textures;
-    layout_binding.stageFlags = stage_flags;
-    layout_binding.pImmutableSamplers = nullptr;
+    VkDescriptorSetLayoutBinding binding{};
+    binding.binding = texture_binding;
+    binding.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+    binding.descriptorCount = max_textures;
+    binding.stageFlags = stage_flags;
+    binding.pImmutableSamplers = nullptr;
 
-    VkDescriptorBindingFlags binding_flags = VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT |
-                                             VK_DESCRIPTOR_BINDING_UPDATE_AFTER_BIND_BIT |
-                                             VK_DESCRIPTOR_BINDING_VARIABLE_DESCRIPTOR_COUNT_BIT;
+    VkDescriptorBindingFlags flags = VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT |
+                                     VK_DESCRIPTOR_BINDING_UPDATE_AFTER_BIND_BIT |
+                                     VK_DESCRIPTOR_BINDING_VARIABLE_DESCRIPTOR_COUNT_BIT;
 
-    return descriptor_set_layout_create_bindless(device, &layout_binding, &binding_flags, 1);
+    return descriptor_set_layout_create_bindless(device, &binding, &flags, 1);
 }
 
 // Allocates a descriptor set with variable descriptor count for bindless arrays
@@ -1261,7 +1322,7 @@ descriptor_set_update_bindless_texture(U32 array_index, VkImageView image_view, 
     Assert(sampler);
     vulkan::Context* vk_ctx = ctx_get();
     U32 binding = vk_ctx->texture_binding;
-    VkDescriptorSet desc_set = vk_ctx->texture_descriptor_set;
+    VkDescriptorSet desc_set = vk_ctx->bindless_descriptor_set;
 
     VkDescriptorImageInfo image_info{};
     image_info.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
@@ -1278,44 +1339,6 @@ descriptor_set_update_bindless_texture(U32 array_index, VkImageView image_view, 
     write.pImageInfo = &image_info;
 
     vkUpdateDescriptorSets(vk_ctx->device, 1, &write, 0, nullptr);
-}
-
-static VkDescriptorSet
-descriptor_set_create(Arena* arena, VkDevice device, VkDescriptorPool desc_pool,
-                      VkDescriptorSetLayout desc_set_layout, VkImageView image_view,
-                      VkSampler sampler)
-{
-    ScratchScope scratch = ScratchScope(&arena, 1);
-
-    VkDescriptorSetLayout layouts[] = {desc_set_layout};
-    VkDescriptorSetAllocateInfo allocInfo{};
-    allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
-    allocInfo.descriptorPool = desc_pool;
-    allocInfo.descriptorSetCount = ArrayCount(layouts);
-    allocInfo.pSetLayouts = layouts;
-
-    VkDescriptorSet desc_set;
-    VK_CHECK_RESULT(vkAllocateDescriptorSets(device, &allocInfo, &desc_set));
-
-    VkDescriptorImageInfo image_info{};
-    image_info.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-    image_info.imageView = image_view;
-    image_info.sampler = sampler;
-
-    VkWriteDescriptorSet texture_sampler_desc{};
-    texture_sampler_desc.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-    texture_sampler_desc.dstSet = desc_set;
-    texture_sampler_desc.dstBinding = 0;
-    texture_sampler_desc.dstArrayElement = 0;
-    texture_sampler_desc.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-    texture_sampler_desc.descriptorCount = 1;
-    texture_sampler_desc.pImageInfo = &image_info;
-
-    VkWriteDescriptorSet descriptors[] = {texture_sampler_desc};
-
-    vkUpdateDescriptorSets(device, ArrayCount(descriptors), descriptors, 0, nullptr);
-
-    return desc_set;
 }
 
 static VkFilter

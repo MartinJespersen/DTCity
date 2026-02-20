@@ -68,10 +68,8 @@ class DTCityPrepareRendererResources : public Cesium3DTilesSelection::IPrepareRe
                                                                          nullptr});
         }
 
-        glm::dmat4 final_transform = ecef_to_local_transform * transform; //* gltf_to_zup;
-
         render::ThreadInput* thread_input = render::thread_input_create();
-        TileInfo tile_info = TileInfo(*pModel, final_transform);
+        TileInfo tile_info = TileInfo(*pModel, ecef_to_local_transform, transform);
         render::ThreadSyncCallback callback =
             render::ThreadSyncCallback(&tile_info, render_list_record);
         void* render_data_list = render::thread_cmd_buffer_record(thread_input, callback);
@@ -105,9 +103,12 @@ class DTCityPrepareRendererResources : public Cesium3DTilesSelection::IPrepareRe
         for (TileRenderData* render_data = render_data_list->first; render_data;
              render_data = render_data->next)
         {
-            render::handle_destroy_deferred(render_data->vertex_handle);
-            render::handle_destroy_deferred(render_data->index_handle);
-            render::handle_destroy_deferred(render_data->texture_handle);
+            render::handle_destroy_deferred(render_data->render_data.vertex_buffer_handle);
+            render::handle_destroy_deferred(render_data->render_data.index_buffer_handle);
+            render::handle_destroy_deferred(render_data->render_data.texture_handle);
+            render::handle_destroy_deferred(render_data->render_data.model_matrix_buffer_handle);
+            render::handle_destroy_deferred(render_data->render_data.uniform_buffer_handle);
+            render::handle_destroy_deferred(render_data->render_data.storage_buffer_handle);
         }
         arena_release(render_data_list->arena);
     }
@@ -271,8 +272,8 @@ g_internal void*
 render_list_record(render::ThreadInput* thread_input, render::FuncData user_data)
 {
     TileInfo* tile_info = (TileInfo*)user_data;
-    TileRenderDataList* render_data_list =
-        tile_render_data_from_gltf(tile_info->model, tile_info->transform, thread_input);
+    TileRenderDataList* render_data_list = tile_render_data_from_gltf(
+        tile_info->model, tile_info->ecef_to_local, tile_info->tile_transform, thread_input);
     {
         auto stub_func = [](void* data, render::ThreadInput* thread_input)
         {
@@ -283,11 +284,17 @@ render_list_record(render::ThreadInput* thread_input, render::FuncData user_data
         for (TileRenderData* data = render_data_list->first; data; data = data->next)
         {
             render::handle_list_push(thread_input->arena, &thread_input->handles,
-                                     data->vertex_handle);
+                                     data->render_data.vertex_buffer_handle);
             render::handle_list_push(thread_input->arena, &thread_input->handles,
-                                     data->index_handle);
+                                     data->render_data.index_buffer_handle);
             render::handle_list_push(thread_input->arena, &thread_input->handles,
-                                     data->texture_handle);
+                                     data->render_data.texture_handle);
+            render::handle_list_push(thread_input->arena, &thread_input->handles,
+                                     data->render_data.model_matrix_buffer_handle);
+            render::handle_list_push(thread_input->arena, &thread_input->handles,
+                                     data->render_data.uniform_buffer_handle);
+            render::handle_list_push(thread_input->arena, &thread_input->handles,
+                                     data->render_data.storage_buffer_handle);
 
             thread_input->done_loading_func = render::handle_done_loading;
             thread_input->loading_func = stub_func;
@@ -297,8 +304,8 @@ render_list_record(render::ThreadInput* thread_input, render::FuncData user_data
 }
 
 g_internal TileRenderDataList*
-tile_render_data_from_gltf(const CesiumGltf::Model& model, const glm::dmat4& transform,
-                           render::ThreadInput* thread_input)
+tile_render_data_from_gltf(const CesiumGltf::Model& model, const glm::dmat4& ecef_to_local,
+                           const glm::dmat4& tile_transform, render::ThreadInput* thread_input)
 {
     prof_scope_marker;
 
@@ -383,9 +390,8 @@ tile_render_data_from_gltf(const CesiumGltf::Model& model, const glm::dmat4& tra
                     {
                         uv_data = (U8*)uv_buffer->cesium.data.data() + uv_buffer_view->byteOffset +
                                   uv_accessor->byteOffset;
-                        uv_stride = uv_buffer_view->byteStride.value_or(0) > 0
-                                        ? uv_buffer_view->byteStride.value()
-                                        : sizeof(F32) * 2;
+                        U32 uv_byte_stride = uv_buffer_view->byteStride.value_or(0);
+                        uv_stride = uv_byte_stride > 0 ? uv_byte_stride : sizeof(F32) * 2;
                     }
                 }
             }
@@ -407,15 +413,15 @@ tile_render_data_from_gltf(const CesiumGltf::Model& model, const glm::dmat4& tra
                 // -y) Then transform applies: tile_transform (to ECEF) -> ecef_to_local (to local
                 // ENU)
                 const F32* pos = (const F32*)(pos_data + i * pos_stride);
-                glm::dvec4 pos_zup = glm::dvec4(pos[0], -pos[2], pos[1], 1.0);
-                glm::dvec4 pos_transformed = transform * pos_zup;
+                glm::dvec4 pos_zup =
+                    ecef_to_local * tile_transform * glm::dvec4(pos[0], -pos[2], pos[1], 1.0);
 
-                vertex->pos.x = (F32)pos_transformed.x;
-                vertex->pos.y = (F32)pos_transformed.y;
-                vertex->pos.z = (F32)pos_transformed.z;
+                vertex->pos.x = (F32)pos_zup.x;
+                vertex->pos.y = (F32)pos_zup.y;
+                vertex->pos.z = (F32)pos_zup.z;
 
                 AssertAlways(uv_data);
-                const F32* uv = (const F32*)(uv_data + i * uv_stride);
+                const F32* uv = (const F32*)(uv_data + (U64)i * (U64)uv_stride);
                 vertex->uv.x = uv[0];
                 vertex->uv.y = uv[1];
             }
@@ -484,7 +490,7 @@ tile_render_data_from_gltf(const CesiumGltf::Model& model, const glm::dmat4& tra
                 index_count += prim_node->indices.size;
             }
         }
-        render_data->index_count = index_count;
+        render_data->render_data.index_count = index_count;
 
         // Second pass: copy and merge vertices/indices
         U32 vertex_offset = 0;
@@ -510,18 +516,37 @@ tile_render_data_from_gltf(const CesiumGltf::Model& model, const glm::dmat4& tra
                 index_offset += prim_node->indices.size;
             }
         }
-        render::BufferInfo vertex_info =
-            render::buffer_info_from_vertex_3d_buffer(vertices, render::BufferType_Vertex);
-        render::BufferInfo index_info =
-            render::buffer_info_from_u32_index_buffer(indices, render::BufferType_Index);
+        render::BufferInfo vertex_info = render::BufferInfo(
+            vertices, render::BufferType_Vertex | render::BufferType_StorageBuffer);
+        render::BufferInfo index_info = render::BufferInfo(
+            indices, render::BufferType_Index | render::BufferType_StorageBuffer);
 
-        render_data->vertex_handle =
+        glm::mat4 model_matrix = glm::identity<glm::mat4>();
+        render::BufferInfo model_matrix_info =
+            render::BufferInfo(tile_arena, &model_matrix, render::BufferType_Uniform);
+
+        render_data->render_data.vertex_buffer_handle =
             render::buffer_load_sync((VkCommandBuffer)thread_input->cmd_buffer, &vertex_info);
-        render_data->index_handle =
+        render_data->render_data.index_buffer_handle =
             render::buffer_load_sync((VkCommandBuffer)thread_input->cmd_buffer, &index_info);
+        render_data->render_data.model_matrix_buffer_handle =
+            render::buffer_load_sync((VkCommandBuffer)thread_input->cmd_buffer, &model_matrix_info);
+        render_data->render_data.uniform_buffer_handle = render::uniform_buffer_load_sync(
+            thread_input->arena, render_data->render_data.model_matrix_buffer_handle);
+        render_data->render_data.storage_buffer_handle = render::storage_buffer_load_sync(
+            thread_input->arena, render_data->render_data.vertex_buffer_handle,
+            render_data->render_data.index_buffer_handle);
 
         // Texture Loading
-        S32 tex_idx = model.materials[mat_idx].pbrMetallicRoughness->baseColorTexture->index;
+        S32 tex_idx = -1;
+        if (model.materials[mat_idx].pbrMetallicRoughness.has_value())
+        {
+            const auto& pbr = *model.materials[mat_idx].pbrMetallicRoughness;
+            if (pbr.baseColorTexture.has_value())
+            {
+                tex_idx = pbr.baseColorTexture->index;
+            }
+        }
         AssertAlways(tex_idx >= 0);
         CesiumGltf::Texture texture = model.textures[tex_idx];
         AssertAlways(texture.source >= 0);
@@ -550,7 +575,7 @@ tile_render_data_from_gltf(const CesiumGltf::Model& model, const glm::dmat4& tra
 
         render::TextureUploadData tex_data = render::TextureUploadData::init(
             tex_buffer, (U32)width, (U32)height, channels, bytes_per_channel, byte_count);
-        render_data->texture_handle = render::texture_load_sync(
+        render_data->render_data.texture_handle = render::texture_load_sync(
             &sampler_info, &tex_data, (VkCommandBuffer)thread_input->cmd_buffer);
     }
 
@@ -568,13 +593,14 @@ tileset_renderer_create(Arena* arena, async::Threads* threads, const char* tiles
     // Register all tile content types
     Cesium3DTilesContent::registerAllTileContentTypes();
 
-    TilesetRenderer* renderer = PushStruct(arena, TilesetRenderer);
+    TilesetRenderer* renderer = PushArrayNoZero(arena, TilesetRenderer, 1);
 
     // Create task processor
     renderer->task_processor = std::make_shared<DTCityTaskProcessor>(threads->msg_queue);
 
     // Create asset accessor using CesiumCurl
-    renderer->asset_accessor = std::make_shared<CesiumCurl::CurlAssetAccessor>();
+    std::shared_ptr<CesiumAsync::IAssetAccessor> asset_accessor =
+        std::make_shared<CesiumCurl::CurlAssetAccessor>();
 
     // Create async system
     new (&renderer->async_system) CesiumAsync::AsyncSystem(renderer->task_processor);
@@ -583,25 +609,18 @@ tileset_renderer_create(Arena* arena, async::Threads* threads, const char* tiles
     CesiumGeospatial::Cartographic origin_cartographic(
         glm::radians(origin_longitude), glm::radians(origin_latitude), origin_height);
 
-    renderer->origin_ecef =
-        CesiumGeospatial::Ellipsoid::WGS84.cartographicToCartesian(origin_cartographic);
-
-    renderer->local_coord_system =
-        std::make_unique<CesiumGeospatial::LocalHorizontalCoordinateSystem>(
-            origin_cartographic, CesiumGeospatial::LocalDirection::East,
-            CesiumGeospatial::LocalDirection::North, CesiumGeospatial::LocalDirection::Up);
+    renderer->local_coord_system = new CesiumGeospatial::LocalHorizontalCoordinateSystem(
+        origin_cartographic, CesiumGeospatial::LocalDirection::East,
+        CesiumGeospatial::LocalDirection::North, CesiumGeospatial::LocalDirection::Up);
 
     // Create prepare renderer resources (pass coordinate system for ECEF->local transforms)
     auto prepare_renderer_resources = std::make_shared<DTCityPrepareRendererResources>(
-        renderer->local_coord_system.get()->getEcefToLocalTransformation());
+        renderer->local_coord_system->getEcefToLocalTransformation());
 
     // Create tileset externals
-    Cesium3DTilesSelection::TilesetExternals externals{renderer->asset_accessor,
-                                                       prepare_renderer_resources,
-                                                       renderer->async_system,
-                                                       nullptr,
-                                                       nullptr,
-                                                       nullptr};
+    Cesium3DTilesSelection::TilesetExternals externals{
+        asset_accessor, prepare_renderer_resources, renderer->async_system, nullptr, nullptr,
+        nullptr};
 
     // Create tileset options
     Cesium3DTilesSelection::TilesetOptions options;
@@ -611,7 +630,7 @@ tileset_renderer_create(Arena* arena, async::Threads* threads, const char* tiles
 
     // Create the tileset
     renderer->tileset =
-        std::make_unique<Cesium3DTilesSelection::Tileset>(externals, tileset_url, options);
+        std::make_shared<Cesium3DTilesSelection::Tileset>(externals, tileset_url, options);
 
     return renderer;
 }
@@ -622,7 +641,7 @@ tileset_renderer_destroy(TilesetRenderer* renderer)
     if (renderer)
     {
         renderer->tileset.reset();
-        renderer->local_coord_system.reset();
+        renderer->task_processor.reset();
     }
 }
 
@@ -722,21 +741,18 @@ tileset_update_view(Arena* arena, TilesetRenderer* renderer, ui::Camera* camera,
 }
 
 g_internal void
-tileset_render(TilesetRenderer* renderer)
+tileset_render(TilesetRenderer* renderer, render::Handle road_segment_handle,
+               render::Handle road_segment_buffer_handle)
 {
     if (!renderer)
         return;
 
     for (TileRenderData* tile = renderer->loaded_tiles.first; tile; tile = tile->next)
     {
-        render::Model3DPipelineData pipeline_data = {};
-        pipeline_data.vertex_buffer_handle = tile->vertex_handle;
-        pipeline_data.index_buffer_handle = tile->index_handle;
-        pipeline_data.texture_handle = tile->texture_handle;
-        pipeline_data.index_count = tile->index_count;
-        pipeline_data.index_offset = 0;
-
-        render::model_3d_draw(pipeline_data);
+        render::road_intersection_compute_add(tile->render_data.storage_buffer_handle,
+                                              tile->render_data.index_buffer_handle,
+                                              road_segment_buffer_handle, road_segment_handle);
+        render::model_3d_draw(tile->render_data);
     }
 }
 

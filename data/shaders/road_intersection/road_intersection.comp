@@ -1,0 +1,88 @@
+#version 450
+#extension GL_EXT_nonuniform_qualifier : require
+#extension GL_EXT_buffer_reference : require
+#extension GL_EXT_buffer_reference2 : require
+#extension GL_EXT_debug_printf: enable
+
+const uint CORNERS_COUNT = 4;
+
+struct RoadSegment {
+    uvec2 id;
+    vec2 positions[CORNERS_COUNT];
+};
+
+struct Vertex {
+    float pos_x;
+    float pos_y;
+    float pos_z;
+    float padding;
+    vec2 uv;
+    uvec2 id;
+};
+
+layout(std430, set = 0, binding = 0) readonly buffer RoadSegmentBuffer {
+    RoadSegment data[];
+} road_segments;
+
+layout(std430, set = 1, binding = 0) buffer VertexBuffer {
+    Vertex data[];
+} vertices;
+
+layout(std430, set = 1, binding = 1) readonly buffer IndexBuffer {
+    uint data[];
+} indices;
+
+layout(push_constant) uniform PushConstants
+{
+    uint road_segment_buffer_size;
+    uint invocation_count;
+} push_constants;
+
+layout(local_size_x = 256, local_size_y = 1, local_size_z = 1) in;
+
+bool is_face_inside_road_segment(vec2 road_corner_pos[CORNERS_COUNT], vec2 face_avg)
+{
+    bool is_inside = true;
+    float cross_z = 0.0;
+    for (int i = 0; i < CORNERS_COUNT; i++) {
+        vec2 edge = road_corner_pos[(i + 1) % CORNERS_COUNT] - road_corner_pos[i];
+        vec2 to_point = face_avg - road_corner_pos[i];
+        cross_z = edge.x * to_point.y - edge.y * to_point.x;
+        if (cross_z <= 0.0) {
+            is_inside = false;
+            break;
+        }
+    }
+    return is_inside;
+}
+
+void main()
+{
+    uint index = gl_GlobalInvocationID.x;
+
+    if (index >= push_constants.invocation_count)
+    {
+        return;
+    }
+    uint base = index * 3;
+    uint v0_idx = indices.data[base];
+    uint v1_idx = indices.data[base + 1];
+    uint v2_idx = indices.data[base + 2];
+
+    vec3 v0 = vec3(vertices.data[v0_idx].pos_x, vertices.data[v0_idx].pos_y, vertices.data[v0_idx].pos_z);
+    vec3 v1 = vec3(vertices.data[v1_idx].pos_x, vertices.data[v1_idx].pos_y, vertices.data[v1_idx].pos_z);
+    vec3 v2 = vec3(vertices.data[v2_idx].pos_x, vertices.data[v2_idx].pos_y, vertices.data[v2_idx].pos_z);
+
+    vec3 pos_avg = (v0 + v1 + v2) / 3.0;
+
+    for (uint i = 0; i < push_constants.road_segment_buffer_size; i++) {
+        vec2 road_segment[CORNERS_COUNT] = road_segments.data[i].positions;
+        bool is_inside = is_face_inside_road_segment(road_segment, pos_avg.xy);
+        if (is_inside) {
+            vertices.data[v0_idx].id = road_segments.data[i].id;
+            vertices.data[v1_idx].id = road_segments.data[i].id;
+            vertices.data[v2_idx].id = road_segments.data[i].id;
+            break;
+        }
+    }
+}

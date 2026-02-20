@@ -2,7 +2,7 @@ namespace ui
 {
 
 static void
-camera_init(Camera* camera, Vec2F32 world_offset)
+camera_init(Camera* camera)
 {
     camera->move_sensitivity = 300.0f;
     camera->fov = 45.0;
@@ -10,7 +10,6 @@ camera_init(Camera* camera, Vec2F32 world_offset)
     camera->yaw = 0.0f;
     camera->pitch = -60.0f; // Look downward at the ground
     camera->view_dir = ui_direction_normal_from_euler_angles(camera->yaw, camera->pitch);
-    camera->world_offset = {-world_offset.x, -world_offset.y};
 }
 
 static void
@@ -49,9 +48,6 @@ camera_update(Camera* camera, io::IO* input, F32 time, Vec2U32 extent)
 
     camera->position += camera->view_dir * move_y;
     camera->position += move_x * x_view_norm;
-    printf("Camera Position: (%f, %f, %f)\n", camera->position.x, camera->position.y,
-           camera->position.z);
-    printf("Camera Angle: (%f, %f, %f)\n", camera->yaw, camera->pitch, camera->fov);
 
     camera->view_matrix =
         glm::lookAt(camera->position, camera->position + camera->view_dir, camera_up);

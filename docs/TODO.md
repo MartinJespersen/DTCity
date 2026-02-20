@@ -1,11 +1,25 @@
-# Before commiting
+# Urgent changes
 * tile transform might need to be passed to shader as a uniform buffer
+* Check barriers for command buffer recordings
+* Separate functions should be created for the creation of assets of different type (Buffer, Texture, Descriptor) 
+* Consider DescriptorSet asset to be a grouping of Buffers and Textures
+* Reconsider the number of descriptor pools (whether 1 is enough) and the descriptor numbers
+* The model matrix and the accompanying uniform buffer should freed as part of the collective tile not for each render data
+* remove dependency from vulkan to city
+* Create ComputePipelineData for descriptor and buffers of the compute pipeline should be input to the compute pipeline function
+* dispatch for compute might not be 100% correct.
+* the readback buffer should be duplicated to the number of frames in flight.
+* In function RoadSegmentFromTwoRoadNodes: the normalize function leads to values being Nan. Handle this in a better way.
 
-# Before Push
+# Less urgent changes
+* Use vulkan push descriptor and buffer device address instead of descriptor sets
+* buildings need to be rendered included in compute pass as well
+* simplify render interface (a little too verbose at the moment)
 * Reconsider async loading for none cesium objects.
 * Make the vcpkg overlay port work for cesium instead of the using the local repo.
 * look at the descriptor index alloc and free functions again.
 * Remove the printf logging and find way to log the queue messages
+* Find out how to make the coordinate system and 3D geometry match.
 
 # Bugs
 * After deleting everything in the deletion queue, delete the asset item queue and give warning if it is not empty.
@@ -18,11 +32,24 @@
 * Change the naming convention for functions from PascalCase to snake_case
 * Cleanup entrypoint main loop
 
-# Tools to look at
+# Tools or features for debugging
+* Vulkan debugging: https://www.youtube.com/watch?v=UeWXr0i7eBY
 * Clang ThreadSanitizer (for detecting race conditions)
 * WhiteBox (by Andrew Reece) 
 * /fsanitize=fuzzer option in MSVC 
-
+* GL_EXT_debug_printf for making debugging shaders easier
+* VkPhysicalDeviceFeatures::robustBufferAccess debugging shaders(OOB writes ignored and loads are zeroed)
+  * Extension2 is available for descriptor sets (descriptor_indexing OOB)
+* VkDebugUtilsMessengerEXT for debugging Vulkan API calls
+* GPU-Assisted Validation (GPU-AV)
+  * helps with Buffer Device Addresses (currently not used)
+* VK_EXT_debug_utils
+  * label buffer and images 
+  * label regions in command buffer
+* GPU printf 
+  * SPV_KHR_non_semantic_info (16:06 in video above)
+* What to do about VK_DEVICE_LOST_LOST (video at 18:00)
+* Other tools (video 18:30)
 
 # Future Improvements:
 * Create a draw layer 

@@ -9,7 +9,8 @@ enum class HandleType : U32
 {
     Undefined,
     Texture,
-    Buffer
+    Buffer,
+    DescriptorSet
 };
 
 struct Handle
@@ -39,6 +40,9 @@ struct Handle
 
     static Handle
     buffer_handle_create();
+
+    static Handle
+    descriptor_set_handle_create();
 };
 
 struct HandleNode
@@ -136,18 +140,29 @@ struct SamplerInfo
     bool unnormalized_coordinates;
 };
 
-enum BufferType
+enum BufferType : U32
 {
-    BufferType_Invalid,
-    BufferType_Vertex,
-    BufferType_Index
+    BufferType_Invalid = 0,
+    BufferType_Vertex = (1 << 0),
+    BufferType_Index = (1 << 2),
+    BufferType_Uniform = (1 << 3),
+    BufferType_StorageBuffer = (1 << 4)
 };
 
 struct BufferInfo
 {
     Buffer<U8> buffer;
     U64 type_size;
-    BufferType buffer_type;
+    U32 buffer_type;
+
+    BufferInfo(Buffer<U8> buffer, U64 type_size, U32 buffer_type)
+        : buffer(buffer), type_size(type_size), buffer_type(buffer_type)
+    {
+    }
+
+    template <typename T> BufferInfo(Buffer<T> buffer, U32 buffer_type);
+
+    template <typename T> BufferInfo(Arena* arena, T* buffer, U32 buffer_type);
 };
 
 enum class PipelineLayoutType
@@ -157,13 +172,13 @@ enum class PipelineLayoutType
     Model3DInstance,
     Blend3D_Tex,
     Blend3D_ColorMap
-
 };
 
 template <typename T> struct AssetItem
 {
     AssetItem* next;
     AssetItem* prev;
+    HandleType type;
     U64 gen_id;
     B32 is_loaded;
     T item;
@@ -191,7 +206,11 @@ struct Model3DPipelineData
 {
     Handle vertex_buffer_handle;
     Handle index_buffer_handle;
+    Handle model_matrix_buffer_handle;
     Handle texture_handle;
+
+    Handle uniform_buffer_handle;
+    Handle storage_buffer_handle;
 
     U64 index_count;
     U32 index_offset;
@@ -220,6 +239,7 @@ struct Blend3DPipelineData
 struct Vertex3D
 {
     Vec3F32 pos;
+    F32 padding;
     Vec2F32 uv;
     Vec2U32 object_id;
 };
@@ -292,23 +312,6 @@ static void
 handle_list_push(Arena* arena, HandleList* list, Handle handle);
 static Handle
 handle_list_first_handle(HandleList* list);
-static BufferInfo
-buffer_info_from_vertex_3d_buffer(Buffer<Vertex3D> buffer, BufferType buffer_type);
-
-static BufferInfo
-buffer_info_from_u32_index_buffer(Buffer<U32> buffer, BufferType buffer_type);
-
-static BufferInfo
-buffer_info_from_vertex_3d_instance_buffer(Buffer<Model3DInstance> buffer, BufferType buffer_type);
-
-static render::BufferInfo
-buffer_info_from_vertex_blend_3d_buffer(Buffer<Vertex3DBlend> buffer,
-                                        render::BufferType buffer_type);
-
-// privates
-template <typename T>
-static BufferInfo
-buffer_info_from_template_buffer(Buffer<T> buffer, BufferType buffer_type, U64 type_size);
 
 //////////////////////////////////////////////////////////////////////////
 // ~mgj: function declaration to be implemented by backend
@@ -356,11 +359,24 @@ model_3d_draw(Model3DPipelineData pipeline_input);
 g_internal void
 blend_3d_draw(Blend3DPipelineData pipeline_input);
 
+g_internal void
+road_intersection_compute_add(Handle storage_buffer_handle, Handle index_buffer_handle,
+                              Handle road_segment_buffer_handle, Handle road_segment_handle);
+
 g_internal Handle
-buffer_load(BufferInfo* buffer_info);
+buffer_load_async(BufferInfo* buffer_info);
 
 g_internal Handle
 buffer_load_sync(VkCommandBuffer cmd, render::BufferInfo* buffer_info);
+
+g_internal Handle
+uniform_buffer_load_sync(Arena* arena, Handle handle);
+
+g_internal Handle
+storage_buffer_load_sync(Arena* arena, Handle vertex_buffer_handle, Handle index_buffer_handle);
+
+g_internal Handle
+road_segment_descriptor_load_async(Arena* arena, Handle buffer_handle);
 
 g_internal bool
 is_resource_loaded(Handle handle);

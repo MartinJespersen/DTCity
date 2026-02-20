@@ -7,6 +7,7 @@ struct BufferAllocation
 {
     VkBuffer buffer;
     VmaAllocation allocation;
+    U32 size;
 };
 
 struct BufferAllocationMapped
@@ -64,18 +65,37 @@ struct ImageAllocationResource
     }
 };
 
-struct BufferUpload
+struct BufferHandle
 {
     BufferAllocation buffer_alloc;
     BufferAllocation staging_buffer;
 };
 
-struct Texture
+struct TextureHandle
 {
     BufferAllocation staging_allocation;
     ImageResource image_resource;
     VkSampler sampler;
     U32 descriptor_set_idx;
+};
+
+struct DescriptorSetInfo
+{
+    VkDescriptorSet set;
+    VkDescriptorSetLayout layout;
+
+    DescriptorSetInfo(VkDescriptorSet set, VkDescriptorSetLayout layout) : set(set), layout(layout)
+    {
+    }
+};
+typedef DescriptorSetInfo (*DescriptorWriteFunc)(VkDevice, VkDescriptorPool, void*);
+struct DescriptorSetHandle
+{
+    void* desc_write_func_data;
+    DescriptorWriteFunc desc_write_func;
+
+    VkDescriptorSetLayout desc_layout;
+    VkDescriptorSet desc_set;
 };
 
 struct AssetManagerCommandPool
@@ -145,13 +165,18 @@ struct AssetManager
 
     // ~mgj: Textures
     OS_Handle texture_mutex;
-    render::AssetItemList<Texture> texture_list;
-    render::AssetItemList<Texture> texture_free_list;
+    render::AssetItemList<TextureHandle> texture_list;
+    render::AssetItemList<TextureHandle> texture_free_list;
 
     // ~mgj: Buffers
     OS_Handle buffer_mutex;
-    render::AssetItemList<BufferUpload> buffer_list;
-    render::AssetItemList<BufferUpload> buffer_free_list;
+    render::AssetItemList<BufferHandle> buffer_list;
+    render::AssetItemList<BufferHandle> buffer_free_list;
+
+    // ~mgj: Descriptor Sets
+    OS_Handle descriptor_set_mutex;
+    render::AssetItemList<DescriptorSetHandle> descriptor_set_list;
+    render::AssetItemList<DescriptorSetHandle> descriptor_set_free_list;
 
     // ~mgj: Threading Buffer Commands
     ::Buffer<AssetManagerCommandPool> threaded_cmd_pools;
@@ -241,16 +266,17 @@ deletion_queue_push(DeletionQueue* queue, render::Handle handle, U64 frames_in_f
 static void
 deletion_queue_deferred_resource_deletion(DeletionQueue* queue);
 static void
-deletion_queue_resource_free(PendingDeletion* deletion);
-static void
 deletion_queue_delete_all(DeletionQueue* queue);
 
 //~mgj: Asset Item Management
 
-static render::AssetItem<BufferUpload>*
+static render::AssetItem<BufferHandle>*
 asset_manager_buffer_item_get(render::Handle handle);
-static render::AssetItem<Texture>*
+static render::AssetItem<TextureHandle>*
 asset_manager_texture_item_get(render::Handle handle);
+
+static render::AssetItem<DescriptorSetHandle>*
+asset_manager_descriptor_set_item_get(render::Handle handle);
 template <typename T>
 static render::Handle
 asset_manager_item_create(render::AssetItemList<T>* list, render::AssetItemList<T>* free_list,
@@ -259,6 +285,8 @@ template <typename T>
 static render::AssetItem<T>*
 asset_manager_item_get(render::Handle handle);
 
+static void
+asset_manager_handle_free(render::Handle handle);
 g_internal ImageAllocationResource
 texture_upload_with_blitting(VkCommandBuffer cmd, render::TextureUploadData* data);
 //~mgj: Command Management
@@ -282,22 +310,24 @@ static void
 asset_manager_buffer_free(render::Handle handle);
 static void
 asset_manager_texture_free(render::Handle handle);
+static void
+asset_manager_descriptor_set_free(render::Handle handle);
 
 static void
 asset_cmd_queue_item_enqueue(U32 thread_id, render::ThreadInput* thread_input);
 
 //~mgj: Texture Functions
 static void
-texture_destroy(Texture* texture);
+texture_destroy(TextureHandle* texture);
 g_internal void
-texture_ktx_cmd_record(VkCommandBuffer cmd, Texture* tex, ::Buffer<U8> tex_buf);
+texture_ktx_cmd_record(VkCommandBuffer cmd, TextureHandle* tex, ::Buffer<U8> tex_buf);
 g_internal B32
-texture_cmd_record_with_stb(VkCommandBuffer cmd, Texture* tex, ::Buffer<U8> tex_buf);
+texture_cmd_record_with_stb(VkCommandBuffer cmd, TextureHandle* tex, ::Buffer<U8> tex_buf);
 g_internal B32
 texture_gpu_upload_cmd_recording(VkCommandBuffer cmd, render::Handle tex_handle,
                                  ::Buffer<U8> tex_buf);
 g_internal void
-colormap_texture_cmd_record(VkCommandBuffer cmd, Texture* tex, Buffer<U8> buf);
+colormap_texture_cmd_record(VkCommandBuffer cmd, TextureHandle* tex, Buffer<U8> buf);
 
 //~mgj: Loading Thread Functions
 static void
@@ -319,7 +349,7 @@ thread_main(async::ThreadInfo thread_info, void* input);
         VkResult res = (f);                                                                        \
         if (res != VK_SUCCESS)                                                                     \
         {                                                                                          \
-            ERROR_LOG("Fatal : VkResult is %d in %s at line %d\n", res, __FILE__, __LINE__);       \
+            ERROR_LOG("Fatal : VkResult is %d in %s:%d\n", res, __FILE__, __LINE__);               \
             Trap();                                                                                \
             exit(EXIT_FAILURE);                                                                    \
         }                                                                                          \

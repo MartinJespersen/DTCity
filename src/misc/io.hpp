@@ -3,8 +3,6 @@
 namespace io
 {
 
-struct Context;
-
 struct IO
 {
     Arena* arena;

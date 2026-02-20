@@ -6,10 +6,12 @@ namespace cesium
 struct TileInfo
 {
     const CesiumGltf::Model& model;
-    const glm::dmat4& transform;
+    const glm::dmat4 ecef_to_local;
+    const glm::dmat4 tile_transform;
 
-    TileInfo(const CesiumGltf::Model& model, const glm::dmat4& transform)
-        : model(model), transform(transform)
+    TileInfo(const CesiumGltf::Model& model, const glm::dmat4& ecef_to_local,
+             const glm::dmat4& transform)
+        : model(model), ecef_to_local(ecef_to_local), tile_transform(transform)
     {
     }
 };
@@ -18,10 +20,7 @@ struct TileRenderData
 {
     TileRenderData* next;
     String8 tile_id;
-    render::Handle vertex_handle;
-    render::Handle index_handle;
-    render::Handle texture_handle;
-    U32 index_count;
+    render::Model3DPipelineData render_data;
 };
 
 struct TileRenderDataList
@@ -34,14 +33,12 @@ struct TileRenderDataList
 
 struct TilesetRenderer
 {
-    std::unique_ptr<Cesium3DTilesSelection::Tileset> tileset;
-    std::shared_ptr<CesiumAsync::IAssetAccessor> asset_accessor;
+    std::shared_ptr<Cesium3DTilesSelection::Tileset> tileset;
     std::shared_ptr<CesiumAsync::ITaskProcessor> task_processor;
     CesiumAsync::AsyncSystem async_system;
 
     // Coordinate system for local rendering
-    std::unique_ptr<CesiumGeospatial::LocalHorizontalCoordinateSystem> local_coord_system;
-    glm::dvec3 origin_ecef;
+    CesiumGeospatial::LocalHorizontalCoordinateSystem* local_coord_system;
 
     // Render resources
     TileRenderDataList loaded_tiles;
@@ -59,12 +56,13 @@ g_internal void
 tileset_update_view(Arena* arena, TilesetRenderer* renderer, ui::Camera* camera,
                     Vec2U32 viewport_size, F64 delta_time);
 g_internal void
-tileset_render(TilesetRenderer* renderer);
+tileset_render(TilesetRenderer* renderer, render::Handle road_segment_handle,
+               render::Handle road_segment_buffer_handle);
 
 // Helper to convert cesium glTF to render data
 g_internal TileRenderDataList*
-tile_render_data_from_gltf(const CesiumGltf::Model& model, const glm::dmat4& transform,
-                           render::ThreadInput* thread_input);
+tile_render_data_from_gltf(const CesiumGltf::Model& model, const glm::dmat4& ecef_to_local,
+                           const glm::dmat4& tile_transform, render::ThreadInput* thread_input);
 
 g_internal void*
 render_list_record(render::ThreadInput* thread_input, render::FuncData user_data);

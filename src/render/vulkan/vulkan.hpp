@@ -39,6 +39,7 @@ struct Model3DNode
     U32 index_count;
     BufferAllocation vertex_alloc;
     Model3dPushConstants push_constants;
+    VkDescriptorSet model_matrix;
 };
 
 struct Model3dInstancePushConstants
@@ -80,6 +81,12 @@ struct Blend3dPushConstants
     U32 colormap_index;
 };
 
+struct RoadIntersectionPushConstants
+{
+    U32 road_segment_buffer_elem_count;
+    U32 invocation_count;
+};
+
 struct Blend3DNode
 {
     Blend3DNode* next;
@@ -94,11 +101,28 @@ struct Blend3DList
     Blend3DNode* last;
 };
 
+struct RoadIntersectionNode
+{
+    RoadIntersectionNode* next;
+    VkDescriptorSet storage_buffer_set;
+    VkDescriptorSet road_segment_set;
+    VkBuffer road_segment_buffer;
+    U32 index_count;
+    U32 road_segment_buffer_size;
+};
+
+struct RoadIntersectionList
+{
+    RoadIntersectionNode* first;
+    RoadIntersectionNode* last;
+};
+
 struct DrawFrame
 {
     Model3DNodeList model_3D_list;
     Model3DInstance model_3D_instance_draw;
     Blend3DList blend_3d_list;
+    RoadIntersectionList road_intersection_list;
 };
 
 struct Context
@@ -108,8 +132,10 @@ struct Context
 
 #if BUILD_DEBUG
     static const U8 enable_validation_layers = 1;
+    static const U8 enable_gpu_assisted_validation = 1;
 #else
     static const U8 enable_validation_layers = 0;
+    static const U8 enable_gpu_assisted_validation = 0;
 #endif
     Arena* arena;
     U32 render_thread_id;
@@ -151,8 +177,9 @@ struct Context
 
     U32 max_texture_count;
     U32 texture_binding;
-    VkDescriptorSetLayout texture_descriptor_set_layout;
-    VkDescriptorSet texture_descriptor_set;
+    VkDescriptorSetLayout bindless_descriptor_set_layout;
+    VkDescriptorSet bindless_descriptor_set;
+    VkDescriptorSetLayout model_matrix_descriptor_set_layout;
 
     // ~mgj: Asset Streaming
     AssetManager* asset_manager;
@@ -166,6 +193,9 @@ struct Context
     Pipeline model_3D_pipeline;
     Pipeline model_3D_instance_pipeline;
     Pipeline blend_3d_pipeline;
+    Pipeline road_intersection_pipeline;
+    VkDescriptorSetLayout road_segment_descriptor_set_layout;
+    VkDescriptorSetLayout storage_buffer_descriptor_set_layout;
     BufferAllocation model_3D_instance_buffer;
 };
 
@@ -189,11 +219,39 @@ ctx_set(Context* vk_ctx);
 g_internal Context*
 ctx_get();
 
+// ~mgj: Descriptor Sets Functions
+
+struct UniformBufferDescriptor
+{
+    VkBuffer uniform_buffer;
+};
+
+g_internal DescriptorSetInfo
+descriptor_set_uniform_buffer(VkDevice device, VkDescriptorPool desc_pool, void* data);
+
+struct StorageBufferDescriptor
+{
+    VkBuffer vertex_buffer;
+    VkBuffer index_buffer;
+};
+
+g_internal DescriptorSetInfo
+descriptor_set_storage_buffers(VkDevice device, VkDescriptorPool desc_pool, void* data);
+
+struct RoadSegmentDescriptor
+{
+    VkBuffer road_segment_buffer;
+};
+
+g_internal DescriptorSetInfo
+descriptor_set_road_segment(VkDevice device, VkDescriptorPool desc_pool, void* data);
+
 // ~mgj: Building
 static void
 model_3d_bucket_add(BufferAllocation* vertex_buffer_allocation,
                     BufferAllocation* index_buffer_allocation, render::Handle tex_handle,
-                    B32 depth_write_per_draw_call_only, U32 index_buffer_offset, U32 index_count);
+                    B32 depth_write_per_draw_call_only, U32 index_buffer_offset, U32 index_count,
+                    VkDescriptorSet model_matrix);
 static void
 model_3d_instance_bucket_add(BufferAllocation* vertex_buffer_allocation,
                              BufferAllocation* index_buffer_allocation, render::Handle tex_handle,
@@ -208,6 +266,14 @@ static Pipeline
 model_3d_pipeline_create(Context* vk_ctx, String8 shader_path);
 static Pipeline
 blend_3d_pipeline_create(String8 shader_path);
+static Pipeline
+road_intersection_pipeline_create(String8 shader_path);
+g_internal void
+road_intersection_compute();
+static void
+road_intersection_bucket_add(VkDescriptorSet storage_buffer_set, VkDescriptorSet road_segment,
+                             VkBuffer road_segment_buffer, U32 index_count,
+                             U32 road_segment_buffer_size);
 static void
 draw_frame_reset();
 static void

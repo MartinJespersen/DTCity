@@ -12,7 +12,7 @@ asset_manager_get()
 }
 
 static void
-texture_destroy(Texture* texture)
+texture_destroy(TextureHandle* texture)
 {
     AssetManager* asset_manager = asset_manager_get();
     buffer_destroy(&texture->staging_allocation);
@@ -34,7 +34,7 @@ ktx2_check(U8* buf, U64 size)
 }
 
 g_internal void
-texture_ktx_cmd_record(VkCommandBuffer cmd, Texture* tex, Buffer<U8> tex_buf)
+texture_ktx_cmd_record(VkCommandBuffer cmd, TextureHandle* tex, Buffer<U8> tex_buf)
 {
     ScratchScope scratch = ScratchScope(0, 0);
     AssetManager* asset_manager = asset_manager_get();
@@ -146,14 +146,14 @@ texture_ktx_cmd_record(VkCommandBuffer cmd, Texture* tex, Buffer<U8> tex_buf)
 }
 
 g_internal void
-colormap_texture_cmd_record(VkCommandBuffer cmd, Texture* tex, Buffer<U8> buf)
+colormap_texture_cmd_record(VkCommandBuffer cmd, TextureHandle* tex, Buffer<U8> buf)
 {
     ScratchScope scratch = ScratchScope(0, 0);
     AssetManager* asset_manager = asset_manager_get();
     U32 sizeof_rgb = 3;
     U32 sizeof_f32 = sizeof(F32);
     U32 colormap_size = buf.size / sizeof_rgb / sizeof_f32;
-    U32 staging_buffer_size = colormap_size * 4 * sizeof(F32);
+    U32 staging_buffer_size = colormap_size * 4 * (U32)sizeof(F32);
     AssertAlways(colormap_size == 256);
     VkFormat vk_format = VK_FORMAT_R32G32B32A32_SFLOAT;
 
@@ -348,7 +348,7 @@ texture_upload_with_blitting(VkCommandBuffer cmd, render::TextureUploadData* dat
 }
 
 g_internal B32
-texture_cmd_record_with_stb(VkCommandBuffer cmd, Texture* tex, Buffer<U8> tex_buf)
+texture_cmd_record_with_stb(VkCommandBuffer cmd, TextureHandle* tex, Buffer<U8> tex_buf)
 {
     S32 width;
     S32 height;
@@ -375,8 +375,8 @@ texture_cmd_record_with_stb(VkCommandBuffer cmd, Texture* tex, Buffer<U8> tex_bu
 g_internal B32
 texture_gpu_upload_cmd_recording(VkCommandBuffer cmd, render::Handle tex_handle, Buffer<U8> tex_buf)
 {
-    render::AssetItem<Texture>* tex_asset = (render::AssetItem<Texture>*)tex_handle.ptr;
-    Texture* tex = &tex_asset->item;
+    render::AssetItem<TextureHandle>* tex_asset = (render::AssetItem<TextureHandle>*)tex_handle.ptr;
+    TextureHandle* tex = &tex_asset->item;
     B32 err = false;
 
     bool is_ktx2 = ktx2_check(tex_buf.data, tex_buf.size);
@@ -396,12 +396,12 @@ texture_gpu_upload_cmd_recording(VkCommandBuffer cmd, render::Handle tex_handle,
 g_internal U32
 buffer_allocation_size_get(BufferAllocation* buffer_allocation)
 {
-    if (!buffer_allocation->allocation)
+    if (buffer_allocation->size == 0)
     {
         return 0;
     }
-
-    return buffer_allocation->allocation->GetSize();
+    Assert(buffer_allocation->size == buffer_allocation->allocation->GetSize());
+    return buffer_allocation->size;
 }
 
 static void
@@ -420,11 +420,11 @@ buffer_loading_thread(void* data, render::ThreadInput* thread_input)
 
     OS_MutexScopeW(asset_manager->buffer_mutex)
     {
-        render::AssetItem<BufferUpload>* asset_item_buffer =
-            asset_manager_item_get<BufferUpload>(handle);
+        render::AssetItem<BufferHandle>* asset_item_buffer =
+            asset_manager_item_get<BufferHandle>(handle);
         if (asset_item_buffer)
         {
-            BufferUpload* asset_buffer = &asset_item_buffer->item;
+            BufferHandle* asset_buffer = &asset_item_buffer->item;
 
             VkBufferCopy copy_region = {0};
             copy_region.size = buffer.size;
@@ -454,7 +454,7 @@ texture_loading_thread(void* data, render::ThreadInput* thread_input)
 
     OS_MutexScopeW(asset_manager->texture_mutex)
     {
-        render::AssetItem<Texture>* tex_asset = asset_manager_item_get<Texture>(handle);
+        render::AssetItem<TextureHandle>* tex_asset = asset_manager_item_get<TextureHandle>(handle);
         if (tex_asset)
         {
             tex_asset->item.image_resource = image_allocation_resource.image_resource;
@@ -494,7 +494,7 @@ colormap_loading_thread(void* data, render::ThreadInput* thread_input)
     render::ColorMapLoadingInfo* colormap_info = (render::ColorMapLoadingInfo*)data;
     Buffer<U8> colormap_buf = {.data = (U8*)colormap_info->colormap_data,
                                .size = colormap_info->colormap_size};
-    render::AssetItem<Texture>* asset = (render::AssetItem<Texture>*)handle.ptr;
+    render::AssetItem<TextureHandle>* asset = (render::AssetItem<TextureHandle>*)handle.ptr;
     Assert(asset);
     colormap_texture_cmd_record((VkCommandBuffer)thread_input->cmd_buffer, &asset->item,
                                 colormap_buf);
@@ -513,7 +513,7 @@ thread_main(async::ThreadInfo thread_info, void* input)
         asset_manager->device, &asset_manager->threaded_cmd_pools.data[thread_info.thread_id]);
 
     Assert(thread_input->handles.count > 0);
-    Assert(thread_input->loading_func && thread_input->user_data);
+    Assert(thread_input->loading_func || thread_input->user_data);
     Assert(thread_input->done_loading_func != nullptr);
     thread_input->loading_func(thread_input->user_data, thread_input);
 
@@ -587,25 +587,6 @@ deletion_queue_push(DeletionQueue* queue, render::Handle handle, U64 frames_in_f
 }
 
 static void
-deletion_queue_resource_free(PendingDeletion* deletion)
-{
-    switch (deletion->handle.type)
-    {
-        case render::HandleType::Buffer:
-        {
-            asset_manager_buffer_free(deletion->handle);
-        }
-        break;
-        case render::HandleType::Texture:
-        {
-            asset_manager_texture_free(deletion->handle);
-        }
-        break;
-        default: InvalidPath; break;
-    }
-}
-
-static void
 deletion_queue_deferred_resource_deletion(DeletionQueue* queue)
 {
     AssetManager* asset_manager = asset_manager_get();
@@ -619,7 +600,7 @@ deletion_queue_deferred_resource_deletion(DeletionQueue* queue)
             DEBUG_LOG("Asset ID: %llu - Executing deferred deletion at frame %llu",
                       deletion->handle.u64, queue->frame_counter);
 
-            deletion_queue_resource_free(deletion);
+            asset_manager_handle_free(deletion->handle);
             SLLStackPush(queue->free_list, deletion);
             deletion = next;
         }
@@ -639,7 +620,7 @@ deletion_queue_delete_all(DeletionQueue* queue)
             DLLRemove(queue->first, queue->last, deletion);
             DEBUG_LOG("Asset ID: %llu - Force deleting from deletion queue", deletion->handle.u64);
 
-            deletion_queue_resource_free(deletion);
+            asset_manager_handle_free(deletion->handle);
             SLLStackPush(queue->free_list, deletion);
             deletion = next;
         }
@@ -697,6 +678,7 @@ asset_manager_create(VkPhysicalDevice physical_device, VkDevice device, VkInstan
     // ~mgj: Mutex for asset operations (Textures and Buffers)
     asset_manager->texture_mutex = OS_RWMutexAlloc();
     asset_manager->buffer_mutex = OS_RWMutexAlloc();
+    asset_manager->descriptor_set_mutex = OS_RWMutexAlloc();
 
     // Set global pointer
     g_asset_manager = asset_manager;
@@ -715,19 +697,25 @@ asset_manager_destroy(AssetManager* asset_manager)
     // 3. Clean up remaining resources (workers are stopped, no mutex needed)
     async::QueueDestroy(asset_manager->cmd_queue);
     deletion_queue_delete_all(asset_manager->deletion_queue);
-    for (render::AssetItem<BufferUpload>* item = asset_manager->buffer_list.first; item != NULL;
+    for (render::AssetItem<BufferHandle>* item = asset_manager->buffer_list.first; item != NULL;
          item = item->next)
     {
         buffer_destroy(&item->item.buffer_alloc);
         buffer_destroy(&item->item.staging_buffer);
     }
 
-    for (render::AssetItem<Texture>* item = asset_manager->texture_list.first; item != NULL;
+    for (render::AssetItem<TextureHandle>* item = asset_manager->texture_list.first; item != NULL;
          item = item->next)
     {
         descriptor_index_free(&asset_manager->descriptor_index_allocator,
                               item->item.descriptor_set_idx);
         texture_destroy(&item->item);
+    }
+
+    for (render::AssetItem<DescriptorSetHandle>* item = asset_manager->descriptor_set_list.first;
+         item != NULL; item = item->next)
+    {
+        vkDestroyDescriptorSetLayout(asset_manager->device, item->item.desc_layout, nullptr);
     }
 
     for (U32 i = 0; i < asset_manager->threaded_cmd_pools.size; i++)
@@ -739,6 +727,7 @@ asset_manager_destroy(AssetManager* asset_manager)
 
     OS_MutexRelease(asset_manager->texture_mutex);
     OS_MutexRelease(asset_manager->buffer_mutex);
+    OS_MutexRelease(asset_manager->descriptor_set_mutex);
 
     vmaDestroyAllocator(asset_manager->allocator);
 
@@ -796,7 +785,7 @@ asset_manager_item_get(render::Handle handle)
 {
     Assert(handle.u64 != 0);
     render::AssetItem<T>* asset_item = (render::AssetItem<T>*)handle.ptr;
-    if (asset_item && asset_item->gen_id == handle.gen_id)
+    if (asset_item && asset_item->gen_id == handle.gen_id && handle.type == asset_item->type)
         return asset_item;
 
     if (!render::is_handle_zero(handle))
@@ -807,28 +796,40 @@ asset_manager_item_get(render::Handle handle)
     return 0;
 }
 
-static render::AssetItem<BufferUpload>*
+static render::AssetItem<BufferHandle>*
 asset_manager_buffer_item_get(render::Handle handle)
 {
     AssetManager* asset_manager = asset_manager_get();
-    render::AssetItem<BufferUpload>* asset_item_buffer = {};
+    render::AssetItem<BufferHandle>* asset_item_buffer = {};
     OS_MutexScopeR(asset_manager->buffer_mutex)
     {
-        asset_item_buffer = asset_manager_item_get<BufferUpload>(handle);
+        asset_item_buffer = asset_manager_item_get<BufferHandle>(handle);
     }
     return asset_item_buffer;
 }
 
-static render::AssetItem<Texture>*
+static render::AssetItem<TextureHandle>*
 asset_manager_texture_item_get(render::Handle handle)
 {
     AssetManager* asset_manager = asset_manager_get();
-    render::AssetItem<Texture>* asset_item_texture = {};
+    render::AssetItem<TextureHandle>* asset_item_texture = {};
     OS_MutexScopeR(asset_manager->texture_mutex)
     {
-        asset_item_texture = asset_manager_item_get<Texture>(handle);
+        asset_item_texture = asset_manager_item_get<TextureHandle>(handle);
     }
     return asset_item_texture;
+}
+
+static render::AssetItem<DescriptorSetHandle>*
+asset_manager_descriptor_set_item_get(render::Handle handle)
+{
+    AssetManager* asset_manager = asset_manager_get();
+    render::AssetItem<DescriptorSetHandle>* asset_item_descriptor_set = {};
+    OS_MutexScopeR(asset_manager->descriptor_set_mutex)
+    {
+        asset_item_descriptor_set = asset_manager_item_get<DescriptorSetHandle>(handle);
+    }
+    return asset_item_descriptor_set;
 }
 
 // ~mgj: As it is right now, this function needs to be protected by a mutex like object as it is
@@ -854,6 +855,7 @@ asset_manager_item_create(render::AssetItemList<T>* list, render::AssetItemList<
         asset_item = PushStruct(arena, render::AssetItem<T>);
     }
     Assert(asset_item);
+    asset_item->type = handle_type;
 
     DLLPushBack(list->first, list->last, asset_item);
     list->count++;
@@ -1002,7 +1004,7 @@ static void
 asset_manager_buffer_free(render::Handle handle)
 {
     AssetManager* asset_manager = asset_manager_get();
-    render::AssetItem<BufferUpload>* item = asset_manager_buffer_item_get(handle);
+    render::AssetItem<BufferHandle>* item = asset_manager_buffer_item_get(handle);
     if (item)
     {
         OS_MutexScopeW(asset_manager->buffer_mutex)
@@ -1019,7 +1021,7 @@ static void
 asset_manager_texture_free(render::Handle handle)
 {
     AssetManager* asset_manager = asset_manager_get();
-    render::AssetItem<Texture>* item = asset_manager_texture_item_get(handle);
+    render::AssetItem<TextureHandle>* item = asset_manager_texture_item_get(handle);
     if (item)
     {
         OS_MutexScopeW(asset_manager->texture_mutex)
@@ -1030,6 +1032,46 @@ asset_manager_texture_free(render::Handle handle)
             asset_manager_item_free(item, &asset_manager->texture_list,
                                     &asset_manager->texture_free_list);
         }
+    }
+}
+
+static void
+asset_manager_descriptor_set_free(render::Handle handle)
+{
+    AssetManager* asset_manager = asset_manager_get();
+    render::AssetItem<DescriptorSetHandle>* item = asset_manager_descriptor_set_item_get(handle);
+    if (item)
+    {
+        OS_MutexScopeW(asset_manager->descriptor_set_mutex)
+        {
+            vkDestroyDescriptorSetLayout(asset_manager->device, item->item.desc_layout, nullptr);
+            asset_manager_item_free(item, &asset_manager->descriptor_set_list,
+                                    &asset_manager->descriptor_set_free_list);
+        }
+    }
+}
+
+static void
+asset_manager_handle_free(render::Handle handle)
+{
+    switch (handle.type)
+    {
+        case render::HandleType::Buffer:
+        {
+            asset_manager_buffer_free(handle);
+        }
+        break;
+        case render::HandleType::Texture:
+        {
+            asset_manager_texture_free(handle);
+        }
+        break;
+        case render::HandleType::DescriptorSet:
+        {
+            asset_manager_descriptor_set_free(handle);
+        }
+        break;
+        default: InvalidPath; break;
     }
 }
 
@@ -1049,6 +1091,7 @@ buffer_allocation_create(VkDeviceSize size, VkBufferUsageFlags buffer_usage,
 
     VK_CHECK_RESULT(vmaCreateBuffer(asset_manager->allocator, &bufferInfo, &vma_info,
                                     &buffer.buffer, &buffer.allocation, nullptr));
+    buffer.size = (U32)size;
 
     MEMORY_LOG("VMA Buffer Allocated: %p (size: %llu bytes, usage: 0x%x)", buffer.buffer,
                buffer.size, buffer_usage);
