@@ -584,15 +584,6 @@ sync_objects_create(Context* vk_ctx)
 }
 
 static void
-sync_objects_destroy(Context* vk_ctx)
-{
-    for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
-    {
-        vkDestroyFence(vk_ctx->device, vk_ctx->in_flight_fences.data[i], nullptr);
-    }
-}
-
-static void
 command_buffers_create(Context* vk_ctx)
 {
     vk_ctx->command_buffers = BufferAlloc<VkCommandBuffer>(vk_ctx->arena, MAX_FRAMES_IN_FLIGHT);

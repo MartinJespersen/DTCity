@@ -234,7 +234,6 @@ dt_main_loop(void* ptr)
 
     ctx->buildings = city::buildings_create(cache_dir, texture_dir, 10.f, input->bbox,
                                             &sampler_info, ecef_to_local);
-    city::Buildings* buildings = ctx->buildings;
     // ctx->car_sim = city::car_sim_create(asset_dir, texture_dir, 1000, ctx->road);
 
     city::RoadOverlayOption overlay_option_choice = city::RoadOverlayOption_None;

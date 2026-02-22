@@ -306,8 +306,6 @@ static Handle
 handle_zero();
 static bool
 is_handle_zero(Handle handle);
-static bool
-is_handle_loaded(Handle handle);
 static void
 handle_list_push(Arena* arena, HandleList* list, Handle handle);
 static Handle

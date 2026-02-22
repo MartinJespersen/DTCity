@@ -189,9 +189,6 @@ swapchain_recreate(Vec2U32 framebuffer_dim);
 static void
 sync_objects_create(Context* vk_ctx);
 
-static void
-sync_objects_destroy(Context* vk_ctx);
-
 static VkCommandPool
 command_pool_create(VkDevice device, VkCommandPoolCreateInfo* poolInfo);
 

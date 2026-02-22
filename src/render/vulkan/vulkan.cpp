@@ -927,13 +927,6 @@ camera_cleanup(Context* vk_ctx)
 }
 
 // ~mgj: Rendering
-static void
-draw_frame_reset()
-{
-    Context* vk_ctx = ctx_get();
-    arena_clear(vk_ctx->draw_frame_arena);
-    vk_ctx->draw_frame = PushStruct(vk_ctx->draw_frame_arena, DrawFrame);
-}
 
 static void
 pipeline_destroy(Pipeline* pipeline)

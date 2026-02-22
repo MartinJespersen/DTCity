@@ -274,8 +274,7 @@ static void
 road_intersection_bucket_add(VkDescriptorSet storage_buffer_set, VkDescriptorSet road_segment,
                              VkBuffer road_segment_buffer, U32 index_count,
                              U32 road_segment_buffer_size);
-static void
-draw_frame_reset();
+
 static void
 model_3d_rendering();
 static void

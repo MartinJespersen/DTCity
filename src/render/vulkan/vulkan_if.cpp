@@ -873,17 +873,6 @@ Handle::descriptor_set_handle_create()
     return handle;
 }
 
-static bool
-is_handle_loaded(Handle handle)
-{
-    if (render::is_handle_zero(handle) == false)
-    {
-        render::AssetItem<S64>* asset = (render::AssetItem<S64>*)handle.ptr;
-        return asset->is_loaded;
-    }
-    return false;
-}
-
 g_internal void*
 thread_cmd_buffer_record(render::ThreadInput* thread_input, ThreadSyncCallback callback)
 {
