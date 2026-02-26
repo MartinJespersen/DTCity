@@ -47,8 +47,9 @@ class DTCityTaskProcessor : public CesiumAsync::ITaskProcessor
 class DTCityPrepareRendererResources : public Cesium3DTilesSelection::IPrepareRendererResources
 {
   public:
-    DTCityPrepareRendererResources(glm::dmat4 ecef_to_local_transform)
-        : ecef_to_local_transform(ecef_to_local_transform)
+    DTCityPrepareRendererResources(glm::dmat4 ecef_to_local_transform,
+                                   TilesetRenderer* tile_set_renderer)
+        : ecef_to_local_transform(ecef_to_local_transform), tile_set_renderer(tile_set_renderer)
     {
     }
 
@@ -96,21 +97,17 @@ class DTCityPrepareRendererResources : public Cesium3DTilesSelection::IPrepareRe
         (void)tile;
         (void)pLoadThreadResult;
 
-        TileRenderDataList* render_data_list = static_cast<TileRenderDataList*>(pMainThreadResult);
+        TileRenderDataList* render_data_list = static_cast<TileRenderDataList*>(
+            pMainThreadResult ? pMainThreadResult : pLoadThreadResult);
+
         if (!render_data_list)
             return;
-        render_data_list->tile_is_loaded = false;
-        for (TileRenderData* render_data = render_data_list->first; render_data;
-             render_data = render_data->next)
+
+        OS_MutexScopeW(tile_set_renderer->tiles_to_free_mutex)
         {
-            render::handle_destroy_deferred(render_data->render_data.vertex_buffer_handle);
-            render::handle_destroy_deferred(render_data->render_data.index_buffer_handle);
-            render::handle_destroy_deferred(render_data->render_data.texture_handle);
-            render::handle_destroy_deferred(render_data->render_data.model_matrix_buffer_handle);
-            render::handle_destroy_deferred(render_data->render_data.uniform_buffer_handle);
-            render::handle_destroy_deferred(render_data->render_data.storage_buffer_handle);
+            SLLStackPush(tile_set_renderer->tiles_to_free_stack, render_data_list);
+            tile_set_renderer->tiles_to_free_stack_count++;
         }
-        arena_release(render_data_list->arena);
     }
 
     void*
@@ -169,6 +166,7 @@ class DTCityPrepareRendererResources : public Cesium3DTilesSelection::IPrepareRe
 
   private:
     glm::dmat4 ecef_to_local_transform;
+    TilesetRenderer* tile_set_renderer;
 };
 
 //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -594,6 +592,7 @@ tileset_renderer_create(Arena* arena, async::Threads* threads, const char* tiles
     Cesium3DTilesContent::registerAllTileContentTypes();
 
     TilesetRenderer* renderer = PushArrayNoZero(arena, TilesetRenderer, 1);
+    renderer->tiles_to_free_mutex = OS_RWMutexAlloc();
 
     // Create task processor
     renderer->task_processor = std::make_shared<DTCityTaskProcessor>(threads->msg_queue);
@@ -615,7 +614,7 @@ tileset_renderer_create(Arena* arena, async::Threads* threads, const char* tiles
 
     // Create prepare renderer resources (pass coordinate system for ECEF->local transforms)
     auto prepare_renderer_resources = std::make_shared<DTCityPrepareRendererResources>(
-        renderer->local_coord_system->getEcefToLocalTransformation());
+        renderer->local_coord_system->getEcefToLocalTransformation(), renderer);
 
     // Create tileset externals
     Cesium3DTilesSelection::TilesetExternals externals{
@@ -636,13 +635,56 @@ tileset_renderer_create(Arena* arena, async::Threads* threads, const char* tiles
 }
 
 g_internal void
+tileset_renderer_free_tile_ressource(TilesetRenderer* renderer)
+{
+    while (1)
+    {
+        TileRenderDataList* tile_data = 0;
+        OS_MutexScopeW(renderer->tiles_to_free_mutex)
+        {
+            tile_data = renderer->tiles_to_free_stack;
+            if (tile_data)
+            {
+                SLLStackPop(renderer->tiles_to_free_stack);
+                renderer->tiles_to_free_stack_count--;
+            }
+        }
+
+        if (!tile_data)
+        {
+            break;
+        }
+
+        for (TileRenderData* render_data = tile_data->first; render_data;
+             render_data = render_data->next)
+        {
+            render::handle_destroy_deferred(render_data->render_data.vertex_buffer_handle);
+            render::handle_destroy_deferred(render_data->render_data.index_buffer_handle);
+            render::handle_destroy_deferred(render_data->render_data.texture_handle);
+            render::handle_destroy_deferred(render_data->render_data.model_matrix_buffer_handle);
+            render::handle_destroy_deferred(render_data->render_data.uniform_buffer_handle);
+            render::handle_destroy_deferred(render_data->render_data.storage_buffer_handle);
+        }
+        arena_release(tile_data->arena);
+    }
+}
+
+g_internal void
 tileset_renderer_destroy(TilesetRenderer* renderer)
 {
     if (renderer)
     {
+        if (renderer->tileset->waitForAllLoadsToComplete(max_f32) == false)
+        {
+            DEBUG_LOG("Failed to wait for all tile loads to complete");
+        }
+
         renderer->tileset.reset();
         renderer->task_processor.reset();
     }
+
+    tileset_renderer_free_tile_ressource(renderer);
+    OS_RWMutexRelease(renderer->tiles_to_free_mutex);
 }
 
 //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -695,8 +737,10 @@ tileset_update_view(Arena* arena, TilesetRenderer* renderer, ui::Camera* camera,
     renderer->tileset->loadTiles();
 
     // Clear and rebuild the loaded tiles list
-    renderer->loaded_tiles = {};
+    renderer->tile_to_show = {};
+    renderer->tiles_to_show_count = 0;
 
+    tileset_renderer_free_tile_ressource(renderer);
     for (const Cesium3DTilesSelection::Tile* tile : result.tilesToRenderThisFrame)
     {
         if (tile->getState() != Cesium3DTilesSelection::TileLoadState::Done)
@@ -729,12 +773,9 @@ tileset_update_view(Arena* arena, TilesetRenderer* renderer, ui::Camera* camera,
             for (TileRenderData* render_data_node = render_data->first; render_data_node;
                  render_data_node = render_data_node->next)
             {
-                const std::string* str = std::get_if<std::string>(&tile->getTileID());
-                render_data_node->tile_id = push_str8f(render_data->arena, "%s", str->c_str());
-                TileRenderData* new_node = PushStruct(arena, TileRenderData);
-                *new_node = *render_data_node;
-                new_node->tile_id = push_str8_copy(arena, render_data_node->tile_id);
-                SLLQueuePush(renderer->loaded_tiles.first, renderer->loaded_tiles.last, new_node);
+                SLLQueuePush_N(renderer->tile_to_show.first, renderer->tile_to_show.last,
+                               render_data_node, render_next);
+                renderer->tiles_to_show_count++;
             }
         }
     }
@@ -747,12 +788,19 @@ tileset_render(TilesetRenderer* renderer, render::Handle road_segment_handle,
     if (!renderer)
         return;
 
-    for (TileRenderData* tile = renderer->loaded_tiles.first; tile; tile = tile->next)
+    for (TileRenderData* tile = renderer->tile_to_show.first; tile; tile = tile->render_next)
     {
-        render::road_intersection_compute_add(tile->render_data.storage_buffer_handle,
-                                              tile->render_data.index_buffer_handle,
-                                              road_segment_buffer_handle, road_segment_handle);
-        render::model_3d_draw(tile->render_data);
+        if (tile->compute_scheduled == false)
+        {
+            tile->compute_scheduled = render::road_intersection_compute_add(
+                tile->render_data.storage_buffer_handle, tile->render_data.index_buffer_handle,
+                road_segment_buffer_handle, road_segment_handle);
+        }
+
+        if (tile->compute_scheduled)
+        {
+            render::model_3d_draw(tile->render_data);
+        }
     }
 }
 

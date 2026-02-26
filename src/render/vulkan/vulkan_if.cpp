@@ -1,6 +1,76 @@
 namespace render
 {
 
+static void
+null_texture_create(vulkan::Context* vk_ctx)
+{
+    // Create a 1x1 RGBA8 image
+    VmaAllocationCreateInfo vma_info = {.usage = VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE};
+    vulkan::ImageAllocation image_alloc = vulkan::image_allocation_create(
+        1, 1, VK_SAMPLE_COUNT_1_BIT, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_TILING_OPTIMAL,
+        VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT, 1, vma_info,
+        "null_texture image");
+
+    vulkan::ImageViewResource image_view_resource = vulkan::image_view_resource_create(
+        vk_ctx->device, image_alloc.image, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_ASPECT_COLOR_BIT, 1);
+
+    // Transition image to SHADER_READ_ONLY_OPTIMAL
+    VkCommandBuffer cmd;
+    VkCommandBufferAllocateInfo alloc_info{};
+    alloc_info.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+    alloc_info.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+    alloc_info.commandPool = vk_ctx->command_pool;
+    alloc_info.commandBufferCount = 1;
+    vkAllocateCommandBuffers(vk_ctx->device, &alloc_info, &cmd);
+
+    VkCommandBufferBeginInfo begin_info{};
+    begin_info.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+    begin_info.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
+    vkBeginCommandBuffer(cmd, &begin_info);
+
+    VkImageMemoryBarrier barrier{};
+    barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+    barrier.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+    barrier.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+    barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    barrier.image = image_alloc.image;
+    barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+    barrier.subresourceRange.baseMipLevel = 0;
+    barrier.subresourceRange.levelCount = 1;
+    barrier.subresourceRange.baseArrayLayer = 0;
+    barrier.subresourceRange.layerCount = 1;
+    barrier.srcAccessMask = 0;
+    barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+
+    vkCmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
+                         VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0, 0, nullptr, 0, nullptr, 1,
+                         &barrier);
+
+    vkEndCommandBuffer(cmd);
+
+    VkSubmitInfo submit_info{};
+    submit_info.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+    submit_info.commandBufferCount = 1;
+    submit_info.pCommandBuffers = &cmd;
+    vkQueueSubmit(vk_ctx->graphics_queue, 1, &submit_info, VK_NULL_HANDLE);
+    vkQueueWaitIdle(vk_ctx->graphics_queue);
+
+    vkFreeCommandBuffers(vk_ctx->device, vk_ctx->command_pool, 1, &cmd);
+
+    // Create sampler
+    VkSamplerCreateInfo sampler_create_info{};
+    sampler_create_info.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
+    sampler_create_info.magFilter = VK_FILTER_NEAREST;
+    sampler_create_info.minFilter = VK_FILTER_NEAREST;
+    sampler_create_info.addressModeU = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+    sampler_create_info.addressModeV = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+    sampler_create_info.addressModeW = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+    vk_ctx->null_sampler = vulkan::sampler_create(vk_ctx->device, &sampler_create_info);
+
+    vk_ctx->null_image_resource = vulkan::ImageResource(image_alloc, image_view_resource);
+}
+
 // ~mgj: Vulkan Interface
 static void
 render_ctx_create(String8 shader_path, io::IO* io_ctx, async::Threads* thread_pool)
@@ -50,10 +120,14 @@ render_ctx_create(String8 shader_path, io::IO* io_ctx, async::Threads* thread_po
 
     vk_ctx->object_id_format = VK_FORMAT_R32G32_UINT;
 
+    vk_ctx->max_texture_count = 5000;
+    vulkan::descriptor_pool_create(vk_ctx, vk_ctx->max_texture_count);
+
     // ~mgj: Create asset manager (includes VMA allocator)
     vk_ctx->asset_manager = vulkan::asset_manager_create(
         vk_ctx->physical_device, vk_ctx->device, vk_ctx->instance, vk_ctx->graphics_queue,
-        vk_ctx->queue_family_indices.graphicsFamilyIndex, thread_pool, GB(1));
+        vk_ctx->queue_family_indices.graphicsFamilyIndex, thread_pool, GB(1),
+        vk_ctx->descriptor_pool);
 
     Vec2S32 vk_framebuffer_dim_s32 = io::wait_for_valid_framebuffer_size(io_ctx);
     Vec2U32 vk_framebuffer_dim_u32 = {(U32)vk_framebuffer_dim_s32.x, (U32)vk_framebuffer_dim_s32.y};
@@ -74,8 +148,6 @@ render_ctx_create(String8 shader_path, io::IO* io_ctx, async::Threads* thread_po
 
     vulkan::sync_objects_create(vk_ctx);
 
-    vk_ctx->max_texture_count = 5000;
-    vulkan::descriptor_pool_create(vk_ctx, vk_ctx->max_texture_count);
     vulkan::camera_uniform_buffer_create(vk_ctx);
     vulkan::camera_descriptor_set_layout_create(vk_ctx);
     vulkan::camera_descriptor_set_create(vk_ctx);
@@ -90,6 +162,8 @@ render_ctx_create(String8 shader_path, io::IO* io_ctx, async::Threads* thread_po
     vk_ctx->bindless_descriptor_set = vulkan::descriptor_set_allocate_bindless(
         vk_ctx->device, vk_ctx->descriptor_pool, vk_ctx->bindless_descriptor_set_layout,
         vk_ctx->max_texture_count);
+
+    null_texture_create(vk_ctx);
 
     VkDescriptorSetLayoutBinding model_matrix_binding = {.binding = 0,
                                                          .descriptorType =
@@ -131,6 +205,11 @@ render_ctx_destroy()
     vulkan::buffer_destroy(&vk_ctx->model_3D_instance_buffer);
 
     vulkan::swapchain_cleanup(vk_ctx->device, vk_ctx->swapchain_resources);
+
+    // destroy null texture
+    vulkan::image_resource_destroy(vk_ctx->null_image_resource);
+    vkDestroySampler(vk_ctx->device, vk_ctx->null_sampler, nullptr);
+
     vulkan::asset_manager_destroy(vk_ctx->asset_manager);
     vkDestroyCommandPool(vk_ctx->device, vk_ctx->command_pool, nullptr);
 
@@ -174,6 +253,7 @@ render_frame(Vec2U32 framebuffer_dim, B32* in_out_framebuffer_resized, ui::Camer
         return;
     }
     vulkan::Context* vk_ctx = vulkan::ctx_get();
+
     defer({ vk_ctx->current_frame = (vk_ctx->current_frame + 1) % vulkan::MAX_FRAMES_IN_FLIGHT; });
 
     vulkan::asset_manager_execute_cmds();
@@ -204,8 +284,9 @@ render_frame(Vec2U32 framebuffer_dim, B32* in_out_framebuffer_resized, ui::Camer
                 vkWaitForFences(vk_ctx->device, 1, in_flight_fence, VK_TRUE, 1000000000));
         }
 
-        // Process deferred deletions after fence wait to ensure command buffers are done
-        vulkan::deletion_queue_deferred_resource_deletion(vk_ctx->asset_manager->deletion_queue);
+        // delete everyting in the deletion queue as all the command using its ressource have
+        // finished execution at this point
+        vulkan::deletion_queue_empty_next();
 
         VkResult result = vkAcquireNextImageKHR(
             vk_ctx->device, vk_ctx->swapchain_resources->swapchain, UINT64_MAX,
@@ -457,9 +538,7 @@ handle_destroy_deferred(render::Handle handle)
 {
     if (render::is_handle_zero(handle) == false)
     {
-        vulkan::Context* vk_ctx = vulkan::ctx_get();
-        vulkan::deletion_queue_push(vk_ctx->asset_manager->deletion_queue, handle,
-                                    vulkan::MAX_FRAMES_IN_FLIGHT);
+        vulkan::deletion_queue_push(handle);
     }
 }
 
@@ -470,6 +549,7 @@ buffer_load_sync(VkCommandBuffer cmd, render::BufferInfo* buffer_info)
     if (buffer_info->buffer.size == 0)
     {
         DEBUG_LOG("Zero handle created for buffer\n");
+        InvalidPath;
         return render::handle_zero();
     }
 
@@ -493,7 +573,8 @@ buffer_load_sync(VkCommandBuffer cmd, render::BufferInfo* buffer_info)
         usage_flags |= VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
     Assert(usage_flags != 0);
     vulkan::BufferAllocation buffer_alloc = vulkan::buffer_allocation_create(
-        buffer_info->buffer.size, usage_flags | VK_BUFFER_USAGE_TRANSFER_DST_BIT, vma_info);
+        buffer_info->buffer.size, usage_flags | VK_BUFFER_USAGE_TRANSFER_DST_BIT, vma_info,
+        "buffer_load_sync");
 
     // ~mgj: Create staging buffer allocation
     vulkan::BufferAllocation staging_buffer_alloc =
@@ -550,6 +631,10 @@ uniform_buffer_load_sync(Arena* arena, Handle handle)
             desc_set_handle->desc_write_func = vulkan::descriptor_set_uniform_buffer;
         }
     }
+    else
+    {
+        AssertStr("uniform_buffer_load_sync: zero handle passed");
+    }
 
     return desc_handle;
 }
@@ -580,6 +665,10 @@ storage_buffer_load_sync(Arena* arena, Handle vertex_buffer_handle, Handle index
             desc_set_handle->desc_write_func_data = storage_desc;
             desc_set_handle->desc_write_func = vulkan::descriptor_set_storage_buffers;
         }
+    }
+    else
+    {
+        AssertStr("storage_buffer_load_sync: zero handle passed");
     }
 
     return desc_handle;
@@ -622,7 +711,7 @@ road_segment_descriptor_load_async(Arena* arena, Handle buffer_handle)
             async::QueuePush(asset_manager->work_queue, &queue_input);
         }
     }
-
+    Assert("road_segment_descriptor_load_async: zero handle passed");
     return desc_handle;
 }
 
@@ -633,6 +722,7 @@ buffer_load_async(render::BufferInfo* buffer_info)
     if (buffer_info->buffer.size == 0)
     {
         DEBUG_LOG("Zero handle created for buffer\n");
+        InvalidPath;
         return render::handle_zero();
     }
 
@@ -656,7 +746,8 @@ buffer_load_async(render::BufferInfo* buffer_info)
         usage_flags |= VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
     Assert(usage_flags != 0);
     vulkan::BufferAllocation buffer = vulkan::buffer_allocation_create(
-        buffer_info->buffer.size, usage_flags | VK_BUFFER_USAGE_TRANSFER_DST_BIT, vma_info);
+        buffer_info->buffer.size, usage_flags | VK_BUFFER_USAGE_TRANSFER_DST_BIT, vma_info,
+        "buffer_load_async");
 
     // ~mgj: Prepare buffer asset item
     OS_MutexScopeW(asset_manager->buffer_mutex)
@@ -753,7 +844,8 @@ model_3d_draw(render::Model3DPipelineData pipeline_input)
     if (render::is_resource_loaded(pipeline_input.vertex_buffer_handle) &&
         render::is_resource_loaded(pipeline_input.index_buffer_handle) &&
         render::is_resource_loaded(pipeline_input.texture_handle) &&
-        render::is_resource_loaded(pipeline_input.model_matrix_buffer_handle))
+        render::is_resource_loaded(pipeline_input.model_matrix_buffer_handle) &&
+        render::is_resource_loaded(pipeline_input.uniform_buffer_handle))
     {
         render::AssetItem<vulkan::BufferHandle>* asset_vertex_buffer =
             vulkan::asset_manager_buffer_item_get(pipeline_input.vertex_buffer_handle);
@@ -768,13 +860,14 @@ model_3d_draw(render::Model3DPipelineData pipeline_input)
     }
 }
 
-g_internal void
+g_internal bool
 road_intersection_compute_add(Handle storage_buffer_handle, Handle index_buffer_handle,
                               Handle road_segment_buffer_handle, Handle road_segment_handle)
 {
+    bool compute_scheduled = false;
     if (is_handle_zero(storage_buffer_handle) || is_handle_zero(index_buffer_handle) ||
-        is_handle_zero(road_segment_handle))
-        return;
+        is_handle_zero(road_segment_handle) || is_handle_zero(road_segment_buffer_handle))
+        return compute_scheduled;
 
     if (is_resource_loaded(road_segment_handle) && is_resource_loaded(road_segment_buffer_handle) &&
         is_resource_loaded(storage_buffer_handle) && is_resource_loaded(index_buffer_handle))
@@ -788,18 +881,22 @@ road_intersection_compute_add(Handle storage_buffer_handle, Handle index_buffer_
         render::AssetItem<vulkan::BufferHandle>* road_segment_buffer =
             vulkan::asset_manager_buffer_item_get(road_segment_buffer_handle);
 
-        if (storage_set && index_buffer)
+        if (!storage_set || !road_segment || !index_buffer || !road_segment_buffer)
         {
-            U32 index_count =
-                vulkan::buffer_allocation_size_get(&index_buffer->item.buffer_alloc) / sizeof(U32);
-            U32 road_segment_buffer_size =
-                vulkan::buffer_allocation_size_get(&road_segment_buffer->item.buffer_alloc);
-            vulkan::road_intersection_bucket_add(storage_set->item.desc_set,
-                                                 road_segment->item.desc_set,
-                                                 road_segment_buffer->item.buffer_alloc.buffer,
-                                                 index_count, road_segment_buffer_size);
+            exit_with_error("Item is null in road_intersection_compute_add!");
+            return compute_scheduled;
         }
+
+        compute_scheduled = true;
+        U32 index_count =
+            vulkan::buffer_allocation_size_get(&index_buffer->item.buffer_alloc) / sizeof(U32);
+        U32 road_segment_buffer_size =
+            vulkan::buffer_allocation_size_get(&road_segment_buffer->item.buffer_alloc);
+        vulkan::road_intersection_bucket_add(
+            storage_set->item.desc_set, road_segment->item.desc_set,
+            road_segment_buffer->item.buffer_alloc.buffer, index_count, road_segment_buffer_size);
     }
+    return compute_scheduled;
 }
 
 g_internal void

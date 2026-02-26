@@ -183,6 +183,8 @@
 #else
 #define Assert(x) (void)(x)
 #endif
+
+#define AssertStr(msg) Assert(!(msg))
 #define InvalidPath Assert(!"Invalid Path!")
 #define NotImplemented Assert(!"Not Implemented!")
 #define NoOp ((void)0)

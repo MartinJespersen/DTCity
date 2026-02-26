@@ -181,6 +181,31 @@ dt_utm_from_wgs84(Rng2F64 wgs84_bbox)
     return {south_west_lon, south_west_lat, north_east_lon, north_east_lat};
 }
 
+g_internal void
+imgui_debug_window(cesium::TilesetRenderer* renderer)
+{
+    vulkan::AssetManager* asset_manager = vulkan::asset_manager_get();
+
+    ImGui::Begin("Asset Manager", nullptr, ImGuiWindowFlags_AlwaysAutoResize);
+    ImGui::Text("Textures:       %d active, %d free", asset_manager->texture_list.count,
+                asset_manager->texture_free_list.count);
+    ImGui::Text("Buffers:        %d active, %d free", asset_manager->buffer_list.count,
+                asset_manager->buffer_free_list.count);
+    ImGui::Text("Descriptor Sets: %d active, %d free", asset_manager->descriptor_set_list.count,
+                asset_manager->descriptor_set_free_list.count);
+    for (U32 i = 0; i < ArrayCount(asset_manager->deletion_queues); i++)
+    {
+        ImGui::Text("Deletion Queue %d: %d active", i,
+                    asset_manager->deletion_queues[i].list_count);
+    }
+    ImGui::Text("Deletetion Queue Free List: %d active",
+                asset_manager->deletion_queue_free_list_count);
+    ImGui::Text("Tileset Renderer Show: %d active", renderer->tiles_to_show_count);
+    ImGui::Text("Tileset Renderer Free List Count: %d", renderer->tiles_to_free_stack_count);
+
+    ImGui::End();
+}
+
 static void
 dt_main_loop(void* ptr)
 {
@@ -226,29 +251,39 @@ dt_main_loop(void* ptr)
 
     // Load local 3D Tiles tileset
     const char* tileset_url = "file:///C:/ByModel/5km_6235_580/tileset.json";
-    ctx->cesium_tileset = cesium::tileset_renderer_create(
-        ctx->arena_permanent, ctx->thread_pool, tileset_url, tileset_lon, tileset_lat, 0.0);
 
-    glm::dmat4 ecef_to_local =
-        ctx->cesium_tileset->local_coord_system->getEcefToLocalTransformation();
-
-    ctx->buildings = city::buildings_create(cache_dir, texture_dir, 10.f, input->bbox,
-                                            &sampler_info, ecef_to_local);
+    ctx->buildings = city::buildings_create(cache_dir, texture_dir, input->bbox);
     // ctx->car_sim = city::car_sim_create(asset_dir, texture_dir, 1000, ctx->road);
 
     city::RoadOverlayOption overlay_option_choice = city::RoadOverlayOption_None;
 
     ctx->road = city::road_create(texture_dir, cache_dir, ctx->data_dir, input->bbox, utm_coords,
-                                  &sampler_info, ecef_to_local);
-    {
-        Buffer<city::RoadSegmentCorners> road_segments =
-            ctx->road->road_build_result.road_segment_corners;
-        render::BufferInfo road_seg_info =
-            render::BufferInfo(road_segments, render::BufferType_StorageBuffer);
-        ctx->road_segment_buffer_handle = render::buffer_load_async(&road_seg_info);
-        ctx->road_segment_descriptor_handle = render::road_segment_descriptor_load_async(
-            ctx->arena_permanent, ctx->road_segment_buffer_handle);
-    }
+                                  &sampler_info);
+
+    CesiumGeospatial::Cartographic origin_cartographic(glm::radians(tileset_lon),
+                                                       glm::radians(tileset_lat), 0);
+    CesiumGeospatial::LocalHorizontalCoordinateSystem* local_coord =
+        new CesiumGeospatial::LocalHorizontalCoordinateSystem(
+            origin_cartographic, CesiumGeospatial::LocalDirection::East,
+            CesiumGeospatial::LocalDirection::North, CesiumGeospatial::LocalDirection::Up);
+
+    glm::dmat4 ecef_to_local = local_coord->getEcefToLocalTransformation();
+
+    ctx->road->road_build_result = city::road_segment_build(
+        ctx->road->arena, ctx->road->edge_structure.edges, ctx->road->default_road_width,
+        ctx->road->road_height, ecef_to_local);
+
+    render::BufferInfo road_segment_buffer_info = render::BufferInfo(
+        ctx->road->road_build_result.road_segment_corners, render::BufferType_StorageBuffer);
+    render::Handle road_segment_buffer_handle =
+        render::buffer_load_async(&road_segment_buffer_info);
+    render::Handle road_segment_handle = render::road_segment_descriptor_load_async(
+        ctx->arena_permanent, road_segment_buffer_handle);
+
+    ctx->cesium_tileset = cesium::tileset_renderer_create(
+        ctx->arena_permanent, ctx->thread_pool, tileset_url, tileset_lon, tileset_lat, 0.0);
+    // city::Buildings* buildings = ctx->buildings;
+    // buildings_build(buildings, &sampler_info, ecef_to_local, ctx->road->road_height);
 
     while (ctx->running)
     {
@@ -258,6 +293,10 @@ dt_main_loop(void* ptr)
         io::new_frame();
         render::new_frame();
         ImGui::NewFrame();
+
+#if BUILD_DEBUG
+        imgui_debug_window(ctx->cesium_tileset);
+#endif
         Vec2U32 framebuffer_dim = {(U32)io_ctx->framebuffer_width, (U32)io_ctx->framebuffer_height};
 
         {
@@ -324,7 +363,7 @@ dt_main_loop(void* ptr)
         ImGui::End();
 
         // city::road_vertex_buffer_switch(road, overlay_option_choice);
-        render::blend_3d_draw(ctx->road->handles[ctx->road->current_handle_idx]);
+        // render::blend_3d_draw(ctx->road->handles[ctx->road->current_handle_idx]);
         // render::model_3d_draw(buildings->roof_model_handles);
         // render::model_3d_draw(buildings->facade_model_handles);
 
@@ -343,8 +382,8 @@ dt_main_loop(void* ptr)
         {
             cesium::tileset_update_view(dt_ctx_get()->arena_frame, ctx->cesium_tileset, ctx->camera,
                                         framebuffer_dim, ctx->time->delta_time_sec);
-            cesium::tileset_render(ctx->cesium_tileset, ctx->road_segment_descriptor_handle,
-                                   ctx->road_segment_buffer_handle);
+            cesium::tileset_render(ctx->cesium_tileset, road_segment_handle,
+                                   road_segment_buffer_handle);
         }
 
         render::render_frame(framebuffer_dim, &io_ctx->framebuffer_resized, ctx->camera,
@@ -358,5 +397,7 @@ dt_main_loop(void* ptr)
     // city::car_sim_destroy(ctx->car_sim);
     // city::building_destroy(ctx->buildings);
     cesium::tileset_renderer_destroy(ctx->cesium_tileset);
+    render::handle_destroy_deferred(road_segment_buffer_handle);
+    render::handle_destroy_deferred(road_segment_handle);
     render::render_ctx_destroy();
 }

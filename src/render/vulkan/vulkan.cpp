@@ -626,7 +626,9 @@ road_intersection_compute()
     RoadIntersectionList* list = &draw_frame->road_intersection_list;
 
     if (!list->first)
+    {
         return;
+    }
 
     VkCommandBuffer cmd_buffer = vk_ctx->command_buffers.data[vk_ctx->current_frame];
     TracyVkZone(vk_ctx->tracy_ctx[vk_ctx->current_frame], cmd_buffer,
@@ -708,7 +710,8 @@ model_3d_instance_rendering()
     VkDescriptorSet descriptor_sets[2] = {vk_ctx->camera_descriptor_sets[vk_ctx->current_frame],
                                           vk_ctx->bindless_descriptor_set};
     buffer_alloc_create_or_resize(model_3D_instance_draw->total_instance_buffer_byte_count,
-                                  instance_buffer_alloc, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT);
+                                  instance_buffer_alloc, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
+                                  "model_3D instance buffer");
 
     for (Model3DInstanceNode* node = vk_ctx->draw_frame->model_3D_instance_draw.list.first; node;
          node = node->next)
@@ -747,7 +750,7 @@ camera_uniform_buffer_create(Context* vk_ctx)
     for (U32 i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
     {
         vk_ctx->camera_buffer_alloc_mapped[i] =
-            buffer_mapped_create(camera_buffer_size, buffer_usage);
+            buffer_mapped_create(camera_buffer_size, buffer_usage, "camera uniform buffer");
     }
 }
 

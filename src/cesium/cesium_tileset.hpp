@@ -19,12 +19,16 @@ struct TileInfo
 struct TileRenderData
 {
     TileRenderData* next;
-    String8 tile_id;
+    TileRenderData* render_next;
+
     render::Model3DPipelineData render_data;
+
+    bool compute_scheduled;
 };
 
 struct TileRenderDataList
 {
+    TileRenderDataList* next;
     Arena* arena;
     bool tile_is_loaded;
     TileRenderData* first;
@@ -40,8 +44,12 @@ struct TilesetRenderer
     // Coordinate system for local rendering
     CesiumGeospatial::LocalHorizontalCoordinateSystem* local_coord_system;
 
-    // Render resources
-    TileRenderDataList loaded_tiles;
+    // tiles to render list
+    OS_Handle tiles_to_free_mutex;
+    TileRenderDataList* tiles_to_free_stack;
+    U32 tiles_to_free_stack_count;
+    TileRenderDataList tile_to_show;
+    U32 tiles_to_show_count;
 };
 
 // Lifecycle

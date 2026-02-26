@@ -15,6 +15,9 @@ layout(push_constant) uniform constants
 } PushConstants;
 
 void main() {
-    out_color = texture(texture_sampler[nonuniformEXT(PushConstants.base_tex)], in_uv);
+    vec4 sampler_color = texture(texture_sampler[nonuniformEXT(PushConstants.base_tex)], in_uv);
+    vec3 road_color = vec3(1, 0, 0);
+    out_color = vec4(mix(sampler_color.xyz, road_color, in_object_id.x), 1);
+
     out_object_id = in_object_id;
 }

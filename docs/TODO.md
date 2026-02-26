@@ -1,8 +1,4 @@
 # Urgent changes
-* tile transform might need to be passed to shader as a uniform buffer
-* Check barriers for command buffer recordings
-* Separate functions should be created for the creation of assets of different type (Buffer, Texture, Descriptor) 
-* Consider DescriptorSet asset to be a grouping of Buffers and Textures
 * Reconsider the number of descriptor pools (whether 1 is enough) and the descriptor numbers
 * The model matrix and the accompanying uniform buffer should freed as part of the collective tile not for each render data
 * remove dependency from vulkan to city
@@ -10,6 +6,8 @@
 * dispatch for compute might not be 100% correct.
 * the readback buffer should be duplicated to the number of frames in flight.
 * In function RoadSegmentFromTwoRoadNodes: the normalize function leads to values being Nan. Handle this in a better way.
+* Check barriers for command buffer recordings
+* Separate functions should be created for the creation of assets of different type (Buffer, Texture, Descriptor) 
 
 # Less urgent changes
 * Use vulkan push descriptor and buffer device address instead of descriptor sets
@@ -20,9 +18,13 @@
 * look at the descriptor index alloc and free functions again.
 * Remove the printf logging and find way to log the queue messages
 * Find out how to make the coordinate system and 3D geometry match.
+* make descriptor_pool and functionallity part of asset_manager.
+* Make TilesetRenderer into global variable
+* Validation error for descriptors not used in shader when null texture is not filling in the wholes
+* tile transform might need to be passed to shader as a uniform buffer
+* validation errors at null texture destruction as it is still used by some cmd buffers.
 
 # Bugs
-* After deleting everything in the deletion queue, delete the asset item queue and give warning if it is not empty.
 * imgui assertion happens during array indexing operation (Assertion failed: i >= 0 && i < Size)
 * Direction or previous node is needed for random neighbor algorithm to avoid doing a u-turn when it is possible to drive straight.
 

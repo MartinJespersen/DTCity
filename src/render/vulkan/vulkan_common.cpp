@@ -77,7 +77,8 @@ depth_resources_create(Context* vk_ctx, SwapchainResources* swapchain_resources)
     ImageAllocation image_alloc = image_allocation_create(
         swapchain_resources->swapchain_extent.width, swapchain_resources->swapchain_extent.height,
         vk_ctx->msaa_samples, depth_format, VK_IMAGE_TILING_OPTIMAL,
-        VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT, 1, vma_info);
+        VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT, 1, vma_info,
+        "depth image");
 
     ImageViewResource image_view_resource = image_view_resource_create(
         vk_ctx->device, image_alloc.image, depth_format, VK_IMAGE_ASPECT_DEPTH_BIT, 1);
@@ -119,7 +120,7 @@ object_id_image_resource_create(SwapchainResources* swapchain_resources, U32 ima
                                                VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT |
                                                    VK_IMAGE_USAGE_TRANSFER_DST_BIT |
                                                    VK_IMAGE_USAGE_TRANSFER_SRC_BIT,
-                                               1, vma_info);
+                                               1, vma_info, "object_id image");
 
         *image_view_res = image_view_resource_create(
             vk_ctx->device, image_alloc->image, attachment_format, VK_IMAGE_ASPECT_COLOR_BIT, 1);
@@ -137,7 +138,7 @@ object_id_image_resource_create(SwapchainResources* swapchain_resources, U32 ima
             tiling,
             VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT |
                 VK_IMAGE_USAGE_TRANSFER_SRC_BIT,
-            1, vma_info);
+            1, vma_info, "object_id resolve image");
 
         *image_resolve_view_resource =
             image_view_resource_create(vk_ctx->device, image_resolve_alloc->image,
@@ -151,7 +152,7 @@ object_id_image_resource_create(SwapchainResources* swapchain_resources, U32 ima
     swapchain_resources->object_id_image_resolve_resources = object_id_image_resolve_resources;
 
     buffer_readback_create(buffer_size, VK_BUFFER_USAGE_TRANSFER_DST_BIT,
-                           &swapchain_resources->object_id_buffer_readback);
+                           &swapchain_resources->object_id_buffer_readback, "object_id readback");
 }
 
 static VkCommandPool
@@ -874,7 +875,8 @@ color_resources_create(Context* vk_ctx, SwapchainResources* swapchain_resources)
     ImageAllocation image_alloc = image_allocation_create(
         swapchain_resources->swapchain_extent.width, swapchain_resources->swapchain_extent.height,
         vk_ctx->msaa_samples, colorFormat, VK_IMAGE_TILING_OPTIMAL,
-        VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT, 1, vma_info);
+        VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT, 1, vma_info,
+        "color image");
 
     ImageViewResource color_image_view = image_view_resource_create(
         vk_ctx->device, image_alloc.image, colorFormat, VK_IMAGE_ASPECT_COLOR_BIT, 1);
@@ -1170,7 +1172,8 @@ descriptor_pool_create(Context* vk_ctx, U32 max_textures)
     poolInfo.poolSizeCount = pool_size_count;
     poolInfo.pPoolSizes = pool_sizes;
     // Enable update after bind for descriptor indexing support
-    poolInfo.flags = VK_DESCRIPTOR_POOL_CREATE_UPDATE_AFTER_BIND_BIT;
+    poolInfo.flags = VK_DESCRIPTOR_POOL_CREATE_UPDATE_AFTER_BIND_BIT |
+                     VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT;
     poolInfo.maxSets = max_textures;
 
     if (vkCreateDescriptorPool(vk_ctx->device, &poolInfo, nullptr, &vk_ctx->descriptor_pool) !=
@@ -1324,6 +1327,27 @@ descriptor_set_update_bindless_texture(U32 array_index, VkImageView image_view, 
     write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
     write.dstSet = desc_set;
     write.dstBinding = binding;
+    write.dstArrayElement = array_index;
+    write.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+    write.descriptorCount = 1;
+    write.pImageInfo = &image_info;
+
+    vkUpdateDescriptorSets(vk_ctx->device, 1, &write, 0, nullptr);
+}
+
+static void
+descriptor_set_clear_bindless_texture(U32 array_index)
+{
+    vulkan::Context* vk_ctx = ctx_get();
+    VkDescriptorImageInfo image_info{};
+    image_info.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+    image_info.imageView = vk_ctx->null_image_resource.image_view_resource.image_view;
+    image_info.sampler = vk_ctx->null_sampler;
+
+    VkWriteDescriptorSet write{};
+    write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+    write.dstSet = vk_ctx->bindless_descriptor_set;
+    write.dstBinding = vk_ctx->texture_binding;
     write.dstArrayElement = array_index;
     write.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
     write.descriptorCount = 1;

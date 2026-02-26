@@ -40,8 +40,6 @@ struct Context
     ui::Camera* camera;
     dt_Time* time;
     city::Road* road;
-    render::Handle road_segment_buffer_handle;
-    render::Handle road_segment_descriptor_handle;
     city::CarSim* car_sim;
     city::Buildings* buildings;
     cesium::TilesetRenderer* cesium_tileset;

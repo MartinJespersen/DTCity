@@ -173,6 +173,10 @@ descriptor_set_allocate_bindless(VkDevice device, VkDescriptorPool desc_pool,
 static void
 descriptor_set_update_bindless_texture(U32 array_index, VkImageView image_view, VkSampler sampler);
 
+// Clears a bindless descriptor slot by writing the null texture
+static void
+descriptor_set_clear_bindless_texture(U32 array_index);
+
 // image helpers
 
 g_internal void

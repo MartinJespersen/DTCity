@@ -3,8 +3,6 @@
 namespace vulkan
 {
 
-static const U32 MAX_FRAMES_IN_FLIGHT = 2;
-
 struct CameraUniformBuffer
 {
     glm::mat4 view;
@@ -158,7 +156,7 @@ struct Context
     Buffer<VkCommandBuffer> command_buffers;
 
     Buffer<VkFence> in_flight_fences;
-    U32 current_frame;
+    U64 current_frame;
     U32 cur_img_idx;
 
     VkFormat object_id_format;
@@ -180,6 +178,10 @@ struct Context
     VkDescriptorSetLayout bindless_descriptor_set_layout;
     VkDescriptorSet bindless_descriptor_set;
     VkDescriptorSetLayout model_matrix_descriptor_set_layout;
+
+    // ~mgj: Null texture used to clear freed bindless descriptor slots
+    VkSampler null_sampler;
+    ImageResource null_image_resource;
 
     // ~mgj: Asset Streaming
     AssetManager* asset_manager;

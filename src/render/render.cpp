@@ -38,6 +38,7 @@ is_handle_zero(render::Handle handle)
 static void
 handle_list_push(Arena* arena, render::HandleList* list, render::Handle handle)
 {
+    Assert(handle.u64);
     render::HandleNode* node = PushStruct(arena, render::HandleNode);
     node->handle = handle;
     SLLQueuePush(list->first, list->last, node);

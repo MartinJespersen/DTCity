@@ -2,6 +2,7 @@
 
 namespace vulkan
 {
+static const U32 MAX_FRAMES_IN_FLIGHT = 2;
 
 struct BufferAllocation
 {
@@ -145,15 +146,13 @@ struct PendingDeletion
     PendingDeletion* next;
     PendingDeletion* prev;
     render::Handle handle;
-    U64 frame_to_delete;
 };
 
 struct DeletionQueue
 {
     PendingDeletion* first;
     PendingDeletion* last;
-    PendingDeletion* free_list;
-    U64 frame_counter;
+    U32 list_count;
 };
 
 struct AssetManager
@@ -179,7 +178,7 @@ struct AssetManager
     render::AssetItemList<DescriptorSetHandle> descriptor_set_free_list;
 
     // ~mgj: Threading Buffer Commands
-    ::Buffer<AssetManagerCommandPool> threaded_cmd_pools;
+    Buffer<AssetManagerCommandPool> threaded_cmd_pools;
     U64 total_size;
     async::Queue<CmdQueueItem>* cmd_queue;
     async::Queue<async::QueueItem>* work_queue;
@@ -187,11 +186,14 @@ struct AssetManager
     AssetManagerCmdList* cmd_wait_list;
 
     // ~mgj: Bindless descriptor index allocator
+    VkDescriptorPool descriptor_pool;
     DescriptorIndexAllocator descriptor_index_allocator;
 
     // ~mgj: Deferred Deletion Queue
-    DeletionQueue* deletion_queue;
-    OS_Handle deletion_queue_mutex;
+    DeletionQueue deletion_queues[MAX_FRAMES_IN_FLIGHT + 1];
+    U64 deletion_queue_idx;
+    PendingDeletion* deletion_queue_free_list;
+    U32 deletion_queue_free_list_count;
 
     // ~mgj: Vulkan resources needed for asset operations
     VkDevice device;
@@ -206,7 +208,7 @@ asset_manager_get();
 static AssetManager*
 asset_manager_create(VkPhysicalDevice physical_device, VkDevice device, VkInstance instance,
                      VkQueue graphics_queue, U32 queue_family_index, async::Threads* threads,
-                     U64 total_size_in_bytes);
+                     U64 total_size_in_bytes, VkDescriptorPool desc_pool);
 static void
 asset_manager_destroy(AssetManager* asset_manager);
 
@@ -215,7 +217,7 @@ asset_manager_destroy(AssetManager* asset_manager);
 // https://gpuopen-librariesandsdks.github.io/VulkanMemoryAllocator/html/usage_patterns.html
 static BufferAllocation
 buffer_allocation_create(VkDeviceSize size, VkBufferUsageFlags buffer_usage,
-                         VmaAllocationCreateInfo vma_info);
+                         VmaAllocationCreateInfo vma_info, const char* name);
 
 g_internal U32
 buffer_allocation_size_get(BufferAllocation* buffer_allocation);
@@ -225,19 +227,19 @@ buffer_destroy(BufferAllocation* buffer_allocation);
 static void
 buffer_mapped_destroy(BufferAllocationMapped* mapped_buffer);
 static BufferAllocationMapped
-buffer_mapped_create(VkDeviceSize size, VkBufferUsageFlags buffer_usage);
+buffer_mapped_create(VkDeviceSize size, VkBufferUsageFlags buffer_usage, const char* name);
 static void
 buffer_mapped_update(VkCommandBuffer cmd_buffer, BufferAllocationMapped mapped_buffer);
 static BufferAllocation
 staging_buffer_create(VkDeviceSize size);
 static BufferAllocation
-staging_buffer_mapped_create(VkDeviceSize size);
+staging_buffer_mapped_create(VkDeviceSize size, const char* name);
 static void
 buffer_alloc_create_or_resize(U32 total_buffer_byte_count, BufferAllocation* buffer_alloc,
-                              VkBufferUsageFlags usage);
+                              VkBufferUsageFlags usage, const char* name);
 static void
 buffer_readback_create(VkDeviceSize size, VkBufferUsageFlags buffer_usage,
-                       BufferReadback* out_buffer_readback);
+                       BufferReadback* out_buffer_readback, const char* name);
 static void
 buffer_readback_destroy(BufferReadback* out_buffer_readback);
 
@@ -245,7 +247,7 @@ buffer_readback_destroy(BufferReadback* out_buffer_readback);
 static ImageAllocation
 image_allocation_create(U32 width, U32 height, VkSampleCountFlagBits numSamples, VkFormat format,
                         VkImageTiling tiling, VkImageUsageFlags usage, U32 mipmap_level,
-                        VmaAllocationCreateInfo vma_info,
+                        VmaAllocationCreateInfo vma_info, const char* name,
                         VkImageType image_type = VK_IMAGE_TYPE_2D);
 static void
 image_allocation_destroy(ImageAllocation image_alloc);
@@ -262,11 +264,13 @@ descriptor_index_free(DescriptorIndexAllocator* alloc, U32 index);
 
 //~mgj: Deferred Deletion Queue
 static void
-deletion_queue_push(DeletionQueue* queue, render::Handle handle, U64 frames_in_flight);
+deletion_queue_push(render::Handle handle);
 static void
-deletion_queue_deferred_resource_deletion(DeletionQueue* queue);
+deletion_queue_empty(DeletionQueue* queue);
+g_internal void
+deletion_queue_empty_next();
 static void
-deletion_queue_delete_all(DeletionQueue* queue);
+deletion_queue_empty_all();
 
 //~mgj: Asset Item Management
 

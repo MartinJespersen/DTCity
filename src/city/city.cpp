@@ -591,8 +591,7 @@ car_sim_update(Arena* arena, CarSim* car, F64 time_delta)
 // ~mgj: Buildings
 
 g_internal Buildings*
-buildings_create(String8 cache_path, String8 texture_path, F32 road_height, Rng2F64 bbox,
-                 render::SamplerInfo* sampler_info, glm::dmat4 ecef_to_local)
+buildings_create(String8 cache_path, String8 texture_path, Rng2F64 bbox)
 {
     prof_scope_marker;
     ScratchScope scratch = ScratchScope(0, 0);
@@ -658,31 +657,6 @@ buildings_create(String8 cache_path, String8 texture_path, F32 road_height, Rng2
         str8_path_from_str8_list(arena, {texture_path, S("brick_wall.ktx2")});
     buildings->roof_texture_path =
         str8_path_from_str8_list(arena, {texture_path, S("concrete042A.ktx2")});
-    render::Handle facade_texture_handle =
-        render::texture_load_async(sampler_info, buildings->facade_texture_path);
-    render::Handle roof_texture_handle =
-        render::texture_load_async(sampler_info, buildings->roof_texture_path);
-
-    BuildingRenderInfo render_info;
-    city::buildings_buffers_create(arena, road_height, ecef_to_local, &render_info);
-    render::BufferInfo vertex_buffer_info =
-        render::BufferInfo(render_info.vertex_buffer, render::BufferType_Vertex);
-    render::BufferInfo index_buffer_info =
-        render::BufferInfo(render_info.index_buffer, render::BufferType_Index);
-
-    render::Handle vertex_handle = render::buffer_load_async(&vertex_buffer_info);
-    render::Handle index_handle = render::buffer_load_async(&index_buffer_info);
-
-    buildings->roof_model_handles = {.vertex_buffer_handle = vertex_handle,
-                                     .index_buffer_handle = index_handle,
-                                     .texture_handle = roof_texture_handle,
-                                     .index_count = render_info.roof_index_count,
-                                     .index_offset = render_info.roof_index_offset};
-    buildings->facade_model_handles = {.vertex_buffer_handle = vertex_handle,
-                                       .index_buffer_handle = index_handle,
-                                       .texture_handle = facade_texture_handle,
-                                       .index_count = render_info.facade_index_count,
-                                       .index_offset = render_info.facade_index_offset};
 
     return buildings;
 }
@@ -717,7 +691,8 @@ AreTwoConnectedLineSegmentsCollinear(Vec2F64 prev, Vec2F64 cur, Vec2F64 next)
 }
 
 g_internal void
-buildings_buffers_create(Arena* arena, F32 road_height, glm::dmat4& ecef_to_local, BuildingRenderInfo* out_render_info)
+buildings_buffers_create(Arena* arena, F32 road_height, glm::dmat4& ecef_to_local,
+                         BuildingRenderInfo* out_render_info)
 {
     prof_scope_marker;
     osm::Network* osm_network = osm::g_network;
@@ -764,12 +739,12 @@ buildings_buffers_create(Arena* arena, F32 road_height, glm::dmat4& ecef_to_loca
                 osm::EcefLocation node_loc = osm::location_get(way->node_ids[node_idx]);
                 osm::EcefLocation next_node_loc = osm::location_get(way->node_ids[node_idx + 1]);
 
-                glm::vec3 local_pos = glm::vec3(
-                    ecef_to_local *
-                    glm::dvec4(node_loc.pos.x, node_loc.pos.y, node_loc.pos.z, 1.0));
-                glm::vec3 local_next_pos = glm::vec3(
-                    ecef_to_local *
-                    glm::dvec4(next_node_loc.pos.x, next_node_loc.pos.y, next_node_loc.pos.z, 1.0));
+                glm::vec3 local_pos =
+                    glm::vec3(ecef_to_local *
+                              glm::dvec4(node_loc.pos.x, node_loc.pos.y, node_loc.pos.z, 1.0));
+                glm::vec3 local_next_pos =
+                    glm::vec3(ecef_to_local * glm::dvec4(next_node_loc.pos.x, next_node_loc.pos.y,
+                                                         next_node_loc.pos.z, 1.0));
 
                 F32 side_width = glm::length(local_next_pos - local_pos);
                 Vec2U32 id = {.u64 = (U64)way->id};
@@ -866,9 +841,9 @@ buildings_buffers_create(Arena* arena, F32 road_height, glm::dmat4& ecef_to_loca
                 for (U32 idx = 0; idx < final_utm_node_buffer.size; idx += 1)
                 {
                     osm::EcefLocation node_utm = final_utm_node_buffer.data[idx];
-                    glm::vec3 local_pos = glm::vec3(
-                        ecef_to_local *
-                        glm::dvec4(node_utm.pos.x, node_utm.pos.y, node_utm.pos.z, 1.0));
+                    glm::vec3 local_pos =
+                        glm::vec3(ecef_to_local *
+                                  glm::dvec4(node_utm.pos.x, node_utm.pos.y, node_utm.pos.z, 1.0));
                     Vec2U32 id = {.u64 = (U64)way->id};
                     vertex_buffer.data[base_vertex_idx + idx] = {
                         .pos = {local_pos.x, local_pos.y,
@@ -906,6 +881,37 @@ buildings_buffers_create(Arena* arena, F32 road_height, glm::dmat4& ecef_to_loca
     out_render_info->roof_index_offset = roof_base_index;
     out_render_info->facade_index_count = roof_base_index;
     out_render_info->roof_index_count = base_index_idx - roof_base_index;
+}
+
+g_internal void
+buildings_build(Buildings* buildings, render::SamplerInfo* sampler_info, glm::dmat4& ecef_to_local,
+                F32 road_height)
+{
+    render::Handle facade_texture_handle =
+        render::texture_load_async(sampler_info, buildings->facade_texture_path);
+    render::Handle roof_texture_handle =
+        render::texture_load_async(sampler_info, buildings->roof_texture_path);
+
+    city::BuildingRenderInfo render_info;
+    city::buildings_buffers_create(buildings->arena, road_height, ecef_to_local, &render_info);
+    render::BufferInfo vertex_buffer_info =
+        render::BufferInfo(render_info.vertex_buffer, render::BufferType_Vertex);
+    render::BufferInfo index_buffer_info =
+        render::BufferInfo(render_info.index_buffer, render::BufferType_Index);
+
+    render::Handle vertex_handle = render::buffer_load_async(&vertex_buffer_info);
+    render::Handle index_handle = render::buffer_load_async(&index_buffer_info);
+
+    buildings->roof_model_handles = {.vertex_buffer_handle = vertex_handle,
+                                     .index_buffer_handle = index_handle,
+                                     .texture_handle = roof_texture_handle,
+                                     .index_count = render_info.roof_index_count,
+                                     .index_offset = render_info.roof_index_offset};
+    buildings->facade_model_handles = {.vertex_buffer_handle = vertex_handle,
+                                       .index_buffer_handle = index_handle,
+                                       .texture_handle = facade_texture_handle,
+                                       .index_count = render_info.facade_index_count,
+                                       .index_offset = render_info.facade_index_offset};
 }
 
 enum Direction
@@ -1282,7 +1288,7 @@ str8_from_bbox(Arena* arena, Rng2F64 bbox)
 
 g_internal Road*
 road_create(String8 texture_path, String8 cache_path, String8 data_dir, Rng2F64 bbox,
-            Rng2F64 utm_coords, render::SamplerInfo* sampler_info, glm::dmat4 ecef_to_local)
+            Rng2F64 utm_coords, render::SamplerInfo* sampler_info)
 {
     prof_scope_marker;
 
@@ -1360,50 +1366,47 @@ road_create(String8 texture_path, String8 cache_path, String8 data_dir, Rng2F64 
     road->road_info_map =
         city::road_info_from_edge_id(road->arena, road->edge_structure.edges, edge_map);
 
-    road->road_build_result =
-        city::road_segment_build(road->arena, road->edge_structure.edges, road->default_road_width,
-                                 road->road_height, ecef_to_local);
+    // render::BufferInfo vertex_buffer_info =
+    //     render::BufferInfo(road->road_build_result.vertices, render::BufferType_Vertex);
+    // render::BufferInfo index_buffer_info =
+    //     render::BufferInfo(road->road_build_result.indices, render::BufferType_Index);
 
-    render::BufferInfo vertex_buffer_info =
-        render::BufferInfo(road->road_build_result.vertices, render::BufferType_Vertex);
-    render::BufferInfo index_buffer_info =
-        render::BufferInfo(road->road_build_result.indices, render::BufferType_Index);
+    // road->texture_path =
+    //     str8_path_from_str8_list(road->arena, {texture_path, S("road_texture.ktx2")});
 
-    road->texture_path =
-        str8_path_from_str8_list(road->arena, {texture_path, S("road_texture.ktx2")});
+    // render::Handle texture_handle = render::texture_load_async(sampler_info, road->texture_path);
+    // render::Handle vertex_handle = render::buffer_load_async(&vertex_buffer_info);
+    // render::Handle index_handle = render::buffer_load_async(&index_buffer_info);
 
-    render::Handle texture_handle = render::texture_load_async(sampler_info, road->texture_path);
-    render::Handle vertex_handle = render::buffer_load_async(&vertex_buffer_info);
-    render::Handle index_handle = render::buffer_load_async(&index_buffer_info);
+    // constexpr U64 colormap_byte_size = 256ULL * 3 * sizeof(F32);
+    // U8* zero_arr = PushArray(road->arena, U8, colormap_byte_size);
 
-    constexpr U64 colormap_byte_size = 256ULL * 3 * sizeof(F32);
-    U8* zero_arr = PushArray(road->arena, U8, colormap_byte_size);
+    // // ~mgj: Load colormaps for different overlay options
+    // const U8* colormap_arrays[] = {
+    //     zero_arr,           // RoadOverlayOption_None
+    //     g_colormap_inferno, // RoadOverlayOption_Bikeability_ft
+    //     g_colormap_plasma,  // RoadOverlayOption_Bikeability_tf
+    //     g_colormap_viridis, // RoadOverlayOption_Walkability_tf
+    //     g_colormap_magma,   // RoadOverlayOption_Walkability_ft
+    // };
 
-    // ~mgj: Load colormaps for different overlay options
-    const U8* colormap_arrays[] = {
-        zero_arr,           // RoadOverlayOption_None
-        g_colormap_inferno, // RoadOverlayOption_Bikeability_ft
-        g_colormap_plasma,  // RoadOverlayOption_Bikeability_tf
-        g_colormap_viridis, // RoadOverlayOption_Walkability_tf
-        g_colormap_magma,   // RoadOverlayOption_Walkability_ft
-    };
+    // render::SamplerInfo colormap_sampler = {
+    //     .min_filter = render::Filter_Linear,
+    //     .mag_filter = render::Filter_Linear,
+    //     .mip_map_mode = render::MipMapMode_Linear,
+    //     .address_mode_u = render::SamplerAddressMode_MirroredRepeat,
+    //     .address_mode_v = render::SamplerAddressMode_ClampToEdge,
+    // };
 
-    render::SamplerInfo colormap_sampler = {
-        .min_filter = render::Filter_Linear,
-        .mag_filter = render::Filter_Linear,
-        .mip_map_mode = render::MipMapMode_Linear,
-        .address_mode_u = render::SamplerAddressMode_MirroredRepeat,
-        .address_mode_v = render::SamplerAddressMode_ClampToEdge,
-    };
+    // for (U32 i = 0; i < RoadOverlayOption_Count; i++)
+    // {
+    //     road->colormap_handles[i] =
+    //         render::colormap_load_async(&colormap_sampler, colormap_arrays[i],
+    //         colormap_byte_size);
+    // }
 
-    for (U32 i = 0; i < RoadOverlayOption_Count; i++)
-    {
-        road->colormap_handles[i] =
-            render::colormap_load_async(&colormap_sampler, colormap_arrays[i], colormap_byte_size);
-    }
-
-    road->handles[road->current_handle_idx] = {vertex_handle, index_handle, texture_handle,
-                                               road->colormap_handles[RoadOverlayOption_None]};
+    // road->handles[road->current_handle_idx] = {vertex_handle, index_handle, texture_handle,
+    //                                            road->colormap_handles[RoadOverlayOption_None]};
 
     return road;
 }

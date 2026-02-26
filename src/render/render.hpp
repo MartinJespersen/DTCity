@@ -178,6 +178,7 @@ template <typename T> struct AssetItem
 {
     AssetItem* next;
     AssetItem* prev;
+
     HandleType type;
     U64 gen_id;
     B32 is_loaded;
@@ -357,7 +358,7 @@ model_3d_draw(Model3DPipelineData pipeline_input);
 g_internal void
 blend_3d_draw(Blend3DPipelineData pipeline_input);
 
-g_internal void
+g_internal bool
 road_intersection_compute_add(Handle storage_buffer_handle, Handle index_buffer_handle,
                               Handle road_segment_buffer_handle, Handle road_segment_handle);
 

@@ -197,12 +197,15 @@ car_sim_update(Arena* arena, CarSim* car, F64 time_delta);
 
 // ~mgj: Buildings
 g_internal Buildings*
-buildings_create(String8 cache_path, String8 texture_path, F32 road_height, Rng2F64 bbox,
-                 render::SamplerInfo* sampler_info, glm::dmat4 ecef_to_local);
+buildings_create(String8 cache_path, String8 texture_path, Rng2F64 bbox);
+g_internal void
+buildings_build(Buildings* buildings, render::SamplerInfo* sampler_info, glm::dmat4& ecef_to_local,
+                F32 road_height);
 g_internal void
 building_destroy(Buildings* building);
 g_internal void
-buildings_buffers_create(Arena* arena, F32 road_height, glm::dmat4& ecef_to_local, BuildingRenderInfo* out_render_info);
+buildings_buffers_create(Arena* arena, F32 road_height, glm::dmat4& ecef_to_local,
+                         BuildingRenderInfo* out_render_info);
 g_internal Buffer<U32>
 EarClipping(Arena* arena, Buffer<Vec2F64> node_buffer);
 
@@ -230,7 +233,7 @@ g_internal render::SamplerInfo
 sampler_from_cgltf_sampler(gltfw_Sampler sampler);
 g_internal Road*
 road_create(String8 texture_path, String8 cache_path, String8 data_dir, Rng2F64 bbox,
-            Rng2F64 utm_coords, render::SamplerInfo* sampler_info, glm::dmat4 ecef_to_local);
+            Rng2F64 utm_coords, render::SamplerInfo* sampler_info);
 g_internal void
 road_vertex_buffer_switch(Road* road, RoadOverlayOption overlay_option);
 g_internal EdgeStructure
