@@ -1,10 +1,10 @@
 # Urgent changes
-* Reconsider the number of descriptor pools (whether 1 is enough) and the descriptor numbers
-* The model matrix and the accompanying uniform buffer should freed as part of the collective tile not for each render data
-* remove dependency from vulkan to city
-* Create ComputePipelineData for descriptor and buffers of the compute pipeline should be input to the compute pipeline function
-* dispatch for compute might not be 100% correct.
 * the readback buffer should be duplicated to the number of frames in flight.
+* dispatch for compute might not be 100% correct.
+* The model matrix in shader is currently unused
+* Reconsider the number of descriptor pools (whether 1 is enough) and the descriptor numbers
+* remove dependency from vulkan to city
+
 * In function RoadSegmentFromTwoRoadNodes: the normalize function leads to values being Nan. Handle this in a better way.
 * Check barriers for command buffer recordings
 * Separate functions should be created for the creation of assets of different type (Buffer, Texture, Descriptor) 

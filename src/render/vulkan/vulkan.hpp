@@ -165,9 +165,10 @@ struct Context
 
     VkSampleCountFlagBits msaa_samples = VK_SAMPLE_COUNT_1_BIT;
 
-    // queue
+    // Graphics and Compute Queue
     QueueFamilyIndices queue_family_indices;
     VkDescriptorPool descriptor_pool;
+
     // ~mgj: camera resources for uniform buffers
     BufferAllocationMapped camera_buffer_alloc_mapped[MAX_FRAMES_IN_FLIGHT];
     VkDescriptorSetLayout camera_descriptor_set_layout;

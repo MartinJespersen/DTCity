@@ -1433,7 +1433,8 @@ command_buffer_record(U32 image_index, U32 current_frame, ui::Camera* camera,
                     .dstAccessMask = VK_ACCESS_2_TRANSFER_WRITE_BIT,
                     .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
                     .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-                    .buffer = swapchain_resource->object_id_buffer_readback.buffer_alloc.buffer,
+                    .buffer = swapchain_resource->object_id_buffer_readback[current_frame]
+                                  .buffer_alloc.buffer,
                     .offset = 0,
                     .size = VK_WHOLE_SIZE};
                 VkDependencyInfo readback_dep_info = {.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
@@ -1450,13 +1451,15 @@ command_buffer_record(U32 image_index, U32 current_frame, ui::Camera* camera,
                                     (S32)mouse_position_screen_coords.y, 0},
                     .imageExtent = {1, 1, 1},
                 }};
-                vkCmdCopyImageToBuffer(
-                    current_cmd_buf, object_id_resolve_image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
-                    swapchain_resource->object_id_buffer_readback.buffer_alloc.buffer,
-                    ArrayCount(buffer_image_copy), buffer_image_copy);
+                vkCmdCopyImageToBuffer(current_cmd_buf, object_id_resolve_image,
+                                       VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+                                       swapchain_resource->object_id_buffer_readback[current_frame]
+                                           .buffer_alloc.buffer,
+                                       ArrayCount(buffer_image_copy), buffer_image_copy);
 
                 Assert(vk_ctx->object_id_format == VK_FORMAT_R32G32_UINT);
-                U64* object_id = (U64*)swapchain_resource->object_id_buffer_readback.mapped_ptr;
+                U64* object_id =
+                    (U64*)swapchain_resource->object_id_buffer_readback[current_frame].mapped_ptr;
                 vk_ctx->hovered_object_id = *object_id;
             }
 

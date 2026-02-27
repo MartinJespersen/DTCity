@@ -151,8 +151,12 @@ object_id_image_resource_create(SwapchainResources* swapchain_resources, U32 ima
     swapchain_resources->object_id_image_resources = object_id_image_resources;
     swapchain_resources->object_id_image_resolve_resources = object_id_image_resolve_resources;
 
-    buffer_readback_create(buffer_size, VK_BUFFER_USAGE_TRANSFER_DST_BIT,
-                           &swapchain_resources->object_id_buffer_readback, "object_id readback");
+    for (U32 i = 0; i < ArrayCount(swapchain_resources->object_id_buffer_readback); i++)
+    {
+        buffer_readback_create(buffer_size, VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+                               &swapchain_resources->object_id_buffer_readback[i],
+                               "object_id readback");
+    }
 }
 
 static VkCommandPool
@@ -562,7 +566,10 @@ object_id_resources_cleanup()
         image_resource_destroy(swapchain_resources->object_id_image_resolve_resources.data[i]);
     }
 
-    buffer_readback_destroy(&swapchain_resources->object_id_buffer_readback);
+    for (U32 i = 0; i < ArrayCount(swapchain_resources->object_id_buffer_readback); i++)
+    {
+        buffer_readback_destroy(&swapchain_resources->object_id_buffer_readback[i]);
+    }
 }
 
 static void

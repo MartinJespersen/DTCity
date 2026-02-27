@@ -39,7 +39,7 @@ struct SwapchainResources
     VkFormat object_id_image_format;
     Buffer<ImageResource> object_id_image_resources;
     Buffer<ImageResource> object_id_image_resolve_resources;
-    BufferReadback object_id_buffer_readback;
+    BufferReadback object_id_buffer_readback[MAX_FRAMES_IN_FLIGHT];
 
     // sync objects
     Buffer<VkSemaphore> image_available_semaphores;
