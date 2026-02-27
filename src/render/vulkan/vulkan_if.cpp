@@ -165,14 +165,6 @@ render_ctx_create(String8 shader_path, io::IO* io_ctx, async::Threads* thread_po
 
     null_texture_create(vk_ctx);
 
-    VkDescriptorSetLayoutBinding model_matrix_binding = {.binding = 0,
-                                                         .descriptorType =
-                                                             VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
-                                                         .descriptorCount = 1,
-                                                         .stageFlags = VK_SHADER_STAGE_VERTEX_BIT};
-    vk_ctx->model_matrix_descriptor_set_layout =
-        vulkan::descriptor_set_layout_create(vk_ctx->device, &model_matrix_binding, 1);
-
     vk_ctx->draw_frame_arena = arena_alloc();
     vk_ctx->model_3D_pipeline = vulkan::model_3d_pipeline_create(vk_ctx, shader_path);
     vk_ctx->model_3D_instance_pipeline =
@@ -227,8 +219,6 @@ render_ctx_destroy()
     vulkan::pipeline_destroy(&vk_ctx->road_intersection_pipeline);
 
     vkDestroyDescriptorSetLayout(vk_ctx->device, vk_ctx->bindless_descriptor_set_layout, nullptr);
-    vkDestroyDescriptorSetLayout(vk_ctx->device, vk_ctx->model_matrix_descriptor_set_layout,
-                                 nullptr);
     vkDestroyDescriptorSetLayout(vk_ctx->device, vk_ctx->road_segment_descriptor_set_layout,
                                  nullptr);
     vkDestroyDescriptorSetLayout(vk_ctx->device, vk_ctx->storage_buffer_descriptor_set_layout,
@@ -842,26 +832,21 @@ model_3d_draw(render::Model3DPipelineData pipeline_input)
 {
     if (render::is_handle_zero(pipeline_input.index_buffer_handle) ||
         render::is_handle_zero(pipeline_input.vertex_buffer_handle) ||
-        render::is_handle_zero(pipeline_input.texture_handle) ||
-        render::is_handle_zero(pipeline_input.model_matrix_buffer_handle))
+        render::is_handle_zero(pipeline_input.texture_handle))
         return;
 
     if (render::is_resource_loaded(pipeline_input.vertex_buffer_handle) &&
         render::is_resource_loaded(pipeline_input.index_buffer_handle) &&
-        render::is_resource_loaded(pipeline_input.texture_handle) &&
-        render::is_resource_loaded(pipeline_input.model_matrix_buffer_handle) &&
-        render::is_resource_loaded(pipeline_input.uniform_buffer_handle))
+        render::is_resource_loaded(pipeline_input.texture_handle))
     {
         render::AssetItem<vulkan::BufferHandle>* asset_vertex_buffer =
             vulkan::asset_manager_buffer_item_get(pipeline_input.vertex_buffer_handle);
         render::AssetItem<vulkan::BufferHandle>* asset_index_buffer =
             vulkan::asset_manager_buffer_item_get(pipeline_input.index_buffer_handle);
-        render::AssetItem<vulkan::DescriptorSetHandle>* asset_descriptor_set =
-            vulkan::asset_manager_descriptor_set_item_get(pipeline_input.uniform_buffer_handle);
-        vulkan::model_3d_bucket_add(
-            &asset_vertex_buffer->item.buffer_alloc, &asset_index_buffer->item.buffer_alloc,
-            pipeline_input.texture_handle, false, pipeline_input.index_offset,
-            pipeline_input.index_count, asset_descriptor_set->item.desc_set);
+        vulkan::model_3d_bucket_add(&asset_vertex_buffer->item.buffer_alloc,
+                                    &asset_index_buffer->item.buffer_alloc,
+                                    pipeline_input.texture_handle, false,
+                                    pipeline_input.index_offset, pipeline_input.index_count);
     }
 }
 

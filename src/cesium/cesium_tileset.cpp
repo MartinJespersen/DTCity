@@ -287,10 +287,7 @@ render_list_record(render::ThreadInput* thread_input, render::FuncData user_data
                                      data->render_data.index_buffer_handle);
             render::handle_list_push(thread_input->arena, &thread_input->handles,
                                      data->render_data.texture_handle);
-            render::handle_list_push(thread_input->arena, &thread_input->handles,
-                                     data->render_data.model_matrix_buffer_handle);
-            render::handle_list_push(thread_input->arena, &thread_input->handles,
-                                     data->render_data.uniform_buffer_handle);
+
             render::handle_list_push(thread_input->arena, &thread_input->handles,
                                      data->render_data.storage_buffer_handle);
 
@@ -527,10 +524,6 @@ tile_render_data_from_gltf(const CesiumGltf::Model& model, const glm::dmat4& ece
             render::buffer_load_sync((VkCommandBuffer)thread_input->cmd_buffer, &vertex_info);
         render_data->render_data.index_buffer_handle =
             render::buffer_load_sync((VkCommandBuffer)thread_input->cmd_buffer, &index_info);
-        render_data->render_data.model_matrix_buffer_handle =
-            render::buffer_load_sync((VkCommandBuffer)thread_input->cmd_buffer, &model_matrix_info);
-        render_data->render_data.uniform_buffer_handle = render::uniform_buffer_load_sync(
-            thread_input->arena, render_data->render_data.model_matrix_buffer_handle);
         render_data->render_data.storage_buffer_handle = render::storage_buffer_load_sync(
             thread_input->arena, render_data->render_data.vertex_buffer_handle,
             render_data->render_data.index_buffer_handle);
@@ -661,8 +654,6 @@ tileset_renderer_free_tile_ressource(TilesetRenderer* renderer)
             render::handle_destroy_deferred(render_data->render_data.vertex_buffer_handle);
             render::handle_destroy_deferred(render_data->render_data.index_buffer_handle);
             render::handle_destroy_deferred(render_data->render_data.texture_handle);
-            render::handle_destroy_deferred(render_data->render_data.model_matrix_buffer_handle);
-            render::handle_destroy_deferred(render_data->render_data.uniform_buffer_handle);
             render::handle_destroy_deferred(render_data->render_data.storage_buffer_handle);
         }
         arena_release(tile_data->arena);

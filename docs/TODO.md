@@ -1,9 +1,5 @@
 # Urgent changes
-* dispatch for compute might not be 100% correct.
-* The model matrix in shader is currently unused
 * Reconsider the number of descriptor pools (whether 1 is enough) and the descriptor numbers
-* remove dependency from vulkan to city
-
 * In function RoadSegmentFromTwoRoadNodes: the normalize function leads to values being Nan. Handle this in a better way.
 * Check barriers for command buffer recordings
 * Separate functions should be created for the creation of assets of different type (Buffer, Texture, Descriptor) 

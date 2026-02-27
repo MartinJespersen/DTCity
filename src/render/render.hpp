@@ -207,10 +207,8 @@ struct Model3DPipelineData
 {
     Handle vertex_buffer_handle;
     Handle index_buffer_handle;
-    Handle model_matrix_buffer_handle;
     Handle texture_handle;
 
-    Handle uniform_buffer_handle;
     Handle storage_buffer_handle;
 
     U64 index_count;

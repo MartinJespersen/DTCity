@@ -37,7 +37,6 @@ struct Model3DNode
     U32 index_count;
     BufferAllocation vertex_alloc;
     Model3dPushConstants push_constants;
-    VkDescriptorSet model_matrix;
 };
 
 struct Model3dInstancePushConstants
@@ -177,7 +176,6 @@ struct Context
     U32 texture_binding;
     VkDescriptorSetLayout bindless_descriptor_set_layout;
     VkDescriptorSet bindless_descriptor_set;
-    VkDescriptorSetLayout model_matrix_descriptor_set_layout;
 
     // ~mgj: Null texture used to clear freed bindless descriptor slots
     VkSampler null_sampler;
@@ -252,8 +250,7 @@ descriptor_set_road_segment(VkDevice device, VkDescriptorPool desc_pool, void* d
 static void
 model_3d_bucket_add(BufferAllocation* vertex_buffer_allocation,
                     BufferAllocation* index_buffer_allocation, render::Handle tex_handle,
-                    B32 depth_write_per_draw_call_only, U32 index_buffer_offset, U32 index_count,
-                    VkDescriptorSet model_matrix);
+                    B32 depth_write_per_draw_call_only, U32 index_buffer_offset, U32 index_count);
 static void
 model_3d_instance_bucket_add(BufferAllocation* vertex_buffer_allocation,
                              BufferAllocation* index_buffer_allocation, render::Handle tex_handle,

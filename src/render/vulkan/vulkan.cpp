@@ -297,8 +297,7 @@ model_3d_pipeline_create(Context* vk_ctx, String8 shader_path)
     color_blending.pAttachments = color_blend_attachments;
 
     VkDescriptorSetLayout descriptor_set_layouts[] = {vk_ctx->camera_descriptor_set_layout,
-                                                      vk_ctx->bindless_descriptor_set_layout,
-                                                      vk_ctx->model_matrix_descriptor_set_layout};
+                                                      vk_ctx->bindless_descriptor_set_layout};
 
     VkPushConstantRange push_constant_range{};
     push_constant_range.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
@@ -939,8 +938,7 @@ pipeline_destroy(Pipeline* pipeline)
 static void
 model_3d_bucket_add(BufferAllocation* vertex_buffer_allocation,
                     BufferAllocation* index_buffer_allocation, render::Handle tex_handle,
-                    B32 depth_write_per_draw_call_only, U32 index_buffer_offset, U32 index_count,
-                    VkDescriptorSet model_matrix)
+                    B32 depth_write_per_draw_call_only, U32 index_buffer_offset, U32 index_count)
 {
     Context* vk_ctx = ctx_get();
     DrawFrame* draw_frame = vk_ctx->draw_frame;
@@ -958,7 +956,6 @@ model_3d_bucket_add(BufferAllocation* vertex_buffer_allocation,
         node->index_count = index_count;
         node->index_buffer_offset = index_buffer_offset;
         node->depth_write_per_draw_enabled = depth_write_per_draw_call_only;
-        node->model_matrix = model_matrix;
 
         SLLQueuePush(draw_frame->model_3D_list.first, draw_frame->model_3D_list.last, node);
     }
@@ -1085,13 +1082,12 @@ model_3d_rendering()
     scissor.extent = swapchain_extent;
     vkCmdSetScissor(cmd_buffer, 0, 1, &scissor);
 
-    VkDescriptorSet descriptor_sets[3] = {vk_ctx->camera_descriptor_sets[vk_ctx->current_frame],
+    VkDescriptorSet descriptor_sets[2] = {vk_ctx->camera_descriptor_sets[vk_ctx->current_frame],
                                           vk_ctx->bindless_descriptor_set};
 
     VkDeviceSize offsets[] = {0};
     for (Model3DNode* node = draw_frame->model_3D_list.first; node; node = node->next)
     {
-        descriptor_sets[2] = node->model_matrix;
         vkCmdPushConstants(cmd_buffer, model_3D_pipeline->pipeline_layout,
                            VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(Model3dPushConstants),
                            &node->push_constants);
