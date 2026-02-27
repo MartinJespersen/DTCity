@@ -604,16 +604,14 @@ descriptor_set_road_segment(VkDevice device, VkDescriptorPool desc_pool, void* d
 
 static void
 road_intersection_bucket_add(VkDescriptorSet storage_buffer_set, VkDescriptorSet road_segment,
-                             VkBuffer road_segment_buffer, U32 index_count,
-                             U32 road_segment_buffer_size)
+                             BufferHandle* vertex_buffer, BufferHandle* index_buffer)
 {
     Context* vk_ctx = ctx_get();
     RoadIntersectionNode* node = PushStruct(vk_ctx->draw_frame_arena, RoadIntersectionNode);
-    node->road_segment_set = road_segment;
+    node->vertex_and_index_set = road_segment;
     node->storage_buffer_set = storage_buffer_set;
-    node->road_segment_buffer = road_segment_buffer;
-    node->index_count = index_count;
-    node->road_segment_buffer_size = road_segment_buffer_size;
+    node->vertex_buffer = *vertex_buffer;
+    node->index_buffer = *index_buffer;
     SLLQueuePush(vk_ctx->draw_frame->road_intersection_list.first,
                  vk_ctx->draw_frame->road_intersection_list.last, node);
 }
@@ -640,16 +638,15 @@ road_intersection_compute()
 
     for (RoadIntersectionNode* node = list->first; node; node = node->next)
     {
-        U32 triangle_count = node->index_count / 3;
+        U32 triangle_count = node->index_buffer.elem_count / 3;
         RoadIntersectionPushConstants push_constants = {};
-        push_constants.road_segment_buffer_elem_count =
-            node->road_segment_buffer_size / sizeof(city::RoadSegmentCorners);
+        push_constants.road_segment_buffer_elem_count = node->vertex_buffer.elem_count;
         push_constants.invocation_count = triangle_count;
 
         vkCmdPushConstants(cmd_buffer, pipeline->pipeline_layout, VK_SHADER_STAGE_COMPUTE_BIT, 0,
                            sizeof(RoadIntersectionPushConstants), &push_constants);
 
-        VkDescriptorSet desc_sets[] = {node->road_segment_set, node->storage_buffer_set};
+        VkDescriptorSet desc_sets[] = {node->vertex_and_index_set, node->storage_buffer_set};
         vkCmdBindDescriptorSets(cmd_buffer, VK_PIPELINE_BIND_POINT_COMPUTE,
                                 pipeline->pipeline_layout, 0, ArrayCount(desc_sets), desc_sets, 0,
                                 NULL);
@@ -665,9 +662,9 @@ road_intersection_compute()
                                           .dstAccessMask = VK_ACCESS_2_VERTEX_ATTRIBUTE_READ_BIT,
                                           .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
                                           .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-                                          .buffer = node->road_segment_buffer,
+                                          .buffer = node->vertex_buffer.buffer_alloc.buffer,
                                           .offset = 0,
-                                          .size = node->road_segment_buffer_size};
+                                          .size = node->vertex_buffer.buffer_alloc.size};
         VkDependencyInfo dep_info = {.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
                                      .bufferMemoryBarrierCount = 1,
                                      .pBufferMemoryBarriers = &barrier};

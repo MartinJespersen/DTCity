@@ -103,10 +103,9 @@ struct RoadIntersectionNode
 {
     RoadIntersectionNode* next;
     VkDescriptorSet storage_buffer_set;
-    VkDescriptorSet road_segment_set;
-    VkBuffer road_segment_buffer;
-    U32 index_count;
-    U32 road_segment_buffer_size;
+    VkDescriptorSet vertex_and_index_set;
+    BufferHandle vertex_buffer;
+    BufferHandle index_buffer;
 };
 
 struct RoadIntersectionList
@@ -275,8 +274,7 @@ g_internal void
 road_intersection_compute();
 static void
 road_intersection_bucket_add(VkDescriptorSet storage_buffer_set, VkDescriptorSet road_segment,
-                             VkBuffer road_segment_buffer, U32 index_count,
-                             U32 road_segment_buffer_size);
+                             BufferHandle* vertex_buffer, BufferHandle* index_buffer);
 
 static void
 model_3d_rendering();

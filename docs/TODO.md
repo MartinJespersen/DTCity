@@ -1,5 +1,4 @@
 # Urgent changes
-* the readback buffer should be duplicated to the number of frames in flight.
 * dispatch for compute might not be 100% correct.
 * The model matrix in shader is currently unused
 * Reconsider the number of descriptor pools (whether 1 is enough) and the descriptor numbers

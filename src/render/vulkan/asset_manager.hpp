@@ -70,6 +70,8 @@ struct BufferHandle
 {
     BufferAllocation buffer_alloc;
     BufferAllocation staging_buffer;
+    U32 elem_byte_size;
+    U32 elem_count;
 };
 
 struct TextureHandle

@@ -280,8 +280,9 @@ render_frame(Vec2U32 framebuffer_dim, B32* in_out_framebuffer_resized, ui::Camer
 
         {
             prof_scope_marker_named("Wait for frame");
-            VK_CHECK_RESULT(
-                vkWaitForFences(vk_ctx->device, 1, in_flight_fence, VK_TRUE, 1000000000));
+            VkResult fence_result =
+                vkWaitForFences(vk_ctx->device, 1, in_flight_fence, VK_TRUE, UINT64_MAX);
+            VK_CHECK_RESULT(fence_result);
         }
 
         // delete everyting in the deletion queue as all the command using its ressource have
@@ -587,6 +588,8 @@ buffer_load_sync(VkCommandBuffer cmd, render::BufferInfo* buffer_info)
     {
         vulkan::BufferHandle* asset_buffer = (vulkan::BufferHandle*)&asset_item->item;
         asset_buffer->buffer_alloc = buffer_alloc;
+        asset_buffer->elem_byte_size = buffer_info->type_size;
+        asset_buffer->elem_count = buffer_info->buffer.size / buffer_info->type_size;
 
         // ~mgj: copy to staging and record copy command
         VK_CHECK_RESULT(vmaCopyMemoryToAllocation(
@@ -756,6 +759,8 @@ buffer_load_async(render::BufferInfo* buffer_info)
             (AssetItem<vulkan::BufferHandle>*)asset_handle.ptr;
         vulkan::BufferHandle* asset_buffer = (vulkan::BufferHandle*)&asset_item->item;
         asset_buffer->buffer_alloc = buffer;
+        asset_buffer->elem_byte_size = buffer_info->type_size;
+        asset_buffer->elem_count = buffer.size / buffer_info->type_size;
     }
 
     // ~mgj: Preparing buffer loading for another thread
@@ -888,13 +893,9 @@ road_intersection_compute_add(Handle storage_buffer_handle, Handle index_buffer_
         }
 
         compute_scheduled = true;
-        U32 index_count =
-            vulkan::buffer_allocation_size_get(&index_buffer->item.buffer_alloc) / sizeof(U32);
-        U32 road_segment_buffer_size =
-            vulkan::buffer_allocation_size_get(&road_segment_buffer->item.buffer_alloc);
-        vulkan::road_intersection_bucket_add(
-            storage_set->item.desc_set, road_segment->item.desc_set,
-            road_segment_buffer->item.buffer_alloc.buffer, index_count, road_segment_buffer_size);
+        vulkan::road_intersection_bucket_add(storage_set->item.desc_set,
+                                             road_segment->item.desc_set,
+                                             &road_segment_buffer->item, &index_buffer->item);
     }
     return compute_scheduled;
 }

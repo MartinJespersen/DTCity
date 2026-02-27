@@ -435,6 +435,8 @@ buffer_loading_thread(void* data, render::ThreadInput* thread_input)
                             asset_buffer->buffer_alloc.buffer, 1, &copy_region);
 
             asset_buffer->staging_buffer = staging_buffer_alloc;
+            asset_buffer->elem_byte_size = buffer_info->type_size;
+            asset_buffer->elem_count = buffer.size / buffer_info->type_size;
         }
         else
         {
