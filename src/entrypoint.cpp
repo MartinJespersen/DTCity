@@ -273,12 +273,19 @@ dt_main_loop(void* ptr)
         ctx->road->arena, ctx->road->edge_structure.edges, ctx->road->default_road_width,
         ctx->road->road_height, ecef_to_local);
 
-    render::BufferInfo road_segment_buffer_info = render::BufferInfo(
-        ctx->road->road_build_result.road_segment_corners, render::BufferType_StorageBuffer);
+    render::BufferInfo road_segment_buffer_info =
+        render::BufferInfo(ctx->road->road_build_result.bvh_result.road_segment_buffer_sorted,
+                           render::BufferType_StorageBuffer);
     render::Handle road_segment_buffer_handle =
         render::buffer_load_async(&road_segment_buffer_info);
+
+    render::BufferInfo road_segment_node_buffer_info = render::BufferInfo(
+        ctx->road->road_build_result.bvh_result.node_buffer, render::BufferType_StorageBuffer);
+    render::Handle road_segment_node_buffer_handle =
+        render::buffer_load_async(&road_segment_node_buffer_info);
+
     render::Handle road_segment_handle = render::road_segment_descriptor_load_async(
-        ctx->arena_permanent, road_segment_buffer_handle);
+        ctx->arena_permanent, road_segment_buffer_handle, road_segment_node_buffer_handle);
 
     ctx->cesium_tileset = cesium::tileset_renderer_create(
         ctx->arena_permanent, ctx->thread_pool, tileset_url, tileset_lon, tileset_lat, 0.0);
@@ -383,7 +390,7 @@ dt_main_loop(void* ptr)
             cesium::tileset_update_view(dt_ctx_get()->arena_frame, ctx->cesium_tileset, ctx->camera,
                                         framebuffer_dim, ctx->time->delta_time_sec);
             cesium::tileset_render(ctx->cesium_tileset, road_segment_handle,
-                                   road_segment_buffer_handle);
+                                   road_segment_node_buffer_handle, road_segment_buffer_handle);
         }
 
         render::render_frame(framebuffer_dim, &io_ctx->framebuffer_resized, ctx->camera,
@@ -398,6 +405,7 @@ dt_main_loop(void* ptr)
     // city::building_destroy(ctx->buildings);
     cesium::tileset_renderer_destroy(ctx->cesium_tileset);
     render::handle_destroy_deferred(road_segment_buffer_handle);
+    render::handle_destroy_deferred(road_segment_node_buffer_handle);
     render::handle_destroy_deferred(road_segment_handle);
     render::render_ctx_destroy();
 }

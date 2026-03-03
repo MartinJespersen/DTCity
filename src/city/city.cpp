@@ -92,6 +92,248 @@ tag_value_get(Arena* arena, String8 key, F32 default_width, Buffer<osm::Tag> tag
     return road_width;
 }
 
+// BVH functions /////////////////////////////
+
+g_internal void
+quick_select(Buffer<BoundingBox> center_buffer, U32 split_axis, U32 start_idx, U32 end_idx, U32 k)
+{
+    Assert(k < center_buffer.size);
+
+    while (start_idx < end_idx)
+    {
+        U32 pivot_idx = end_idx - 1;
+        F32 pivot = center_buffer.data[pivot_idx].center.v[split_axis];
+
+        U32 divider_idx = start_idx;
+        for (U32 i = start_idx; i < pivot_idx; ++i)
+        {
+            if (center_buffer.data[i].center.v[split_axis] < pivot)
+            {
+                Swap(BoundingBox, center_buffer.data[i], center_buffer.data[divider_idx]);
+                divider_idx++;
+            }
+        }
+
+        Swap(BoundingBox, center_buffer.data[divider_idx], center_buffer.data[pivot_idx]);
+
+        if (divider_idx == k)
+        {
+            break;
+        }
+        else if (divider_idx < k)
+        {
+            start_idx = divider_idx + 1;
+        }
+        else
+        {
+            end_idx = divider_idx;
+        }
+    }
+}
+
+g_internal Rng2F32
+bounds_union(Rng2F32 a, Rng2F32 b)
+{
+    Rng2F32 result;
+    result.min.v[0] = Min(a.min.v[0], b.min.v[0]);
+    result.min.v[1] = Min(a.min.v[1], b.min.v[1]);
+
+    result.max.v[0] = Max(a.max.v[0], b.max.v[0]);
+    result.max.v[1] = Max(a.max.v[1], b.max.v[1]);
+    return result;
+}
+
+g_internal Rng2F32
+bounds_union(Rng2F32 rng, Vec2F32 vec)
+{
+    Rng2F32 result;
+    result.min.v[0] = Min(rng.min.v[0], vec.v[0]);
+    result.min.v[1] = Min(rng.min.v[1], vec.v[1]);
+
+    result.max.v[0] = Max(rng.max.v[0], vec.v[0]);
+    result.max.v[1] = Max(rng.max.v[1], vec.v[1]);
+    return result;
+}
+
+g_internal Rng2F32
+bounds_union(Buffer<BoundingBox> center_buffer, U32 start_idx, U32 end_idx)
+{
+    Rng2F32 bounds = rng2f32_inverted_inf();
+    for (U32 i = start_idx; i < end_idx; ++i)
+    {
+        BoundingBox seg_center = center_buffer.data[i];
+        bounds = bounds_union(bounds, seg_center.bounds);
+    }
+    return bounds;
+}
+
+g_internal Axis2
+split_axis_find(Buffer<BoundingBox> bb_buffer, U32 start_idx, U32 end_idx)
+{
+    Rng2F32 bounds = rng2f32_inverted_inf();
+    for (U32 i = start_idx; i < end_idx; ++i)
+    {
+        BoundingBox* seg_center = bb_buffer[i];
+        for (U32 ax_idx = 0; ax_idx < Axis2_COUNT; ++ax_idx)
+        {
+            if (seg_center->center.v[ax_idx] < bounds.min.v[ax_idx])
+            {
+                bounds.min.v[ax_idx] = seg_center->center.v[ax_idx];
+            }
+
+            if (seg_center->center.v[ax_idx] > bounds.max.v[ax_idx])
+            {
+                bounds.max.v[ax_idx] = seg_center->center.v[ax_idx];
+            }
+        }
+    }
+
+    Vec2F32 diff = sub_2f32(bounds.max, bounds.min);
+    Axis2 split_axis = diff.x > diff.y ? Axis2_X : Axis2_Y;
+    return split_axis;
+}
+
+g_internal BvhResult
+bvh_create(Arena* arena, Buffer<RoadSegmentCorners> road_segment_buffer, U32 leaf_bb_max)
+{
+    ScratchScope scratch = ScratchScope(&arena, 1);
+
+    Buffer<BoundingBox> bb_buffer =
+        BufferAlloc<BoundingBox>(scratch.arena, road_segment_buffer.size);
+
+    // 1. for every element in the buffer, find the center point (used for segmentation)
+    for (U32 i = 0; i < bb_buffer.size; i++)
+    {
+        // init idx to later point to RoadSegmentCorners*
+        bb_buffer.data[i].idx = i;
+
+        // create bounding box around road segment
+        Rng2F32 bounds = rng2f32_inverted_inf();
+        for (U32 j = 0; j < Corner_COUNT; ++j)
+        {
+            RoadSegmentCorners* seg = road_segment_buffer[i];
+            Vec2F32 corner = seg->corners[j];
+            bounds = bounds_union(bounds, corner);
+        }
+        bb_buffer.data[i].bounds = bounds;
+
+        // find center point
+        Vec2F32 center = {};
+        for (U32 j = 0; j < Corner_COUNT; ++j)
+        {
+            RoadSegmentCorners* seg = road_segment_buffer[i];
+            Vec2F32 corner = seg->corners[j];
+            center = add_2f32(center, corner);
+        }
+        bb_buffer.data[i].center.vec = center.vec / (F32)Corner_COUNT;
+    }
+
+    BvhContext* bvh = PushStruct(scratch.arena, BvhContext);
+    bvh->road_segment_buffer = road_segment_buffer;
+    bvh->bb_buffer = bb_buffer;
+    bvh->leaf_bb_max = leaf_bb_max;
+
+    RoadSegmentNode* root = PushStruct(scratch.arena, RoadSegmentNode);
+    bvh->root = root;
+    root->bounds = bounds_union(bb_buffer, 0, bb_buffer.size);
+    root->start_idx = 0;
+    root->end_idx = bb_buffer.size;
+
+    SLLStackPush(bvh->stack, root);
+
+    Buffer<RoadSegmentCorners> road_segment_buffer_sorted =
+        BufferAlloc<RoadSegmentCorners>(arena, bvh->road_segment_buffer.size);
+    while (bvh->stack)
+    {
+        bvh->road_segment_node_count += 1;
+        RoadSegmentNode* node = bvh->stack;
+        SLLStackPop(bvh->stack);
+
+        U32 num_elem = node->end_idx - node->start_idx;
+
+        if (num_elem <= leaf_bb_max)
+        {
+            for (U32 i = node->start_idx; i < node->end_idx; ++i)
+            {
+                // copy road segment corners from bb_buffer index to sorted buffer
+                BoundingBox bb = bvh->bb_buffer.data[i];
+                road_segment_buffer_sorted.data[i] = bvh->road_segment_buffer.data[bb.idx];
+            }
+            continue;
+        }
+
+        Axis2 split_axis = split_axis_find(bvh->bb_buffer, node->start_idx, node->end_idx);
+        U32 split_idx = node->start_idx + (num_elem) / 2;
+        quick_select(bb_buffer, (U32)split_axis, node->start_idx, node->end_idx, split_idx);
+        node->split_axis = split_axis;
+        node->split_value = bb_buffer.data[split_idx].center.v[(U32)split_axis];
+
+        Rng2F32 idx_range =
+            rng_2f32(V2F32(node->start_idx, split_idx), V2F32(split_idx, node->end_idx));
+
+        for (U32 i = 0; i < ArrayCount(idx_range.v); ++i)
+        {
+            node->children[i] = PushStruct(scratch.arena, RoadSegmentNode);
+            node->children[i]->start_idx = idx_range.min.v[i];
+            node->children[i]->end_idx = idx_range.max.v[i];
+            node->children[i]->bounds =
+                bounds_union(bb_buffer, node->children[i]->start_idx, node->children[i]->end_idx);
+        }
+
+        SLLStackPush(bvh->stack, node->children[1]);
+        SLLStackPush(bvh->stack, node->children[0]);
+    }
+
+    // create the final road segment node for storage buffer usage
+    Buffer<RoadSegmentNodeStorageBuffer> road_segment_node_buffer =
+        BufferAlloc<RoadSegmentNodeStorageBuffer>(arena, bvh->road_segment_node_count);
+    Assert(bvh->stack == 0);
+    SLLStackPush(bvh->stack, bvh->root);
+    U32 cur_node_idx = 0;
+    while (bvh->stack)
+    {
+        RoadSegmentNode* node = bvh->stack;
+        SLLStackPop(bvh->stack);
+
+        node->final_idx = cur_node_idx++;
+        RoadSegmentNodeStorageBuffer* current = road_segment_node_buffer[node->final_idx];
+        current->min_x = node->bounds.min.x;
+        current->min_y = node->bounds.min.y;
+        current->max_x = node->bounds.max.x;
+        current->max_y = node->bounds.max.y;
+        current->split_axis = node->split_axis;
+        current->split_value = node->split_value;
+
+        // fill out parent nodes second child idx
+        if (node->parent)
+        {
+            U32 parent_idx = node->parent->final_idx;
+            RoadSegmentNodeStorageBuffer* parent = road_segment_node_buffer[parent_idx];
+            parent->child_1_idx = node->final_idx;
+        }
+
+        if (node->children[0] && node->children[1])
+        {
+            current->is_leaf = false;
+            current->child_0_idx = cur_node_idx;
+
+            SLLStackPush(bvh->stack, node->children[1]);
+            SLLStackPush(bvh->stack, node->children[0]);
+            node->children[1]->parent = node;
+        }
+        else
+        {
+            current->is_leaf = true;
+            current->start_idx = node->start_idx;
+            current->end_idx = node->end_idx;
+        }
+    }
+    Assert(cur_node_idx == road_segment_node_buffer.size);
+
+    BvhResult result = {road_segment_buffer_sorted, road_segment_node_buffer};
+    return result;
+}
+
 g_internal city::RoadBuildResult
 road_segment_build(Arena* arena, Buffer<city::RoadEdge> edge_buffer, F32 default_road_width,
                    F32 road_height, glm::dmat4& ecef_to_local)
@@ -160,15 +402,16 @@ road_segment_build(Arena* arena, Buffer<city::RoadEdge> edge_buffer, F32 default
                                                  road_segment.start.node.pos.z, 1.0));
 
         // add vertex and inde
-
         quad_to_buffer_add(road_segment_corners, vertex_buffer, index_buffer, edge->id, road_height,
                            &cur_vertex_idx, &cur_index_idx);
     }
 
+    BvhResult result = bvh_create(arena, corner_buffer, 10);
+
     city::RoadBuildResult road_build_result = {
         .vertices = vertex_buffer,
         .indices = index_buffer,
-        .road_segment_corners = corner_buffer,
+        .bvh_result = result,
     };
     return road_build_result;
 }
@@ -913,13 +1156,6 @@ buildings_build(Buildings* buildings, render::SamplerInfo* sampler_info, glm::dm
                                        .index_count = render_info.facade_index_count,
                                        .index_offset = render_info.facade_index_offset};
 }
-
-enum Direction
-{
-    Direction_Undefined,
-    Direction_Clockwise,
-    Direction_CounterClockwise
-};
 
 g_internal Direction
 ClockWiseTest(Buffer<Vec2F64> node_buffer)

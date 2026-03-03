@@ -1096,6 +1096,9 @@ static Rng2F32 rng_2f32(Vec2F32 min, Vec2F32 max) {
   Rng2F32 r = {min, max};
   return r;
 }
+static Rng2F32 rng2f32_inverted_inf(void) {
+  return rng_2f32(V2F32(max_f32, max_f32), V2F32(min_f32, min_f32));
+}
 static Rng2F32 shift_2f32(Rng2F32 r, Vec2F32 x) {
   r.min = add_2f32(r.min, x);
   r.max = add_2f32(r.max, x);

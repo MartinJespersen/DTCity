@@ -637,8 +637,8 @@ static S64 min_S64 = (S64)0xffffffffffffffffull;
 static S32 min_S32 = (S32)0xffffffff;
 static S16 min_S16 = (S16)0xffff;
 static S8 min_S8 = (S8)0xff;
-static F32 min_F32 = (F32)FLT_MIN;
-static F64 min_F64 = (F64)DBL_MIN;
+static F32 min_f32 = -(F32)FLT_MAX;
+static F64 min_f64 = -(F64)DBL_MAX;
 
 static const U32 bitmask1 = 0x00000001;
 static const U32 bitmask2 = 0x00000003;

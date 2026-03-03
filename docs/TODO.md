@@ -1,8 +1,8 @@
 # Urgent changes
+* vulkan descriptor layout specified twice some places (e.g. compute storage buffers descriptor)
 * Reconsider the number of descriptor pools (whether 1 is enough) and the descriptor numbers
 * In function RoadSegmentFromTwoRoadNodes: the normalize function leads to values being Nan. Handle this in a better way.
 * Check barriers for command buffer recordings
-* Separate functions should be created for the creation of assets of different type (Buffer, Texture, Descriptor) 
 
 # Less urgent changes
 * Use vulkan push descriptor and buffer device address instead of descriptor sets

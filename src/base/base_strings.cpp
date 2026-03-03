@@ -332,8 +332,8 @@ str8_match(String8 a, String8 b, StringMatchFlags flags)
     }
     else if (a.size == b.size || (flags & MatchFlag_RightSideSloppy))
     {
-        U32 case_insensitive = (flags & MatchFlag_RightSideSloppy);
-        U32 slash_insensitive = (flags & MatchFlag_RightSideSloppy);
+        U32 case_insensitive = (flags & MatchFlag_CaseInsensitive);
+        U32 slash_insensitive = (flags & MatchFlag_SlashInsensitive);
         U64 size = Min(a.size, b.size);
         result = 1;
         for (U64 i = 0; i < size; i += 1)

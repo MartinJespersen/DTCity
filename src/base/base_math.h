@@ -938,6 +938,8 @@ clamp_2s64(Rng2S64 r, Vec2S64 v);
 static Rng2F32
 rng_2f32(Vec2F32 min, Vec2F32 max);
 static Rng2F32
+rng2f32_inverted_inf(void);
+static Rng2F32
 shift_2f32(Rng2F32 r, Vec2F32 x);
 static Rng2F32
 pad_2f32(Rng2F32 r, F32 x);

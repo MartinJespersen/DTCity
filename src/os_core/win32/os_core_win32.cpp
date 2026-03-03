@@ -1775,6 +1775,7 @@ win32_exception_filter(EXCEPTION_POINTERS* exception_ptrs)
 #undef OS_WINDOWS // shlwapi uses its own OS_WINDOWS include inside
 #define OS_WINDOWS 1
 
+#if !BUILD_TEST
 static void
 w32_entry_point_caller(int argc, WCHAR** wargv)
 {
@@ -1946,3 +1947,4 @@ wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPWSTR lpCmdLine, int nSh
     return 0;
 }
 #endif
+#endif // !BUILD_TEST

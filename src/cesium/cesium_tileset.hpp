@@ -65,6 +65,7 @@ tileset_update_view(Arena* arena, TilesetRenderer* renderer, ui::Camera* camera,
                     Vec2U32 viewport_size, F64 delta_time);
 g_internal void
 tileset_render(TilesetRenderer* renderer, render::Handle road_segment_handle,
+               render::Handle road_segment_node_buffer_handle,
                render::Handle road_segment_buffer_handle);
 
 // Helper to convert cesium glTF to render data

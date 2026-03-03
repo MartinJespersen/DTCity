@@ -358,7 +358,8 @@ blend_3d_draw(Blend3DPipelineData pipeline_input);
 
 g_internal bool
 road_intersection_compute_add(Handle storage_buffer_handle, Handle index_buffer_handle,
-                              Handle road_segment_buffer_handle, Handle road_segment_handle);
+                              Handle road_segment_buffer_handle,
+                              Handle road_segment_node_buffer_handle, Handle road_segment_handle);
 
 g_internal Handle
 buffer_load_async(BufferInfo* buffer_info);
@@ -373,7 +374,7 @@ g_internal Handle
 storage_buffer_load_sync(Arena* arena, Handle vertex_buffer_handle, Handle index_buffer_handle);
 
 g_internal Handle
-road_segment_descriptor_load_async(Arena* arena, Handle buffer_handle);
+road_segment_descriptor_load_async(Arena* arena, Handle buffer_handle, Handle node_buffer_handle);
 
 g_internal bool
 is_resource_loaded(Handle handle);

@@ -241,6 +241,7 @@ descriptor_set_storage_buffers(VkDevice device, VkDescriptorPool desc_pool, void
 struct RoadSegmentDescriptor
 {
     VkBuffer road_segment_buffer;
+    VkBuffer road_segment_node_buffer;
 };
 
 g_internal DescriptorSetInfo

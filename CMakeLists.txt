@@ -12,6 +12,7 @@ set(ALL_TARGETS city)
 
 option(BUILD_DEBUG "Enable Additional Debugging Information (e.g Vulkan Validation Layers)" OFF)
 option(ASAN_ENABLED "Enable Address Sanitizer" OFF)
+option(BUILD_TESTS "Build tests" OFF)
 
 # cmake macro -> compiler macro
 if(BUILD_DEBUG)
@@ -23,7 +24,6 @@ if(ASAN_ENABLED)
     add_compile_definitions(ASAN_ENABLED=1)
 endif()
 
-add_executable(city)
 
 # Compiler specific options
 if (MSVC)
@@ -39,31 +39,31 @@ if (MSVC)
    /Z7
   )
     endif()
-    target_compile_options(city PRIVATE
-        /W4
-        /wd4201  /wd4005 /wd4838 /wd4244 /wd4996 /wd4310 /wd4245 /wd4100 /wd4505
-        /EHsc
-        /utf-8
-        /Zc:__cplusplus
-    )
+        add_compile_options(
+            /W4
+            /wd4201  /wd4005 /wd4838 /wd4244 /wd4996 /wd4310 /wd4245 /wd4100 /wd4505
+            /EHsc
+            /utf-8
+            /Zc:__cplusplus
+        )
 
     add_compile_definitions(BUILD_CONSOLE_INTERFACE ON)
 
     list(APPEND ASAN_LINK_FLAGS /INCREMENTAL:NO)
     list(APPEND ASAN_COMPILE_FLAGS /fsanitize=address /D_DISABLE_STRING_ANNOTATION /D_DISABLE_VECTOR_ANNOTATION)
 elseif(CMAKE_COMPILER_IS_GNUCXX)
-    target_compile_options(city PRIVATE
+    add_compile_options(
     -maes
     -msse4
     )
     if(BUILD_DEBUG AND NOT NDEBUG)
-        target_compile_options(city PRIVATE
+        add_compile_options(
         -Wall -Wextra -Wno-attributes -Wno-format -Wno-unused-function -Wno-unused-parameter -Wno-narrowing -Wno-missing-field-initializers -Wno-sign-conversion -Wno-write-strings -Wno-class-memaccess -Wno-comment -Wno-pedantic
     )
 
     else()
 
-        target_compile_options(city PRIVATE -w)
+        add_compile_options(-w)
     endif()
 
     list(APPEND ASAN_LINK_FLAGS -fsanitize=address)
@@ -71,6 +71,13 @@ elseif(CMAKE_COMPILER_IS_GNUCXX)
 else()
     message(FATAL_ERROR "Unsupported compiler")
 endif()
+
+find_package(glm CONFIG REQUIRED)
+
+if(BUILD_TESTS)
+    add_subdirectory(tests)
+endif()
+add_executable(city)
 
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/src ${CMAKE_CURRENT_SOURCE_DIR}/src/third_party/imgui)
 
@@ -207,6 +214,7 @@ target_compile_definitions(city PRIVATE
         GLM_FORCE_SIZE_T_LENGTH
         LIBASYNC_STATIC
     )
+
 
 add_custom_target(clang-tidy-check
     COMMAND clang-tidy -p ${CMAKE_BINARY_DIR} "src/main.cpp"

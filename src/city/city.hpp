@@ -4,6 +4,7 @@
 
 namespace city
 {
+
 typedef S64 EdgeId;
 enum RoadSegmentCornerCoord
 {
@@ -19,13 +20,89 @@ struct RoadSegmentCorners
     EdgeId edge_id;
     Vec2F32 corners[RoadSegmentCornerCoord_Count];
 };
+// BVH types
+enum Bounds : U32
+{
+    Bounds_Min,
+    Bounds_Max,
+    Bounds_Count
+};
+
+struct RoadSegmentNode
+{
+    RoadSegmentNode* next;
+    RoadSegmentNode* parent;
+    U32 final_idx;
+    Rng2F32 bounds;
+    RoadSegmentNode* children[2];
+    U32 split_axis;
+    F32 split_value;
+
+    // buffer range
+    U32 start_idx;
+    U32 end_idx;
+};
+
+struct RoadSegmentNodeStorageBuffer
+{
+    F32 min_x;
+    F32 min_y;
+    F32 max_x;
+    F32 max_y;
+    U32 split_axis;
+    F32 split_value;
+    U32 is_leaf;
+    union
+    {
+        struct
+        {
+            U32 child_0_idx;
+            U32 child_1_idx;
+        };
+        struct
+        {
+            U32 start_idx;
+            U32 end_idx;
+        };
+    };
+    U32 _pad;
+};
+static_assert(sizeof(RoadSegmentNodeStorageBuffer) == 40,
+              "RoadSegmentNodeStorageBuffer must match std430 RoadSegmentNode size");
+
+struct BoundingBox
+{
+    Vec2F32 center;
+    Rng2F32 bounds;
+    U32 idx;
+};
+
+struct BvhContext
+{
+    RoadSegmentNode* stack;
+    RoadSegmentNode* root;
+
+    U32 road_segment_node_count;
+
+    Buffer<RoadSegmentCorners> road_segment_buffer;
+    Buffer<BoundingBox> bb_buffer;
+
+    U32 leaf_bb_max;
+};
+
+struct BvhResult
+{
+    Buffer<RoadSegmentCorners> road_segment_buffer_sorted;
+    Buffer<RoadSegmentNodeStorageBuffer> node_buffer;
+};
+// /////////////////////////////////
 static_assert(sizeof(RoadSegmentCorners) == 40, "size of road segment might not match shader size");
 
 struct RoadBuildResult
 {
     Buffer<render::Vertex3DBlend> vertices;
     Buffer<U32> indices;
-    Buffer<RoadSegmentCorners> road_segment_corners;
+    BvhResult bvh_result;
 };
 
 #define ROAD_OVERLAY_RED {1.0f, 0.0f, 0.0f}
@@ -221,8 +298,6 @@ g_internal U64
 hash_u64_from_str8(String8 str);
 g_internal B32
 cache_needs_update(String8 data_file_str, String8 cache_meta_file_path);
-g_internal B32
-cache_needs_update(String8 data_file_str, String8 cache_meta_file_path);
 g_internal String8
 str8_from_bbox(Arena* arena, Rng2F64 bbox);
 g_internal render::Model3DPipelineDataList
@@ -250,6 +325,54 @@ vertex_3d_from_gltfw_vertex(Arena* arena, Buffer<gltfw_Vertex3D> in_vertex_buffe
 
 // privates ///////////////////////////////////////////////////
 
+g_internal void
+road_segment_from_road_nodes(RoadSegment* out_road_segment, osm::EcefLocation node_0,
+                             osm::EcefLocation node_1, F32 road_width);
+g_internal void
+road_segments_coalesce(RoadSegment* in_out_road_segment_0, RoadSegment* in_out_road_segment_1,
+                       F32 road_width);
+g_internal F32
+tag_value_get(Arena* arena, String8 key, F32 default_width, Buffer<osm::Tag> tags);
+
+// BVH functions /////////////////////////////
+g_internal void
+quick_select(Buffer<BoundingBox> center_buffer, U32 split_axis, U32 start_idx, U32 end_idx, U32 k);
+g_internal Rng2F32
+bounds_union(Rng2F32 a, Rng2F32 b);
+g_internal Rng2F32
+bounds_union(Rng2F32 rng, Vec2F32 vec);
+g_internal Rng2F32
+bounds_union(Buffer<BoundingBox> center_buffer, U32 start_idx, U32 end_idx);
+g_internal Axis2
+split_axis_find(Buffer<BoundingBox> bb_buffer, U32 start_idx, U32 end_idx);
+g_internal BvhResult
+bvh_create(Arena* arena, Buffer<RoadSegmentCorners> road_segment_buffer, U32 leaf_bb_max);
+////////////////////////////////////
+
+g_internal Vec3F64
+height_dim_add(Vec2F64 pos, F64 height);
+g_internal Rng1F32
+car_center_height_offset(Buffer<gltfw_Vertex3D> vertices);
 g_internal osm::EcefLocation
 random_utm_road_node_get();
+g_internal F64
+cross_2f64_z_component(Vec2F64 a, Vec2F64 b);
+g_internal B32
+AreTwoConnectedLineSegmentsCollinear(Vec2F64 prev, Vec2F64 cur, Vec2F64 next);
+
+enum Direction
+{
+    Direction_Undefined,
+    Direction_Clockwise,
+    Direction_CounterClockwise
+};
+
+g_internal Direction
+ClockWiseTest(Buffer<Vec2F64> node_buffer);
+g_internal Buffer<U32>
+IndexBufferCreate(Arena* arena, U64 buffer_size, Direction direction);
+g_internal B32
+PointInTriangle(Vec2F64 p1, Vec2F64 p2, Vec2F64 p3, Vec2F64 point);
+g_internal void
+NodeBufferPrintDebug(Buffer<Vec2F64> node_buffer);
 } // namespace city

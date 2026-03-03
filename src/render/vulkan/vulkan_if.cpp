@@ -668,15 +668,17 @@ storage_buffer_load_sync(Arena* arena, Handle vertex_buffer_handle, Handle index
 }
 
 g_internal Handle
-road_segment_descriptor_load_async(Arena* arena, Handle buffer_handle)
+road_segment_descriptor_load_async(Arena* arena, Handle buffer_handle, Handle node_buffer_handle)
 {
     Handle desc_handle = Handle();
-    if (is_handle_zero(buffer_handle) == false)
+    if (is_handle_zero(buffer_handle) == false && is_handle_zero(node_buffer_handle) == false)
     {
         AssetItem<vulkan::BufferHandle>* buffer_asset =
             vulkan::asset_manager_buffer_item_get(buffer_handle);
-        Assert(buffer_asset);
-        if (buffer_asset)
+        AssetItem<vulkan::BufferHandle>* node_buffer_asset =
+            vulkan::asset_manager_buffer_item_get(node_buffer_handle);
+        Assert(buffer_asset && node_buffer_asset);
+        if (buffer_asset && node_buffer_asset)
         {
             vulkan::AssetManager* asset_manager = vulkan::asset_manager_get();
 
@@ -688,6 +690,7 @@ road_segment_descriptor_load_async(Arena* arena, Handle buffer_handle)
             vulkan::RoadSegmentDescriptor* road_seg_desc =
                 PushStruct(arena, vulkan::RoadSegmentDescriptor);
             road_seg_desc->road_segment_buffer = buffer_asset->item.buffer_alloc.buffer;
+            road_seg_desc->road_segment_node_buffer = node_buffer_asset->item.buffer_alloc.buffer;
 
             desc_set_handle->desc_write_func_data = road_seg_desc;
             desc_set_handle->desc_write_func = vulkan::descriptor_set_road_segment;
@@ -852,15 +855,18 @@ model_3d_draw(render::Model3DPipelineData pipeline_input)
 
 g_internal bool
 road_intersection_compute_add(Handle storage_buffer_handle, Handle index_buffer_handle,
-                              Handle road_segment_buffer_handle, Handle road_segment_handle)
+                              Handle road_segment_buffer_handle,
+                              Handle road_segment_node_buffer_handle, Handle road_segment_handle)
 {
     bool compute_scheduled = false;
     if (is_handle_zero(storage_buffer_handle) || is_handle_zero(index_buffer_handle) ||
-        is_handle_zero(road_segment_handle) || is_handle_zero(road_segment_buffer_handle))
+        is_handle_zero(road_segment_handle) || is_handle_zero(road_segment_buffer_handle) ||
+        is_handle_zero(road_segment_node_buffer_handle))
         return compute_scheduled;
 
     if (is_resource_loaded(road_segment_handle) && is_resource_loaded(road_segment_buffer_handle) &&
-        is_resource_loaded(storage_buffer_handle) && is_resource_loaded(index_buffer_handle))
+        is_resource_loaded(storage_buffer_handle) && is_resource_loaded(index_buffer_handle) &&
+        is_resource_loaded(road_segment_node_buffer_handle))
     {
         render::AssetItem<vulkan::DescriptorSetHandle>* storage_set =
             vulkan::asset_manager_descriptor_set_item_get(storage_buffer_handle);

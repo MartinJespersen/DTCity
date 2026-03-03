@@ -774,6 +774,7 @@ tileset_update_view(Arena* arena, TilesetRenderer* renderer, ui::Camera* camera,
 
 g_internal void
 tileset_render(TilesetRenderer* renderer, render::Handle road_segment_handle,
+               render::Handle road_segment_node_buffer_handle,
                render::Handle road_segment_buffer_handle)
 {
     if (!renderer)
@@ -785,7 +786,7 @@ tileset_render(TilesetRenderer* renderer, render::Handle road_segment_handle,
         {
             tile->compute_scheduled = render::road_intersection_compute_add(
                 tile->render_data.storage_buffer_handle, tile->render_data.index_buffer_handle,
-                road_segment_buffer_handle, road_segment_handle);
+                road_segment_buffer_handle, road_segment_node_buffer_handle, road_segment_handle);
         }
 
         if (tile->compute_scheduled)

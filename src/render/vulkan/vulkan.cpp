@@ -537,7 +537,8 @@ road_intersection_pipeline_create(String8 shader_path)
     // Set 0: Road segments (storage buffer, binding 0)
     vk_ctx->road_segment_descriptor_set_layout = descriptor_set_layout_create(
         vk_ctx->device,
-        {{0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, NULL}});
+        {{0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, NULL},
+         {1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, NULL}});
 
     // Set 1: Vertex buffer (binding 0) + Index buffer (binding 1)
     vk_ctx->storage_buffer_descriptor_set_layout = descriptor_set_layout_create(
@@ -578,7 +579,8 @@ descriptor_set_road_segment(VkDevice device, VkDescriptorPool desc_pool, void* d
     RoadSegmentDescriptor* buffer_desc = (RoadSegmentDescriptor*)data;
 
     VkDescriptorSetLayout desc_set_layout = descriptor_set_layout_create(
-        device, {{0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, NULL}});
+        device, {{0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, NULL},
+                 {1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, NULL}});
 
     VkDescriptorSet desc_set = descriptor_set_alloc(device, desc_pool, {desc_set_layout});
 
@@ -586,6 +588,11 @@ descriptor_set_road_segment(VkDevice device, VkDescriptorPool desc_pool, void* d
     buffer_info.buffer = buffer_desc->road_segment_buffer;
     buffer_info.offset = 0;
     buffer_info.range = VK_WHOLE_SIZE;
+
+    VkDescriptorBufferInfo buffer_node_info{};
+    buffer_node_info.buffer = buffer_desc->road_segment_node_buffer;
+    buffer_node_info.offset = 0;
+    buffer_node_info.range = VK_WHOLE_SIZE;
 
     VkWriteDescriptorSet write{};
     write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
@@ -596,7 +603,16 @@ descriptor_set_road_segment(VkDevice device, VkDescriptorPool desc_pool, void* d
     write.descriptorCount = 1;
     write.pBufferInfo = &buffer_info;
 
-    descriptor_set_update(device, {write});
+    VkWriteDescriptorSet write_node{};
+    write_node.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+    write_node.dstSet = desc_set;
+    write_node.dstBinding = 1;
+    write_node.dstArrayElement = 0;
+    write_node.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+    write_node.descriptorCount = 1;
+    write_node.pBufferInfo = &buffer_node_info;
+
+    descriptor_set_update(device, {write, write_node});
 
     return DescriptorSetInfo(desc_set, desc_set_layout);
 }
