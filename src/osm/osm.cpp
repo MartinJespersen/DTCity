@@ -5,8 +5,7 @@ osm::structure_init(U64 node_hashmap_size, U64 way_hashmap_size)
     Arena* arena = arena_alloc();
     Buffer<osm::NodeList> utm_node_hashmap = BufferAlloc<osm::NodeList>(arena, node_hashmap_size);
     Buffer<osm::WayList> way_hashmap = BufferAlloc<osm::WayList>(arena, way_hashmap_size);
-    Map<osm::NodeId, osm::EcefLocation>* utm_location_map =
-        map_create<osm::NodeId, osm::EcefLocation>(arena, node_hashmap_size);
+    Map<osm::NodeId, osm::EcefLocation>* utm_location_map = map_create<osm::NodeId, osm::EcefLocation>(arena, node_hashmap_size);
 
     osm::g_network = PushStruct(arena, osm::Network);
     *osm::g_network = {arena, utm_node_hashmap, utm_location_map, way_hashmap};
@@ -27,8 +26,7 @@ osm::structure_add(Buffer<osm::RoadNodeList> node_hashmap, String8 json, osm::Wa
     osm::Network* network = osm::g_network;
     Arena* arena = network->arena;
     // ~mgj: parse OSM way structures
-    osm::WayParseResult osm_way_parse_result =
-        wrapper::way_buffer_from_simd_json(network->arena, json);
+    osm::WayParseResult osm_way_parse_result = wrapper::way_buffer_from_simd_json(network->arena, json);
 
     if (osm_way_parse_result.error)
     {
@@ -51,12 +49,9 @@ osm::structure_add(Buffer<osm::RoadNodeList> node_hashmap, String8 json, osm::Wa
                 osm::WgsNode* node_coord = osm::wgs_node_find(node_hashmap, node_id);
 
                 // Cartographic to ECEF transformation
-                CesiumGeospatial::Cartographic origin_cartographic(
-                    glm::radians(node_coord->lon), glm::radians(node_coord->lat), 0);
-                glm::dvec3 coord_ecef =
-                    CesiumGeospatial::Ellipsoid::WGS84.cartographicToCartesian(origin_cartographic);
-                EcefLocation loc = ecef_location_create(
-                    node_id, vec_3f64(coord_ecef.x, coord_ecef.y, coord_ecef.z));
+                CesiumGeospatial::Cartographic origin_cartographic(glm::radians(node_coord->lon), glm::radians(node_coord->lat), 0);
+                glm::dvec3 coord_ecef = CesiumGeospatial::Ellipsoid::WGS84.cartographicToCartesian(origin_cartographic);
+                EcefLocation loc = ecef_location_create(node_id, vec_3f64(coord_ecef.x, coord_ecef.y, coord_ecef.z));
 
                 map_insert(network->ecef_location_map, node_id, loc);
 
@@ -198,6 +193,7 @@ osm::random_node_id_from_type_get(osm::WayType type)
     Network* network = g_network;
 
     Buffer<NodeId> node_ids = network->node_id_arr[type];
+    Assert(node_ids.size);
     NodeId node_id = node_ids.data[random_u64() % node_ids.size];
 
     return node_id;
@@ -216,8 +212,7 @@ osm::random_neighbour_node_get(osm::Node* node)
 {
     // Calculate roadway count for the node
     U32 roadway_count = 0;
-    for (osm::WayNode* way_element = node->way_queue.first; way_element;
-         way_element = way_element->next)
+    for (osm::WayNode* way_element = node->way_queue.first; way_element; way_element = way_element->next)
     {
         roadway_count++;
     }

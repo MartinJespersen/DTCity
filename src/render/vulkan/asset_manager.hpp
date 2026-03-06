@@ -197,6 +197,9 @@ struct AssetManager
     PendingDeletion* deletion_queue_free_list;
     U32 deletion_queue_free_list_count;
 
+    // ~mgj: Arena mutex - protects concurrent PushStruct calls across different asset types
+    OS_Handle arena_mutex;
+
     // ~mgj: Vulkan resources needed for asset operations
     VkDevice device;
     VkQueue graphics_queue;

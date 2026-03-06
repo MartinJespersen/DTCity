@@ -9,9 +9,7 @@ struct TileInfo
     const glm::dmat4 ecef_to_local;
     const glm::dmat4 tile_transform;
 
-    TileInfo(const CesiumGltf::Model& model, const glm::dmat4& ecef_to_local,
-             const glm::dmat4& transform)
-        : model(model), ecef_to_local(ecef_to_local), tile_transform(transform)
+    TileInfo(const CesiumGltf::Model& model, const glm::dmat4& ecef_to_local, const glm::dmat4& transform) : model(model), ecef_to_local(ecef_to_local), tile_transform(transform)
     {
     }
 };
@@ -54,24 +52,17 @@ struct TilesetRenderer
 
 // Lifecycle
 g_internal TilesetRenderer*
-tileset_renderer_create(Arena* arena, async::Threads* threads, const char* tileset_url,
-                        F64 origin_longitude, F64 origin_latitude, F64 origin_height);
+tileset_renderer_create(Arena* arena, async::Threads* threads, const char* tileset_url, F64 origin_longitude, F64 origin_latitude, F64 origin_height);
 g_internal void
 tileset_renderer_destroy(TilesetRenderer* renderer);
 
 // Update and rendering
 g_internal void
-tileset_update_view(Arena* arena, TilesetRenderer* renderer, ui::Camera* camera,
-                    Vec2U32 viewport_size, F64 delta_time);
-g_internal void
-tileset_render(TilesetRenderer* renderer, render::Handle road_segment_handle,
-               render::Handle road_segment_node_buffer_handle,
-               render::Handle road_segment_buffer_handle);
+tileset_update_view(Arena* arena, TilesetRenderer* renderer, ui::Camera* camera, Vec2U32 viewport_size, F64 delta_time);
 
 // Helper to convert cesium glTF to render data
 g_internal TileRenderDataList*
-tile_render_data_from_gltf(const CesiumGltf::Model& model, const glm::dmat4& ecef_to_local,
-                           const glm::dmat4& tile_transform, render::ThreadInput* thread_input);
+tile_render_data_from_gltf(const CesiumGltf::Model& model, const glm::dmat4& ecef_to_local, const glm::dmat4& tile_transform, render::ThreadInput* thread_input);
 
 g_internal void*
 render_list_record(render::ThreadInput* thread_input, render::FuncData user_data);

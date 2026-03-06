@@ -26,6 +26,7 @@ struct Pipeline
 struct Model3dPushConstants
 {
     U32 tex_idx;
+    U32 colormap_idx;
 };
 
 struct Model3DNode
@@ -47,8 +48,8 @@ struct Model3dInstancePushConstants
 struct Model3DInstanceNode
 {
     Model3DInstanceNode* next;
-    BufferAllocation index_alloc;
-    BufferAllocation vertex_alloc;
+    BufferHandle* index_handle;
+    BufferHandle* vertex_handle;
     render::BufferInfo instance_buffer_info;
     U32 instance_buffer_offset;
     Model3dInstancePushConstants push_constants;
@@ -82,6 +83,7 @@ struct RoadIntersectionPushConstants
 {
     U32 road_segment_buffer_elem_count;
     U32 invocation_count;
+    U32 overlay_option_idx;
 };
 
 struct Blend3DNode
@@ -105,6 +107,7 @@ struct RoadIntersectionNode
     VkDescriptorSet vertex_and_index_set;
     BufferHandle vertex_buffer;
     BufferHandle index_buffer;
+    U32 overlay_option_idx;
 };
 
 struct RoadIntersectionList
@@ -206,8 +209,7 @@ camera_cleanup(Context* vk_ctx);
 static void
 camera_uniform_buffer_create(Context* vk_ctx);
 static void
-camera_uniform_buffer_update(Context* vk_ctx, ui::Camera* camera, Vec2F32 screen_res,
-                             U32 current_frame);
+camera_uniform_buffer_update(Context* vk_ctx, ui::Camera* camera, Vec2F32 screen_res, U32 current_frame);
 static void
 camera_descriptor_set_layout_create(Context* vk_ctx);
 static void
@@ -249,17 +251,12 @@ descriptor_set_road_segment(VkDevice device, VkDescriptorPool desc_pool, void* d
 
 // ~mgj: Building
 static void
-model_3d_bucket_add(BufferAllocation* vertex_buffer_allocation,
-                    BufferAllocation* index_buffer_allocation, render::Handle tex_handle,
-                    B32 depth_write_per_draw_call_only, U32 index_buffer_offset, U32 index_count);
+model_3d_bucket_add(BufferAllocation* vertex_buffer_allocation, BufferAllocation* index_buffer_allocation, render::Handle tex_handle, B32 depth_write_per_draw_call_only, U32 index_buffer_offset,
+                    U32 index_count, U32 colormap_idx);
 static void
-model_3d_instance_bucket_add(BufferAllocation* vertex_buffer_allocation,
-                             BufferAllocation* index_buffer_allocation, render::Handle tex_handle,
-                             render::BufferInfo* instance_buffer_info);
+model_3d_instance_bucket_add(render::Handle vertex_buffer_handle, render::Handle index_buffer_handle, render::Handle tex_handle, render::BufferInfo* instance_buffer_info);
 static void
-blend_3d_bucket_add(BufferAllocation* vertex_buffer_allocation,
-                    BufferAllocation* index_buffer_allocation, render::Handle texture_handle,
-                    render::Handle colormap_handle);
+blend_3d_bucket_add(BufferAllocation* vertex_buffer_allocation, BufferAllocation* index_buffer_allocation, render::Handle texture_handle, render::Handle colormap_handle);
 static Pipeline
 model_3d_instance_pipeline_create(Context* vk_ctx, String8 shader_path);
 static Pipeline
@@ -271,8 +268,7 @@ road_intersection_pipeline_create(String8 shader_path);
 g_internal void
 road_intersection_compute();
 static void
-road_intersection_bucket_add(VkDescriptorSet storage_buffer_set, VkDescriptorSet road_segment,
-                             BufferHandle* vertex_buffer, BufferHandle* index_buffer);
+road_intersection_bucket_add(VkDescriptorSet storage_buffer_set, VkDescriptorSet road_segment, BufferHandle* vertex_buffer, BufferHandle* index_buffer, U32 overlay_option);
 
 static void
 model_3d_rendering();
@@ -284,8 +280,7 @@ static void
 pipeline_destroy(Pipeline* draw_ctx);
 
 static void
-command_buffer_record(U32 image_index, U32 current_frame, ui::Camera* camera,
-                      Vec2S64 mouse_cursor_pos);
+command_buffer_record(U32 image_index, U32 current_frame, ui::Camera* camera, Vec2S64 mouse_cursor_pos);
 
 static void
 profile_buffers_create(Context* vk_ctx);

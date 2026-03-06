@@ -15,10 +15,37 @@ enum RoadSegmentCornerCoord
     RoadSegmentCornerCoord_Count
 };
 
-struct RoadSegmentCorners
+#define ROAD_OVERLAY_OPTIONS                                                                                                                                                                           \
+    X(None, "None")                                                                                                                                                                                    \
+    X(Bikeability_ft, "Bikeability_ft")                                                                                                                                                                \
+    X(Bikeability_tf, "Bikeability_tf")                                                                                                                                                                \
+    X(Walkability_tf, "Walkability_tf")                                                                                                                                                                \
+    X(Walkability_ft, "Walkability_ft")
+
+enum RoadOverlayOption : U32
+{
+#define X(name, str) RoadOverlayOption_##name,
+    ROAD_OVERLAY_OPTIONS
+#undef X
+        RoadOverlayOption_Count
+};
+
+read_only g_internal const char* road_overlay_option_strs[] = {
+#define X(name, str) str,
+    ROAD_OVERLAY_OPTIONS
+#undef X
+};
+
+struct RoadInfo
+{
+    F32 options[RoadOverlayOption_Count];
+};
+
+struct alignas(8) RoadSegmentCorners
 {
     EdgeId edge_id;
     Vec2F32 corners[RoadSegmentCornerCoord_Count];
+    RoadInfo road_info;
 };
 // BVH types
 enum Bounds : U32
@@ -67,8 +94,7 @@ struct RoadSegmentNodeStorageBuffer
     };
     U32 _pad;
 };
-static_assert(sizeof(RoadSegmentNodeStorageBuffer) == 40,
-              "RoadSegmentNodeStorageBuffer must match std430 RoadSegmentNode size");
+static_assert(sizeof(RoadSegmentNodeStorageBuffer) == 40, "RoadSegmentNodeStorageBuffer must match std430 RoadSegmentNode size");
 
 struct BoundingBox
 {
@@ -96,48 +122,13 @@ struct BvhResult
     Buffer<RoadSegmentNodeStorageBuffer> node_buffer;
 };
 // /////////////////////////////////
-static_assert(sizeof(RoadSegmentCorners) == 40, "size of road segment might not match shader size");
+static_assert(sizeof(RoadSegmentCorners) == 64, "size of road segment might not match shader size");
 
 struct RoadBuildResult
 {
-    Buffer<render::Vertex3DBlend> vertices;
-    Buffer<U32> indices;
+    render::Handle vertex_buffer_handle;
+    render::Handle index_buffer_handle;
     BvhResult bvh_result;
-};
-
-#define ROAD_OVERLAY_RED {1.0f, 0.0f, 0.0f}
-#define ROAD_OVERLAY_GREEN {0.0f, 1.0f, 0.0f}
-
-#define ROAD_OVERLAY_OPTIONS                                                                       \
-    X(None, "None", {})                                                                            \
-    X(Bikeability_ft, "Bikeability_ft", ROAD_OVERLAY_RED)                                          \
-    X(Bikeability_tf, "Bikeability_tf", ROAD_OVERLAY_RED)                                          \
-    X(Walkability_tf, "Walkability_tf", ROAD_OVERLAY_GREEN)                                        \
-    X(Walkability_ft, "Walkability_ft", ROAD_OVERLAY_GREEN)
-
-enum RoadOverlayOption : U32
-{
-#define X(name, str, color) RoadOverlayOption_##name,
-    ROAD_OVERLAY_OPTIONS
-#undef X
-        RoadOverlayOption_Count
-};
-
-read_only g_internal const char* road_overlay_option_strs[] = {
-#define X(name, str, color) str,
-    ROAD_OVERLAY_OPTIONS
-#undef X
-};
-
-read_only g_internal Vec3F32 road_overlay_option_colors[] = {
-#define X(name, str, color) color,
-    ROAD_OVERLAY_OPTIONS
-#undef X
-};
-
-struct RoadInfo
-{
-    F32 options[RoadOverlayOption_Count];
 };
 
 struct RoadEdge
@@ -172,12 +163,13 @@ struct Road
 
     ////////////////////////////////
     // Graphics API
-    String8 texture_path;
-    render::Blend3DPipelineData handles[2];
-    render::Handle colormap_handles[RoadOverlayOption_Count];
+    render::Handle zero_colormap_handle;
+    render::Handle colormap_handle;
     U32 current_handle_idx;
     bool new_vertex_handle_loading;
     RoadOverlayOption overlay_option_cur;
+    render::Handle vertex_buffer_handle;
+    render::Handle index_buffer_handle;
     /////////////////////////
 };
 
@@ -254,16 +246,12 @@ struct Buildings
 g_internal void
 road_destroy(Road* road);
 g_internal city::RoadBuildResult
-road_segment_build(Arena* arena, Buffer<city::RoadEdge> edge_buffer, F32 default_road_width,
-                   F32 road_height, glm::dmat4& ecef_to_local);
+road_segment_build(Arena* arena, Buffer<city::RoadEdge> edge_buffer, F32 default_road_width, F32 road_height, glm::dmat4& ecef_to_local, Map<EdgeId, RoadInfo>* road_info_map);
 
 g_internal void
-quad_to_buffer_add(RoadSegmentCorners* road_segment, Buffer<render::Vertex3DBlend> buffer,
-                   Buffer<U32> indices, U64 edge_id, F32 road_height, U32* cur_vertex_idx,
-                   U32* cur_index_idx);
+quad_to_buffer_add(RoadSegmentCorners* road_segment, Buffer<render::Vertex3DBlend> buffer, Buffer<U32> indices, U64 edge_id, F32 road_height, U32* cur_vertex_idx, U32* cur_index_idx);
 g_internal void
-RoadIntersectionPointsFind(Road* road, RoadSegment* in_out_segment, osm::Way* current_road_way,
-                           osm::Network* node_utm_structure);
+RoadIntersectionPointsFind(Road* road, RoadSegment* in_out_segment, osm::Way* current_road_way, osm::Network* node_utm_structure);
 // ~mgj: Cars
 g_internal CarSim*
 car_sim_create(String8 asset_path, String8 texture_path, U32 car_count, Road* road);
@@ -276,13 +264,11 @@ car_sim_update(Arena* arena, CarSim* car, F64 time_delta);
 g_internal Buildings*
 buildings_create(String8 cache_path, String8 texture_path, Rng2F64 bbox);
 g_internal void
-buildings_build(Buildings* buildings, render::SamplerInfo* sampler_info, glm::dmat4& ecef_to_local,
-                F32 road_height);
+buildings_build(Buildings* buildings, render::SamplerInfo* sampler_info, glm::dmat4& ecef_to_local, F32 road_height);
 g_internal void
 building_destroy(Buildings* building);
 g_internal void
-buildings_buffers_create(Arena* arena, F32 road_height, glm::dmat4& ecef_to_local,
-                         BuildingRenderInfo* out_render_info);
+buildings_buffers_create(Arena* arena, F32 road_height, glm::dmat4& ecef_to_local, BuildingRenderInfo* out_render_info);
 g_internal Buffer<U32>
 EarClipping(Arena* arena, Buffer<Vec2F64> node_buffer);
 
@@ -307,15 +293,13 @@ land_destroy(render::Model3DPipelineDataList list);
 g_internal render::SamplerInfo
 sampler_from_cgltf_sampler(gltfw_Sampler sampler);
 g_internal Road*
-road_create(String8 texture_path, String8 cache_path, String8 data_dir, Rng2F64 bbox,
-            Rng2F64 utm_coords, render::SamplerInfo* sampler_info);
+road_create(String8 texture_path, String8 cache_path, String8 data_dir, Rng2F64 bbox, Rng2F64 utm_coords, render::SamplerInfo* sampler_info);
 g_internal void
 road_vertex_buffer_switch(Road* road, RoadOverlayOption overlay_option);
 g_internal EdgeStructure
 road_edge_structure_create(Arena* arena);
 g_internal Map<EdgeId, RoadInfo>*
-road_info_from_edge_id(Arena* arena, Buffer<RoadEdge> road_edge_buf,
-                       Map<S64, neta::EdgeList>* neta_edge_map);
+road_info_from_edge_id(Arena* arena, Buffer<RoadEdge> road_edge_buf, Map<S64, neta::EdgeList>* neta_edge_map);
 
 g_internal neta::Edge*
 edge_from_road_edge(RoadEdge* road_edge, Map<S64, neta::EdgeList>* edge_list_map);
@@ -326,11 +310,9 @@ vertex_3d_from_gltfw_vertex(Arena* arena, Buffer<gltfw_Vertex3D> in_vertex_buffe
 // privates ///////////////////////////////////////////////////
 
 g_internal void
-road_segment_from_road_nodes(RoadSegment* out_road_segment, osm::EcefLocation node_0,
-                             osm::EcefLocation node_1, F32 road_width);
+road_segment_from_road_nodes(RoadSegment* out_road_segment, osm::EcefLocation node_0, osm::EcefLocation node_1, F32 road_width);
 g_internal void
-road_segments_coalesce(RoadSegment* in_out_road_segment_0, RoadSegment* in_out_road_segment_1,
-                       F32 road_width);
+road_segments_coalesce(RoadSegment* in_out_road_segment_0, RoadSegment* in_out_road_segment_1, F32 road_width);
 g_internal F32
 tag_value_get(Arena* arena, String8 key, F32 default_width, Buffer<osm::Tag> tags);
 
@@ -354,7 +336,7 @@ height_dim_add(Vec2F64 pos, F64 height);
 g_internal Rng1F32
 car_center_height_offset(Buffer<gltfw_Vertex3D> vertices);
 g_internal osm::EcefLocation
-random_utm_road_node_get();
+random_ecef_road_node_get();
 g_internal F64
 cross_2f64_z_component(Vec2F64 a, Vec2F64 b);
 g_internal B32

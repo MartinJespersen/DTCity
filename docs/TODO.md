@@ -1,4 +1,5 @@
 # Urgent changes
+* Improve the threading in the asset manager (e.g. too many mutexes are used at the moment)
 * vulkan descriptor layout specified twice some places (e.g. compute storage buffers descriptor)
 * Reconsider the number of descriptor pools (whether 1 is enough) and the descriptor numbers
 * In function RoadSegmentFromTwoRoadNodes: the normalize function leads to values being Nan. Handle this in a better way.
@@ -9,18 +10,22 @@
 * buildings need to be rendered included in compute pass as well
 * simplify render interface (a little too verbose at the moment)
 * Reconsider async loading for none cesium objects.
-* Make the vcpkg overlay port work for cesium instead of the using the local repo.
-* look at the descriptor index alloc and free functions again.
 * Remove the printf logging and find way to log the queue messages
-* Find out how to make the coordinate system and 3D geometry match.
 * make descriptor_pool and functionallity part of asset_manager.
 * Make TilesetRenderer into global variable
 * Validation error for descriptors not used in shader when null texture is not filling in the wholes
 * tile transform might need to be passed to shader as a uniform buffer
 * validation errors at null texture destruction as it is still used by some cmd buffers.
 
+# features
+* pass frame buffer size to shader 
+* Add NetAScore layers on 3D geometry
+* Add Cars to roads
+* Get NetAScore from HTTP API if possible.
+* Simulation
+  * Integrate with MATSim
+
 # Bugs
-* imgui assertion happens during array indexing operation (Assertion failed: i >= 0 && i < Size)
 * Direction or previous node is needed for random neighbor algorithm to avoid doing a u-turn when it is possible to drive straight.
 
 # Changes along the way
@@ -52,10 +57,8 @@
 * Create a draw layer 
 * Improve BufferInfo creation and especially the render interface functions.
 * Descriptor set layouts are badly handled at the moment and the how it is allocated, used and destroyed should be improved.
-* make vma allocator part of the asset manager (seperate asset manager from other parts of application)
 * Layers should compile as seperate units
 * Error handling improvements - error handling should not be ExitWithError everywhere
-* Improve the conversion between UTM and WGS84 system
 * Consider testing and how to do it
 * Improve the HTTP library implementation
   * Probably consider using a cross platform library only instead of a mix

@@ -78,15 +78,13 @@ dt_imgui_setup(vulkan::Context* vk_ctx, io::IO* io_ctx)
 
     float main_scale = ImGui_ImplGlfw_GetContentScaleForMonitor(glfwGetPrimaryMonitor());
     ImGuiStyle& style = ImGui::GetStyle();
-    style.ScaleAllSizes(
-        main_scale); // Bake a fixed style scale. (until we have a solution for dynamic style
-                     // scaling, changing this requires resetting Style + calling this again)
+    style.ScaleAllSizes(main_scale); // Bake a fixed style scale. (until we have a solution for dynamic style
+                                     // scaling, changing this requires resetting Style + calling this again)
     style.FontScaleDpi = main_scale;
 
     ImGui_ImplVulkan_InitInfo init_info = {};
-    init_info.ApiVersion =
-        VK_API_VERSION_1_3; // Pass in your value of VkApplicationInfo::apiVersion, otherwise will
-                            // default to header version.
+    init_info.ApiVersion = VK_API_VERSION_1_3; // Pass in your value of VkApplicationInfo::apiVersion, otherwise will
+                                               // default to header version.
     init_info.Instance = vk_ctx->instance;
     init_info.PhysicalDevice = vk_ctx->physical_device;
     init_info.Device = vk_ctx->device;
@@ -99,11 +97,10 @@ dt_imgui_setup(vulkan::Context* vk_ctx, io::IO* io_ctx)
     init_info.Allocator = VK_NULL_HANDLE;
     init_info.PipelineInfoMain.RenderPass = VK_NULL_HANDLE;
     init_info.PipelineInfoMain.Subpass = 0;
-    init_info.PipelineInfoMain.PipelineRenderingCreateInfo = {
-        .sType = VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO_KHR,
-        .colorAttachmentCount = 1,
-        .pColorAttachmentFormats = &vk_ctx->swapchain_resources->color_format,
-        .depthAttachmentFormat = vk_ctx->swapchain_resources->depth_format};
+    init_info.PipelineInfoMain.PipelineRenderingCreateInfo = {.sType = VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO_KHR,
+                                                              .colorAttachmentCount = 1,
+                                                              .pColorAttachmentFormats = &vk_ctx->swapchain_resources->color_format,
+                                                              .depthAttachmentFormat = vk_ctx->swapchain_resources->depth_format};
     init_info.PipelineInfoMain.MSAASamples = VK_SAMPLE_COUNT_1_BIT;
     init_info.CheckVkResultFn = CheckVkResult;
     init_info.UseDynamicRendering = VK_TRUE;
@@ -187,19 +184,14 @@ imgui_debug_window(cesium::TilesetRenderer* renderer)
     vulkan::AssetManager* asset_manager = vulkan::asset_manager_get();
 
     ImGui::Begin("Asset Manager", nullptr, ImGuiWindowFlags_AlwaysAutoResize);
-    ImGui::Text("Textures:       %d active, %d free", asset_manager->texture_list.count,
-                asset_manager->texture_free_list.count);
-    ImGui::Text("Buffers:        %d active, %d free", asset_manager->buffer_list.count,
-                asset_manager->buffer_free_list.count);
-    ImGui::Text("Descriptor Sets: %d active, %d free", asset_manager->descriptor_set_list.count,
-                asset_manager->descriptor_set_free_list.count);
+    ImGui::Text("Textures:       %d active, %d free", asset_manager->texture_list.count, asset_manager->texture_free_list.count);
+    ImGui::Text("Buffers:        %d active, %d free", asset_manager->buffer_list.count, asset_manager->buffer_free_list.count);
+    ImGui::Text("Descriptor Sets: %d active, %d free", asset_manager->descriptor_set_list.count, asset_manager->descriptor_set_free_list.count);
     for (U32 i = 0; i < ArrayCount(asset_manager->deletion_queues); i++)
     {
-        ImGui::Text("Deletion Queue %d: %d active", i,
-                    asset_manager->deletion_queues[i].list_count);
+        ImGui::Text("Deletion Queue %d: %d active", i, asset_manager->deletion_queues[i].list_count);
     }
-    ImGui::Text("Deletetion Queue Free List: %d active",
-                asset_manager->deletion_queue_free_list_count);
+    ImGui::Text("Deletetion Queue Free List: %d active", asset_manager->deletion_queue_free_list_count);
     ImGui::Text("Tileset Renderer Show: %d active", renderer->tiles_to_show_count);
     ImGui::Text("Tileset Renderer Free List Count: %d", renderer->tiles_to_free_stack_count);
 
@@ -217,10 +209,8 @@ dt_main_loop(void* ptr)
     os_set_thread_name(str8_c_string("Entrypoint thread"));
 
     Rng2F64 utm_coords = dt_utm_from_wgs84(input->bbox);
-    printf("UTM Coordinates: %f %f %f %f\n", utm_coords.min.x, utm_coords.min.y, utm_coords.max.x,
-           utm_coords.max.y);
-    render::render_ctx_create(ctx->data_subdirs.data[dt_DataDirType::Shaders], io_ctx,
-                              ctx->thread_pool);
+    printf("UTM Coordinates: %f %f %f %f\n", utm_coords.min.x, utm_coords.min.y, utm_coords.max.x, utm_coords.max.y);
+    render::render_ctx_create(ctx->data_subdirs.data[dt_DataDirType::Shaders], io_ctx, ctx->thread_pool);
     vulkan::Context* vk_ctx = vulkan::ctx_get();
     dt_imgui_setup(vk_ctx, io_ctx);
 
@@ -257,38 +247,26 @@ dt_main_loop(void* ptr)
 
     city::RoadOverlayOption overlay_option_choice = city::RoadOverlayOption_None;
 
-    ctx->road = city::road_create(texture_dir, cache_dir, ctx->data_dir, input->bbox, utm_coords,
-                                  &sampler_info);
+    ctx->road = city::road_create(texture_dir, cache_dir, ctx->data_dir, input->bbox, utm_coords, &sampler_info);
 
-    CesiumGeospatial::Cartographic origin_cartographic(glm::radians(tileset_lon),
-                                                       glm::radians(tileset_lat), 0);
-    CesiumGeospatial::LocalHorizontalCoordinateSystem* local_coord =
-        new CesiumGeospatial::LocalHorizontalCoordinateSystem(
-            origin_cartographic, CesiumGeospatial::LocalDirection::East,
-            CesiumGeospatial::LocalDirection::North, CesiumGeospatial::LocalDirection::Up);
+    CesiumGeospatial::Cartographic origin_cartographic(glm::radians(tileset_lon), glm::radians(tileset_lat), 0);
+    CesiumGeospatial::LocalHorizontalCoordinateSystem* local_coord = new CesiumGeospatial::LocalHorizontalCoordinateSystem(
+        origin_cartographic, CesiumGeospatial::LocalDirection::East, CesiumGeospatial::LocalDirection::North, CesiumGeospatial::LocalDirection::Up);
 
     glm::dmat4 ecef_to_local = local_coord->getEcefToLocalTransformation();
 
-    ctx->road->road_build_result = city::road_segment_build(
-        ctx->road->arena, ctx->road->edge_structure.edges, ctx->road->default_road_width,
-        ctx->road->road_height, ecef_to_local);
+    ctx->road->road_build_result =
+        city::road_segment_build(ctx->road->arena, ctx->road->edge_structure.edges, ctx->road->default_road_width, ctx->road->road_height, ecef_to_local, ctx->road->road_info_map);
 
-    render::BufferInfo road_segment_buffer_info =
-        render::BufferInfo(ctx->road->road_build_result.bvh_result.road_segment_buffer_sorted,
-                           render::BufferType_StorageBuffer);
-    render::Handle road_segment_buffer_handle =
-        render::buffer_load_async(&road_segment_buffer_info);
+    render::BufferInfo road_segment_buffer_info = render::BufferInfo(ctx->road->road_build_result.bvh_result.road_segment_buffer_sorted, render::BufferType_StorageBuffer);
+    render::Handle road_segment_buffer_handle = render::buffer_load_async(&road_segment_buffer_info);
 
-    render::BufferInfo road_segment_node_buffer_info = render::BufferInfo(
-        ctx->road->road_build_result.bvh_result.node_buffer, render::BufferType_StorageBuffer);
-    render::Handle road_segment_node_buffer_handle =
-        render::buffer_load_async(&road_segment_node_buffer_info);
+    render::BufferInfo road_segment_node_buffer_info = render::BufferInfo(ctx->road->road_build_result.bvh_result.node_buffer, render::BufferType_StorageBuffer);
+    render::Handle road_segment_node_buffer_handle = render::buffer_load_async(&road_segment_node_buffer_info);
 
-    render::Handle road_segment_handle = render::road_segment_descriptor_load_async(
-        ctx->arena_permanent, road_segment_buffer_handle, road_segment_node_buffer_handle);
+    render::Handle road_segment_handle = render::road_segment_descriptor_load_async(ctx->arena_permanent, road_segment_buffer_handle, road_segment_node_buffer_handle);
 
-    ctx->cesium_tileset = cesium::tileset_renderer_create(
-        ctx->arena_permanent, ctx->thread_pool, tileset_url, tileset_lon, tileset_lat, 0.0);
+    ctx->cesium_tileset = cesium::tileset_renderer_create(ctx->arena_permanent, ctx->thread_pool, tileset_url, tileset_lon, tileset_lat, 0.0);
     // city::Buildings* buildings = ctx->buildings;
     // buildings_build(buildings, &sampler_info, ecef_to_local, ctx->road->road_height);
 
@@ -310,8 +288,7 @@ dt_main_loop(void* ptr)
             ui::camera_update(ctx->camera, ctx->io, ctx->time->delta_time_sec, framebuffer_dim);
             U64 hovered_object_id = render::latest_hovered_object_id_get();
             printf("ID: %llu\n", hovered_object_id);
-            city::RoadEdge** edge_ptr =
-                map_get(&ctx->road->edge_structure.edge_map, (S64)hovered_object_id);
+            city::RoadEdge** edge_ptr = map_get(&ctx->road->edge_structure.edge_map, (S64)hovered_object_id);
             if (edge_ptr)
             {
                 city::RoadEdge* edge = *edge_ptr;
@@ -330,8 +307,7 @@ dt_main_loop(void* ptr)
                 {
                     for (U32 i = 1; i < ArrayCount(chosen_edge->options); i++)
                     {
-                        ImGui::Text("%s: %lf", city::road_overlay_option_strs[i],
-                                    chosen_edge->options[i]);
+                        ImGui::Text("%s: %lf", city::road_overlay_option_strs[i], chosen_edge->options[i]);
                     }
                 }
                 ImVec2 window_size = ImGui::GetWindowSize();
@@ -364,43 +340,49 @@ dt_main_loop(void* ptr)
 
         for (U32 i = 0; i < city::RoadOverlayOption_Count; i++)
         {
-            ImGui::RadioButton(city::road_overlay_option_strs[i], (int*)&overlay_option_choice,
-                               (int)i);
+            ImGui::RadioButton(city::road_overlay_option_strs[i], (int*)&overlay_option_choice, (int)i);
         }
         ImGui::End();
 
-        // city::road_vertex_buffer_switch(road, overlay_option_choice);
         // render::blend_3d_draw(ctx->road->handles[ctx->road->current_handle_idx]);
         // render::model_3d_draw(buildings->roof_model_handles);
         // render::model_3d_draw(buildings->facade_model_handles);
 
-        // Buffer<render::Model3DInstance> instance_buffer =
-        //     car_sim_update(vk_ctx->draw_frame_arena, car_sim, ctx->time->delta_time_sec);
-
-        // render::BufferInfo instance_buffer_info =
-        //     render::buffer_info_from_vertex_3d_instance_buffer(instance_buffer,
-        //                                                        render::BufferType_Vertex);
-
-        // render::model_3d_instance_draw(car_sim->texture_handle, car_sim->vertex_handle,
-        //                                car_sim->index_handle, &instance_buffer_info);
+        // Buffer<render::Model3DInstance> instance_buffer = car_sim_update(vk_ctx->draw_frame_arena, ctx->car_sim, ctx->time->delta_time_sec);
+        // render::BufferInfo instance_buffer_info = render::BufferInfo(instance_buffer, render::BufferType_Vertex);
+        // render::model_3d_instance_draw(ctx->car_sim->texture_handle, ctx->car_sim->vertex_handle, ctx->car_sim->index_handle, &instance_buffer_info);
 
         // Update and render Cesium 3D Tiles
         if (ctx->cesium_tileset)
         {
-            cesium::tileset_update_view(dt_ctx_get()->arena_frame, ctx->cesium_tileset, ctx->camera,
-                                        framebuffer_dim, ctx->time->delta_time_sec);
-            cesium::tileset_render(ctx->cesium_tileset, road_segment_handle,
-                                   road_segment_node_buffer_handle, road_segment_buffer_handle);
+            cesium::TilesetRenderer* renderer = ctx->cesium_tileset;
+            cesium::tileset_update_view(dt_ctx_get()->arena_frame, ctx->cesium_tileset, ctx->camera, framebuffer_dim, ctx->time->delta_time_sec);
+
+            bool overlay_option_changed = overlay_option_choice != ctx->road->overlay_option_cur;
+            for (cesium::TileRenderData* tile = renderer->tile_to_show.first; tile; tile = tile->render_next)
+            {
+                if (tile->compute_scheduled == false || overlay_option_changed)
+                {
+                    tile->compute_scheduled = render::road_intersection_compute_add(tile->render_data.storage_buffer_handle, tile->render_data.index_buffer_handle, road_segment_buffer_handle,
+                                                                                    road_segment_node_buffer_handle, road_segment_handle, overlay_option_choice);
+                }
+
+                if (tile->compute_scheduled)
+                {
+                    render::Handle colormap_handle = overlay_option_choice ? ctx->road->colormap_handle : ctx->road->zero_colormap_handle;
+                    render::model_3d_draw(tile->render_data, colormap_handle);
+                }
+            }
+            ctx->road->overlay_option_cur = overlay_option_choice;
         }
 
-        render::render_frame(framebuffer_dim, &io_ctx->framebuffer_resized, ctx->camera,
-                             io_ctx->mouse_pos_cur_s64);
+        render::render_frame(framebuffer_dim, &io_ctx->framebuffer_resized, ctx->camera, io_ctx->mouse_pos_cur_s64);
 
         ImGui::EndFrame();
     }
     render::gpu_work_done_wait();
 
-    // city::road_destroy(ctx->road);
+    city::road_destroy(ctx->road);
     // city::car_sim_destroy(ctx->car_sim);
     // city::building_destroy(ctx->buildings);
     cesium::tileset_renderer_destroy(ctx->cesium_tileset);

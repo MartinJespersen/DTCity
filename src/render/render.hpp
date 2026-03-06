@@ -30,8 +30,7 @@ struct Handle
     {
     }
 
-    Handle(void* ptr, U64 gen_id, HandleType asset_type)
-        : ptr(ptr), gen_id(gen_id), type(asset_type)
+    Handle(void* ptr, U64 gen_id, HandleType asset_type) : ptr(ptr), gen_id(gen_id), type(asset_type)
     {
     }
 
@@ -155,8 +154,7 @@ struct BufferInfo
     U64 type_size;
     U32 buffer_type;
 
-    BufferInfo(Buffer<U8> buffer, U64 type_size, U32 buffer_type)
-        : buffer(buffer), type_size(type_size), buffer_type(buffer_type)
+    BufferInfo(Buffer<U8> buffer, U64 type_size, U32 buffer_type) : buffer(buffer), type_size(type_size), buffer_type(buffer_type)
     {
     }
 
@@ -238,7 +236,7 @@ struct Blend3DPipelineData
 struct Vertex3D
 {
     Vec3F32 pos;
-    F32 padding;
+    F32 colormap_value;
     Vec2F32 uv;
     Vec2U32 object_id;
 };
@@ -269,8 +267,7 @@ struct TextureUploadData
     U32 data_byte_size;
 
     static TextureUploadData
-    init(U8* data, U32 width, U32 height, U32 num_channels, U32 bytes_per_channel,
-         U32 data_byte_size)
+    init(U8* data, U32 width, U32 height, U32 num_channels, U32 bytes_per_channel, U32 data_byte_size)
     {
         TextureUploadData result = {};
         result.width = width;
@@ -318,8 +315,7 @@ render_ctx_create(String8 shader_path, io::IO* io_ctx, async::Threads* thread_po
 static void
 render_ctx_destroy();
 static void
-render_frame(Vec2U32 framebuffer_dim, B32* in_out_framebuffer_resized, ui::Camera* camera,
-             Vec2S64 mouse_cursor_pos);
+render_frame(Vec2U32 framebuffer_dim, B32* in_out_framebuffer_resized, ui::Camera* camera, Vec2S64 mouse_cursor_pos);
 static void
 gpu_work_done_wait();
 static void
@@ -340,8 +336,7 @@ g_internal void
 texture_gpu_upload_sync(Handle tex_handle, Buffer<U8> tex_bufs);
 
 g_internal Handle
-texture_load_sync(render::SamplerInfo* sampler_info, TextureUploadData* tex_data,
-                  VkCommandBuffer cmd);
+texture_load_sync(render::SamplerInfo* sampler_info, TextureUploadData* tex_data, VkCommandBuffer cmd);
 g_internal void
 handle_destroy(Handle handle);
 g_internal void
@@ -351,15 +346,14 @@ g_internal void
 handle_done_loading(render::HandleList handles);
 
 g_internal void
-model_3d_draw(Model3DPipelineData pipeline_input);
+model_3d_draw(Model3DPipelineData pipeline_input, render::Handle colormap_handle);
 
 g_internal void
 blend_3d_draw(Blend3DPipelineData pipeline_input);
 
 g_internal bool
-road_intersection_compute_add(Handle storage_buffer_handle, Handle index_buffer_handle,
-                              Handle road_segment_buffer_handle,
-                              Handle road_segment_node_buffer_handle, Handle road_segment_handle);
+road_intersection_compute_add(Handle storage_buffer_handle, Handle index_buffer_handle, Handle road_segment_buffer_handle, Handle road_segment_node_buffer_handle, Handle road_segment_handle,
+                              U32 overlay_option);
 
 g_internal Handle
 buffer_load_async(BufferInfo* buffer_info);
@@ -380,8 +374,7 @@ g_internal bool
 is_resource_loaded(Handle handle);
 
 g_internal void
-model_3d_instance_draw(Handle texture_handle, Handle vertex_buffer_handle,
-                       Handle index_buffer_handle, BufferInfo* instance_buffer);
+model_3d_instance_draw(Handle texture_handle, Handle vertex_buffer_handle, Handle index_buffer_handle, BufferInfo* instance_buffer);
 
 g_internal void*
 thread_cmd_buffer_record(ThreadInput* thread_input, ThreadSyncCallback callback);

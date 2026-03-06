@@ -25,20 +25,13 @@ model_3d_instance_pipeline_create(Context* vk_ctx, String8 shader_path)
 {
     ScratchScope scratch = ScratchScope(0, 0);
 
-    String8 vert_path = CreatePathFromStrings(
-        scratch.arena, Str8BufferFromCString(scratch.arena, {(char*)shader_path.str, "bin",
-                                                             "model_3d_instancing_vert.spv"}));
-    String8 frag_path = CreatePathFromStrings(
-        scratch.arena, Str8BufferFromCString(scratch.arena, {(char*)shader_path.str, "bin",
-                                                             "model_3d_instancing_frag.spv"}));
+    String8 vert_path = CreatePathFromStrings(scratch.arena, Str8BufferFromCString(scratch.arena, {(char*)shader_path.str, "bin", "model_3d_instancing_vert.spv"}));
+    String8 frag_path = CreatePathFromStrings(scratch.arena, Str8BufferFromCString(scratch.arena, {(char*)shader_path.str, "bin", "model_3d_instancing_frag.spv"}));
 
-    ShaderModuleInfo vert_shader_stage_info = shader_stage_from_spirv(
-        scratch.arena, vk_ctx->device, VK_SHADER_STAGE_VERTEX_BIT, vert_path);
-    ShaderModuleInfo frag_shader_stage_info = shader_stage_from_spirv(
-        scratch.arena, vk_ctx->device, VK_SHADER_STAGE_FRAGMENT_BIT, frag_path);
+    ShaderModuleInfo vert_shader_stage_info = shader_stage_from_spirv(scratch.arena, vk_ctx->device, VK_SHADER_STAGE_VERTEX_BIT, vert_path);
+    ShaderModuleInfo frag_shader_stage_info = shader_stage_from_spirv(scratch.arena, vk_ctx->device, VK_SHADER_STAGE_FRAGMENT_BIT, frag_path);
 
-    VkPipelineShaderStageCreateInfo shader_stages[] = {vert_shader_stage_info.info,
-                                                       frag_shader_stage_info.info};
+    VkPipelineShaderStageCreateInfo shader_stages[] = {vert_shader_stage_info.info, frag_shader_stage_info.info};
 
     VkDynamicState dynamicStates[] = {VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR};
 
@@ -59,29 +52,13 @@ model_3d_instance_pipeline_create(Context* vk_ctx, String8 shader_path)
     VkVertexInputAttributeDescription attr_desc[] = {
         {.location = 0, .binding = 0, .format = VK_FORMAT_R32G32B32_SFLOAT},
         {.location = 1, .binding = 0, .format = VK_FORMAT_R32G32_SFLOAT, .offset = uv_offset},
-        {.location = 2,
-         .binding = 1,
-         .format = VK_FORMAT_R32G32B32A32_SFLOAT,
-         .offset = x_basis_offset},
-        {.location = 3,
-         .binding = 1,
-         .format = VK_FORMAT_R32G32B32A32_SFLOAT,
-         .offset = y_basis_offset},
-        {.location = 4,
-         .binding = 1,
-         .format = VK_FORMAT_R32G32B32A32_SFLOAT,
-         .offset = z_basis_offset},
-        {.location = 5,
-         .binding = 1,
-         .format = VK_FORMAT_R32G32B32A32_SFLOAT,
-         .offset = w_basis_offset},
+        {.location = 2, .binding = 1, .format = VK_FORMAT_R32G32B32A32_SFLOAT, .offset = x_basis_offset},
+        {.location = 3, .binding = 1, .format = VK_FORMAT_R32G32B32A32_SFLOAT, .offset = y_basis_offset},
+        {.location = 4, .binding = 1, .format = VK_FORMAT_R32G32B32A32_SFLOAT, .offset = z_basis_offset},
+        {.location = 5, .binding = 1, .format = VK_FORMAT_R32G32B32A32_SFLOAT, .offset = w_basis_offset},
     };
-    VkVertexInputBindingDescription input_desc[] = {{.binding = 0,
-                                                     .stride = sizeof(render::Vertex3D),
-                                                     .inputRate = VK_VERTEX_INPUT_RATE_VERTEX},
-                                                    {.binding = 1,
-                                                     .stride = sizeof(render::Model3DInstance),
-                                                     .inputRate = VK_VERTEX_INPUT_RATE_INSTANCE}};
+    VkVertexInputBindingDescription input_desc[] = {{.binding = 0, .stride = sizeof(render::Vertex3D), .inputRate = VK_VERTEX_INPUT_RATE_VERTEX},
+                                                    {.binding = 1, .stride = sizeof(render::Model3DInstance), .inputRate = VK_VERTEX_INPUT_RATE_INSTANCE}};
 
     vertex_input_info.vertexBindingDescriptionCount = ArrayCount(input_desc);
     vertex_input_info.vertexAttributeDescriptionCount = ArrayCount(attr_desc);
@@ -124,19 +101,15 @@ model_3d_instance_pipeline_create(Context* vk_ctx, String8 shader_path)
     multisampling.rasterizationSamples = vk_ctx->msaa_samples;
     multisampling.minSampleShading = 1.0f;
 
-    VkPipelineColorBlendAttachmentState color_blend_attachment{
-        .colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT |
-                          VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT};
+    VkPipelineColorBlendAttachmentState color_blend_attachment{.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT};
 
-    VkPipelineColorBlendAttachmentState color_blend_attachments[] = {color_blend_attachment,
-                                                                     color_blend_attachment};
+    VkPipelineColorBlendAttachmentState color_blend_attachments[] = {color_blend_attachment, color_blend_attachment};
     VkPipelineColorBlendStateCreateInfo color_blending{};
     color_blending.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
     color_blending.attachmentCount = ArrayCount(color_blend_attachments);
     color_blending.pAttachments = color_blend_attachments;
 
-    VkDescriptorSetLayout descriptor_set_layouts[] = {vk_ctx->camera_descriptor_set_layout,
-                                                      vk_ctx->bindless_descriptor_set_layout};
+    VkDescriptorSetLayout descriptor_set_layouts[] = {vk_ctx->camera_descriptor_set_layout, vk_ctx->bindless_descriptor_set_layout};
     VkPushConstantRange push_constant_range{};
     push_constant_range.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
     push_constant_range.offset = 0;
@@ -156,14 +129,12 @@ model_3d_instance_pipeline_create(Context* vk_ctx, String8 shader_path)
     depth_stencil.depthCompareOp = VK_COMPARE_OP_LESS;
 
     VkPipelineLayout pipeline_layout;
-    if (vkCreatePipelineLayout(vk_ctx->device, &pipelineLayoutInfo, nullptr, &pipeline_layout) !=
-        VK_SUCCESS)
+    if (vkCreatePipelineLayout(vk_ctx->device, &pipelineLayoutInfo, nullptr, &pipeline_layout) != VK_SUCCESS)
     {
         exit_with_error("failed to create pipeline layout!");
     }
 
-    VkFormat color_attachment_formats[] = {vk_ctx->swapchain_resources->color_format,
-                                           vk_ctx->swapchain_resources->object_id_image_format};
+    VkFormat color_attachment_formats[] = {vk_ctx->swapchain_resources->color_format, vk_ctx->swapchain_resources->object_id_image_format};
 
     VkPipelineRenderingCreateInfo pipeline_rendering_info{};
     pipeline_rendering_info.sType = VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO;
@@ -187,8 +158,7 @@ model_3d_instance_pipeline_create(Context* vk_ctx, String8 shader_path)
     pipeline_create_info.layout = pipeline_layout;
 
     VkPipeline pipeline;
-    if (vkCreateGraphicsPipelines(vk_ctx->device, VK_NULL_HANDLE, 1, &pipeline_create_info, nullptr,
-                                  &pipeline) != VK_SUCCESS)
+    if (vkCreateGraphicsPipelines(vk_ctx->device, VK_NULL_HANDLE, 1, &pipeline_create_info, nullptr, &pipeline) != VK_SUCCESS)
     {
         exit_with_error("failed to create graphics pipeline!");
     }
@@ -202,24 +172,15 @@ model_3d_pipeline_create(Context* vk_ctx, String8 shader_path)
 {
     ScratchScope scratch = ScratchScope(0, 0);
 
-    String8 vert_path = CreatePathFromStrings(
-        scratch.arena,
-        Str8BufferFromCString(scratch.arena, {(char*)shader_path.str, "bin", "model_3d_vert.spv"}));
-    String8 frag_path = CreatePathFromStrings(
-        scratch.arena,
-        Str8BufferFromCString(scratch.arena, {(char*)shader_path.str, "bin", "model_3d_frag.spv"}));
+    String8 vert_path = CreatePathFromStrings(scratch.arena, Str8BufferFromCString(scratch.arena, {(char*)shader_path.str, "bin", "model_3d_vert.spv"}));
+    String8 frag_path = CreatePathFromStrings(scratch.arena, Str8BufferFromCString(scratch.arena, {(char*)shader_path.str, "bin", "model_3d_frag.spv"}));
 
-    ShaderModuleInfo vert_shader_stage_info = shader_stage_from_spirv(
-        scratch.arena, vk_ctx->device, VK_SHADER_STAGE_VERTEX_BIT, vert_path);
-    ShaderModuleInfo frag_shader_stage_info = shader_stage_from_spirv(
-        scratch.arena, vk_ctx->device, VK_SHADER_STAGE_FRAGMENT_BIT, frag_path);
+    ShaderModuleInfo vert_shader_stage_info = shader_stage_from_spirv(scratch.arena, vk_ctx->device, VK_SHADER_STAGE_VERTEX_BIT, vert_path);
+    ShaderModuleInfo frag_shader_stage_info = shader_stage_from_spirv(scratch.arena, vk_ctx->device, VK_SHADER_STAGE_FRAGMENT_BIT, frag_path);
 
-    VkPipelineShaderStageCreateInfo shader_stages[] = {vert_shader_stage_info.info,
-                                                       frag_shader_stage_info.info};
+    VkPipelineShaderStageCreateInfo shader_stages[] = {vert_shader_stage_info.info, frag_shader_stage_info.info};
 
-    VkDynamicState dynamicStates[] = {VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR,
-                                      VK_DYNAMIC_STATE_DEPTH_WRITE_ENABLE,
-                                      VK_DYNAMIC_STATE_COLOR_WRITE_ENABLE_EXT};
+    VkDynamicState dynamicStates[] = {VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR, VK_DYNAMIC_STATE_DEPTH_WRITE_ENABLE, VK_DYNAMIC_STATE_COLOR_WRITE_ENABLE_EXT};
 
     VkPipelineDynamicStateCreateInfo dynamic_state{};
     dynamic_state.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
@@ -229,20 +190,17 @@ model_3d_pipeline_create(Context* vk_ctx, String8 shader_path)
     VkPipelineVertexInputStateCreateInfo vertex_input_info{};
     vertex_input_info.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
 
+    U32 pos_offset = offsetof(render::Vertex3D, pos);
+    U32 colormap_value_offset = offsetof(render::Vertex3D, colormap_value);
     U32 uv_offset = offsetof(render::Vertex3D, uv);
     U32 object_id_offset = offsetof(render::Vertex3D, object_id);
 
-    VkVertexInputAttributeDescription attr_desc[] = {
-        {.location = 0, .binding = 0, .format = VK_FORMAT_R32G32B32_SFLOAT},
-        {.location = 1, .binding = 0, .format = VK_FORMAT_R32G32_SFLOAT, .offset = uv_offset},
-        {.location = 2,
-         .binding = 0,
-         .format = vk_ctx->object_id_format,
-         .offset = object_id_offset}};
+    VkVertexInputAttributeDescription attr_desc[] = {{.location = 0, .binding = 0, .format = VK_FORMAT_R32G32B32_SFLOAT, .offset = pos_offset},
+                                                     {.location = 1, .binding = 0, .format = VK_FORMAT_R32_SFLOAT, .offset = colormap_value_offset},
+                                                     {.location = 2, .binding = 0, .format = VK_FORMAT_R32G32_SFLOAT, .offset = uv_offset},
+                                                     {.location = 3, .binding = 0, .format = vk_ctx->object_id_format, .offset = object_id_offset}};
 
-    VkVertexInputBindingDescription input_desc[] = {{.binding = 0,
-                                                     .stride = sizeof(render::Vertex3D),
-                                                     .inputRate = VK_VERTEX_INPUT_RATE_VERTEX}};
+    VkVertexInputBindingDescription input_desc[] = {{.binding = 0, .stride = sizeof(render::Vertex3D), .inputRate = VK_VERTEX_INPUT_RATE_VERTEX}};
 
     vertex_input_info.vertexBindingDescriptionCount = ArrayCount(input_desc);
     vertex_input_info.vertexAttributeDescriptionCount = ArrayCount(attr_desc);
@@ -285,19 +243,15 @@ model_3d_pipeline_create(Context* vk_ctx, String8 shader_path)
     multisampling.rasterizationSamples = vk_ctx->msaa_samples;
     multisampling.minSampleShading = 1.0f;
 
-    VkPipelineColorBlendAttachmentState color_blend_attachment{
-        .colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT |
-                          VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT};
+    VkPipelineColorBlendAttachmentState color_blend_attachment{.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT};
 
-    VkPipelineColorBlendAttachmentState color_blend_attachments[] = {color_blend_attachment,
-                                                                     color_blend_attachment};
+    VkPipelineColorBlendAttachmentState color_blend_attachments[] = {color_blend_attachment, color_blend_attachment};
     VkPipelineColorBlendStateCreateInfo color_blending{};
     color_blending.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
     color_blending.attachmentCount = ArrayCount(color_blend_attachments);
     color_blending.pAttachments = color_blend_attachments;
 
-    VkDescriptorSetLayout descriptor_set_layouts[] = {vk_ctx->camera_descriptor_set_layout,
-                                                      vk_ctx->bindless_descriptor_set_layout};
+    VkDescriptorSetLayout descriptor_set_layouts[] = {vk_ctx->camera_descriptor_set_layout, vk_ctx->bindless_descriptor_set_layout};
 
     VkPushConstantRange push_constant_range{};
     push_constant_range.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
@@ -318,14 +272,12 @@ model_3d_pipeline_create(Context* vk_ctx, String8 shader_path)
     depth_stencil.depthCompareOp = VK_COMPARE_OP_LESS;
 
     VkPipelineLayout pipeline_layout;
-    if (vkCreatePipelineLayout(vk_ctx->device, &pipelineLayoutInfo, nullptr, &pipeline_layout) !=
-        VK_SUCCESS)
+    if (vkCreatePipelineLayout(vk_ctx->device, &pipelineLayoutInfo, nullptr, &pipeline_layout) != VK_SUCCESS)
     {
         exit_with_error("failed to create pipeline layout!");
     }
 
-    VkFormat color_attachment_formats[] = {vk_ctx->swapchain_resources->color_format,
-                                           vk_ctx->swapchain_resources->object_id_image_format};
+    VkFormat color_attachment_formats[] = {vk_ctx->swapchain_resources->color_format, vk_ctx->swapchain_resources->object_id_image_format};
     VkPipelineRenderingCreateInfo pipeline_rendering_info{};
     pipeline_rendering_info.sType = VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO;
     pipeline_rendering_info.colorAttachmentCount = ArrayCount(color_attachment_formats);
@@ -348,8 +300,7 @@ model_3d_pipeline_create(Context* vk_ctx, String8 shader_path)
     pipeline_create_info.layout = pipeline_layout;
 
     VkPipeline pipeline;
-    if (vkCreateGraphicsPipelines(vk_ctx->device, VK_NULL_HANDLE, 1, &pipeline_create_info, nullptr,
-                                  &pipeline) != VK_SUCCESS)
+    if (vkCreateGraphicsPipelines(vk_ctx->device, VK_NULL_HANDLE, 1, &pipeline_create_info, nullptr, &pipeline) != VK_SUCCESS)
     {
         exit_with_error("failed to create graphics pipeline!");
     }
@@ -364,24 +315,15 @@ blend_3d_pipeline_create(String8 shader_path)
     Context* vk_ctx = ctx_get();
     ScratchScope scratch = ScratchScope(0, 0);
 
-    String8 vert_path = CreatePathFromStrings(
-        scratch.arena, Str8BufferFromCString(scratch.arena, {(char*)shader_path.str, "bin",
-                                                             "colormap_blend_3d_vert.spv"}));
-    String8 frag_path = CreatePathFromStrings(
-        scratch.arena, Str8BufferFromCString(scratch.arena, {(char*)shader_path.str, "bin",
-                                                             "colormap_blend_3d_frag.spv"}));
+    String8 vert_path = CreatePathFromStrings(scratch.arena, Str8BufferFromCString(scratch.arena, {(char*)shader_path.str, "bin", "colormap_blend_3d_vert.spv"}));
+    String8 frag_path = CreatePathFromStrings(scratch.arena, Str8BufferFromCString(scratch.arena, {(char*)shader_path.str, "bin", "colormap_blend_3d_frag.spv"}));
 
-    ShaderModuleInfo vert_shader_stage_info = shader_stage_from_spirv(
-        scratch.arena, vk_ctx->device, VK_SHADER_STAGE_VERTEX_BIT, vert_path);
-    ShaderModuleInfo frag_shader_stage_info = shader_stage_from_spirv(
-        scratch.arena, vk_ctx->device, VK_SHADER_STAGE_FRAGMENT_BIT, frag_path);
+    ShaderModuleInfo vert_shader_stage_info = shader_stage_from_spirv(scratch.arena, vk_ctx->device, VK_SHADER_STAGE_VERTEX_BIT, vert_path);
+    ShaderModuleInfo frag_shader_stage_info = shader_stage_from_spirv(scratch.arena, vk_ctx->device, VK_SHADER_STAGE_FRAGMENT_BIT, frag_path);
 
-    VkPipelineShaderStageCreateInfo shader_stages[] = {vert_shader_stage_info.info,
-                                                       frag_shader_stage_info.info};
+    VkPipelineShaderStageCreateInfo shader_stages[] = {vert_shader_stage_info.info, frag_shader_stage_info.info};
 
-    VkDynamicState dynamicStates[] = {VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR,
-                                      VK_DYNAMIC_STATE_DEPTH_WRITE_ENABLE,
-                                      VK_DYNAMIC_STATE_COLOR_WRITE_ENABLE_EXT};
+    VkDynamicState dynamicStates[] = {VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR, VK_DYNAMIC_STATE_DEPTH_WRITE_ENABLE, VK_DYNAMIC_STATE_COLOR_WRITE_ENABLE_EXT};
 
     VkPipelineDynamicStateCreateInfo dynamic_state{};
     dynamic_state.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
@@ -395,18 +337,12 @@ blend_3d_pipeline_create(String8 shader_path)
     U32 object_id_offset = offsetof(render::Vertex3DBlend, object_id);
     U32 color_offset = offsetof(render::Vertex3DBlend, blend_factor);
 
-    VkVertexInputAttributeDescription attr_desc[] = {
-        {.location = 0, .binding = 0, .format = VK_FORMAT_R32G32B32_SFLOAT},
-        {.location = 1, .binding = 0, .format = VK_FORMAT_R32G32_SFLOAT, .offset = uv_offset},
-        {.location = 2,
-         .binding = 0,
-         .format = vk_ctx->object_id_format,
-         .offset = object_id_offset},
-        {.location = 3, .binding = 0, .format = VK_FORMAT_R32G32_SFLOAT, .offset = color_offset}};
+    VkVertexInputAttributeDescription attr_desc[] = {{.location = 0, .binding = 0, .format = VK_FORMAT_R32G32B32_SFLOAT},
+                                                     {.location = 1, .binding = 0, .format = VK_FORMAT_R32G32_SFLOAT, .offset = uv_offset},
+                                                     {.location = 2, .binding = 0, .format = vk_ctx->object_id_format, .offset = object_id_offset},
+                                                     {.location = 3, .binding = 0, .format = VK_FORMAT_R32G32_SFLOAT, .offset = color_offset}};
 
-    VkVertexInputBindingDescription input_desc[] = {{.binding = 0,
-                                                     .stride = sizeof(render::Vertex3DBlend),
-                                                     .inputRate = VK_VERTEX_INPUT_RATE_VERTEX}};
+    VkVertexInputBindingDescription input_desc[] = {{.binding = 0, .stride = sizeof(render::Vertex3DBlend), .inputRate = VK_VERTEX_INPUT_RATE_VERTEX}};
 
     vertex_input_info.vertexBindingDescriptionCount = ArrayCount(input_desc);
     vertex_input_info.vertexAttributeDescriptionCount = ArrayCount(attr_desc);
@@ -449,19 +385,15 @@ blend_3d_pipeline_create(String8 shader_path)
     multisampling.rasterizationSamples = vk_ctx->msaa_samples;
     multisampling.minSampleShading = 1.0f;
 
-    VkPipelineColorBlendAttachmentState color_blend_attachment{
-        .colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT |
-                          VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT};
+    VkPipelineColorBlendAttachmentState color_blend_attachment{.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT};
 
-    VkPipelineColorBlendAttachmentState color_blend_attachments[] = {color_blend_attachment,
-                                                                     color_blend_attachment};
+    VkPipelineColorBlendAttachmentState color_blend_attachments[] = {color_blend_attachment, color_blend_attachment};
     VkPipelineColorBlendStateCreateInfo color_blending{};
     color_blending.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
     color_blending.attachmentCount = ArrayCount(color_blend_attachments);
     color_blending.pAttachments = color_blend_attachments;
 
-    VkDescriptorSetLayout descriptor_set_layouts[] = {vk_ctx->camera_descriptor_set_layout,
-                                                      vk_ctx->bindless_descriptor_set_layout};
+    VkDescriptorSetLayout descriptor_set_layouts[] = {vk_ctx->camera_descriptor_set_layout, vk_ctx->bindless_descriptor_set_layout};
 
     VkPushConstantRange push_constant_range{};
     push_constant_range.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
@@ -482,11 +414,9 @@ blend_3d_pipeline_create(String8 shader_path)
     depth_stencil.depthCompareOp = VK_COMPARE_OP_LESS;
 
     VkPipelineLayout pipeline_layout;
-    VK_CHECK_RESULT(
-        vkCreatePipelineLayout(vk_ctx->device, &pipelineLayoutInfo, nullptr, &pipeline_layout));
+    VK_CHECK_RESULT(vkCreatePipelineLayout(vk_ctx->device, &pipelineLayoutInfo, nullptr, &pipeline_layout));
 
-    VkFormat color_attachment_formats[] = {vk_ctx->swapchain_resources->color_format,
-                                           vk_ctx->swapchain_resources->object_id_image_format};
+    VkFormat color_attachment_formats[] = {vk_ctx->swapchain_resources->color_format, vk_ctx->swapchain_resources->object_id_image_format};
     VkPipelineRenderingCreateInfo pipeline_rendering_info{};
     pipeline_rendering_info.sType = VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO;
     pipeline_rendering_info.colorAttachmentCount = ArrayCount(color_attachment_formats);
@@ -509,8 +439,7 @@ blend_3d_pipeline_create(String8 shader_path)
     pipeline_create_info.layout = pipeline_layout;
 
     VkPipeline pipeline;
-    VK_CHECK_RESULT(vkCreateGraphicsPipelines(vk_ctx->device, VK_NULL_HANDLE, 1,
-                                              &pipeline_create_info, nullptr, &pipeline));
+    VK_CHECK_RESULT(vkCreateGraphicsPipelines(vk_ctx->device, VK_NULL_HANDLE, 1, &pipeline_create_info, nullptr, &pipeline));
 
     Pipeline pipeline_info = {.pipeline = pipeline, .pipeline_layout = pipeline_layout};
     return pipeline_info;
@@ -522,12 +451,9 @@ road_intersection_pipeline_create(String8 shader_path)
     Context* vk_ctx = ctx_get();
     ScratchScope scratch = ScratchScope(0, 0);
 
-    String8 comp_path = CreatePathFromStrings(
-        scratch.arena, Str8BufferFromCString(scratch.arena, {(char*)shader_path.str, "bin",
-                                                             "road_intersection_comp.spv"}));
+    String8 comp_path = CreatePathFromStrings(scratch.arena, Str8BufferFromCString(scratch.arena, {(char*)shader_path.str, "bin", "road_intersection_comp.spv"}));
 
-    ShaderModuleInfo comp_shader_stage_info = shader_stage_from_spirv(
-        scratch.arena, vk_ctx->device, VK_SHADER_STAGE_COMPUTE_BIT, comp_path);
+    ShaderModuleInfo comp_shader_stage_info = shader_stage_from_spirv(scratch.arena, vk_ctx->device, VK_SHADER_STAGE_COMPUTE_BIT, comp_path);
 
     VkPushConstantRange push_constant_range{};
     push_constant_range.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
@@ -536,18 +462,13 @@ road_intersection_pipeline_create(String8 shader_path)
 
     // Set 0: Road segments (storage buffer, binding 0)
     vk_ctx->road_segment_descriptor_set_layout = descriptor_set_layout_create(
-        vk_ctx->device,
-        {{0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, NULL},
-         {1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, NULL}});
+        vk_ctx->device, {{0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, NULL}, {1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, NULL}});
 
     // Set 1: Vertex buffer (binding 0) + Index buffer (binding 1)
     vk_ctx->storage_buffer_descriptor_set_layout = descriptor_set_layout_create(
-        vk_ctx->device,
-        {{0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, NULL},
-         {1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, NULL}});
+        vk_ctx->device, {{0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, NULL}, {1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, NULL}});
 
-    VkDescriptorSetLayout set_layouts[] = {vk_ctx->road_segment_descriptor_set_layout,
-                                           vk_ctx->storage_buffer_descriptor_set_layout};
+    VkDescriptorSetLayout set_layouts[] = {vk_ctx->road_segment_descriptor_set_layout, vk_ctx->storage_buffer_descriptor_set_layout};
 
     VkPipelineLayoutCreateInfo pipeline_layout_info{};
     pipeline_layout_info.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
@@ -557,8 +478,7 @@ road_intersection_pipeline_create(String8 shader_path)
     pipeline_layout_info.pPushConstantRanges = &push_constant_range;
 
     VkPipelineLayout pipeline_layout;
-    VK_CHECK_RESULT(
-        vkCreatePipelineLayout(vk_ctx->device, &pipeline_layout_info, nullptr, &pipeline_layout));
+    VK_CHECK_RESULT(vkCreatePipelineLayout(vk_ctx->device, &pipeline_layout_info, nullptr, &pipeline_layout));
 
     VkComputePipelineCreateInfo pipeline_create_info{};
     pipeline_create_info.sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO;
@@ -566,8 +486,7 @@ road_intersection_pipeline_create(String8 shader_path)
     pipeline_create_info.layout = pipeline_layout;
 
     VkPipeline pipeline;
-    VK_CHECK_RESULT(vkCreateComputePipelines(vk_ctx->device, VK_NULL_HANDLE, 1,
-                                             &pipeline_create_info, nullptr, &pipeline));
+    VK_CHECK_RESULT(vkCreateComputePipelines(vk_ctx->device, VK_NULL_HANDLE, 1, &pipeline_create_info, nullptr, &pipeline));
 
     Pipeline pipeline_info = {.pipeline = pipeline, .pipeline_layout = pipeline_layout};
     return pipeline_info;
@@ -579,8 +498,7 @@ descriptor_set_road_segment(VkDevice device, VkDescriptorPool desc_pool, void* d
     RoadSegmentDescriptor* buffer_desc = (RoadSegmentDescriptor*)data;
 
     VkDescriptorSetLayout desc_set_layout = descriptor_set_layout_create(
-        device, {{0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, NULL},
-                 {1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, NULL}});
+        device, {{0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, NULL}, {1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, NULL}});
 
     VkDescriptorSet desc_set = descriptor_set_alloc(device, desc_pool, {desc_set_layout});
 
@@ -618,8 +536,7 @@ descriptor_set_road_segment(VkDevice device, VkDescriptorPool desc_pool, void* d
 }
 
 static void
-road_intersection_bucket_add(VkDescriptorSet storage_buffer_set, VkDescriptorSet road_segment,
-                             BufferHandle* vertex_buffer, BufferHandle* index_buffer)
+road_intersection_bucket_add(VkDescriptorSet storage_buffer_set, VkDescriptorSet road_segment, BufferHandle* vertex_buffer, BufferHandle* index_buffer, U32 overlay_option)
 {
     Context* vk_ctx = ctx_get();
     RoadIntersectionNode* node = PushStruct(vk_ctx->draw_frame_arena, RoadIntersectionNode);
@@ -627,8 +544,8 @@ road_intersection_bucket_add(VkDescriptorSet storage_buffer_set, VkDescriptorSet
     node->storage_buffer_set = storage_buffer_set;
     node->vertex_buffer = *vertex_buffer;
     node->index_buffer = *index_buffer;
-    SLLQueuePush(vk_ctx->draw_frame->road_intersection_list.first,
-                 vk_ctx->draw_frame->road_intersection_list.last, node);
+    node->overlay_option_idx = overlay_option;
+    SLLQueuePush(vk_ctx->draw_frame->road_intersection_list.first, vk_ctx->draw_frame->road_intersection_list.last, node);
 }
 
 g_internal void
@@ -657,17 +574,14 @@ road_intersection_compute()
         RoadIntersectionPushConstants push_constants = {};
         push_constants.road_segment_buffer_elem_count = node->vertex_buffer.elem_count;
         push_constants.invocation_count = triangle_count;
+        push_constants.overlay_option_idx = node->overlay_option_idx;
 
-        vkCmdPushConstants(cmd_buffer, pipeline->pipeline_layout, VK_SHADER_STAGE_COMPUTE_BIT, 0,
-                           sizeof(RoadIntersectionPushConstants), &push_constants);
+        vkCmdPushConstants(cmd_buffer, pipeline->pipeline_layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(RoadIntersectionPushConstants), &push_constants);
 
         VkDescriptorSet desc_sets[] = {node->vertex_and_index_set, node->storage_buffer_set};
-        vkCmdBindDescriptorSets(cmd_buffer, VK_PIPELINE_BIND_POINT_COMPUTE,
-                                pipeline->pipeline_layout, 0, ArrayCount(desc_sets), desc_sets, 0,
-                                NULL);
+        vkCmdBindDescriptorSets(cmd_buffer, VK_PIPELINE_BIND_POINT_COMPUTE, pipeline->pipeline_layout, 0, ArrayCount(desc_sets), desc_sets, 0, NULL);
 
-        U32 workgroup_count =
-            (triangle_count + 255) / 256; // 256 is the workgroup size specified in the shader
+        U32 workgroup_count = (triangle_count + 255) / 256; // 256 is the workgroup size specified in the shader
         vkCmdDispatch(cmd_buffer, workgroup_count, 1, 1);
 
         VkBufferMemoryBarrier2 barrier = {.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER_2,
@@ -680,9 +594,7 @@ road_intersection_compute()
                                           .buffer = node->vertex_buffer.buffer_alloc.buffer,
                                           .offset = 0,
                                           .size = node->vertex_buffer.buffer_alloc.size};
-        VkDependencyInfo dep_info = {.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
-                                     .bufferMemoryBarrierCount = 1,
-                                     .pBufferMemoryBarriers = &barrier};
+        VkDependencyInfo dep_info = {.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO, .bufferMemoryBarrierCount = 1, .pBufferMemoryBarriers = &barrier};
 
         vkCmdPipelineBarrier2(cmd_buffer, &dep_info);
     }
@@ -694,8 +606,7 @@ model_3d_instance_rendering()
 {
     Context* vk_ctx = ctx_get();
     VkCommandBuffer cmd_buffer = vk_ctx->command_buffers.data[vk_ctx->current_frame];
-    TracyVkZone(vk_ctx->tracy_ctx[vk_ctx->current_frame], cmd_buffer,
-                "model_3d_instance_rendering");
+    TracyVkZone(vk_ctx->tracy_ctx[vk_ctx->current_frame], cmd_buffer, "model_3d_instance_rendering");
 
     SwapchainResources* swapchain_resources = vk_ctx->swapchain_resources;
     VkExtent2D swapchain_extent = swapchain_resources->swapchain_extent;
@@ -719,36 +630,25 @@ model_3d_instance_rendering()
     BufferAllocation* instance_buffer_alloc = &vk_ctx->model_3D_instance_buffer;
     Model3DInstance* model_3D_instance_draw = &vk_ctx->draw_frame->model_3D_instance_draw;
 
-    VkDescriptorSet descriptor_sets[2] = {vk_ctx->camera_descriptor_sets[vk_ctx->current_frame],
-                                          vk_ctx->bindless_descriptor_set};
-    buffer_alloc_create_or_resize(model_3D_instance_draw->total_instance_buffer_byte_count,
-                                  instance_buffer_alloc, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
-                                  "model_3D instance buffer");
+    VkDescriptorSet descriptor_sets[2] = {vk_ctx->camera_descriptor_sets[vk_ctx->current_frame], vk_ctx->bindless_descriptor_set};
+    buffer_alloc_create_or_resize(model_3D_instance_draw->total_instance_buffer_byte_count, instance_buffer_alloc, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, "model_3D instance buffer");
 
-    for (Model3DInstanceNode* node = vk_ctx->draw_frame->model_3D_instance_draw.list.first; node;
-         node = node->next)
+    for (Model3DInstanceNode* node = vk_ctx->draw_frame->model_3D_instance_draw.list.first; node; node = node->next)
     {
-        VK_CHECK_RESULT(vmaCopyMemoryToAllocation(
-            vk_ctx->asset_manager->allocator, node->instance_buffer_info.buffer.data,
-            instance_buffer_alloc->allocation, node->instance_buffer_offset,
-            node->instance_buffer_info.buffer.size));
+        VK_CHECK_RESULT(vmaCopyMemoryToAllocation(vk_ctx->asset_manager->allocator, node->instance_buffer_info.buffer.data, instance_buffer_alloc->allocation, node->instance_buffer_offset,
+                                                  node->instance_buffer_info.buffer.size));
         VkBuffer vertex_buffers[] = {
-            node->vertex_alloc.buffer,
+            node->vertex_handle->buffer_alloc.buffer,
             instance_buffer_alloc->buffer,
         };
 
-        vkCmdPushConstants(cmd_buffer, pipeline->pipeline_layout, VK_SHADER_STAGE_FRAGMENT_BIT, 0,
-                           sizeof(Model3dInstancePushConstants), &node->push_constants);
+        vkCmdPushConstants(cmd_buffer, pipeline->pipeline_layout, VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(Model3dInstancePushConstants), &node->push_constants);
         VkDeviceSize vertex_offsets[] = {0, node->instance_buffer_offset};
-        vkCmdBindDescriptorSets(cmd_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS,
-                                pipeline->pipeline_layout, 0, ArrayCount(descriptor_sets),
-                                descriptor_sets, 0, NULL);
+        vkCmdBindDescriptorSets(cmd_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline->pipeline_layout, 0, ArrayCount(descriptor_sets), descriptor_sets, 0, NULL);
         vkCmdBindVertexBuffers(cmd_buffer, 0, 2, vertex_buffers, vertex_offsets);
-        U32 instance_count =
-            U32(node->instance_buffer_info.buffer.size / node->instance_buffer_info.type_size);
-        U32 index_count = buffer_allocation_size_get(&node->index_alloc) / sizeof(U32);
-        vkCmdBindIndexBuffer(cmd_buffer, node->index_alloc.buffer, 0, VK_INDEX_TYPE_UINT32);
-        vkCmdDrawIndexed(cmd_buffer, index_count, instance_count, 0, 0, 0);
+        U32 instance_count = U32(node->instance_buffer_info.buffer.size / node->instance_buffer_info.type_size);
+        vkCmdBindIndexBuffer(cmd_buffer, node->index_handle->buffer_alloc.buffer, 0, VK_INDEX_TYPE_UINT32);
+        vkCmdDrawIndexed(cmd_buffer, node->index_handle->elem_count, instance_count, 0, 0, 0);
     }
 }
 
@@ -761,14 +661,12 @@ camera_uniform_buffer_create(Context* vk_ctx)
 
     for (U32 i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
     {
-        vk_ctx->camera_buffer_alloc_mapped[i] =
-            buffer_mapped_create(camera_buffer_size, buffer_usage, "camera uniform buffer");
+        vk_ctx->camera_buffer_alloc_mapped[i] = buffer_mapped_create(camera_buffer_size, buffer_usage, "camera uniform buffer");
     }
 }
 
 static void
-camera_uniform_buffer_update(Context* vk_ctx, ui::Camera* camera, Vec2F32 screen_res,
-                             U32 current_frame)
+camera_uniform_buffer_update(Context* vk_ctx, ui::Camera* camera, Vec2F32 screen_res, U32 current_frame)
 {
     BufferAllocationMapped* buffer = &vk_ctx->camera_buffer_alloc_mapped[current_frame];
     CameraUniformBuffer* ubo = (CameraUniformBuffer*)buffer->mapped_ptr;
@@ -798,8 +696,7 @@ camera_descriptor_set_layout_create(Context* vk_ctx)
     layoutInfo.bindingCount = ArrayCount(descriptor_layout_bindings);
     layoutInfo.pBindings = descriptor_layout_bindings;
 
-    if (vkCreateDescriptorSetLayout(vk_ctx->device, &layoutInfo, nullptr,
-                                    &vk_ctx->camera_descriptor_set_layout) != VK_SUCCESS)
+    if (vkCreateDescriptorSetLayout(vk_ctx->device, &layoutInfo, nullptr, &vk_ctx->camera_descriptor_set_layout) != VK_SUCCESS)
     {
         exit_with_error("failed to create camera descriptor set layout!");
     }
@@ -811,8 +708,7 @@ camera_descriptor_set_create(Context* vk_ctx)
     Temp scratch = ScratchBegin(0, 0);
     Arena* arena = scratch.arena;
 
-    Buffer<VkDescriptorSetLayout> layouts =
-        BufferAlloc<VkDescriptorSetLayout>(arena, MAX_FRAMES_IN_FLIGHT);
+    Buffer<VkDescriptorSetLayout> layouts = BufferAlloc<VkDescriptorSetLayout>(arena, MAX_FRAMES_IN_FLIGHT);
 
     for (U32 i = 0; i < layouts.size; i++)
     {
@@ -825,8 +721,7 @@ camera_descriptor_set_create(Context* vk_ctx)
     allocInfo.descriptorSetCount = layouts.size;
     allocInfo.pSetLayouts = layouts.data;
 
-    if (vkAllocateDescriptorSets(vk_ctx->device, &allocInfo, vk_ctx->camera_descriptor_sets) !=
-        VK_SUCCESS)
+    if (vkAllocateDescriptorSets(vk_ctx->device, &allocInfo, vk_ctx->camera_descriptor_sets) != VK_SUCCESS)
     {
         exit_with_error("CameraDescriptorSetCreate: failed to allocate descriptor sets!");
     }
@@ -862,8 +757,7 @@ descriptor_set_uniform_buffer(VkDevice device, VkDescriptorPool desc_pool, void*
 {
     UniformBufferDescriptor* buffer_desc = (UniformBufferDescriptor*)data;
 
-    VkDescriptorSetLayout desc_set_layout = descriptor_set_layout_create(
-        device, {{0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1, VK_SHADER_STAGE_VERTEX_BIT, NULL}});
+    VkDescriptorSetLayout desc_set_layout = descriptor_set_layout_create(device, {{0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1, VK_SHADER_STAGE_VERTEX_BIT, NULL}});
 
     VkDescriptorSet desc_set = descriptor_set_alloc(device, desc_pool, {desc_set_layout});
 
@@ -892,8 +786,7 @@ descriptor_set_storage_buffers(VkDevice device, VkDescriptorPool desc_pool, void
     StorageBufferDescriptor* buffer_desc = (StorageBufferDescriptor*)data;
 
     VkDescriptorSetLayout desc_set_layout = descriptor_set_layout_create(
-        device, {{0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, NULL},
-                 {1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, NULL}});
+        device, {{0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, NULL}, {1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, NULL}});
 
     VkDescriptorSet desc_set = descriptor_set_alloc(device, desc_pool, {desc_set_layout});
 
@@ -952,9 +845,8 @@ pipeline_destroy(Pipeline* pipeline)
 }
 
 static void
-model_3d_bucket_add(BufferAllocation* vertex_buffer_allocation,
-                    BufferAllocation* index_buffer_allocation, render::Handle tex_handle,
-                    B32 depth_write_per_draw_call_only, U32 index_buffer_offset, U32 index_count)
+model_3d_bucket_add(BufferAllocation* vertex_buffer_allocation, BufferAllocation* index_buffer_allocation, render::Handle tex_handle, B32 depth_write_per_draw_call_only, U32 index_buffer_offset,
+                    U32 index_count, U32 colormap_idx)
 {
     Context* vk_ctx = ctx_get();
     DrawFrame* draw_frame = vk_ctx->draw_frame;
@@ -964,6 +856,7 @@ model_3d_bucket_add(BufferAllocation* vertex_buffer_allocation,
     {
         Model3dPushConstants push_constants = {};
         push_constants.tex_idx = base_tex->item.descriptor_set_idx;
+        push_constants.colormap_idx = colormap_idx;
 
         Model3DNode* node = PushStruct(vk_ctx->draw_frame_arena, Model3DNode);
         node->vertex_alloc = *vertex_buffer_allocation;
@@ -978,9 +871,7 @@ model_3d_bucket_add(BufferAllocation* vertex_buffer_allocation,
 }
 
 static void
-model_3d_instance_bucket_add(BufferAllocation* vertex_buffer_allocation,
-                             BufferAllocation* index_buffer_allocation, render::Handle tex_handle,
-                             render::BufferInfo* instance_buffer_info)
+model_3d_instance_bucket_add(render::Handle vertex_buffer_handle, render::Handle index_buffer_handle, render::Handle tex_handle, render::BufferInfo* instance_buffer_info)
 {
     U32 align = 16;
     Context* vk_ctx = ctx_get();
@@ -988,7 +879,9 @@ model_3d_instance_bucket_add(BufferAllocation* vertex_buffer_allocation,
     Model3DInstance* instance_draw = &draw_frame->model_3D_instance_draw;
 
     render::AssetItem<TextureHandle>* asset_tex = asset_manager_texture_item_get(tex_handle);
-    if (asset_tex)
+    render::AssetItem<BufferHandle>* asset_vertex = asset_manager_buffer_item_get(vertex_buffer_handle);
+    render::AssetItem<BufferHandle>* asset_index = asset_manager_buffer_item_get(index_buffer_handle);
+    if (asset_tex && asset_vertex && asset_index)
     {
         TextureHandle* tex = &asset_tex->item;
 
@@ -998,20 +891,17 @@ model_3d_instance_bucket_add(BufferAllocation* vertex_buffer_allocation,
         U32 align_pst = instance_draw->total_instance_buffer_byte_count + (align - 1);
         align_pst -= align_pst % align;
         node->instance_buffer_offset = align_pst;
-        node->vertex_alloc = *vertex_buffer_allocation;
-        node->index_alloc = *index_buffer_allocation;
+        node->vertex_handle = &asset_vertex->item;
+        node->index_handle = &asset_index->item;
         node->push_constants = push_constants;
         node->instance_buffer_info = *instance_buffer_info;
-        instance_draw->total_instance_buffer_byte_count +=
-            node->instance_buffer_offset + instance_buffer_info->buffer.size;
+        instance_draw->total_instance_buffer_byte_count += node->instance_buffer_offset + instance_buffer_info->buffer.size;
         SLLQueuePush(instance_draw->list.first, instance_draw->list.last, node);
     }
 }
 
 static void
-blend_3d_bucket_add(BufferAllocation* vertex_buffer_allocation,
-                    BufferAllocation* index_buffer_allocation, render::Handle texture_handle,
-                    render::Handle colormap_handle)
+blend_3d_bucket_add(BufferAllocation* vertex_buffer_allocation, BufferAllocation* index_buffer_allocation, render::Handle texture_handle, render::Handle colormap_handle)
 {
     Context* vk_ctx = ctx_get();
     DrawFrame* draw_frame = vk_ctx->draw_frame;
@@ -1021,8 +911,7 @@ blend_3d_bucket_add(BufferAllocation* vertex_buffer_allocation,
     node->index_alloc = *index_buffer_allocation;
 
     render::AssetItem<TextureHandle>* base_tex = asset_manager_texture_item_get(texture_handle);
-    render::AssetItem<TextureHandle>* colormap_tex =
-        asset_manager_texture_item_get(colormap_handle);
+    render::AssetItem<TextureHandle>* colormap_tex = asset_manager_texture_item_get(colormap_handle);
     Assert(base_tex);
     Assert(colormap_tex);
     if (!base_tex || !colormap_tex)
@@ -1030,8 +919,7 @@ blend_3d_bucket_add(BufferAllocation* vertex_buffer_allocation,
         return;
     }
 
-    node->push_constants = {.texture_index = base_tex->item.descriptor_set_idx,
-                            .colormap_index = colormap_tex->item.descriptor_set_idx};
+    node->push_constants = {.texture_index = base_tex->item.descriptor_set_idx, .colormap_index = colormap_tex->item.descriptor_set_idx};
 
     SLLQueuePush(draw_frame->blend_3d_list.first, draw_frame->blend_3d_list.last, node);
 }
@@ -1044,25 +932,21 @@ enum WriteType
 };
 
 g_internal void
-draw_indexed_separate_depth_and_color_calls(VkCommandBuffer cmd_buffer, U32 index_offset,
-                                            U32 index_count)
+draw_indexed_separate_depth_and_color_calls(VkCommandBuffer cmd_buffer, U32 index_offset, U32 index_count)
 {
     VkBool32 color_write_enabled[4] = {VK_TRUE, VK_TRUE, VK_TRUE, VK_TRUE};
     VkBool32 color_write_disabled[4] = {};
-    for (WriteType write_type = (WriteType)0; write_type < WriteType_Count;
-         write_type = (WriteType)(write_type + 1))
+    for (WriteType write_type = (WriteType)0; write_type < WriteType_Count; write_type = (WriteType)(write_type + 1))
     {
         if (write_type == WriteType_Color)
         {
             vkCmdSetDepthWriteEnable(cmd_buffer, VK_FALSE);
-            cmd_set_color_write_enable_ext(cmd_buffer, ArrayCount(color_write_enabled),
-                                           color_write_enabled);
+            cmd_set_color_write_enable_ext(cmd_buffer, ArrayCount(color_write_enabled), color_write_enabled);
         }
         else if (write_type == WriteType_Depth)
         {
             vkCmdSetDepthWriteEnable(cmd_buffer, VK_TRUE);
-            cmd_set_color_write_enable_ext(cmd_buffer, ArrayCount(color_write_disabled),
-                                           color_write_disabled);
+            cmd_set_color_write_enable_ext(cmd_buffer, ArrayCount(color_write_disabled), color_write_disabled);
         }
 
         vkCmdDrawIndexed(cmd_buffer, index_count, 1, index_offset, 0, 0);
@@ -1098,31 +982,24 @@ model_3d_rendering()
     scissor.extent = swapchain_extent;
     vkCmdSetScissor(cmd_buffer, 0, 1, &scissor);
 
-    VkDescriptorSet descriptor_sets[2] = {vk_ctx->camera_descriptor_sets[vk_ctx->current_frame],
-                                          vk_ctx->bindless_descriptor_set};
+    VkDescriptorSet descriptor_sets[2] = {vk_ctx->camera_descriptor_sets[vk_ctx->current_frame], vk_ctx->bindless_descriptor_set};
 
     VkDeviceSize offsets[] = {0};
     for (Model3DNode* node = draw_frame->model_3D_list.first; node; node = node->next)
     {
-        vkCmdPushConstants(cmd_buffer, model_3D_pipeline->pipeline_layout,
-                           VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(Model3dPushConstants),
-                           &node->push_constants);
-        vkCmdBindDescriptorSets(cmd_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS,
-                                model_3D_pipeline->pipeline_layout, 0, ArrayCount(descriptor_sets),
-                                descriptor_sets, 0, NULL);
+        vkCmdPushConstants(cmd_buffer, model_3D_pipeline->pipeline_layout, VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(Model3dPushConstants), &node->push_constants);
+        vkCmdBindDescriptorSets(cmd_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, model_3D_pipeline->pipeline_layout, 0, ArrayCount(descriptor_sets), descriptor_sets, 0, NULL);
         vkCmdBindVertexBuffers(cmd_buffer, 0, 1, &node->vertex_alloc.buffer, offsets);
         vkCmdBindIndexBuffer(cmd_buffer, node->index_alloc.buffer, 0, VK_INDEX_TYPE_UINT32);
         VkBool32 color_write_enabled[4] = {VK_TRUE, VK_TRUE, VK_TRUE, VK_TRUE};
         if (node->depth_write_per_draw_enabled)
         {
-            draw_indexed_separate_depth_and_color_calls(cmd_buffer, node->index_buffer_offset,
-                                                        node->index_count);
+            draw_indexed_separate_depth_and_color_calls(cmd_buffer, node->index_buffer_offset, node->index_count);
         }
         else
         {
             vkCmdSetDepthWriteEnable(cmd_buffer, VK_TRUE);
-            cmd_set_color_write_enable_ext(cmd_buffer, ArrayCount(color_write_enabled),
-                                           color_write_enabled);
+            cmd_set_color_write_enable_ext(cmd_buffer, ArrayCount(color_write_enabled), color_write_enabled);
             vkCmdDrawIndexed(cmd_buffer, node->index_count, 1, node->index_buffer_offset, 0, 0);
         }
     }
@@ -1156,19 +1033,14 @@ blend_3d_rendering()
     scissor.extent = swapchain_extent;
     vkCmdSetScissor(cmd_buffer, 0, 1, &scissor);
 
-    VkDescriptorSet descriptor_sets[2] = {vk_ctx->camera_descriptor_sets[vk_ctx->current_frame],
-                                          vk_ctx->bindless_descriptor_set};
+    VkDescriptorSet descriptor_sets[2] = {vk_ctx->camera_descriptor_sets[vk_ctx->current_frame], vk_ctx->bindless_descriptor_set};
 
     VkDeviceSize offsets[] = {0};
     for (Blend3DNode* node = draw_frame->blend_3d_list.first; node; node = node->next)
     {
-        vkCmdPushConstants(cmd_buffer, blend_3d_pipeline->pipeline_layout,
-                           VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(Blend3dPushConstants),
-                           &node->push_constants);
+        vkCmdPushConstants(cmd_buffer, blend_3d_pipeline->pipeline_layout, VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(Blend3dPushConstants), &node->push_constants);
         U32 index_count = buffer_allocation_size_get(&node->index_alloc) / sizeof(U32);
-        vkCmdBindDescriptorSets(cmd_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS,
-                                blend_3d_pipeline->pipeline_layout, 0, ArrayCount(descriptor_sets),
-                                descriptor_sets, 0, NULL);
+        vkCmdBindDescriptorSets(cmd_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, blend_3d_pipeline->pipeline_layout, 0, ArrayCount(descriptor_sets), descriptor_sets, 0, NULL);
         vkCmdBindVertexBuffers(cmd_buffer, 0, 1, &node->vertex_alloc.buffer, offsets);
         vkCmdBindIndexBuffer(cmd_buffer, node->index_alloc.buffer, 0, VK_INDEX_TYPE_UINT32);
 
@@ -1177,8 +1049,7 @@ blend_3d_rendering()
 }
 
 static void
-command_buffer_record(U32 image_index, U32 current_frame, ui::Camera* camera,
-                      Vec2S64 mouse_cursor_pos)
+command_buffer_record(U32 image_index, U32 current_frame, ui::Camera* camera, Vec2S64 mouse_cursor_pos)
 {
     prof_scope_marker;
     Temp scratch = ScratchBegin(0, 0);
@@ -1193,21 +1064,17 @@ command_buffer_record(U32 image_index, U32 current_frame, ui::Camera* camera,
     SwapchainResources* swapchain_resource = vk_ctx->swapchain_resources;
 
     // object id color attachment image
-    ImageResource* object_id_image_resource =
-        &swapchain_resource->object_id_image_resources.data[image_index];
+    ImageResource* object_id_image_resource = &swapchain_resource->object_id_image_resources.data[image_index];
     ImageAllocation* object_id_image_alloc = &object_id_image_resource->image_alloc;
     VkImageView object_id_image_view = object_id_image_resource->image_view_resource.image_view;
     VkImage object_id_image = object_id_image_alloc->image;
 
     // object id resolve image
-    ImageResource* object_id_image_resolve_resource =
-        &swapchain_resource->object_id_image_resolve_resources.data[image_index];
-    VkImageView object_id_image_resolve_view =
-        object_id_image_resolve_resource->image_view_resource.image_view;
+    ImageResource* object_id_image_resolve_resource = &swapchain_resource->object_id_image_resolve_resources.data[image_index];
+    VkImageView object_id_image_resolve_view = object_id_image_resolve_resource->image_view_resource.image_view;
     VkImage object_id_resolve_image = object_id_image_resolve_resource->image_alloc.image;
 
-    VkImageView swapchain_image_view =
-        swapchain_resource->image_resources.data[image_index].image_view_resource.image_view;
+    VkImageView swapchain_image_view = swapchain_resource->image_resources.data[image_index].image_view_resource.image_view;
 
     VkImage swapchain_image = swapchain_resource->image_resources.data[image_index].image;
     // ~mgj: Render scope (Tracy Profiler documentation says this is necessary)
@@ -1230,26 +1097,17 @@ command_buffer_record(U32 image_index, U32 current_frame, ui::Camera* camera,
         pre_render_swapchain_barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
         pre_render_swapchain_barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
         pre_render_swapchain_barrier.image = swapchain_image;
-        pre_render_swapchain_barrier.subresourceRange = {.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
-                                                         .baseMipLevel = 0,
-                                                         .levelCount = 1,
-                                                         .baseArrayLayer = 0,
-                                                         .layerCount = 1};
+        pre_render_swapchain_barrier.subresourceRange = {.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT, .baseMipLevel = 0, .levelCount = 1, .baseArrayLayer = 0, .layerCount = 1};
 
-        VkImageMemoryBarrier2 pre_render_object_id_barrier{
-            .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
-            .srcStageMask = VK_PIPELINE_STAGE_2_NONE,
-            .srcAccessMask = VK_ACCESS_2_NONE,
-            .dstStageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
-            .dstAccessMask = VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT,
-            .oldLayout = VK_IMAGE_LAYOUT_UNDEFINED,
-            .newLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-            .image = object_id_image,
-            .subresourceRange = {.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
-                                 .baseMipLevel = 0,
-                                 .levelCount = 1,
-                                 .baseArrayLayer = 0,
-                                 .layerCount = 1}};
+        VkImageMemoryBarrier2 pre_render_object_id_barrier{.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
+                                                           .srcStageMask = VK_PIPELINE_STAGE_2_NONE,
+                                                           .srcAccessMask = VK_ACCESS_2_NONE,
+                                                           .dstStageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
+                                                           .dstAccessMask = VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT,
+                                                           .oldLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+                                                           .newLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+                                                           .image = object_id_image,
+                                                           .subresourceRange = {.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT, .baseMipLevel = 0, .levelCount = 1, .baseArrayLayer = 0, .layerCount = 1}};
 
         VkImageMemoryBarrier2 pre_render_object_id_resolve_image_barrier{
             .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
@@ -1260,29 +1118,19 @@ command_buffer_record(U32 image_index, U32 current_frame, ui::Camera* camera,
             .oldLayout = VK_IMAGE_LAYOUT_UNDEFINED,
             .newLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
             .image = object_id_resolve_image,
-            .subresourceRange = {.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
-                                 .baseMipLevel = 0,
-                                 .levelCount = 1,
-                                 .baseArrayLayer = 0,
-                                 .layerCount = 1}};
+            .subresourceRange = {.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT, .baseMipLevel = 0, .levelCount = 1, .baseArrayLayer = 0, .layerCount = 1}};
 
-        VkImageMemoryBarrier2 pre_render_barriers[] = {pre_render_object_id_barrier,
-                                                       pre_render_swapchain_barrier,
-                                                       pre_render_object_id_resolve_image_barrier};
-        VkDependencyInfo pre_render_transition_info = {.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
-                                                       .imageMemoryBarrierCount =
-                                                           ArrayCount(pre_render_barriers),
-                                                       .pImageMemoryBarriers = pre_render_barriers};
+        VkImageMemoryBarrier2 pre_render_barriers[] = {pre_render_object_id_barrier, pre_render_swapchain_barrier, pre_render_object_id_resolve_image_barrier};
+        VkDependencyInfo pre_render_transition_info = {
+            .sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO, .imageMemoryBarrierCount = ArrayCount(pre_render_barriers), .pImageMemoryBarriers = pre_render_barriers};
 
         vkCmdPipelineBarrier2(current_cmd_buf, &pre_render_transition_info);
         {
             TracyVkZone(vk_ctx->tracy_ctx[current_frame], current_cmd_buf, "Render"); // NOLINT
 
             VkExtent2D swapchain_extent = swapchain_resource->swapchain_extent;
-            VkImageView color_image_view =
-                swapchain_resource->color_image_resource.image_view_resource.image_view;
-            VkImageView depth_image_view =
-                swapchain_resource->depth_image_resource.image_view_resource.image_view;
+            VkImageView color_image_view = swapchain_resource->color_image_resource.image_view_resource.image_view;
+            VkImageView depth_image_view = swapchain_resource->depth_image_resource.image_view_resource.image_view;
 
             VkClearColorValue clear_color = {0.0f, 0.0f, 0.0f, 1.0f};
             VkClearDepthStencilValue clear_depth = {1.0f, 0};
@@ -1328,8 +1176,7 @@ command_buffer_record(U32 image_index, U32 current_frame, ui::Camera* camera,
             depth_attachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
             depth_attachment.clearValue = {.depthStencil = clear_depth};
 
-            VkRenderingAttachmentInfo color_attachments[] = {color_attachment,
-                                                             object_id_attachment};
+            VkRenderingAttachmentInfo color_attachments[] = {color_attachment, object_id_attachment};
             VkRenderingInfo rendering_info{};
             rendering_info.sType = VK_STRUCTURE_TYPE_RENDERING_INFO;
             rendering_info.renderArea.offset = {0, 0};
@@ -1339,11 +1186,7 @@ command_buffer_record(U32 image_index, U32 current_frame, ui::Camera* camera,
             rendering_info.pColorAttachments = color_attachments;
             rendering_info.pDepthAttachment = &depth_attachment;
 
-            camera_uniform_buffer_update(
-                vk_ctx, camera,
-                Vec2F32{(F32)vk_ctx->swapchain_resources->swapchain_extent.width,
-                        (F32)vk_ctx->swapchain_resources->swapchain_extent.height},
-                current_frame);
+            camera_uniform_buffer_update(vk_ctx, camera, Vec2F32{(F32)vk_ctx->swapchain_resources->swapchain_extent.width, (F32)vk_ctx->swapchain_resources->swapchain_extent.height}, current_frame);
 
             road_intersection_compute();
 
@@ -1375,8 +1218,7 @@ command_buffer_record(U32 image_index, U32 current_frame, ui::Camera* camera,
 
             ImGui::Render();
             ImDrawData* draw_data = ImGui::GetDrawData();
-            const bool is_minimized =
-                (draw_data->DisplaySize.x <= 0.0f || draw_data->DisplaySize.y <= 0.0f);
+            const bool is_minimized = (draw_data->DisplaySize.x <= 0.0f || draw_data->DisplaySize.y <= 0.0f);
             if (!is_minimized)
             {
                 ImGui_ImplVulkan_RenderDrawData(draw_data, current_cmd_buf);
@@ -1396,103 +1238,68 @@ command_buffer_record(U32 image_index, U32 current_frame, ui::Camera* camera,
             present_barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
             present_barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
             present_barrier.image = swapchain_image;
-            present_barrier.subresourceRange = {.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
-                                                .baseMipLevel = 0,
-                                                .levelCount = 1,
-                                                .baseArrayLayer = 0,
-                                                .layerCount = 1};
-            VkImageMemoryBarrier2 object_id_read_barrier = {
-                .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
-                .srcStageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
-                .srcAccessMask = VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT,
-                .dstStageMask = VK_PIPELINE_STAGE_TRANSFER_BIT,
-                .dstAccessMask = VK_ACCESS_2_TRANSFER_READ_BIT,
-                .oldLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-                .newLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
-                .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-                .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-                .image = object_id_resolve_image,
-                .subresourceRange = {.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
-                                     .baseMipLevel = 0,
-                                     .levelCount = 1,
-                                     .baseArrayLayer = 0,
-                                     .layerCount = 1}};
+            present_barrier.subresourceRange = {.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT, .baseMipLevel = 0, .levelCount = 1, .baseArrayLayer = 0, .layerCount = 1};
+            VkImageMemoryBarrier2 object_id_read_barrier = {.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
+                                                            .srcStageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
+                                                            .srcAccessMask = VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT,
+                                                            .dstStageMask = VK_PIPELINE_STAGE_TRANSFER_BIT,
+                                                            .dstAccessMask = VK_ACCESS_2_TRANSFER_READ_BIT,
+                                                            .oldLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+                                                            .newLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+                                                            .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+                                                            .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+                                                            .image = object_id_resolve_image,
+                                                            .subresourceRange = {.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT, .baseMipLevel = 0, .levelCount = 1, .baseArrayLayer = 0, .layerCount = 1}};
 
-            VkImageMemoryBarrier2 post_render_barriers[] = {present_barrier,
-                                                            object_id_read_barrier};
+            VkImageMemoryBarrier2 post_render_barriers[] = {present_barrier, object_id_read_barrier};
             VkDependencyInfo layout_transition_info = {
-                .sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
-                .imageMemoryBarrierCount = ArrayCount(post_render_barriers),
-                .pImageMemoryBarriers = post_render_barriers};
+                .sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO, .imageMemoryBarrierCount = ArrayCount(post_render_barriers), .pImageMemoryBarriers = post_render_barriers};
 
             vkCmdPipelineBarrier2(current_cmd_buf, &layout_transition_info);
 
             Vec2S64 mouse_position_screen_coords = mouse_cursor_pos;
-            if (mouse_position_screen_coords.x > 0 && mouse_position_screen_coords.y > 0 &&
-                mouse_position_screen_coords.x <
-                    vk_ctx->swapchain_resources->swapchain_extent.width &&
-                mouse_position_screen_coords.y <
-                    vk_ctx->swapchain_resources->swapchain_extent.height)
+            if (mouse_position_screen_coords.x > 0 && mouse_position_screen_coords.y > 0 && mouse_position_screen_coords.x < vk_ctx->swapchain_resources->swapchain_extent.width &&
+                mouse_position_screen_coords.y < vk_ctx->swapchain_resources->swapchain_extent.height)
             {
-                VkBufferMemoryBarrier2 readback_barrier = {
-                    .sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER_2,
-                    .srcStageMask = VK_PIPELINE_STAGE_2_COPY_BIT,
-                    .srcAccessMask = VK_ACCESS_2_TRANSFER_WRITE_BIT,
-                    .dstStageMask = VK_PIPELINE_STAGE_2_COPY_BIT,
-                    .dstAccessMask = VK_ACCESS_2_TRANSFER_WRITE_BIT,
-                    .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-                    .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-                    .buffer = swapchain_resource->object_id_buffer_readback[current_frame]
-                                  .buffer_alloc.buffer,
-                    .offset = 0,
-                    .size = VK_WHOLE_SIZE};
-                VkDependencyInfo readback_dep_info = {.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
-                                                      .bufferMemoryBarrierCount = 1,
-                                                      .pBufferMemoryBarriers = &readback_barrier};
+                VkBufferMemoryBarrier2 readback_barrier = {.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER_2,
+                                                           .srcStageMask = VK_PIPELINE_STAGE_2_COPY_BIT,
+                                                           .srcAccessMask = VK_ACCESS_2_TRANSFER_WRITE_BIT,
+                                                           .dstStageMask = VK_PIPELINE_STAGE_2_COPY_BIT,
+                                                           .dstAccessMask = VK_ACCESS_2_TRANSFER_WRITE_BIT,
+                                                           .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+                                                           .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+                                                           .buffer = swapchain_resource->object_id_buffer_readback[current_frame].buffer_alloc.buffer,
+                                                           .offset = 0,
+                                                           .size = VK_WHOLE_SIZE};
+                VkDependencyInfo readback_dep_info = {.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO, .bufferMemoryBarrierCount = 1, .pBufferMemoryBarriers = &readback_barrier};
                 vkCmdPipelineBarrier2(current_cmd_buf, &readback_dep_info);
 
                 VkBufferImageCopy buffer_image_copy[] = {{
-                    .imageSubresource = {.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
-                                         .mipLevel = 0,
-                                         .baseArrayLayer = 0,
-                                         .layerCount = 1},
-                    .imageOffset = {(S32)mouse_position_screen_coords.x,
-                                    (S32)mouse_position_screen_coords.y, 0},
+                    .imageSubresource = {.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT, .mipLevel = 0, .baseArrayLayer = 0, .layerCount = 1},
+                    .imageOffset = {(S32)mouse_position_screen_coords.x, (S32)mouse_position_screen_coords.y, 0},
                     .imageExtent = {1, 1, 1},
                 }};
-                vkCmdCopyImageToBuffer(current_cmd_buf, object_id_resolve_image,
-                                       VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
-                                       swapchain_resource->object_id_buffer_readback[current_frame]
-                                           .buffer_alloc.buffer,
+                vkCmdCopyImageToBuffer(current_cmd_buf, object_id_resolve_image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, swapchain_resource->object_id_buffer_readback[current_frame].buffer_alloc.buffer,
                                        ArrayCount(buffer_image_copy), buffer_image_copy);
 
                 Assert(vk_ctx->object_id_format == VK_FORMAT_R32G32_UINT);
-                U64* object_id =
-                    (U64*)swapchain_resource->object_id_buffer_readback[current_frame].mapped_ptr;
+                U64* object_id = (U64*)swapchain_resource->object_id_buffer_readback[current_frame].mapped_ptr;
                 vk_ctx->hovered_object_id = *object_id;
             }
 
-            VkImageMemoryBarrier2 object_id_reset_barrier = {
-                .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
-                .srcStageMask = VK_PIPELINE_STAGE_2_TRANSFER_BIT,
-                .srcAccessMask = VK_ACCESS_2_TRANSFER_READ_BIT,
-                .dstStageMask = VK_PIPELINE_STAGE_2_NONE,
-                .dstAccessMask = VK_ACCESS_2_NONE,
-                .oldLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
-                .newLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-                .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-                .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-                .image = object_id_resolve_image,
-                .subresourceRange = {.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
-                                     .baseMipLevel = 0,
-                                     .levelCount = 1,
-                                     .baseArrayLayer = 0,
-                                     .layerCount = 1}};
+            VkImageMemoryBarrier2 object_id_reset_barrier = {.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
+                                                             .srcStageMask = VK_PIPELINE_STAGE_2_TRANSFER_BIT,
+                                                             .srcAccessMask = VK_ACCESS_2_TRANSFER_READ_BIT,
+                                                             .dstStageMask = VK_PIPELINE_STAGE_2_NONE,
+                                                             .dstAccessMask = VK_ACCESS_2_NONE,
+                                                             .oldLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+                                                             .newLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+                                                             .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+                                                             .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+                                                             .image = object_id_resolve_image,
+                                                             .subresourceRange = {.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT, .baseMipLevel = 0, .levelCount = 1, .baseArrayLayer = 0, .layerCount = 1}};
 
-            VkDependencyInfo layout_reset_transition_info = {
-                .sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
-                .imageMemoryBarrierCount = 1,
-                .pImageMemoryBarriers = &object_id_reset_barrier};
+            VkDependencyInfo layout_reset_transition_info = {.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO, .imageMemoryBarrierCount = 1, .pImageMemoryBarriers = &object_id_reset_barrier};
 
             vkCmdPipelineBarrier2(current_cmd_buf, &layout_reset_transition_info);
         }
@@ -1514,9 +1321,7 @@ profile_buffers_create(Context* vk_ctx)
 #ifdef TRACY_ENABLE
     for (U32 i = 0; i < ArrayCount(vk_ctx->tracy_ctx); i++)
     {
-        vk_ctx->tracy_ctx[i] =
-            TracyVkContext(vk_ctx->physical_device, vk_ctx->device, vk_ctx->graphics_queue,
-                           vk_ctx->command_buffers.data[i]);
+        vk_ctx->tracy_ctx[i] = TracyVkContext(vk_ctx->physical_device, vk_ctx->device, vk_ctx->graphics_queue, vk_ctx->command_buffers.data[i]);
     }
 #endif
 }

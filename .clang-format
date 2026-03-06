@@ -17,7 +17,7 @@ BreakBeforeBraces: Allman
 IndentCaseLabels: true
 
 # Other common settings (adjust as needed)
-ColumnLimit: 100
+ColumnLimit: 200
 AllowShortCaseLabelsOnASingleLine: true
 AllowShortFunctionsOnASingleLine: None
 KeepEmptyLinesAtTheStartOfBlocks: false

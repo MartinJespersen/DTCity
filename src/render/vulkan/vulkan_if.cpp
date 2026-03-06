@@ -6,13 +6,10 @@ null_texture_create(vulkan::Context* vk_ctx)
 {
     // Create a 1x1 RGBA8 image
     VmaAllocationCreateInfo vma_info = {.usage = VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE};
-    vulkan::ImageAllocation image_alloc = vulkan::image_allocation_create(
-        1, 1, VK_SAMPLE_COUNT_1_BIT, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_TILING_OPTIMAL,
-        VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT, 1, vma_info,
-        "null_texture image");
+    vulkan::ImageAllocation image_alloc = vulkan::image_allocation_create(1, 1, VK_SAMPLE_COUNT_1_BIT, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_TILING_OPTIMAL,
+                                                                          VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT, 1, vma_info, "null_texture image");
 
-    vulkan::ImageViewResource image_view_resource = vulkan::image_view_resource_create(
-        vk_ctx->device, image_alloc.image, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_ASPECT_COLOR_BIT, 1);
+    vulkan::ImageViewResource image_view_resource = vulkan::image_view_resource_create(vk_ctx->device, image_alloc.image, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_ASPECT_COLOR_BIT, 1);
 
     // Transition image to SHADER_READ_ONLY_OPTIMAL
     VkCommandBuffer cmd;
@@ -43,9 +40,7 @@ null_texture_create(vulkan::Context* vk_ctx)
     barrier.srcAccessMask = 0;
     barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
 
-    vkCmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
-                         VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0, 0, nullptr, 0, nullptr, 1,
-                         &barrier);
+    vkCmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0, 0, nullptr, 0, nullptr, 1, &barrier);
 
     vkEndCommandBuffer(cmd);
 
@@ -84,17 +79,14 @@ render_ctx_create(String8 shader_path, io::IO* io_ctx, async::Threads* thread_po
     vk_ctx->arena = arena;
     vk_ctx->render_thread_id = os_tid();
 
-    const char* validation_layers[] = {"VK_LAYER_KHRONOS_validation",
-                                       "VK_LAYER_KHRONOS_synchronization2"};
+    const char* validation_layers[] = {"VK_LAYER_KHRONOS_validation", "VK_LAYER_KHRONOS_synchronization2"};
     vk_ctx->validation_layers = BufferAlloc<String8>(vk_ctx->arena, ArrayCount(validation_layers));
     for (U32 i = 0; i < ArrayCount(validation_layers); i++)
     {
         vk_ctx->validation_layers.data[i] = {str8_c_string(validation_layers[i])};
     }
 
-    const char* device_extensions[] = {
-        VK_KHR_SWAPCHAIN_EXTENSION_NAME, VK_KHR_DYNAMIC_RENDERING_EXTENSION_NAME,
-        VK_EXT_COLOR_WRITE_ENABLE_EXTENSION_NAME, VK_EXT_DESCRIPTOR_INDEXING_EXTENSION_NAME};
+    const char* device_extensions[] = {VK_KHR_SWAPCHAIN_EXTENSION_NAME, VK_KHR_DYNAMIC_RENDERING_EXTENSION_NAME, VK_EXT_COLOR_WRITE_ENABLE_EXTENSION_NAME, VK_EXT_DESCRIPTOR_INDEXING_EXTENSION_NAME};
     vk_ctx->device_extensions = BufferAlloc<String8>(vk_ctx->arena, ArrayCount(device_extensions));
     for (U32 i = 0; i < ArrayCount(device_extensions); i++)
     {
@@ -110,10 +102,8 @@ render_ctx_create(String8 shader_path, io::IO* io_ctx, async::Threads* thread_po
     // ~mgj: Blitting format
     vk_ctx->blit_format = VK_FORMAT_R8G8B8A8_SRGB;
     VkFormatProperties formatProperties;
-    vkGetPhysicalDeviceFormatProperties(vk_ctx->physical_device, vk_ctx->blit_format,
-                                        &formatProperties);
-    if (!(formatProperties.optimalTilingFeatures &
-          VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT))
+    vkGetPhysicalDeviceFormatProperties(vk_ctx->physical_device, vk_ctx->blit_format, &formatProperties);
+    if (!(formatProperties.optimalTilingFeatures & VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT))
     {
         exit_with_error("texture image format does not support linear blitting!");
     }
@@ -124,19 +114,14 @@ render_ctx_create(String8 shader_path, io::IO* io_ctx, async::Threads* thread_po
     vulkan::descriptor_pool_create(vk_ctx, vk_ctx->max_texture_count);
 
     // ~mgj: Create asset manager (includes VMA allocator)
-    vk_ctx->asset_manager = vulkan::asset_manager_create(
-        vk_ctx->physical_device, vk_ctx->device, vk_ctx->instance, vk_ctx->graphics_queue,
-        vk_ctx->queue_family_indices.graphicsFamilyIndex, thread_pool, GB(1),
-        vk_ctx->descriptor_pool);
+    vk_ctx->asset_manager = vulkan::asset_manager_create(vk_ctx->physical_device, vk_ctx->device, vk_ctx->instance, vk_ctx->graphics_queue, vk_ctx->queue_family_indices.graphicsFamilyIndex,
+                                                         thread_pool, GB(1), vk_ctx->descriptor_pool);
 
     Vec2S32 vk_framebuffer_dim_s32 = io::wait_for_valid_framebuffer_size(io_ctx);
     Vec2U32 vk_framebuffer_dim_u32 = {(U32)vk_framebuffer_dim_s32.x, (U32)vk_framebuffer_dim_s32.y};
-    vulkan::SwapChainSupportDetails swapchain_details =
-        vulkan::query_swapchain_support(scratch.arena, vk_ctx->physical_device, vk_ctx->surface);
-    VkExtent2D swapchain_extent =
-        vulkan::choose_swap_extent(vk_framebuffer_dim_u32, swapchain_details.capabilities);
-    vk_ctx->swapchain_resources =
-        vulkan::swapchain_create(vk_ctx, &swapchain_details, swapchain_extent);
+    vulkan::SwapChainSupportDetails swapchain_details = vulkan::query_swapchain_support(scratch.arena, vk_ctx->physical_device, vk_ctx->surface);
+    VkExtent2D swapchain_extent = vulkan::choose_swap_extent(vk_framebuffer_dim_u32, swapchain_details.capabilities);
+    vk_ctx->swapchain_resources = vulkan::swapchain_create(vk_ctx, &swapchain_details, swapchain_extent);
 
     VkCommandPoolCreateInfo poolInfo{};
     poolInfo.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
@@ -156,19 +141,15 @@ render_ctx_create(String8 shader_path, io::IO* io_ctx, async::Threads* thread_po
     // ~mgj: Drawing (TODO: Move out of vulkan context to own module)
 
     vk_ctx->texture_binding = 0;
-    vk_ctx->bindless_descriptor_set_layout = vulkan::descriptor_set_layout_create_bindless_textures(
-        vk_ctx->device, vk_ctx->texture_binding, vk_ctx->max_texture_count,
-        VK_SHADER_STAGE_ALL); // TODO: VK_SHADER_STAGE_ALL is probably not the best flag
-    vk_ctx->bindless_descriptor_set = vulkan::descriptor_set_allocate_bindless(
-        vk_ctx->device, vk_ctx->descriptor_pool, vk_ctx->bindless_descriptor_set_layout,
-        vk_ctx->max_texture_count);
+    vk_ctx->bindless_descriptor_set_layout = vulkan::descriptor_set_layout_create_bindless_textures(vk_ctx->device, vk_ctx->texture_binding, vk_ctx->max_texture_count,
+                                                                                                    VK_SHADER_STAGE_ALL); // TODO: VK_SHADER_STAGE_ALL is probably not the best flag
+    vk_ctx->bindless_descriptor_set = vulkan::descriptor_set_allocate_bindless(vk_ctx->device, vk_ctx->descriptor_pool, vk_ctx->bindless_descriptor_set_layout, vk_ctx->max_texture_count);
 
     null_texture_create(vk_ctx);
 
     vk_ctx->draw_frame_arena = arena_alloc();
     vk_ctx->model_3D_pipeline = vulkan::model_3d_pipeline_create(vk_ctx, shader_path);
-    vk_ctx->model_3D_instance_pipeline =
-        vulkan::model_3d_instance_pipeline_create(vk_ctx, shader_path);
+    vk_ctx->model_3D_instance_pipeline = vulkan::model_3d_instance_pipeline_create(vk_ctx, shader_path);
     vk_ctx->blend_3d_pipeline = vulkan::blend_3d_pipeline_create(shader_path);
     vk_ctx->road_intersection_pipeline = vulkan::road_intersection_pipeline_create(shader_path);
 }
@@ -185,8 +166,7 @@ render_ctx_destroy()
 
     if (vk_ctx->enable_validation_layers)
     {
-        vulkan::destroy_debug_utils_messenger_ext(vk_ctx->instance, vk_ctx->debug_messenger,
-                                                  nullptr);
+        vulkan::destroy_debug_utils_messenger_ext(vk_ctx->instance, vk_ctx->debug_messenger, nullptr);
     }
 
     vulkan::camera_cleanup(vk_ctx);
@@ -219,10 +199,8 @@ render_ctx_destroy()
     vulkan::pipeline_destroy(&vk_ctx->road_intersection_pipeline);
 
     vkDestroyDescriptorSetLayout(vk_ctx->device, vk_ctx->bindless_descriptor_set_layout, nullptr);
-    vkDestroyDescriptorSetLayout(vk_ctx->device, vk_ctx->road_segment_descriptor_set_layout,
-                                 nullptr);
-    vkDestroyDescriptorSetLayout(vk_ctx->device, vk_ctx->storage_buffer_descriptor_set_layout,
-                                 nullptr);
+    vkDestroyDescriptorSetLayout(vk_ctx->device, vk_ctx->road_segment_descriptor_set_layout, nullptr);
+    vkDestroyDescriptorSetLayout(vk_ctx->device, vk_ctx->storage_buffer_descriptor_set_layout, nullptr);
 
     vkDestroyDevice(vk_ctx->device, nullptr);
     vkDestroyInstance(vk_ctx->instance, nullptr);
@@ -233,8 +211,7 @@ render_ctx_destroy()
 }
 
 static void
-render_frame(Vec2U32 framebuffer_dim, B32* in_out_framebuffer_resized, ui::Camera* camera,
-             Vec2S64 mouse_cursor_pos)
+render_frame(Vec2U32 framebuffer_dim, B32* in_out_framebuffer_resized, ui::Camera* camera, Vec2S64 mouse_cursor_pos)
 {
     ScratchScope scratch = ScratchScope(0, 0);
 
@@ -252,26 +229,21 @@ render_frame(Vec2U32 framebuffer_dim, B32* in_out_framebuffer_resized, ui::Camer
     vulkan::SwapchainResources* swapchain_resources = vk_ctx->swapchain_resources;
     if (!swapchain_resources)
     {
-        vulkan::SwapChainSupportDetails swapchain_details = vulkan::query_swapchain_support(
-            scratch.arena, vk_ctx->physical_device, vk_ctx->surface);
-        VkExtent2D swapchain_extent =
-            vulkan::choose_swap_extent(framebuffer_dim, swapchain_details.capabilities);
+        vulkan::SwapChainSupportDetails swapchain_details = vulkan::query_swapchain_support(scratch.arena, vk_ctx->physical_device, vk_ctx->surface);
+        VkExtent2D swapchain_extent = vulkan::choose_swap_extent(framebuffer_dim, swapchain_details.capabilities);
         if (swapchain_extent.width != 0 && swapchain_extent.height != 0)
-            vk_ctx->swapchain_resources =
-                vulkan::swapchain_create(vk_ctx, &swapchain_details, swapchain_extent);
+            vk_ctx->swapchain_resources = vulkan::swapchain_create(vk_ctx, &swapchain_details, swapchain_extent);
         return;
     }
     VkFence* in_flight_fence = &vk_ctx->in_flight_fences.data[vk_ctx->current_frame];
     U32 image_idx = 0;
     U32 prev_image_idx = vk_ctx->cur_img_idx;
     {
-        VkSemaphore image_available_semaphore =
-            swapchain_resources->image_available_semaphores.data[prev_image_idx];
+        VkSemaphore image_available_semaphore = swapchain_resources->image_available_semaphores.data[prev_image_idx];
 
         {
             prof_scope_marker_named("Wait for frame");
-            VkResult fence_result =
-                vkWaitForFences(vk_ctx->device, 1, in_flight_fence, VK_TRUE, UINT64_MAX);
+            VkResult fence_result = vkWaitForFences(vk_ctx->device, 1, in_flight_fence, VK_TRUE, UINT64_MAX);
             VK_CHECK_RESULT(fence_result);
         }
 
@@ -279,9 +251,7 @@ render_frame(Vec2U32 framebuffer_dim, B32* in_out_framebuffer_resized, ui::Camer
         // finished execution at this point
         vulkan::deletion_queue_empty_next();
 
-        VkResult result = vkAcquireNextImageKHR(
-            vk_ctx->device, vk_ctx->swapchain_resources->swapchain, UINT64_MAX,
-            image_available_semaphore, VK_NULL_HANDLE, &image_idx);
+        VkResult result = vkAcquireNextImageKHR(vk_ctx->device, vk_ctx->swapchain_resources->swapchain, UINT64_MAX, image_available_semaphore, VK_NULL_HANDLE, &image_idx);
         vk_ctx->cur_img_idx = (prev_image_idx + 1) % swapchain_resources->image_count;
 
         if (result == VK_ERROR_OUT_OF_DATE_KHR || *in_out_framebuffer_resized)
@@ -296,10 +266,8 @@ render_frame(Vec2U32 framebuffer_dim, B32* in_out_framebuffer_resized, ui::Camer
         }
     }
 
-    VkSemaphore render_finished_semaphore =
-        swapchain_resources->render_finished_semaphores.data[prev_image_idx];
-    VkSemaphore image_available_semaphore =
-        swapchain_resources->image_available_semaphores.data[prev_image_idx];
+    VkSemaphore render_finished_semaphore = swapchain_resources->render_finished_semaphores.data[prev_image_idx];
+    VkSemaphore image_available_semaphore = swapchain_resources->image_available_semaphores.data[prev_image_idx];
 
     VkCommandBuffer cmd_buffer = vk_ctx->command_buffers.data[vk_ctx->current_frame];
     VK_CHECK_RESULT(vkResetFences(vk_ctx->device, 1, in_flight_fence));
@@ -346,8 +314,7 @@ render_frame(Vec2U32 framebuffer_dim, B32* in_out_framebuffer_resized, ui::Camer
 
     VkResult result = vkQueuePresentKHR(vk_ctx->present_queue, &presentInfo);
     prof_frame_marker; // end of frame is assumed to be here
-    if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR ||
-        *in_out_framebuffer_resized)
+    if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR || *in_out_framebuffer_resized)
     {
         *in_out_framebuffer_resized = 0;
         vulkan::swapchain_recreate(framebuffer_dim);
@@ -398,11 +365,9 @@ texture_handle_create(SamplerInfo* sampler_info)
     render::Handle asset_handle = render::Handle::texture_handle_create();
     OS_MutexScopeW(asset_manager->texture_mutex)
     {
-        AssetItem<vulkan::TextureHandle>* asset_item =
-            (AssetItem<vulkan::TextureHandle>*)asset_handle.ptr;
+        AssetItem<vulkan::TextureHandle>* asset_item = (AssetItem<vulkan::TextureHandle>*)asset_handle.ptr;
         vulkan::TextureHandle* texture = &asset_item->item;
-        texture->descriptor_set_idx =
-            vulkan::descriptor_index_allocate(&asset_manager->descriptor_index_allocator);
+        texture->descriptor_set_idx = vulkan::descriptor_index_allocate(&asset_manager->descriptor_index_allocator);
         texture->sampler = vk_sampler;
     }
 
@@ -418,12 +383,10 @@ texture_load_async(render::SamplerInfo* sampler_info, String8 texture_path)
     render::ThreadInput* thread_input = render::thread_input_create();
 
     // ~mgj: make input ready for texture loading on thread
-    render::TextureLoadingInfo* texture_load_info =
-        PushStruct(thread_input->arena, render::TextureLoadingInfo);
+    render::TextureLoadingInfo* texture_load_info = PushStruct(thread_input->arena, render::TextureLoadingInfo);
     texture_load_info->tex_path = push_str8_copy(thread_input->arena, texture_path);
     thread_input->user_data = texture_load_info;
-    render::handle_list_push(thread_input->arena, &thread_input->handles,
-                             render::texture_handle_create(sampler_info));
+    render::handle_list_push(thread_input->arena, &thread_input->handles, render::texture_handle_create(sampler_info));
 
     thread_input->loading_func = vulkan::texture_loading_from_path_thread;
     thread_input->done_loading_func = render::handle_done_loading;
@@ -435,8 +398,7 @@ texture_load_async(render::SamplerInfo* sampler_info, String8 texture_path)
 }
 
 g_internal Handle
-texture_load_sync(render::SamplerInfo* sampler_info, TextureUploadData* tex_data,
-                  VkCommandBuffer cmd)
+texture_load_sync(render::SamplerInfo* sampler_info, TextureUploadData* tex_data, VkCommandBuffer cmd)
 {
     prof_scope_marker;
     ScratchScope scratch = ScratchScope(0, 0);
@@ -446,11 +408,9 @@ texture_load_sync(render::SamplerInfo* sampler_info, TextureUploadData* tex_data
 
     {
         Assert(tex_data);
-        vulkan::ImageAllocationResource image_allocation_resource =
-            vulkan::texture_upload_with_blitting(cmd, tex_data);
+        vulkan::ImageAllocationResource image_allocation_resource = vulkan::texture_upload_with_blitting(cmd, tex_data);
 
-        render::AssetItem<vulkan::TextureHandle>* tex_asset =
-            vulkan::asset_manager_item_get<vulkan::TextureHandle>(handle);
+        render::AssetItem<vulkan::TextureHandle>* tex_asset = vulkan::asset_manager_item_get<vulkan::TextureHandle>(handle);
         if (tex_asset)
         {
             tex_asset->item.image_resource = image_allocation_resource.image_resource;
@@ -501,13 +461,11 @@ colormap_load_async(render::SamplerInfo* sampler_info, const U8* colormap_data, 
     render::ThreadInput* thread_input = render::thread_input_create();
 
     // ~mgj: make input ready for colormap loading on thread
-    render::ColorMapLoadingInfo* colormap_load_info =
-        PushStruct(thread_input->arena, render::ColorMapLoadingInfo);
+    render::ColorMapLoadingInfo* colormap_load_info = PushStruct(thread_input->arena, render::ColorMapLoadingInfo);
     colormap_load_info->colormap_data = colormap_data;
     colormap_load_info->colormap_size = colormap_size;
 
-    render::handle_list_push(thread_input->arena, &thread_input->handles,
-                             render::texture_handle_create(sampler_info));
+    render::handle_list_push(thread_input->arena, &thread_input->handles, render::texture_handle_create(sampler_info));
     thread_input->user_data = colormap_load_info;
     thread_input->loading_func = vulkan::colormap_loading_thread;
     thread_input->done_loading_func = render::handle_done_loading;
@@ -563,17 +521,13 @@ buffer_load_sync(VkCommandBuffer cmd, render::BufferInfo* buffer_info)
     if (type & render::BufferType_StorageBuffer)
         usage_flags |= VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
     Assert(usage_flags != 0);
-    vulkan::BufferAllocation buffer_alloc = vulkan::buffer_allocation_create(
-        buffer_info->buffer.size, usage_flags | VK_BUFFER_USAGE_TRANSFER_DST_BIT, vma_info,
-        "buffer_load_sync");
+    vulkan::BufferAllocation buffer_alloc = vulkan::buffer_allocation_create(buffer_info->buffer.size, usage_flags | VK_BUFFER_USAGE_TRANSFER_DST_BIT, vma_info, "buffer_load_sync");
 
     // ~mgj: Create staging buffer allocation
-    vulkan::BufferAllocation staging_buffer_alloc =
-        vulkan::staging_buffer_create(buffer_info->buffer.size);
+    vulkan::BufferAllocation staging_buffer_alloc = vulkan::staging_buffer_create(buffer_info->buffer.size);
 
     // ~mgj: Prepare buffer asset item
-    AssetItem<vulkan::BufferHandle>* asset_item =
-        (AssetItem<vulkan::BufferHandle>*)asset_handle.ptr;
+    AssetItem<vulkan::BufferHandle>* asset_item = (AssetItem<vulkan::BufferHandle>*)asset_handle.ptr;
     if (asset_item)
     {
         vulkan::BufferHandle* asset_buffer = (vulkan::BufferHandle*)&asset_item->item;
@@ -582,13 +536,10 @@ buffer_load_sync(VkCommandBuffer cmd, render::BufferInfo* buffer_info)
         asset_buffer->elem_count = buffer_info->buffer.size / buffer_info->type_size;
 
         // ~mgj: copy to staging and record copy command
-        VK_CHECK_RESULT(vmaCopyMemoryToAllocation(
-            asset_manager->allocator, buffer_info->buffer.data, staging_buffer_alloc.allocation, 0,
-            buffer_info->buffer.size));
+        VK_CHECK_RESULT(vmaCopyMemoryToAllocation(asset_manager->allocator, buffer_info->buffer.data, staging_buffer_alloc.allocation, 0, buffer_info->buffer.size));
         VkBufferCopy copy_region = {0};
         copy_region.size = buffer_info->buffer.size;
-        vkCmdCopyBuffer(cmd, staging_buffer_alloc.buffer, asset_buffer->buffer_alloc.buffer, 1,
-                        &copy_region);
+        vkCmdCopyBuffer(cmd, staging_buffer_alloc.buffer, asset_buffer->buffer_alloc.buffer, 1, &copy_region);
 
         asset_buffer->staging_buffer = staging_buffer_alloc;
     }
@@ -607,17 +558,14 @@ uniform_buffer_load_sync(Arena* arena, Handle handle)
     Handle desc_handle = Handle();
     if (is_handle_zero(handle) == false)
     {
-        AssetItem<vulkan::BufferHandle>* buffer_asset =
-            vulkan::asset_manager_buffer_item_get(handle);
+        AssetItem<vulkan::BufferHandle>* buffer_asset = vulkan::asset_manager_buffer_item_get(handle);
         if (buffer_asset)
         {
             desc_handle = Handle::descriptor_set_handle_create();
-            AssetItem<vulkan::DescriptorSetHandle>* asset_item =
-                (AssetItem<vulkan::DescriptorSetHandle>*)desc_handle.ptr;
+            AssetItem<vulkan::DescriptorSetHandle>* asset_item = (AssetItem<vulkan::DescriptorSetHandle>*)desc_handle.ptr;
 
             vulkan::DescriptorSetHandle* desc_set_handle = &asset_item->item;
-            vulkan::UniformBufferDescriptor* uni_buffer_desc =
-                PushStruct(arena, vulkan::UniformBufferDescriptor);
+            vulkan::UniformBufferDescriptor* uni_buffer_desc = PushStruct(arena, vulkan::UniformBufferDescriptor);
             uni_buffer_desc->uniform_buffer = buffer_asset->item.buffer_alloc.buffer;
 
             desc_set_handle->desc_write_func_data = uni_buffer_desc;
@@ -636,22 +584,17 @@ g_internal Handle
 storage_buffer_load_sync(Arena* arena, Handle vertex_buffer_handle, Handle index_buffer_handle)
 {
     Handle desc_handle = Handle();
-    if (is_handle_zero(vertex_buffer_handle) == false &&
-        is_handle_zero(index_buffer_handle) == false)
+    if (is_handle_zero(vertex_buffer_handle) == false && is_handle_zero(index_buffer_handle) == false)
     {
-        AssetItem<vulkan::BufferHandle>* vertex_asset =
-            vulkan::asset_manager_buffer_item_get(vertex_buffer_handle);
-        AssetItem<vulkan::BufferHandle>* index_asset =
-            vulkan::asset_manager_buffer_item_get(index_buffer_handle);
+        AssetItem<vulkan::BufferHandle>* vertex_asset = vulkan::asset_manager_buffer_item_get(vertex_buffer_handle);
+        AssetItem<vulkan::BufferHandle>* index_asset = vulkan::asset_manager_buffer_item_get(index_buffer_handle);
         if (vertex_asset && index_asset)
         {
             desc_handle = Handle::descriptor_set_handle_create();
-            AssetItem<vulkan::DescriptorSetHandle>* asset_item =
-                (AssetItem<vulkan::DescriptorSetHandle>*)desc_handle.ptr;
+            AssetItem<vulkan::DescriptorSetHandle>* asset_item = (AssetItem<vulkan::DescriptorSetHandle>*)desc_handle.ptr;
 
             vulkan::DescriptorSetHandle* desc_set_handle = &asset_item->item;
-            vulkan::StorageBufferDescriptor* storage_desc =
-                PushStruct(arena, vulkan::StorageBufferDescriptor);
+            vulkan::StorageBufferDescriptor* storage_desc = PushStruct(arena, vulkan::StorageBufferDescriptor);
             storage_desc->vertex_buffer = vertex_asset->item.buffer_alloc.buffer;
             storage_desc->index_buffer = index_asset->item.buffer_alloc.buffer;
 
@@ -673,22 +616,18 @@ road_segment_descriptor_load_async(Arena* arena, Handle buffer_handle, Handle no
     Handle desc_handle = Handle();
     if (is_handle_zero(buffer_handle) == false && is_handle_zero(node_buffer_handle) == false)
     {
-        AssetItem<vulkan::BufferHandle>* buffer_asset =
-            vulkan::asset_manager_buffer_item_get(buffer_handle);
-        AssetItem<vulkan::BufferHandle>* node_buffer_asset =
-            vulkan::asset_manager_buffer_item_get(node_buffer_handle);
+        AssetItem<vulkan::BufferHandle>* buffer_asset = vulkan::asset_manager_buffer_item_get(buffer_handle);
+        AssetItem<vulkan::BufferHandle>* node_buffer_asset = vulkan::asset_manager_buffer_item_get(node_buffer_handle);
         Assert(buffer_asset && node_buffer_asset);
         if (buffer_asset && node_buffer_asset)
         {
             vulkan::AssetManager* asset_manager = vulkan::asset_manager_get();
 
             desc_handle = Handle::descriptor_set_handle_create();
-            AssetItem<vulkan::DescriptorSetHandle>* asset_item =
-                (AssetItem<vulkan::DescriptorSetHandle>*)desc_handle.ptr;
+            AssetItem<vulkan::DescriptorSetHandle>* asset_item = (AssetItem<vulkan::DescriptorSetHandle>*)desc_handle.ptr;
 
             vulkan::DescriptorSetHandle* desc_set_handle = &asset_item->item;
-            vulkan::RoadSegmentDescriptor* road_seg_desc =
-                PushStruct(arena, vulkan::RoadSegmentDescriptor);
+            vulkan::RoadSegmentDescriptor* road_seg_desc = PushStruct(arena, vulkan::RoadSegmentDescriptor);
             road_seg_desc->road_segment_buffer = buffer_asset->item.buffer_alloc.buffer;
             road_seg_desc->road_segment_node_buffer = node_buffer_asset->item.buffer_alloc.buffer;
 
@@ -702,8 +641,7 @@ road_segment_descriptor_load_async(Arena* arena, Handle buffer_handle, Handle no
             thread_input->loading_func = [](void*, render::ThreadInput*) {};
             thread_input->done_loading_func = render::handle_done_loading;
 
-            async::QueueItem queue_input = {.data = thread_input,
-                                            .worker_func = vulkan::thread_main};
+            async::QueueItem queue_input = {.data = thread_input, .worker_func = vulkan::thread_main};
             async::QueuePush(asset_manager->work_queue, &queue_input);
         }
     }
@@ -741,15 +679,12 @@ buffer_load_async(render::BufferInfo* buffer_info)
     if (type & render::BufferType_StorageBuffer)
         usage_flags |= VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
     Assert(usage_flags != 0);
-    vulkan::BufferAllocation buffer = vulkan::buffer_allocation_create(
-        buffer_info->buffer.size, usage_flags | VK_BUFFER_USAGE_TRANSFER_DST_BIT, vma_info,
-        "buffer_load_async");
+    vulkan::BufferAllocation buffer = vulkan::buffer_allocation_create(buffer_info->buffer.size, usage_flags | VK_BUFFER_USAGE_TRANSFER_DST_BIT, vma_info, "buffer_load_async");
 
     // ~mgj: Prepare buffer asset item
     OS_MutexScopeW(asset_manager->buffer_mutex)
     {
-        AssetItem<vulkan::BufferHandle>* asset_item =
-            (AssetItem<vulkan::BufferHandle>*)asset_handle.ptr;
+        AssetItem<vulkan::BufferHandle>* asset_item = (AssetItem<vulkan::BufferHandle>*)asset_handle.ptr;
         vulkan::BufferHandle* asset_buffer = (vulkan::BufferHandle*)&asset_item->item;
         asset_buffer->buffer_alloc = buffer;
         asset_buffer->elem_byte_size = buffer_info->type_size;
@@ -783,14 +718,10 @@ texture_gpu_upload_sync(render::Handle tex_handle, Buffer<U8> tex_buf)
     VkResult result;
 
     VkCommandBufferAllocateInfo cmd_buf_alloc_info = {
-        .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
-        .commandPool = vk_ctx->command_pool,
-        .level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
-        .commandBufferCount = 1};
+        .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO, .commandPool = vk_ctx->command_pool, .level = VK_COMMAND_BUFFER_LEVEL_PRIMARY, .commandBufferCount = 1};
     VkCommandBuffer cmd_buf;
     result = vkAllocateCommandBuffers(vk_ctx->device, &cmd_buf_alloc_info, &cmd_buf);
-    VkCommandBufferBeginInfo begin_info = {.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
-                                           .flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT};
+    VkCommandBufferBeginInfo begin_info = {.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO, .flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT};
     result = vkBeginCommandBuffer(cmd_buf, &begin_info);
     vulkan::texture_gpu_upload_cmd_recording(cmd_buf, tex_handle, tex_buf);
 
@@ -805,88 +736,66 @@ texture_gpu_upload_sync(render::Handle tex_handle, Buffer<U8> tex_buf)
     submit_info.commandBufferInfoCount = 1;
     submit_info.pCommandBufferInfos = &cmd_buf_info;
 
-    render::AssetItem<vulkan::TextureHandle>* asset =
-        (render::AssetItem<vulkan::TextureHandle>*)tex_handle.ptr;
+    render::AssetItem<vulkan::TextureHandle>* asset = (render::AssetItem<vulkan::TextureHandle>*)tex_handle.ptr;
     asset->is_loaded = true;
     result = vkQueueSubmit2(vk_ctx->graphics_queue, 1, &submit_info, NULL);
 }
 
 g_internal void
-model_3d_instance_draw(render::Handle texture_handle, render::Handle vertex_buffer_handle,
-                       render::Handle index_buffer_handle, render::BufferInfo* instance_buffer)
+model_3d_instance_draw(render::Handle texture_handle, render::Handle vertex_buffer_handle, render::Handle index_buffer_handle, render::BufferInfo* instance_buffer)
 {
-    render::AssetItem<vulkan::BufferHandle>* asset_vertex_buffer =
-        (render::AssetItem<vulkan::BufferHandle>*)(vertex_buffer_handle.ptr);
-    render::AssetItem<vulkan::BufferHandle>* asset_index_buffer =
-        (render::AssetItem<vulkan::BufferHandle>*)(index_buffer_handle.ptr);
-    render::AssetItem<vulkan::TextureHandle>* asset_texture =
-        (render::AssetItem<vulkan::TextureHandle>*)(texture_handle.ptr);
+    render::AssetItem<vulkan::BufferHandle>* asset_vertex_buffer = (render::AssetItem<vulkan::BufferHandle>*)(vertex_buffer_handle.ptr);
+    render::AssetItem<vulkan::BufferHandle>* asset_index_buffer = (render::AssetItem<vulkan::BufferHandle>*)(index_buffer_handle.ptr);
+    render::AssetItem<vulkan::TextureHandle>* asset_texture = (render::AssetItem<vulkan::TextureHandle>*)(texture_handle.ptr);
 
     if (asset_vertex_buffer->is_loaded && asset_index_buffer->is_loaded && asset_texture->is_loaded)
     {
-        vulkan::model_3d_instance_bucket_add(&asset_vertex_buffer->item.buffer_alloc,
-                                             &asset_index_buffer->item.buffer_alloc, texture_handle,
-                                             instance_buffer);
+        vulkan::model_3d_instance_bucket_add(vertex_buffer_handle, index_buffer_handle, texture_handle, instance_buffer);
     }
 }
 
 g_internal void
-model_3d_draw(render::Model3DPipelineData pipeline_input)
+model_3d_draw(Model3DPipelineData pipeline_input, render::Handle colormap_handle)
 {
-    if (render::is_handle_zero(pipeline_input.index_buffer_handle) ||
-        render::is_handle_zero(pipeline_input.vertex_buffer_handle) ||
-        render::is_handle_zero(pipeline_input.texture_handle))
+    if (render::is_handle_zero(pipeline_input.index_buffer_handle) || render::is_handle_zero(pipeline_input.vertex_buffer_handle) || render::is_handle_zero(pipeline_input.texture_handle) ||
+        render::is_handle_zero(colormap_handle))
         return;
 
-    if (render::is_resource_loaded(pipeline_input.vertex_buffer_handle) &&
-        render::is_resource_loaded(pipeline_input.index_buffer_handle) &&
-        render::is_resource_loaded(pipeline_input.texture_handle))
+    if (render::is_resource_loaded(pipeline_input.vertex_buffer_handle) && render::is_resource_loaded(pipeline_input.index_buffer_handle) &&
+        render::is_resource_loaded(pipeline_input.texture_handle) && render::is_resource_loaded(colormap_handle))
     {
-        render::AssetItem<vulkan::BufferHandle>* asset_vertex_buffer =
-            vulkan::asset_manager_buffer_item_get(pipeline_input.vertex_buffer_handle);
-        render::AssetItem<vulkan::BufferHandle>* asset_index_buffer =
-            vulkan::asset_manager_buffer_item_get(pipeline_input.index_buffer_handle);
-        vulkan::model_3d_bucket_add(&asset_vertex_buffer->item.buffer_alloc,
-                                    &asset_index_buffer->item.buffer_alloc,
-                                    pipeline_input.texture_handle, false,
-                                    pipeline_input.index_offset, pipeline_input.index_count);
+        render::AssetItem<vulkan::BufferHandle>* asset_vertex_buffer = vulkan::asset_manager_buffer_item_get(pipeline_input.vertex_buffer_handle);
+        render::AssetItem<vulkan::BufferHandle>* asset_index_buffer = vulkan::asset_manager_buffer_item_get(pipeline_input.index_buffer_handle);
+        render::AssetItem<vulkan::TextureHandle>* asset_texture = vulkan::asset_manager_texture_item_get(colormap_handle);
+        vulkan::model_3d_bucket_add(&asset_vertex_buffer->item.buffer_alloc, &asset_index_buffer->item.buffer_alloc, pipeline_input.texture_handle, false, pipeline_input.index_offset,
+                                    pipeline_input.index_count, asset_texture->item.descriptor_set_idx);
     }
 }
 
 g_internal bool
-road_intersection_compute_add(Handle storage_buffer_handle, Handle index_buffer_handle,
-                              Handle road_segment_buffer_handle,
-                              Handle road_segment_node_buffer_handle, Handle road_segment_handle)
+road_intersection_compute_add(Handle storage_buffer_handle, Handle index_buffer_handle, Handle road_segment_buffer_handle, Handle road_segment_node_buffer_handle, Handle road_segment_handle,
+                              U32 overlay_option)
 {
     bool compute_scheduled = false;
-    if (is_handle_zero(storage_buffer_handle) || is_handle_zero(index_buffer_handle) ||
-        is_handle_zero(road_segment_handle) || is_handle_zero(road_segment_buffer_handle) ||
+    if (is_handle_zero(storage_buffer_handle) || is_handle_zero(index_buffer_handle) || is_handle_zero(road_segment_handle) || is_handle_zero(road_segment_buffer_handle) ||
         is_handle_zero(road_segment_node_buffer_handle))
         return compute_scheduled;
 
-    if (is_resource_loaded(road_segment_handle) && is_resource_loaded(road_segment_buffer_handle) &&
-        is_resource_loaded(storage_buffer_handle) && is_resource_loaded(index_buffer_handle) &&
+    if (is_resource_loaded(road_segment_handle) && is_resource_loaded(road_segment_buffer_handle) && is_resource_loaded(storage_buffer_handle) && is_resource_loaded(index_buffer_handle) &&
         is_resource_loaded(road_segment_node_buffer_handle))
     {
-        render::AssetItem<vulkan::DescriptorSetHandle>* storage_set =
-            vulkan::asset_manager_descriptor_set_item_get(storage_buffer_handle);
-        render::AssetItem<vulkan::DescriptorSetHandle>* road_segment =
-            vulkan::asset_manager_descriptor_set_item_get(road_segment_handle);
-        render::AssetItem<vulkan::BufferHandle>* index_buffer =
-            vulkan::asset_manager_buffer_item_get(index_buffer_handle);
-        render::AssetItem<vulkan::BufferHandle>* road_segment_buffer =
-            vulkan::asset_manager_buffer_item_get(road_segment_buffer_handle);
+        render::AssetItem<vulkan::DescriptorSetHandle>* storage_set = vulkan::asset_manager_descriptor_set_item_get(storage_buffer_handle);
+        render::AssetItem<vulkan::DescriptorSetHandle>* road_segment = vulkan::asset_manager_descriptor_set_item_get(road_segment_handle);
+        render::AssetItem<vulkan::BufferHandle>* index_buffer = vulkan::asset_manager_buffer_item_get(index_buffer_handle);
+        render::AssetItem<vulkan::BufferHandle>* road_segment_buffer = vulkan::asset_manager_buffer_item_get(road_segment_buffer_handle);
 
         if (!storage_set || !road_segment || !index_buffer || !road_segment_buffer)
         {
-            exit_with_error("Item is null in road_intersection_compute_add!");
             return compute_scheduled;
         }
 
         compute_scheduled = true;
-        vulkan::road_intersection_bucket_add(storage_set->item.desc_set,
-                                             road_segment->item.desc_set,
-                                             &road_segment_buffer->item, &index_buffer->item);
+        vulkan::road_intersection_bucket_add(storage_set->item.desc_set, road_segment->item.desc_set, &road_segment_buffer->item, &index_buffer->item, overlay_option);
     }
     return compute_scheduled;
 }
@@ -894,26 +803,17 @@ road_intersection_compute_add(Handle storage_buffer_handle, Handle index_buffer_
 g_internal void
 blend_3d_draw(render::Blend3DPipelineData pipeline_input)
 {
-    if (render::is_handle_zero(pipeline_input.index_buffer_handle) ||
-        render::is_handle_zero(pipeline_input.vertex_buffer_handle) ||
-        render::is_handle_zero(pipeline_input.texture_handle) ||
+    if (render::is_handle_zero(pipeline_input.index_buffer_handle) || render::is_handle_zero(pipeline_input.vertex_buffer_handle) || render::is_handle_zero(pipeline_input.texture_handle) ||
         render::is_handle_zero(pipeline_input.colormap_handle))
         return;
-    render::AssetItem<vulkan::BufferHandle>* asset_vertex_buffer =
-        (render::AssetItem<vulkan::BufferHandle>*)(pipeline_input.vertex_buffer_handle.ptr);
-    render::AssetItem<vulkan::BufferHandle>* asset_index_buffer =
-        (render::AssetItem<vulkan::BufferHandle>*)(pipeline_input.index_buffer_handle.ptr);
-    render::AssetItem<vulkan::TextureHandle>* asset_texture =
-        (render::AssetItem<vulkan::TextureHandle>*)(pipeline_input.texture_handle.ptr);
-    render::AssetItem<vulkan::TextureHandle>* asset_colormap =
-        (render::AssetItem<vulkan::TextureHandle>*)(pipeline_input.colormap_handle.ptr);
+    render::AssetItem<vulkan::BufferHandle>* asset_vertex_buffer = (render::AssetItem<vulkan::BufferHandle>*)(pipeline_input.vertex_buffer_handle.ptr);
+    render::AssetItem<vulkan::BufferHandle>* asset_index_buffer = (render::AssetItem<vulkan::BufferHandle>*)(pipeline_input.index_buffer_handle.ptr);
+    render::AssetItem<vulkan::TextureHandle>* asset_texture = (render::AssetItem<vulkan::TextureHandle>*)(pipeline_input.texture_handle.ptr);
+    render::AssetItem<vulkan::TextureHandle>* asset_colormap = (render::AssetItem<vulkan::TextureHandle>*)(pipeline_input.colormap_handle.ptr);
 
-    if (asset_vertex_buffer->is_loaded && asset_index_buffer->is_loaded &&
-        asset_texture->is_loaded && asset_colormap->is_loaded)
+    if (asset_vertex_buffer->is_loaded && asset_index_buffer->is_loaded && asset_texture->is_loaded && asset_colormap->is_loaded)
     {
-        vulkan::blend_3d_bucket_add(&asset_vertex_buffer->item.buffer_alloc,
-                                    &asset_index_buffer->item.buffer_alloc,
-                                    pipeline_input.texture_handle, pipeline_input.colormap_handle);
+        vulkan::blend_3d_bucket_add(&asset_vertex_buffer->item.buffer_alloc, &asset_index_buffer->item.buffer_alloc, pipeline_input.texture_handle, pipeline_input.colormap_handle);
     }
 }
 
@@ -930,9 +830,7 @@ Handle::texture_handle_create()
 {
     vulkan::AssetManager* asset_manager = vulkan::asset_manager_get();
     OS_RWMutexTakeW(asset_manager->texture_mutex);
-    Handle handle =
-        asset_manager_item_create(&asset_manager->texture_list, &asset_manager->texture_free_list,
-                                  render::HandleType::Texture);
+    Handle handle = asset_manager_item_create(&asset_manager->texture_list, &asset_manager->texture_free_list, render::HandleType::Texture);
     OS_RWMutexDropW(asset_manager->texture_mutex);
     return handle;
 }
@@ -942,8 +840,7 @@ Handle::buffer_handle_create()
 {
     vulkan::AssetManager* asset_manager = vulkan::asset_manager_get();
     OS_RWMutexTakeW(asset_manager->buffer_mutex);
-    Handle handle = asset_manager_item_create(
-        &asset_manager->buffer_list, &asset_manager->buffer_free_list, render::HandleType::Buffer);
+    Handle handle = asset_manager_item_create(&asset_manager->buffer_list, &asset_manager->buffer_free_list, render::HandleType::Buffer);
 
     OS_RWMutexDropW(asset_manager->buffer_mutex);
     return handle;
@@ -954,9 +851,7 @@ Handle::descriptor_set_handle_create()
 {
     vulkan::AssetManager* asset_manager = vulkan::asset_manager_get();
     OS_RWMutexTakeW(asset_manager->descriptor_set_mutex);
-    Handle handle = asset_manager_item_create(&asset_manager->descriptor_set_list,
-                                              &asset_manager->descriptor_set_free_list,
-                                              render::HandleType::DescriptorSet);
+    Handle handle = asset_manager_item_create(&asset_manager->descriptor_set_list, &asset_manager->descriptor_set_free_list, render::HandleType::DescriptorSet);
 
     OS_RWMutexDropW(asset_manager->descriptor_set_mutex);
     return handle;
@@ -969,8 +864,7 @@ thread_cmd_buffer_record(render::ThreadInput* thread_input, ThreadSyncCallback c
 
     U32 thread_local_id = async::t_cur_thread_id;
     // ~mgj: Record the command buffer
-    thread_input->cmd_buffer = begin_command(
-        asset_manager->device, &asset_manager->threaded_cmd_pools.data[thread_local_id]);
+    thread_input->cmd_buffer = begin_command(asset_manager->device, &asset_manager->threaded_cmd_pools.data[thread_local_id]);
 
     void* result = callback.function(thread_input, callback.data);
 
@@ -993,8 +887,7 @@ handle_done_loading(render::HandleList handles)
         {
             case render::HandleType::Buffer:
             {
-                render::AssetItem<vulkan::BufferHandle>* asset =
-                    vulkan::asset_manager_buffer_item_get(handle);
+                render::AssetItem<vulkan::BufferHandle>* asset = vulkan::asset_manager_buffer_item_get(handle);
                 if (asset)
                 {
                     buffer_destroy(&asset->item.staging_buffer);
@@ -1005,14 +898,11 @@ handle_done_loading(render::HandleList handles)
             break;
             case render::HandleType::Texture:
             {
-                render::AssetItem<vulkan::TextureHandle>* asset =
-                    vulkan::asset_manager_texture_item_get(handle);
+                render::AssetItem<vulkan::TextureHandle>* asset = vulkan::asset_manager_texture_item_get(handle);
                 if (asset)
                 {
                     vulkan::TextureHandle* texture = &asset->item;
-                    vulkan::descriptor_set_update_bindless_texture(
-                        texture->descriptor_set_idx,
-                        texture->image_resource.image_view_resource.image_view, texture->sampler);
+                    vulkan::descriptor_set_update_bindless_texture(texture->descriptor_set_idx, texture->image_resource.image_view_resource.image_view, texture->sampler);
                     buffer_destroy(&asset->item.staging_allocation);
                     asset->is_loaded = 1;
                 }
@@ -1020,14 +910,11 @@ handle_done_loading(render::HandleList handles)
             break;
             case render::HandleType::DescriptorSet:
             {
-                render::AssetItem<vulkan::DescriptorSetHandle>* asset =
-                    vulkan::asset_manager_descriptor_set_item_get(handle);
+                render::AssetItem<vulkan::DescriptorSetHandle>* asset = vulkan::asset_manager_descriptor_set_item_get(handle);
                 if (asset)
                 {
                     vulkan::DescriptorSetHandle* descriptor_handle = &asset->item;
-                    vulkan::DescriptorSetInfo desc_info = descriptor_handle->desc_write_func(
-                        asset_manager->device, vk_ctx->descriptor_pool,
-                        descriptor_handle->desc_write_func_data);
+                    vulkan::DescriptorSetInfo desc_info = descriptor_handle->desc_write_func(asset_manager->device, vk_ctx->descriptor_pool, descriptor_handle->desc_write_func_data);
                     descriptor_handle->desc_layout = desc_info.layout;
                     descriptor_handle->desc_set = desc_info.set;
                     Assert(descriptor_handle->desc_layout);
