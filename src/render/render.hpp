@@ -153,8 +153,9 @@ struct BufferInfo
     Buffer<U8> buffer;
     U64 type_size;
     U32 buffer_type;
+    U32 elem_count;
 
-    BufferInfo(Buffer<U8> buffer, U64 type_size, U32 buffer_type) : buffer(buffer), type_size(type_size), buffer_type(buffer_type)
+    BufferInfo(Buffer<U8> buffer, U64 type_size, U32 buffer_type, U32 elem_count) : buffer(buffer), type_size(type_size), buffer_type(buffer_type), elem_count(elem_count)
     {
     }
 
@@ -351,6 +352,14 @@ model_3d_draw(Model3DPipelineData pipeline_input, render::Handle colormap_handle
 g_internal void
 blend_3d_draw(Blend3DPipelineData pipeline_input);
 
+g_internal void
+car_instance_render_bucket_add(render::Handle vertex_buffer_handle, render::Handle index_buffer_handle, render::Handle tex_handle, render::BufferInfo* instance_buffer_info,
+                               U32 instance_buffer_offset);
+
+g_internal void
+car_instance_compute_bucket_add(render::BufferInfo* instance_buffer_info, render::Handle tile_vertex_buffer_handle, render::Handle tile_index_buffer_handle, F32 car_center_to_road_offset,
+                                U32 instance_buffer_offset);
+
 g_internal bool
 road_intersection_compute_add(Handle storage_buffer_handle, Handle index_buffer_handle, Handle road_segment_buffer_handle, Handle road_segment_node_buffer_handle, Handle road_segment_handle,
                               U32 overlay_option);
@@ -372,9 +381,6 @@ road_segment_descriptor_load_async(Arena* arena, Handle buffer_handle, Handle no
 
 g_internal bool
 is_resource_loaded(Handle handle);
-
-g_internal void
-model_3d_instance_draw(Handle texture_handle, Handle vertex_buffer_handle, Handle index_buffer_handle, BufferInfo* instance_buffer);
 
 g_internal void*
 thread_cmd_buffer_record(ThreadInput* thread_input, ThreadSyncCallback callback);

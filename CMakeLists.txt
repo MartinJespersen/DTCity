@@ -13,11 +13,15 @@ set(ALL_TARGETS city)
 option(BUILD_DEBUG "Enable Additional Debugging Information (e.g Vulkan Validation Layers)" OFF)
 option(ASAN_ENABLED "Enable Address Sanitizer" OFF)
 option(BUILD_TESTS "Build tests" OFF)
+option(SHADER_DEBUG "Enable Shader Debugging" OFF)
 
 # cmake macro -> compiler macro
+if(BUILD_DEBUG OR SHADER_DEBUG)
+    list(APPEND GLSL_SHADER_FLAGS -gVS)
+endif()
+
 if(BUILD_DEBUG)
     add_compile_definitions(BUILD_DEBUG=1)
-    list(APPEND GLSL_SHADER_FLAGS -gVS)
 endif()
 
 if(ASAN_ENABLED)

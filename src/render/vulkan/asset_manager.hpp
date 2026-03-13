@@ -40,8 +40,7 @@ struct ImageViewResource
     VkImageView image_view;
     VkDevice device;
 
-    ImageViewResource(VkDevice device, VkImage image, VkFormat format,
-                      VkImageAspectFlags aspect_mask, U32 mipmap_level, VkImageViewType image_type);
+    ImageViewResource(VkDevice device, VkImage image, VkFormat format, VkImageAspectFlags aspect_mask, U32 mipmap_level, VkImageViewType image_type);
 };
 
 struct ImageResource
@@ -49,8 +48,7 @@ struct ImageResource
     ImageAllocation image_alloc;
     ImageViewResource image_view_resource;
 
-    ImageResource(ImageAllocation image_alloc, ImageViewResource image_view_resource)
-        : image_alloc(image_alloc), image_view_resource(image_view_resource)
+    ImageResource(ImageAllocation image_alloc, ImageViewResource image_view_resource) : image_alloc(image_alloc), image_view_resource(image_view_resource)
     {
     }
 };
@@ -60,8 +58,7 @@ struct ImageAllocationResource
     ImageResource image_resource;
     BufferAllocation staging_buffer_alloc;
 
-    ImageAllocationResource(ImageResource image_resource, BufferAllocation staging_buffer_alloc)
-        : image_resource(image_resource), staging_buffer_alloc(staging_buffer_alloc)
+    ImageAllocationResource(ImageResource image_resource, BufferAllocation staging_buffer_alloc) : image_resource(image_resource), staging_buffer_alloc(staging_buffer_alloc)
     {
     }
 };
@@ -70,7 +67,7 @@ struct BufferHandle
 {
     BufferAllocation buffer_alloc;
     BufferAllocation staging_buffer;
-    U32 elem_byte_size;
+    U32 elem_size_in_bytes;
     U32 elem_count;
 };
 
@@ -211,9 +208,8 @@ struct AssetManager
 g_internal AssetManager*
 asset_manager_get();
 static AssetManager*
-asset_manager_create(VkPhysicalDevice physical_device, VkDevice device, VkInstance instance,
-                     VkQueue graphics_queue, U32 queue_family_index, async::Threads* threads,
-                     U64 total_size_in_bytes, VkDescriptorPool desc_pool);
+asset_manager_create(VkPhysicalDevice physical_device, VkDevice device, VkInstance instance, VkQueue graphics_queue, U32 queue_family_index, async::Threads* threads, U64 total_size_in_bytes,
+                     VkDescriptorPool desc_pool);
 static void
 asset_manager_destroy(AssetManager* asset_manager);
 
@@ -221,11 +217,7 @@ asset_manager_destroy(AssetManager* asset_manager);
 // buffer usage patterns with VMA:
 // https://gpuopen-librariesandsdks.github.io/VulkanMemoryAllocator/html/usage_patterns.html
 static BufferAllocation
-buffer_allocation_create(VkDeviceSize size, VkBufferUsageFlags buffer_usage,
-                         VmaAllocationCreateInfo vma_info, const char* name);
-
-g_internal U32
-buffer_allocation_size_get(BufferAllocation* buffer_allocation);
+buffer_allocation_create(VkDeviceSize size, VkBufferUsageFlags buffer_usage, VmaAllocationCreateInfo vma_info, const char* name);
 
 static void
 buffer_destroy(BufferAllocation* buffer_allocation);
@@ -239,21 +231,17 @@ static BufferAllocation
 staging_buffer_create(VkDeviceSize size);
 static BufferAllocation
 staging_buffer_mapped_create(VkDeviceSize size, const char* name);
+static render::Handle
+buffer_alloc_create_or_resize(U32 total_buffer_byte_count, render::Handle handle, VkBufferUsageFlags usage, const char* name);
 static void
-buffer_alloc_create_or_resize(U32 total_buffer_byte_count, BufferAllocation* buffer_alloc,
-                              VkBufferUsageFlags usage, const char* name);
-static void
-buffer_readback_create(VkDeviceSize size, VkBufferUsageFlags buffer_usage,
-                       BufferReadback* out_buffer_readback, const char* name);
+buffer_readback_create(VkDeviceSize size, VkBufferUsageFlags buffer_usage, BufferReadback* out_buffer_readback, const char* name);
 static void
 buffer_readback_destroy(BufferReadback* out_buffer_readback);
 
 //~mgj: Image Allocation Functions (VMA)
 static ImageAllocation
-image_allocation_create(U32 width, U32 height, VkSampleCountFlagBits numSamples, VkFormat format,
-                        VkImageTiling tiling, VkImageUsageFlags usage, U32 mipmap_level,
-                        VmaAllocationCreateInfo vma_info, const char* name,
-                        VkImageType image_type = VK_IMAGE_TYPE_2D);
+image_allocation_create(U32 width, U32 height, VkSampleCountFlagBits numSamples, VkFormat format, VkImageTiling tiling, VkImageUsageFlags usage, U32 mipmap_level, VmaAllocationCreateInfo vma_info,
+                        const char* name, VkImageType image_type = VK_IMAGE_TYPE_2D);
 static void
 image_allocation_destroy(ImageAllocation image_alloc);
 static void
@@ -288,8 +276,7 @@ static render::AssetItem<DescriptorSetHandle>*
 asset_manager_descriptor_set_item_get(render::Handle handle);
 template <typename T>
 static render::Handle
-asset_manager_item_create(render::AssetItemList<T>* list, render::AssetItemList<T>* free_list,
-                          render::HandleType handle_type);
+asset_manager_item_create(render::AssetItemList<T>* list, render::AssetItemList<T>* free_list, render::HandleType handle_type);
 template <typename T>
 static render::AssetItem<T>*
 asset_manager_item_get(render::Handle handle);
@@ -333,8 +320,7 @@ texture_ktx_cmd_record(VkCommandBuffer cmd, TextureHandle* tex, ::Buffer<U8> tex
 g_internal B32
 texture_cmd_record_with_stb(VkCommandBuffer cmd, TextureHandle* tex, ::Buffer<U8> tex_buf);
 g_internal B32
-texture_gpu_upload_cmd_recording(VkCommandBuffer cmd, render::Handle tex_handle,
-                                 ::Buffer<U8> tex_buf);
+texture_gpu_upload_cmd_recording(VkCommandBuffer cmd, render::Handle tex_handle, ::Buffer<U8> tex_buf);
 g_internal void
 colormap_texture_cmd_record(VkCommandBuffer cmd, TextureHandle* tex, Buffer<U8> buf);
 
@@ -353,13 +339,13 @@ thread_main(async::ThreadInfo thread_info, void* input);
 
 } // namespace vulkan
 
-#define VK_CHECK_RESULT(f)                                                                         \
-    {                                                                                              \
-        VkResult res = (f);                                                                        \
-        if (res != VK_SUCCESS)                                                                     \
-        {                                                                                          \
-            ERROR_LOG("Fatal : VkResult is %d in %s:%d\n", res, __FILE__, __LINE__);               \
-            Trap();                                                                                \
-            exit(EXIT_FAILURE);                                                                    \
-        }                                                                                          \
+#define VK_CHECK_RESULT(f)                                                                                                                                                                             \
+    {                                                                                                                                                                                                  \
+        VkResult res = (f);                                                                                                                                                                            \
+        if (res != VK_SUCCESS)                                                                                                                                                                         \
+        {                                                                                                                                                                                              \
+            ERROR_LOG("Fatal : VkResult is %d in %s:%d\n", res, __FILE__, __LINE__);                                                                                                                   \
+            Trap();                                                                                                                                                                                    \
+            exit(EXIT_FAILURE);                                                                                                                                                                        \
+        }                                                                                                                                                                                              \
     }

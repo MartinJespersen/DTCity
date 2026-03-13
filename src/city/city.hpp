@@ -194,7 +194,7 @@ struct RoadSegment
 
 struct Car
 {
-    Vec3F64 cur_pos;
+    Vec3F64 cur_pos_ecef;
     osm::EcefLocation source_loc;
     osm::EcefLocation target_loc;
     Vec3F64 dir;
@@ -206,6 +206,7 @@ struct CarSim
     Arena* arena;
 
     Buffer<Car> cars;
+    Buffer<F32> car_height;
 
     render::BufferInfo vertex_buffer;
     render::BufferInfo index_buffer;
@@ -254,11 +255,11 @@ g_internal void
 RoadIntersectionPointsFind(Road* road, RoadSegment* in_out_segment, osm::Way* current_road_way, osm::Network* node_utm_structure);
 // ~mgj: Cars
 g_internal CarSim*
-car_sim_create(String8 asset_path, String8 texture_path, U32 car_count, Road* road);
+car_sim_create(String8 asset_path, String8 texture_path, U32 car_count);
 g_internal void
 car_sim_destroy(CarSim* car_sim);
 g_internal Buffer<render::Model3DInstance>
-car_sim_update(Arena* arena, CarSim* car, F64 time_delta);
+car_sim_update(Arena* arena, CarSim* car, F64 time_delta, glm::dmat4& ecef_to_local);
 
 // ~mgj: Buildings
 g_internal Buildings*

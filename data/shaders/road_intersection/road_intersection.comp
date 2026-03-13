@@ -56,7 +56,6 @@ layout(std430, set = 1, binding = 1) readonly buffer IndexBuffer {
 layout(push_constant) uniform PushConstants
 {
     uint road_segment_buffer_size;
-    uint invocation_count;
     uint overlay_option_idx;
 } push_constants;
 
@@ -86,12 +85,10 @@ bool in_bounds(Bounds bounds, vec2 pos)
 void main()
 {
     uint index = gl_GlobalInvocationID.x;
-
-    if (index >= push_constants.invocation_count)
-    {
+    uint base = index * 3;
+    if (base + 2 >= indices.data.length()) {
         return;
     }
-    uint base = index * 3;
     uint v0_idx = indices.data[base];
     uint v1_idx = indices.data[base + 1];
     uint v2_idx = indices.data[base + 2];

@@ -517,10 +517,12 @@ tileset_renderer_create(Arena* arena, async::Threads* threads, const char* tiles
     // Set up local coordinate system centered at the origin
     CesiumGeospatial::Cartographic origin_cartographic(glm::radians(origin_longitude), glm::radians(origin_latitude), origin_height);
 
-    renderer->local_coord_system = new CesiumGeospatial::LocalHorizontalCoordinateSystem(origin_cartographic, CesiumGeospatial::LocalDirection::East, CesiumGeospatial::LocalDirection::North, CesiumGeospatial::LocalDirection::Up);
+    CesiumGeospatial::LocalHorizontalCoordinateSystem local_coord_system(origin_cartographic, CesiumGeospatial::LocalDirection::East, CesiumGeospatial::LocalDirection::North, CesiumGeospatial::LocalDirection::Up);
+    renderer->ecef_to_local = local_coord_system.getEcefToLocalTransformation();
+    renderer->local_to_ecef = local_coord_system.getLocalToEcefTransformation();
 
     // Create prepare renderer resources (pass coordinate system for ECEF->local transforms)
-    auto prepare_renderer_resources = std::make_shared<DTCityPrepareRendererResources>(renderer->local_coord_system->getEcefToLocalTransformation(), renderer);
+    auto prepare_renderer_resources = std::make_shared<DTCityPrepareRendererResources>(renderer->ecef_to_local, renderer);
 
     // Create tileset externals
     Cesium3DTilesSelection::TilesetExternals externals{asset_accessor, prepare_renderer_resources, renderer->async_system, nullptr, nullptr, nullptr};
@@ -599,7 +601,7 @@ tileset_update_view(Arena* arena, TilesetRenderer* renderer, ui::Camera* camera,
         return;
 
     // Get camera position in ECEF
-    glm::dmat4 local_to_ecef = renderer->local_coord_system->getLocalToEcefTransformation();
+    glm::dmat4 local_to_ecef = renderer->local_to_ecef;
     glm::dvec3 camera_pos_local = glm::dvec3(camera->position);
     glm::dvec3 camera_pos_ecef = glm::dvec3(local_to_ecef * glm::dvec4(camera_pos_local, 1.0));
 

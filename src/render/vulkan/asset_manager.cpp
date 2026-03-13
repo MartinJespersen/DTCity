@@ -336,17 +336,6 @@ texture_gpu_upload_cmd_recording(VkCommandBuffer cmd, render::Handle tex_handle,
     return err;
 }
 
-g_internal U32
-buffer_allocation_size_get(BufferAllocation* buffer_allocation)
-{
-    if (buffer_allocation->size == 0)
-    {
-        return 0;
-    }
-    Assert(buffer_allocation->size == buffer_allocation->allocation->GetSize());
-    return buffer_allocation->size;
-}
-
 static void
 buffer_loading_thread(void* data, render::ThreadInput* thread_input)
 {
@@ -372,8 +361,8 @@ buffer_loading_thread(void* data, render::ThreadInput* thread_input)
             vkCmdCopyBuffer((VkCommandBuffer)thread_input->cmd_buffer, staging_buffer_alloc.buffer, asset_buffer->buffer_alloc.buffer, 1, &copy_region);
 
             asset_buffer->staging_buffer = staging_buffer_alloc;
-            asset_buffer->elem_byte_size = buffer_info->type_size;
-            asset_buffer->elem_count = buffer.size / buffer_info->type_size;
+            asset_buffer->elem_size_in_bytes = buffer_info->type_size;
+            asset_buffer->elem_count = buffer_info->elem_count;
         }
         else
         {
@@ -983,6 +972,9 @@ asset_manager_descriptor_set_free(render::Handle handle)
 static void
 asset_manager_handle_free(render::Handle handle)
 {
+    if (render::is_handle_zero(handle))
+        return;
+
     switch (handle.type)
     {
         case render::HandleType::Buffer:
@@ -1077,20 +1069,35 @@ staging_buffer_mapped_create(VkDeviceSize size, const char* buffer_name)
     return staging_buf_alloc;
 }
 
-static void
-buffer_alloc_create_or_resize(U32 total_buffer_byte_count, BufferAllocation* buffer_alloc, VkBufferUsageFlags usage, const char* name)
+static render::Handle
+buffer_alloc_create_or_resize(U32 total_buffer_byte_count, render::Handle handle, VkBufferUsageFlags usage, const char* name)
 {
-    if (total_buffer_byte_count > buffer_allocation_size_get(buffer_alloc))
+    // buffer alloc get
+    render::Handle final_handle = handle;
+    if (render::is_handle_zero(final_handle))
     {
-        buffer_destroy(buffer_alloc);
+        final_handle = render::Handle::buffer_handle_create();
+    }
+    render::AssetItem<BufferHandle>* asset_item_buffer = asset_manager_buffer_item_get(final_handle);
+    Assert(asset_item_buffer);
+
+    if (total_buffer_byte_count > asset_item_buffer->item.buffer_alloc.size)
+    {
+        deletion_queue_push(final_handle);
+        final_handle = render::Handle::buffer_handle_create();
+        asset_item_buffer = asset_manager_buffer_item_get(final_handle);
+        Assert(asset_item_buffer);
 
         VmaAllocationCreateInfo vma_info = {0};
         vma_info.usage = VMA_MEMORY_USAGE_AUTO;
         vma_info.flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT | VMA_ALLOCATION_CREATE_MAPPED_BIT;
         vma_info.requiredFlags = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT;
 
-        *buffer_alloc = buffer_allocation_create(total_buffer_byte_count, usage, vma_info, name);
+        asset_item_buffer->item.buffer_alloc = buffer_allocation_create(total_buffer_byte_count, usage, vma_info, name);
+        asset_item_buffer->item.elem_size_in_bytes = 1;
+        asset_item_buffer->item.elem_count = total_buffer_byte_count;
     }
+    return final_handle;
 }
 
 // inspiration:
@@ -1133,7 +1140,7 @@ static void
 buffer_mapped_update(VkCommandBuffer cmd_buffer, BufferAllocationMapped mapped_buffer)
 {
     AssetManager* asset_manager = asset_manager_get();
-    U32 mapped_buffer_size = buffer_allocation_size_get(&mapped_buffer.buffer_alloc);
+    U32 mapped_buffer_size = mapped_buffer.buffer_alloc.size;
 
     if (mapped_buffer.mem_prop_flags & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT)
     {

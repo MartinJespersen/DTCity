@@ -29,6 +29,7 @@ struct TileRenderDataList
     TileRenderDataList* next;
     Arena* arena;
     bool tile_is_loaded;
+
     TileRenderData* first;
     TileRenderData* last;
 };
@@ -39,8 +40,8 @@ struct TilesetRenderer
     std::shared_ptr<CesiumAsync::ITaskProcessor> task_processor;
     CesiumAsync::AsyncSystem async_system;
 
-    // Coordinate system for local rendering
-    CesiumGeospatial::LocalHorizontalCoordinateSystem* local_coord_system;
+    glm::dmat4 ecef_to_local;
+    glm::dmat4 local_to_ecef;
 
     // tiles to render list
     OS_Handle tiles_to_free_mutex;

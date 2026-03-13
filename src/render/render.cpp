@@ -60,6 +60,7 @@ template <typename T> render::BufferInfo::BufferInfo(Buffer<T> buffer, U32 buffe
     this->buffer = general_buffer;
     this->type_size = sizeof(T);
     this->buffer_type = buffer_type;
+    this->elem_count = buffer.size;
 }
 
 template <typename T> render::BufferInfo::BufferInfo(Arena* arena, T* input, U32 buffer_type)
@@ -70,6 +71,7 @@ template <typename T> render::BufferInfo::BufferInfo(Arena* arena, T* input, U32
     this->buffer = general_buffer;
     this->type_size = sizeof(T);
     this->buffer_type = buffer_type;
+    this->elem_count = 1;
 }
 
 } // namespace render

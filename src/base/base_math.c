@@ -302,6 +302,10 @@ static Vec3F64 vec_3f64(F64 x, F64 y, F64 z) {
   Vec3F64 v = {x, y, z};
   return v;
 }
+static Vec3F64 vec3f64_from_2f64(Vec2F64 xy, F64 z) {
+  Vec3F64 v = {xy.x, xy.y, z};
+  return v;
+}
 static Vec3F64 add_3f64(Vec3F64 a, Vec3F64 b) {
   Vec3F64 c = {a.x + b.x, a.y + b.y, a.z + b.z};
   return c;

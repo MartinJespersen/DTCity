@@ -40,7 +40,8 @@ static void
 dt_time_update(dt_Time* time)
 {
     U64 cur_time = os_now_microseconds();
-    time->delta_time_sec = (F64)(cur_time - time->last_time_ms) / 1'000'000.0;
+    F64 delta_time_us = (F64)(cur_time - time->last_time_ms);
+    time->delta_time_sec = delta_time_us / 1'000'000.0;
     time->last_time_ms = cur_time;
 }
 
@@ -182,8 +183,11 @@ g_internal void
 imgui_debug_window(cesium::TilesetRenderer* renderer)
 {
     vulkan::AssetManager* asset_manager = vulkan::asset_manager_get();
+    const ImGuiViewport* viewport = ImGui::GetMainViewport();
+    ImGui::SetNextWindowPos(ImVec2(viewport->WorkPos.x, viewport->WorkPos.y + viewport->WorkSize.y), ImGuiCond_Always, ImVec2(0.0f, 1.0f));
 
-    ImGui::Begin("Asset Manager", nullptr, ImGuiWindowFlags_AlwaysAutoResize);
+    ImGui::Begin("Debug Info", nullptr, ImGuiWindowFlags_AlwaysAutoResize);
+    ImGui::Text("FPS: %f", ImGui::GetIO().Framerate);
     ImGui::Text("Textures:       %d active, %d free", asset_manager->texture_list.count, asset_manager->texture_free_list.count);
     ImGui::Text("Buffers:        %d active, %d free", asset_manager->buffer_list.count, asset_manager->buffer_free_list.count);
     ImGui::Text("Descriptor Sets: %d active, %d free", asset_manager->descriptor_set_list.count, asset_manager->descriptor_set_free_list.count);
@@ -243,7 +247,6 @@ dt_main_loop(void* ptr)
     const char* tileset_url = "file:///C:/ByModel/5km_6235_580/tileset.json";
 
     ctx->buildings = city::buildings_create(cache_dir, texture_dir, input->bbox);
-    // ctx->car_sim = city::car_sim_create(asset_dir, texture_dir, 1000, ctx->road);
 
     city::RoadOverlayOption overlay_option_choice = city::RoadOverlayOption_None;
 
@@ -265,6 +268,9 @@ dt_main_loop(void* ptr)
     render::Handle road_segment_node_buffer_handle = render::buffer_load_async(&road_segment_node_buffer_info);
 
     render::Handle road_segment_handle = render::road_segment_descriptor_load_async(ctx->arena_permanent, road_segment_buffer_handle, road_segment_node_buffer_handle);
+
+    ctx->car_sim = city::car_sim_create(asset_dir, texture_dir, 100);
+    render::gpu_work_done_wait();
 
     ctx->cesium_tileset = cesium::tileset_renderer_create(ctx->arena_permanent, ctx->thread_pool, tileset_url, tileset_lon, tileset_lat, 0.0);
     // city::Buildings* buildings = ctx->buildings;
@@ -348,11 +354,7 @@ dt_main_loop(void* ptr)
         // render::model_3d_draw(buildings->roof_model_handles);
         // render::model_3d_draw(buildings->facade_model_handles);
 
-        // Buffer<render::Model3DInstance> instance_buffer = car_sim_update(vk_ctx->draw_frame_arena, ctx->car_sim, ctx->time->delta_time_sec);
-        // render::BufferInfo instance_buffer_info = render::BufferInfo(instance_buffer, render::BufferType_Vertex);
-        // render::model_3d_instance_draw(ctx->car_sim->texture_handle, ctx->car_sim->vertex_handle, ctx->car_sim->index_handle, &instance_buffer_info);
-
-        // Update and render Cesium 3D Tiles
+        // Update and render Cesium 3D Tiles ////////////
         if (ctx->cesium_tileset)
         {
             cesium::TilesetRenderer* renderer = ctx->cesium_tileset;
@@ -374,7 +376,31 @@ dt_main_loop(void* ptr)
                 }
             }
             ctx->road->overlay_option_cur = overlay_option_choice;
+
+            /// car simulation rendering
+            if (ctx->car_sim)
+            {
+                Buffer<render::Model3DInstance> instance_buffer = car_sim_update(vk_ctx->draw_frame_arena, ctx->car_sim, ctx->time->delta_time_sec, ctx->cesium_tileset->ecef_to_local);
+
+                // instance buffer offset alignment and assignment
+                U32 align = 16;
+                render::BufferInfo instance_buffer_info = render::BufferInfo(instance_buffer, render::BufferType_Vertex | render::BufferType_StorageBuffer);
+                vulkan::DrawFrame* draw_frame = vk_ctx->draw_frame;
+                vulkan::CarInstanceRender* instance_draw = &draw_frame->car_instance_render_list;
+                U32 instance_buffer_offset = instance_draw->total_instance_buffer_byte_count + (align - 1);
+                instance_buffer_offset -= instance_buffer_offset % align;
+
+                render::car_instance_render_bucket_add(ctx->car_sim->vertex_handle, ctx->car_sim->index_handle, ctx->car_sim->texture_handle, &instance_buffer_info, instance_buffer_offset);
+
+                for (cesium::TileRenderData* tile = renderer->tile_to_show.first; tile; tile = tile->render_next)
+                {
+                    render::car_instance_compute_bucket_add(&instance_buffer_info, tile->render_data.vertex_buffer_handle, tile->render_data.index_buffer_handle, -ctx->car_sim->car_center_offset.min,
+                                                            instance_buffer_offset);
+                }
+            }
         }
+
+        /////////////////////////////////////
 
         render::render_frame(framebuffer_dim, &io_ctx->framebuffer_resized, ctx->camera, io_ctx->mouse_pos_cur_s64);
 
@@ -383,7 +409,7 @@ dt_main_loop(void* ptr)
     render::gpu_work_done_wait();
 
     city::road_destroy(ctx->road);
-    // city::car_sim_destroy(ctx->car_sim);
+    city::car_sim_destroy(ctx->car_sim);
     // city::building_destroy(ctx->buildings);
     cesium::tileset_renderer_destroy(ctx->cesium_tileset);
     render::handle_destroy_deferred(road_segment_buffer_handle);

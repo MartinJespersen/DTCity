@@ -17,7 +17,7 @@
         "CMAKE_BUILD_TYPE": "Debug",
         "ASAN_ENABLED": "ON",
         "BUILD_DEBUG": "ON",
-        "VCPKG_TARGET_TRIPLET": "x64-windows-static-md-asan",
+        "VCPKG_TARGET_TRIPLET": "x64-windows-static-md",
         "VCPKG_OVERLAY_TRIPLETS": "${sourceDir}/triplets"
       }
     },
@@ -74,7 +74,10 @@
       "inherits": "profile-base",
       "generator": "Ninja",
       "cacheVariables": {
-        "VCPKG_TARGET_TRIPLET": "x64-windows-static-md"
+        "SHADER_DEBUG": "ON",
+        "ASAN_ENABLED": "OFF",
+        "VCPKG_TARGET_TRIPLET": "x64-windows-static-md",
+        "VCPKG_OVERLAY_TRIPLETS": "${sourceDir}/triplets"
       }
     },
     {

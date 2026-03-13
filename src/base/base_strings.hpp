@@ -181,10 +181,10 @@ cstring32_length(U32* c);
 //~ rjf: String Constructors
 
 #define Str8Lit(S) Str8((U8*)(S), sizeof(S) - 1)
-#define str8_lit_comp(S)                                                                           \
-    {                                                                                              \
-        (U8*)(S),                                                                                  \
-        sizeof(S) - 1,                                                                             \
+#define str8_lit_comp(S)                                                                                                                                                                               \
+    {                                                                                                                                                                                                  \
+        (U8*)(S),                                                                                                                                                                                      \
+        sizeof(S) - 1,                                                                                                                                                                                 \
     }
 #define str8_varg(S) (int)((S).size), ((S).str)
 
@@ -246,8 +246,7 @@ static U64
 str8_find_needle_reverse(String8 string, U64 start_pos, String8 needle, StringMatchFlags flags);
 static B32
 str8_ends_with(String8 string, String8 end, StringMatchFlags flags);
-#define str8_ends_with_lit(string, end_lit, flags)                                                 \
-    str8_ends_with((string), Str8Lit(end_lit), (flags))
+#define str8_ends_with_lit(string, end_lit, flags) str8_ends_with((string), Str8Lit(end_lit), (flags))
 
 ////////////////////////////////
 //~ rjf: String Slicing
@@ -352,19 +351,15 @@ str8_list_copy(Arena* arena, String8List* list);
 //~ rjf: String Splitting & Joining
 
 static String8List
-str8_split(Arena* arena, String8 string, U8* split_chars, U64 split_char_count,
-           StringSplitFlags flags);
+str8_split(Arena* arena, String8 string, U8* split_chars, U64 split_char_count, StringSplitFlags flags);
 static String8List
-str8_split_by_string_chars(Arena* arena, String8 string, String8 split_chars,
-                           StringSplitFlags flags);
+str8_split_by_string_chars(Arena* arena, String8 string, String8 split_chars, StringSplitFlags flags);
 static String8List
-str8_list_split_by_string_chars(Arena* arena, String8List list, String8 split_chars,
-                                StringSplitFlags flags);
+str8_list_split_by_string_chars(Arena* arena, String8List list, String8 split_chars, StringSplitFlags flags);
 static String8
 str8_list_join(Arena* arena, String8List* list, StringJoin* optional_params);
 static void
-str8_list_from_flags(Arena* arena, String8List* list, U32 flags, String8* flag_string_table,
-                     U32 flag_string_count);
+str8_list_from_flags(Arena* arena, String8List* list, U32 flags, String8* flag_string_table, U32 flag_string_count);
 
 ////////////////////////////////
 //~ rjf; String Arrays
@@ -488,8 +483,7 @@ raw_from_escaped_str8(Arena* arena, String8 string);
 //~ rjf: Text Wrapping
 
 static String8List
-wrapped_lines_from_string(Arena* arena, String8 string, U64 first_line_max_width, U64 max_width,
-                          U64 wrap_indent);
+wrapped_lines_from_string(Arena* arena, String8 string, U64 first_line_max_width, U64 max_width, U64 wrap_indent);
 
 ////////////////////////////////
 //~ rjf: String <-> Color
@@ -536,8 +530,7 @@ static void
 str8_serial_push_cstr(Arena* arena, String8List* srl, String8 str);
 static void
 str8_serial_push_string(Arena* arena, String8List* srl, String8 str);
-#define str8_serial_push_array(arena, srl, ptr, count)                                             \
-    str8_serial_push_data(arena, srl, ptr, sizeof(*(ptr)) * (count))
+#define str8_serial_push_array(arena, srl, ptr, count) str8_serial_push_data(arena, srl, ptr, sizeof(*(ptr)) * (count))
 #define str8_serial_push_struct(arena, srl, ptr) str8_serial_push_array(arena, srl, ptr, 1)
 
 ////////////////////////////////
@@ -555,8 +548,7 @@ static U64
 str8_deserial_read_windows_utf16_string16(String8 string, U64 off, String16* str_out);
 static U64
 str8_deserial_read_block(String8 string, U64 off, U64 size, String8* block_out);
-#define str8_deserial_read_array(string, off, ptr, count)                                          \
-    str8_deserial_read((string), (off), (ptr), sizeof(*(ptr)) * (count), sizeof(*(ptr)))
+#define str8_deserial_read_array(string, off, ptr, count) str8_deserial_read((string), (off), (ptr), sizeof(*(ptr)) * (count), sizeof(*(ptr)))
 #define str8_deserial_read_struct(string, off, ptr) str8_deserial_read_array(string, off, ptr, 1)
 
 //- rjf: Allocation
@@ -582,7 +574,7 @@ static void
 exit_with_error(const char* msg, ...);
 
 // string manipulation helpers
-#define CStrEqual(a, b) (!strcmp((a), (b)))
+#define c_str_equal(a, b) (!strcmp((a), (b)))
 // ~mgj: String Macros
 #define Str8Cmp(a, b) (!strcmp(((char*)(a).str), ((char*)(b).str)))
 #define S(str) Str8((U8*)(str), sizeof(str) - 1)

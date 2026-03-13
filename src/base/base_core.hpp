@@ -57,10 +57,6 @@
 #endif
 
 #if LANG_CPP
-#define C_LINKAGE_BEGIN                                                                            \
-    extern "C"                                                                                     \
-    {
-#define C_LINKAGE_END }
 #define C_LINKAGE extern "C"
 #else
 #define C_LINKAGE_BEGIN
@@ -125,14 +121,12 @@
 //~ rjf: For-Loop Construct Macros
 
 #define DeferLoop(begin, end) for (int _i_ = ((begin), 0); !_i_; _i_ += 1, (end))
-#define DeferLoopChecked(begin, end)                                                               \
-    for (int _i_ = 2 * !(begin); (_i_ == 2 ? ((end), 0) : !_i_); _i_ += 1, (end))
+#define DeferLoopChecked(begin, end) for (int _i_ = 2 * !(begin); (_i_ == 2 ? ((end), 0) : !_i_); _i_ += 1, (end))
 
 #define EachIndex(it, count) (U64 it = 0; (it) < (count); (it) += 1)
 #define EachElement(it, array) (U64 it = 0; (it) < ArrayCount(array); (it) += 1)
 #define EachEnumVal(type, it) (type it = (type)0; (it) < type##_COUNT; (it) = (type)((it) + 1))
-#define EachNonZeroEnumVal(type, it)                                                               \
-    (type(it) = (type)1; (it) < type##_COUNT; (it) = (type)((it) + 1))
+#define EachNonZeroEnumVal(type, it) (type(it) = (type)1; (it) < type##_COUNT; (it) = (type)((it) + 1))
 
 ////////////////////////////////
 //~ rjf: Memory Operation Macros
@@ -156,8 +150,7 @@
 #define MemoryMatchArray(a, b) MemoryMatch((a), (b), sizeof(a))
 
 #define MemoryRead(T, p, e) (((p) + sizeof(T) <= (e)) ? (*(T*)(p)) : (0))
-#define MemoryConsume(T, p, e)                                                                     \
-    (((p) + sizeof(T) <= (e)) ? ((p) += sizeof(T), *(T*)((p) - sizeof(T))) : ((p) = (e), 0))
+#define MemoryConsume(T, p, e) (((p) + sizeof(T) <= (e)) ? ((p) += sizeof(T), *(T*)((p) - sizeof(T))) : ((p) = (e), 0))
 
 ////////////////////////////////
 //~ rjf: Asserts
@@ -170,13 +163,13 @@
 #error Unknown trap intrinsic for this compiler.
 #endif
 
-#define AssertAlways(x)                                                                            \
-    do                                                                                             \
-    {                                                                                              \
-        if (!(x))                                                                                  \
-        {                                                                                          \
-            Trap();                                                                                \
-        }                                                                                          \
+#define AssertAlways(x)                                                                                                                                                                                \
+    do                                                                                                                                                                                                 \
+    {                                                                                                                                                                                                  \
+        if (!(x))                                                                                                                                                                                      \
+        {                                                                                                                                                                                              \
+            Trap();                                                                                                                                                                                    \
+        }                                                                                                                                                                                              \
     } while (0)
 #if BUILD_DEBUG
 #define Assert(x) AssertAlways(x)
@@ -201,13 +194,11 @@
 #define ins_atomic_u64_dec_eval(x) InterlockedDecrement64((volatile __int64*)(x))
 #define ins_atomic_u64_eval_assign(x, c) InterlockedExchange64((volatile __int64*)(x), (c))
 #define ins_atomic_u64_add_eval(x, c) InterlockedAdd64((volatile __int64*)(x), c)
-#define ins_atomic_u64_eval_cond_assign(x, k, c)                                                   \
-    InterlockedCompareExchange64((volatile __int64*)(x), (k), (c))
+#define ins_atomic_u64_eval_cond_assign(x, k, c) InterlockedCompareExchange64((volatile __int64*)(x), (k), (c))
 #define ins_atomic_u32_eval(x) *((volatile U32*)(x))
 #define ins_atomic_u32_inc_eval(x) InterlockedIncrement((volatile LONG*)x)
 #define ins_atomic_u32_eval_assign(x, c) InterlockedExchange((volatile LONG*)(x), (c))
-#define ins_atomic_u32_eval_cond_assign(x, k, c)                                                   \
-    InterlockedCompareExchange((volatile LONG*)(x), (k), (c))
+#define ins_atomic_u32_eval_cond_assign(x, k, c) InterlockedCompareExchange((volatile LONG*)(x), (k), (c))
 #define ins_atomic_u32_add_eval(x, c) InterlockedAdd((volatile LONG*)(x), c)
 #else
 #error Atomic intrinsics not defined for this compiler / architecture combination.
@@ -217,42 +208,34 @@
 #define ins_atomic_u64_inc_eval(x) (__atomic_fetch_add((volatile U64*)(x), 1, __ATOMIC_SEQ_CST) + 1)
 #define ins_atomic_u64_dec_eval(x) (__atomic_fetch_sub((volatile U64*)(x), 1, __ATOMIC_SEQ_CST) - 1)
 #define ins_atomic_u64_eval_assign(x, c) __atomic_exchange_n(x, c, __ATOMIC_SEQ_CST)
-#define ins_atomic_u64_add_eval(x, c)                                                              \
-    (__atomic_fetch_add((volatile U64*)(x), c, __ATOMIC_SEQ_CST) + (c))
-#define ins_atomic_u64_eval_cond_assign(x, k, c)                                                   \
-    ({                                                                                             \
-        U64 _new = (c);                                                                            \
-        __atomic_compare_exchange_n((volatile U64*)(x), &_new, (k), 0, __ATOMIC_SEQ_CST,           \
-                                    __ATOMIC_SEQ_CST);                                             \
-        _new;                                                                                      \
+#define ins_atomic_u64_add_eval(x, c) (__atomic_fetch_add((volatile U64*)(x), c, __ATOMIC_SEQ_CST) + (c))
+#define ins_atomic_u64_eval_cond_assign(x, k, c)                                                                                                                                                       \
+    ({                                                                                                                                                                                                 \
+        U64 _new = (c);                                                                                                                                                                                \
+        __atomic_compare_exchange_n((volatile U64*)(x), &_new, (k), 0, __ATOMIC_SEQ_CST, __ATOMIC_SEQ_CST);                                                                                            \
+        _new;                                                                                                                                                                                          \
     })
 #define ins_atomic_u32_eval(x) __atomic_load_n(x, __ATOMIC_SEQ_CST)
 #define ins_atomic_u32_inc_eval(x) (__atomic_fetch_add((volatile U32*)(x), 1, __ATOMIC_SEQ_CST) + 1)
-#define ins_atomic_u32_add_eval(x, c)                                                              \
-    (__atomic_fetch_add((volatile U32*)(x), c, __ATOMIC_SEQ_CST) + (c))
+#define ins_atomic_u32_add_eval(x, c) (__atomic_fetch_add((volatile U32*)(x), c, __ATOMIC_SEQ_CST) + (c))
 #define ins_atomic_u32_eval_assign(x, c) __atomic_exchange_n(x, c, __ATOMIC_SEQ_CST)
-#define ins_atomic_u32_eval_cond_assign(x, k, c)                                                   \
-    ({                                                                                             \
-        U32 _new = (c);                                                                            \
-        __atomic_compare_exchange_n((volatile U32*)(x), &_new, (k), 0, __ATOMIC_SEQ_CST,           \
-                                    __ATOMIC_SEQ_CST);                                             \
-        _new;                                                                                      \
+#define ins_atomic_u32_eval_cond_assign(x, k, c)                                                                                                                                                       \
+    ({                                                                                                                                                                                                 \
+        U32 _new = (c);                                                                                                                                                                                \
+        __atomic_compare_exchange_n((volatile U32*)(x), &_new, (k), 0, __ATOMIC_SEQ_CST, __ATOMIC_SEQ_CST);                                                                                            \
+        _new;                                                                                                                                                                                          \
     })
 #else
 #error Atomic intrinsics not defined for this compiler / architecture.
 #endif
 
 #if ARCH_64BIT
-#define ins_atomic_ptr_eval_cond_assign(x, k, c)                                                   \
-    (void*)ins_atomic_u64_eval_cond_assign((volatile U64*)(x), (U64)(k), (U64)(c))
-#define ins_atomic_ptr_eval_assign(x, c)                                                           \
-    (void*)ins_atomic_u64_eval_assign((volatile U64*)(x), (U64)(c))
+#define ins_atomic_ptr_eval_cond_assign(x, k, c) (void*)ins_atomic_u64_eval_cond_assign((volatile U64*)(x), (U64)(k), (U64)(c))
+#define ins_atomic_ptr_eval_assign(x, c) (void*)ins_atomic_u64_eval_assign((volatile U64*)(x), (U64)(c))
 #define ins_atomic_ptr_eval(x) (void*)ins_atomic_u64_eval((volatile U64*)(x))
 #elif ARCH_32BIT
-#define ins_atomic_ptr_eval_cond_assign(x, k, c)                                                   \
-    (void*)ins_atomic_u32_eval_cond_assign((volatile U32*)(x), (U32)(k), (U32)(c))
-#define ins_atomic_ptr_eval_assign(x, c)                                                           \
-    (void*)ins_atomic_u32_eval_assign((volatile U32*)(x), (U32)(c))
+#define ins_atomic_ptr_eval_cond_assign(x, k, c) (void*)ins_atomic_u32_eval_cond_assign((volatile U32*)(x), (U32)(k), (U32)(c))
+#define ins_atomic_ptr_eval_assign(x, c) (void*)ins_atomic_u32_eval_assign((volatile U32*)(x), (U32)(c))
 #define ins_atomic_ptr_eval(x) (void*)ins_atomic_u32_eval((volatile U32*)(x))
 #else
 #error Atomic intrinsics for pointers not defined for this architecture.
@@ -266,28 +249,21 @@
 #define SetNil(nil, p) ((p) = (nil))
 
 //- rjf: doubly-linked-lists
-#define DLLInsert_NPZ(nil, f, l, p, n, next, prev)                                                 \
-    (CheckNil(nil, f)   ? ((f) = (l) = (n), SetNil(nil, (n)->next), SetNil(nil, (n)->prev))        \
-     : CheckNil(nil, p) ? ((n)->next = (f), (f)->prev = (n), (f) = (n), SetNil(nil, (n)->prev))    \
-     : ((p) == (l))                                                                                \
-         ? ((l)->next = (n), (n)->prev = (l), (l) = (n), SetNil(nil, (n)->next))                   \
-         : (((!CheckNil(nil, p) && CheckNil(nil, (p)->next)) ? (0) : ((p)->next->prev = (n))),     \
-            ((n)->next = (p)->next), ((p)->next = (n)), ((n)->prev = (p))))
+#define DLLInsert_NPZ(nil, f, l, p, n, next, prev)                                                                                                                                                     \
+    (CheckNil(nil, f)   ? ((f) = (l) = (n), SetNil(nil, (n)->next), SetNil(nil, (n)->prev))                                                                                                            \
+     : CheckNil(nil, p) ? ((n)->next = (f), (f)->prev = (n), (f) = (n), SetNil(nil, (n)->prev))                                                                                                        \
+     : ((p) == (l))     ? ((l)->next = (n), (n)->prev = (l), (l) = (n), SetNil(nil, (n)->next))                                                                                                        \
+                        : (((!CheckNil(nil, p) && CheckNil(nil, (p)->next)) ? (0) : ((p)->next->prev = (n))), ((n)->next = (p)->next), ((p)->next = (n)), ((n)->prev = (p))))
 #define DLLPushBack_NPZ(nil, f, l, n, next, prev) DLLInsert_NPZ(nil, f, l, l, n, next, prev)
 #define DLLPushFront_NPZ(nil, f, l, n, next, prev) DLLInsert_NPZ(nil, l, f, f, n, prev, next)
-#define DLLRemove_NPZ(nil, f, l, n, next, prev)                                                    \
-    (((n) == (f) ? (f) = (n)->next : (0)), ((n) == (l) ? (l) = (l)->prev : (0)),                   \
-     (CheckNil(nil, (n)->prev) ? (0) : ((n)->prev->next = (n)->next)),                             \
+#define DLLRemove_NPZ(nil, f, l, n, next, prev)                                                                                                                                                        \
+    (((n) == (f) ? (f) = (n)->next : (0)), ((n) == (l) ? (l) = (l)->prev : (0)), (CheckNil(nil, (n)->prev) ? (0) : ((n)->prev->next = (n)->next)),                                                     \
      (CheckNil(nil, (n)->next) ? (0) : ((n)->next->prev = (n)->prev)))
 
 //- rjf: singly-linked, doubly-headed lists (queues)
-#define SLLQueuePush_NZ(nil, f, l, n, next)                                                        \
-    (CheckNil(nil, f) ? ((f) = (l) = (n), SetNil(nil, (n)->next))                                  \
-                      : ((l)->next = (n), (l) = (n), SetNil(nil, (n)->next)))
-#define SLLQueuePushFront_NZ(nil, f, l, n, next)                                                   \
-    (CheckNil(nil, f) ? ((f) = (l) = (n), SetNil(nil, (n)->next)) : ((n)->next = (f), (f) = (n)))
-#define SLLQueuePop_NZ(nil, f, l, next)                                                            \
-    ((f) == (l) ? (SetNil(nil, f), SetNil(nil, l)) : ((f) = (f)->next))
+#define SLLQueuePush_NZ(nil, f, l, n, next) (CheckNil(nil, f) ? ((f) = (l) = (n), SetNil(nil, (n)->next)) : ((l)->next = (n), (l) = (n), SetNil(nil, (n)->next)))
+#define SLLQueuePushFront_NZ(nil, f, l, n, next) (CheckNil(nil, f) ? ((f) = (l) = (n), SetNil(nil, (n)->next)) : ((n)->next = (f), (f) = (n)))
+#define SLLQueuePop_NZ(nil, f, l, next) ((f) == (l) ? (SetNil(nil, f), SetNil(nil, l)) : ((f) = (f)->next))
 
 //- rjf: singly-linked, singly-headed lists (stacks)
 #define SLLStackPush_N(f, n, next) ((n)->next = (f), (f) = (n))
@@ -363,12 +339,12 @@ __asan_unpoison_memory_region(void const volatile* addr, size_t size);
 
 #define CeilIntegerDiv(a, b) (((a) + (b) - 1) / (b))
 
-#define Swap(T, a, b)                                                                              \
-    do                                                                                             \
-    {                                                                                              \
-        T t__ = a;                                                                                 \
-        (a) = b;                                                                                   \
-        (b) = t__;                                                                                 \
+#define Swap(T, a, b)                                                                                                                                                                                  \
+    do                                                                                                                                                                                                 \
+    {                                                                                                                                                                                                  \
+        T t__ = a;                                                                                                                                                                                     \
+        (a) = b;                                                                                                                                                                                       \
+        (b) = t__;                                                                                                                                                                                     \
     } while (0)
 
 #if ARCH_64BIT
@@ -393,8 +369,8 @@ __asan_unpoison_memory_region(void const volatile* addr, size_t size);
 #define Extract32(word, pos) (((word) >> ((pos) * 32)) & max_U32)
 
 #if LANG_CPP
-#define zero_struct                                                                                \
-    {                                                                                              \
+#define zero_struct                                                                                                                                                                                    \
+    {                                                                                                                                                                                                  \
     }
 #else
 #define zero_struct {0}
@@ -984,16 +960,13 @@ static U64
 ring_write(U8* ring_base, U64 ring_size, U64 ring_pos, void* src_data, U64 src_data_size);
 static U64
 ring_read(U8* ring_base, U64 ring_size, U64 ring_pos, void* dst_data, U64 read_size);
-#define ring_write_struct(ring_base, ring_size, ring_pos, ptr)                                     \
-    ring_write((ring_base), (ring_size), (ring_pos), (ptr), sizeof(*(ptr)))
-#define ring_read_struct(ring_base, ring_size, ring_pos, ptr)                                      \
-    ring_read((ring_base), (ring_size), (ring_pos), (ptr), sizeof(*(ptr)))
+#define ring_write_struct(ring_base, ring_size, ring_pos, ptr) ring_write((ring_base), (ring_size), (ring_pos), (ptr), sizeof(*(ptr)))
+#define ring_read_struct(ring_base, ring_size, ring_pos, ptr) ring_read((ring_base), (ring_size), (ring_pos), (ptr), sizeof(*(ptr)))
 
 ////////////////////////////////
 //~ rjf: Sorts
 
-#define quick_sort(ptr, count, element_size, cmp_function)                                         \
-    qsort((ptr), (count), (element_size), (int (*)(const void*, const void*))(cmp_function))
+#define quick_sort(ptr, count, element_size, cmp_function) qsort((ptr), (count), (element_size), (int (*)(const void*, const void*))(cmp_function))
 
 ////////////////////////////////
 

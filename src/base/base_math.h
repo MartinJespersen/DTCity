@@ -121,6 +121,7 @@ union Vec3F64
         Vec2F64 yz;
     };
     F64 v[3];
+    glm::dvec3 vec;
 };
 
 typedef union Vec3S32 Vec3S32;
@@ -644,6 +645,8 @@ cross_3f32(Vec3F32 a, Vec3F32 b);
 static Vec3F64
 vec_3f64(F64 x, F64 y, F64 z);
 static Vec3F64
+vec3f64_from_2f64(Vec2F64 xy, F64 z);
+static Vec3F64
 add_3f64(Vec3F64 a, Vec3F64 b);
 static Vec3F64
 sub_3f64(Vec3F64 a, Vec3F64 b);
@@ -994,9 +997,7 @@ static U32
 u32_from_rgba(Vec4F32 rgba);
 static Vec4F32
 rgba_from_u32(U32 hex);
-#define rgba_from_u32_lit_comp(h)                                                                  \
-    {(((h) & 0xff000000) >> 24) / 255.f, (((h) & 0x00ff0000) >> 16) / 255.f,                       \
-     (((h) & 0x0000ff00) >> 8) / 255.f, (((h) & 0x000000ff) >> 0) / 255.f}
+#define rgba_from_u32_lit_comp(h) {(((h) & 0xff000000) >> 24) / 255.f, (((h) & 0x00ff0000) >> 16) / 255.f, (((h) & 0x0000ff00) >> 8) / 255.f, (((h) & 0x000000ff) >> 0) / 255.f}
 
 ////////////////////////////////
 //~ rjf: List Type Functions

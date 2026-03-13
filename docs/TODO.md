@@ -6,6 +6,7 @@
 * Check barriers for command buffer recordings
 
 # Less urgent changes
+* The implementation of draw functions and similar for compute is ugly
 * Use vulkan push descriptor and buffer device address instead of descriptor sets
 * buildings need to be rendered included in compute pass as well
 * simplify render interface (a little too verbose at the moment)
@@ -35,6 +36,7 @@
 * Cleanup entrypoint main loop
 
 # Tools or features for debugging
+* validation layers should show the source location of layer
 * Vulkan debugging: https://www.youtube.com/watch?v=UeWXr0i7eBY
 * Clang ThreadSanitizer (for detecting race conditions)
 * WhiteBox (by Andrew Reece) 

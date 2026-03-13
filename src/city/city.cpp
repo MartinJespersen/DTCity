@@ -674,7 +674,7 @@ random_ecef_road_node_get()
 }
 
 g_internal CarSim*
-car_sim_create(String8 asset_path, String8 texture_path, U32 car_count, Road* road)
+car_sim_create(String8 asset_path, String8 texture_path, U32 car_count)
 {
     prof_scope_marker;
     ScratchScope scratch = ScratchScope(0, 0);
@@ -711,9 +711,9 @@ car_sim_create(String8 asset_path, String8 texture_path, U32 car_count, Road* ro
         car->source_loc = source_loc;
         car->target_loc = target_loc;
         car->speed = 10.0f;
-        car->cur_pos = height_dim_add(source_loc.pos.xy, (F64)(road->road_height - car_sim->car_center_offset.min));
-        Vec2F64 dir = vec_2f64(target_loc.pos.x - source_loc.pos.x, target_loc.pos.y - source_loc.pos.y);
-        car->dir = normalize_3f64(height_dim_add(dir, 0));
+        car->cur_pos_ecef = source_loc.pos;
+        Vec3F64 dir = sub_3f64(target_loc.pos, source_loc.pos);
+        car->dir = normalize_3f64(dir);
     }
 
     return car_sim;
@@ -729,7 +729,7 @@ car_sim_destroy(CarSim* car_sim)
 }
 
 g_internal Buffer<render::Model3DInstance>
-car_sim_update(Arena* arena, CarSim* car, F64 time_delta)
+car_sim_update(Arena* arena, CarSim* car, F64 time_delta, glm::dmat4& ecef_to_local)
 {
     prof_scope_marker;
     Buffer<render::Model3DInstance> instance_buffer = BufferAlloc<render::Model3DInstance>(arena, car->cars.size);
@@ -743,18 +743,18 @@ car_sim_update(Arena* arena, CarSim* car, F64 time_delta)
         instance = &instance_buffer.data[car_idx];
         car_info = &car->cars.data[car_idx];
 
-        Vec3F64 new_pos = add_3f64(car_info->cur_pos, scale_3f64(scale_3f64(car_info->dir, car_speed_default), time_delta));
+        Vec3F64 new_pos_3d = add_3f64(car_info->cur_pos_ecef, scale_3f64(scale_3f64(car_info->dir, car_speed_default), time_delta));
 
         // find out whether target has been reached
-        Vec2F64 src_to_target = sub_2f64(car_info->target_loc.pos.xy, car_info->source_loc.pos.xy);
-        F64 dist_src_to_target = length_2f64(src_to_target);
-        Vec2F64 src_to_new_pos = sub_2f64(new_pos.xy, car_info->source_loc.pos.xy);
-        F64 dist_src_to_new_pos = length_2f64(src_to_new_pos);
+        Vec3F64 src_to_target = sub_3f64(car_info->target_loc.pos, car_info->source_loc.pos);
+        F64 dist_src_to_target = length_3f64(src_to_target);
+        Vec3F64 src_to_new_pos = sub_3f64(new_pos_3d, car_info->source_loc.pos);
+        F64 dist_src_to_new_pos = length_3f64(src_to_new_pos);
 
         // At start up we reset the car's position if target has been by passed by 2 meters
         if ((dist_src_to_new_pos - dist_src_to_target) > 2.0)
         {
-            new_pos = vec_3f64(car_info->target_loc.pos.x, car_info->target_loc.pos.y, car_info->cur_pos.z);
+            new_pos_3d = car_info->target_loc.pos;
         }
 
         // Check if the car has reached its destination. If so, find new destination and
@@ -763,25 +763,25 @@ car_sim_update(Arena* arena, CarSim* car, F64 time_delta)
         {
             osm::Node* node = osm::random_neighbour_node_get(car_info->target_loc.id);
             osm::EcefLocation new_target_loc = osm::location_get(node->id);
-            Vec3F64 new_target_pos = height_dim_add(new_target_loc.pos.xy, car_info->cur_pos.z);
-            Vec3F64 new_dir = normalize_3f64(sub_3f64(new_target_pos, new_pos));
+            Vec3F64 new_dir = normalize_3f64(sub_3f64(new_target_loc.pos, new_pos_3d));
             car_info->dir = new_dir;
             car_info->source_loc = car_info->target_loc;
             car_info->target_loc = new_target_loc;
         }
 
-        glm::vec3 dir = glm::vec3(car_info->dir.x, car_info->dir.y, car_info->dir.z);
-        glm::vec3 y_basis = dir;
-        y_basis *= -1; // In model space, the front of the car ws in the negative y direction
-        glm::vec3 x_basis = glm::vec3(y_basis.y, -y_basis.x, 0);
-        glm::vec3 z_basis = glm::cross(x_basis, y_basis);
+        glm::dvec3 z_up = glm::dvec3(0.0f, 0.0f, 1.0f);
+        glm::dvec3 dir = glm::normalize(glm::dvec3(ecef_to_local * glm::dvec4(car_info->dir.vec, 0.0)));
+        glm::dvec3 y_basis = -dir;
 
-        instance->x_basis = glm::vec4(x_basis, 0);
-        instance->y_basis = glm::vec4(y_basis, 0);
-        instance->z_basis = glm::vec4(z_basis, 0);
-        instance->w_basis = {glm::vec3(new_pos.x, new_pos.y, new_pos.z), 1};
+        glm::dvec3 x_basis = glm::cross(y_basis, z_up);
+        glm::dvec3 z_basis = glm::cross(x_basis, y_basis);
 
-        car_info->cur_pos = new_pos;
+        instance->x_basis = glm::vec4(glm::dvec4(x_basis, 0.0f));
+        instance->y_basis = glm::vec4(glm::dvec4(y_basis, 0.0f));
+        instance->z_basis = glm::vec4(glm::dvec4(z_basis, 0.0f));
+        instance->w_basis = glm::vec4(ecef_to_local * glm::dvec4(new_pos_3d.vec, 1.0));
+
+        car_info->cur_pos_ecef = new_pos_3d;
     }
     return instance_buffer;
 }

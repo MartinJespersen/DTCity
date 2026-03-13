@@ -40,19 +40,43 @@ struct Model3DNode
     Model3dPushConstants push_constants;
 };
 
-struct Model3dInstancePushConstants
+struct CarInstancePushConstants
 {
     U32 tex_idx;
 };
 
-struct Model3DInstanceNode
+struct CarHeightCalculatePushConstants
 {
-    Model3DInstanceNode* next;
-    BufferHandle* index_handle;
-    BufferHandle* vertex_handle;
+    U32 car_count;
+    F32 car_center_offset;
+};
+
+struct CarInstanceComputeNode
+{
+    CarInstanceComputeNode* next;
+
+    // Compute pipeline ressources
+    BufferHandle* tile_index_handle;
+    BufferHandle* tile_vertex_handle;
+    CarHeightCalculatePushConstants compute_push_constants;
+
+    // shared pipeline ressources
     render::BufferInfo instance_buffer_info;
     U32 instance_buffer_offset;
-    Model3dInstancePushConstants push_constants;
+};
+
+struct CarInstanceRenderNode
+{
+    CarInstanceRenderNode* next;
+
+    // draw pipeline ressources
+    BufferHandle* index_handle;
+    BufferHandle* vertex_handle;
+    CarInstancePushConstants draw_push_constants;
+
+    // shared pipeline ressources
+    render::BufferInfo instance_buffer_info;
+    U32 instance_buffer_offset;
 };
 
 struct Model3DNodeList
@@ -61,15 +85,26 @@ struct Model3DNodeList
     Model3DNode* last;
 };
 
-struct Model3DInstanceNodeList
+struct CarInstanceComputeNodeList
 {
-    Model3DInstanceNode* first;
-    Model3DInstanceNode* last;
+    CarInstanceComputeNode* first;
+    CarInstanceComputeNode* last;
 };
 
-struct Model3DInstance
+struct CarInstanceRenderNodeList
 {
-    Model3DInstanceNodeList list;
+    CarInstanceRenderNode* first;
+    CarInstanceRenderNode* last;
+};
+
+struct CarInstanceCompute
+{
+    CarInstanceComputeNodeList list;
+};
+
+struct CarInstanceRender
+{
+    CarInstanceRenderNodeList list;
     U32 total_instance_buffer_byte_count;
 };
 
@@ -82,7 +117,6 @@ struct Blend3dPushConstants
 struct RoadIntersectionPushConstants
 {
     U32 road_segment_buffer_elem_count;
-    U32 invocation_count;
     U32 overlay_option_idx;
 };
 
@@ -119,7 +153,8 @@ struct RoadIntersectionList
 struct DrawFrame
 {
     Model3DNodeList model_3D_list;
-    Model3DInstance model_3D_instance_draw;
+    CarInstanceCompute car_instance_compute_list;
+    CarInstanceRender car_instance_render_list;
     Blend3DList blend_3d_list;
     RoadIntersectionList road_intersection_list;
 };
@@ -131,7 +166,7 @@ struct Context
 
 #if BUILD_DEBUG
     static const U8 enable_validation_layers = 1;
-    static const U8 enable_gpu_assisted_validation = 1;
+    static const U8 enable_gpu_assisted_validation = 0;
 #else
     static const U8 enable_validation_layers = 0;
     static const U8 enable_gpu_assisted_validation = 0;
@@ -158,7 +193,6 @@ struct Context
 
     Buffer<VkFence> in_flight_fences;
     U64 current_frame;
-    U32 cur_img_idx;
 
     VkFormat object_id_format;
     U64 hovered_object_id;
@@ -194,12 +228,14 @@ struct Context
     Arena* draw_frame_arena;
     DrawFrame* draw_frame;
     Pipeline model_3D_pipeline;
-    Pipeline model_3D_instance_pipeline;
+    Pipeline car_instance_pipeline;
     Pipeline blend_3d_pipeline;
     Pipeline road_intersection_pipeline;
+    Pipeline car_height_calculate_pipeline;
     VkDescriptorSetLayout road_segment_descriptor_set_layout;
     VkDescriptorSetLayout storage_buffer_descriptor_set_layout;
-    BufferAllocation model_3D_instance_buffer;
+    VkDescriptorSetLayout car_height_calculate_descriptor_set_layout;
+    render::Handle model_3D_instance_buffer[MAX_FRAMES_IN_FLIGHT];
 };
 
 //~mgj: camera functions
@@ -254,26 +290,28 @@ static void
 model_3d_bucket_add(BufferAllocation* vertex_buffer_allocation, BufferAllocation* index_buffer_allocation, render::Handle tex_handle, B32 depth_write_per_draw_call_only, U32 index_buffer_offset,
                     U32 index_count, U32 colormap_idx);
 static void
-model_3d_instance_bucket_add(render::Handle vertex_buffer_handle, render::Handle index_buffer_handle, render::Handle tex_handle, render::BufferInfo* instance_buffer_info);
-static void
 blend_3d_bucket_add(BufferAllocation* vertex_buffer_allocation, BufferAllocation* index_buffer_allocation, render::Handle texture_handle, render::Handle colormap_handle);
 static Pipeline
-model_3d_instance_pipeline_create(Context* vk_ctx, String8 shader_path);
+car_instance_pipeline_create(Context* vk_ctx, String8 shader_path);
 static Pipeline
 model_3d_pipeline_create(Context* vk_ctx, String8 shader_path);
 static Pipeline
 blend_3d_pipeline_create(String8 shader_path);
 static Pipeline
 road_intersection_pipeline_create(String8 shader_path);
+static Pipeline
+car_instance_compute_pipeline_create(String8 shader_path);
 g_internal void
 road_intersection_compute();
+g_internal void
+car_instance_compute();
 static void
 road_intersection_bucket_add(VkDescriptorSet storage_buffer_set, VkDescriptorSet road_segment, BufferHandle* vertex_buffer, BufferHandle* index_buffer, U32 overlay_option);
 
 static void
 model_3d_rendering();
 static void
-model_3d_instance_rendering();
+car_instance_rendering();
 static void
 blend_3d_rendering();
 static void
