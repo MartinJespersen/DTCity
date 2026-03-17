@@ -18,7 +18,6 @@ union Vec2F32
         F32 y;
     };
     F32 v[2];
-    glm::vec2 vec;
 };
 
 typedef union Vec2F64 Vec2F64;
@@ -121,7 +120,6 @@ union Vec3F64
         Vec2F64 yz;
     };
     F64 v[3];
-    glm::dvec3 vec;
 };
 
 typedef union Vec3S32 Vec3S32;
@@ -517,10 +515,6 @@ static Vec2F64
 vec2f64_from_32(Vec2F32 v);
 static Vec2F32
 Mul2F32(Vec2F32 a, Vec2F32 b);
-static Vec2F32
-Div2F32(Vec2F32 a, Vec2F32 b);
-static Vec2F32
-Div2F32(Vec2F32 a, F32 x);
 static Vec2F32
 scale_2f32(Vec2F32 v, F32 s);
 static F32

@@ -29,3 +29,4 @@ __cmake**
 nul
 .vs
 .claude
+vcpkg_installed/**

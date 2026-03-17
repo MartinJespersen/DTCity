@@ -21,8 +21,7 @@ HTTP_Request(Arena* arena, String8 host, String8 path, String8 body, HTTP_Reques
     httplib::Client cli((char*)host.str);
 
     if (params->method == HTTP_Method_Post)
-        res = cli.Post((char*)path.str, (char*)body.str, (U32)body.size,
-                       (char*)params->content_type.str);
+        res = cli.Post((char*)path.str, (char*)body.str, (U32)body.size, (char*)params->content_type.str);
     else
     {
         exit_with_error("Only Get requests have been implemented for linux (works in windows but "
@@ -36,11 +35,8 @@ HTTP_Request(Arena* arena, String8 host, String8 path, String8 body, HTTP_Reques
     }
     else
     {
-        response.code =
-            response.good
-                ? 200
-                : 418; // TODO: convert error string from httplib::Error to HTTP_Status_Code
-        response.body = PushStr8Copy(arena, str8_c_string(res.value().body.c_str()));
+        response.code = response.good ? 200 : 418; // TODO: convert error string from httplib::Error to HTTP_Status_Code
+        response.body = push_str8_copy(arena, str8_c_string(res.value().body.c_str()));
     }
     return response;
 }

@@ -1,23 +1,30 @@
 #pragma once
-#include <stdlib.h>
+#include <cstdlib>
+
+template <typename... T>
+inline void
+unused(T&&...)
+{
+}
 
 #define ASSERT(condition, msg) assert(((void)(msg), (condition)))
+#define UNUSED(...) unused(__VA_ARGS__)
 
 #if defined(BUILD_DEBUG)
-#define DEBUG_LOG(message, ...)                                                                    \
-    do                                                                                             \
-    {                                                                                              \
-        printf("File %s:%d ", __FILE__, __LINE__);                                                 \
-        fprintf(stdout, message, ##__VA_ARGS__);                                                   \
-        printf("\n");                                                                              \
+#define DEBUG_LOG(message, ...)                                                                                                                                                                        \
+    do                                                                                                                                                                                                 \
+    {                                                                                                                                                                                                  \
+        printf("File %s:%d ", __FILE__, __LINE__);                                                                                                                                                     \
+        fprintf(stdout, message __VA_OPT__(, __VA_ARGS__));                                                                                                                                            \
+        printf("\n");                                                                                                                                                                                  \
     } while (0)
 #else
-#define DEBUG_LOG(message, ...)
+#define DEBUG_LOG(message, ...) unused(message __VA_OPT__(, __VA_ARGS__))
 #endif
 
 // ~mgj: Memory diagnostics
 #if MEMORY_DEBUG
-#define MEMORY_LOG(message, ...) DEBUG_LOG(message, ##__VA_ARGS__)
+#define MEMORY_LOG(message, ...) DEBUG_LOG(message __VA_OPT__(, __VA_ARGS__))
 #else
 #define MEMORY_LOG(message, ...)
 #endif
@@ -28,22 +35,19 @@
 #define DEBUG_FUNC(f)
 #endif
 
-#define ERROR_LOG(message, ...) fprintf(stderr, message, ##__VA_ARGS__)
+#define ERROR_LOG(message, ...) fprintf(stderr, message __VA_OPT__(, __VA_ARGS__))
 
-#define INFO_LOG(message, ...) fprintf(stdout, message, ##__VA_ARGS__)
+#define INFO_LOG(message, ...) fprintf(stdout, message __VA_OPT__(, __VA_ARGS__))
 
 // Push: disable all warnings
 #if COMPILER_MSVC
 #define DISABLE_WARNINGS_PUSH __pragma(warning(push, 0))
 #elif COMPILER_CLANG
-#define DISABLE_WARNINGS_PUSH                                                                      \
-    _Pragma("clang diagnostic push") _Pragma("clang diagnostic ignored \"-Weverything\"")
+#define DISABLE_WARNINGS_PUSH _Pragma("clang diagnostic push") _Pragma("clang diagnostic ignored \"-Weverything\"")
 #elif COMPILER_GCC
-#define DISABLE_WARNINGS_PUSH                                                                      \
-    _Pragma("GCC diagnostic push") _Pragma("GCC diagnostic ignored \"-Wall\"")                     \
-        _Pragma("GCC diagnostic ignored \"-Wextra\"")                                              \
-            _Pragma("GCC diagnostic ignored \"-Wunused-variable\"")                                \
-                _Pragma("GCC diagnostic ignored \"-Wimplicit-fallthrough\"")
+#define DISABLE_WARNINGS_PUSH                                                                                                                                                                          \
+    _Pragma("GCC diagnostic push") _Pragma("GCC diagnostic ignored \"-Wall\"") _Pragma("GCC diagnostic ignored \"-Wextra\"") _Pragma("GCC diagnostic ignored \"-Wunused-variable\"")                   \
+        _Pragma("GCC diagnostic ignored \"-Wimplicit-fallthrough\"")
 #else
 #define DISABLE_WARNINGS_PUSH
 #endif

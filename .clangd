@@ -1,8 +1,10 @@
 If:
   PathMatch: .*
 CompileFlags:
-  CompilationDatabase: build/debug
-  Add: [/FI../../src/includes.hpp, -DVMA_IMPLEMENTATION]
+  CompilationDatabase: build/win/debug
+  Remove: [-MDd]
+  Add: [/FI../../../src/includes.hpp]
+  Compiler: clang-cl
 
 Index:
   Background: Build
@@ -15,6 +17,11 @@ Diagnostics:
     - tautological-pointer-compare
     - c99-designator
     - c++11-narrowing
+    - missing-designated-field-initializers
+    - missing-field-initializers
+    - unused-function
+    - drv_argument_not_allowed_with
+    - missing-braces
   ClangTidy:
     FastCheckFilter: Strict
 Hover:

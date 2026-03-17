@@ -43,11 +43,12 @@ if (MSVC)
    /Z7
   )
     endif()
-        add_compile_options(
+    add_compile_options(
             /W4
             /wd4201  /wd4005 /wd4838 /wd4244 /wd4996 /wd4310 /wd4245 /wd4100 /wd4505
             /EHsc
             /utf-8
+            /Zc:preprocessor
             /Zc:__cplusplus
         )
 
@@ -215,7 +216,6 @@ target_compile_definitions(city PRIVATE
         SPDLOG_COMPILED_LIB
         GLM_FORCE_XYZW_ONLY
         GLM_FORCE_EXPLICIT_CTOR
-        GLM_FORCE_SIZE_T_LENGTH
         LIBASYNC_STATIC
     )
 

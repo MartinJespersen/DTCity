@@ -124,7 +124,8 @@ class DTCityPrepareRendererResources : public Cesium3DTilesSelection::IPrepareRe
     }
 
     void
-    attachRasterInMainThread(const Cesium3DTilesSelection::Tile& tile, int32_t overlayTextureCoordinateID, const CesiumRasterOverlays::RasterOverlayTile& rasterTile, void* pMainThreadRendererResources, const glm::dvec2& translation, const glm::dvec2& scale) override
+    attachRasterInMainThread(const Cesium3DTilesSelection::Tile& tile, int32_t overlayTextureCoordinateID, const CesiumRasterOverlays::RasterOverlayTile& rasterTile,
+                             void* pMainThreadRendererResources, const glm::dvec2& translation, const glm::dvec2& scale) override
     {
         (void)tile;
         (void)overlayTextureCoordinateID;
@@ -135,7 +136,8 @@ class DTCityPrepareRendererResources : public Cesium3DTilesSelection::IPrepareRe
     }
 
     void
-    detachRasterInMainThread(const Cesium3DTilesSelection::Tile& tile, int32_t overlayTextureCoordinateID, const CesiumRasterOverlays::RasterOverlayTile& rasterTile, void* pMainThreadRendererResources) noexcept override
+    detachRasterInMainThread(const Cesium3DTilesSelection::Tile& tile, int32_t overlayTextureCoordinateID, const CesiumRasterOverlays::RasterOverlayTile& rasterTile,
+                             void* pMainThreadRendererResources) noexcept override
     {
         (void)tile;
         (void)overlayTextureCoordinateID;
@@ -379,7 +381,9 @@ tile_render_data_from_gltf(const CesiumGltf::Model& model, const glm::dmat4& ece
                         {
                             U8* index_data = (U8*)index_buffer->cesium.data.data() + index_buffer_view->byteOffset + index_accessor->byteOffset;
 
-                            U32 stride = index_accessor->componentType == CesiumGltf::Accessor::ComponentType::UNSIGNED_BYTE ? sizeof(U8) : index_accessor->componentType == CesiumGltf::Accessor::ComponentType::UNSIGNED_SHORT ? sizeof(U16) : sizeof(U32);
+                            U32 stride = index_accessor->componentType == CesiumGltf::Accessor::ComponentType::UNSIGNED_BYTE    ? sizeof(U8)
+                                         : index_accessor->componentType == CesiumGltf::Accessor::ComponentType::UNSIGNED_SHORT ? sizeof(U16)
+                                                                                                                                : sizeof(U32);
 
                             for (U32 i = 0; i < (U32)index_accessor->count; ++i)
                             {
@@ -451,7 +455,8 @@ tile_render_data_from_gltf(const CesiumGltf::Model& model, const glm::dmat4& ece
 
         render_data->render_data.vertex_buffer_handle = render::buffer_load_sync((VkCommandBuffer)thread_input->cmd_buffer, &vertex_info);
         render_data->render_data.index_buffer_handle = render::buffer_load_sync((VkCommandBuffer)thread_input->cmd_buffer, &index_info);
-        render_data->render_data.storage_buffer_handle = render::storage_buffer_load_sync(thread_input->arena, render_data->render_data.vertex_buffer_handle, render_data->render_data.index_buffer_handle);
+        render_data->render_data.storage_buffer_handle =
+            render::storage_buffer_load_sync(thread_input->arena, render_data->render_data.vertex_buffer_handle, render_data->render_data.index_buffer_handle);
 
         // Texture Loading
         S32 tex_idx = -1;
@@ -469,7 +474,11 @@ tile_render_data_from_gltf(const CesiumGltf::Model& model, const glm::dmat4& ece
         const CesiumGltf::ImageAsset& image = *model.images[texture.source].pAsset;
 
         // Extract sampler from glTF
-        render::SamplerInfo sampler_info = {.min_filter = render::Filter_Linear, .mag_filter = render::Filter_Linear, .mip_map_mode = render::MipMapMode_Linear, .address_mode_u = render::SamplerAddressMode_Repeat, .address_mode_v = render::SamplerAddressMode_Repeat};
+        render::SamplerInfo sampler_info = {.min_filter = render::Filter_Linear,
+                                            .mag_filter = render::Filter_Linear,
+                                            .mip_map_mode = render::MipMapMode_Linear,
+                                            .address_mode_u = render::SamplerAddressMode_Repeat,
+                                            .address_mode_v = render::SamplerAddressMode_Repeat};
         if (texture.sampler >= 0 && texture.sampler < (S32)model.samplers.size())
         {
             sampler_info = sampler_info_from_cesium_sampler(model.samplers[texture.sampler]);
@@ -517,15 +526,16 @@ tileset_renderer_create(Arena* arena, async::Threads* threads, const char* tiles
     // Set up local coordinate system centered at the origin
     CesiumGeospatial::Cartographic origin_cartographic(glm::radians(origin_longitude), glm::radians(origin_latitude), origin_height);
 
-    CesiumGeospatial::LocalHorizontalCoordinateSystem local_coord_system(origin_cartographic, CesiumGeospatial::LocalDirection::East, CesiumGeospatial::LocalDirection::North, CesiumGeospatial::LocalDirection::Up);
+    CesiumGeospatial::LocalHorizontalCoordinateSystem local_coord_system(origin_cartographic, CesiumGeospatial::LocalDirection::East, CesiumGeospatial::LocalDirection::North,
+                                                                         CesiumGeospatial::LocalDirection::Up);
     renderer->ecef_to_local = local_coord_system.getEcefToLocalTransformation();
     renderer->local_to_ecef = local_coord_system.getLocalToEcefTransformation();
 
     // Create prepare renderer resources (pass coordinate system for ECEF->local transforms)
     auto prepare_renderer_resources = std::make_shared<DTCityPrepareRendererResources>(renderer->ecef_to_local, renderer);
 
-    // Create tileset externals
-    Cesium3DTilesSelection::TilesetExternals externals{asset_accessor, prepare_renderer_resources, renderer->async_system, nullptr, nullptr, nullptr};
+    // Keep Cesium's default logger instead of overwriting it with nullptr.
+    Cesium3DTilesSelection::TilesetExternals externals{asset_accessor, prepare_renderer_resources, renderer->async_system, nullptr, spdlog::default_logger(), nullptr};
 
     // Create tileset options
     Cesium3DTilesSelection::TilesetOptions options;

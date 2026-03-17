@@ -629,21 +629,21 @@ asset_manager_destroy(AssetManager* asset_manager)
 #else
     for (render::AssetItem<BufferHandle>* item = asset_manager->buffer_list.first; item != NULL; item = item->next)
     {
-        DEBUG_LOG("Buffer Not Destroyed: %s", item->name);
+        DEBUG_LOG("Buffer Not Destroyed: gen_id=%llu", (U64)item->gen_id);
         buffer_destroy(&item->item.buffer_alloc);
         buffer_destroy(&item->item.staging_buffer);
     }
 
     for (render::AssetItem<TextureHandle>* item = asset_manager->texture_list.first; item != NULL; item = item->next)
     {
-        DEBUG_LOG("Texture Not Destroyed: %s", item->name);
+        DEBUG_LOG("Texture Not Destroyed: gen_id=%llu", (U64)item->gen_id);
         descriptor_index_free(&asset_manager->descriptor_index_allocator, item->item.descriptor_set_idx);
         texture_destroy(&item->item);
     }
 
     for (render::AssetItem<DescriptorSetHandle>* item = asset_manager->descriptor_set_list.first; item != NULL; item = item->next)
     {
-        DEBUG_LOG("DescriptorSet Not Destroyed: %s", item->name);
+        DEBUG_LOG("DescriptorSet Not Destroyed: gen_id=%llu", (U64)item->gen_id);
         vkDestroyDescriptorSetLayout(asset_manager->device, item->item.desc_layout, nullptr);
     }
 #endif

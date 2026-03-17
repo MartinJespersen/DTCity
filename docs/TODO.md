@@ -1,11 +1,10 @@
 # Urgent changes
-* Improve the threading in the asset manager (e.g. too many mutexes are used at the moment)
 * vulkan descriptor layout specified twice some places (e.g. compute storage buffers descriptor)
 * Reconsider the number of descriptor pools (whether 1 is enough) and the descriptor numbers
 * In function RoadSegmentFromTwoRoadNodes: the normalize function leads to values being Nan. Handle this in a better way.
-* Check barriers for command buffer recordings
 
 # Less urgent changes
+* Improve the threading in the asset manager (e.g. too many mutexes are used at the moment)
 * The implementation of draw functions and similar for compute is ugly
 * Use vulkan push descriptor and buffer device address instead of descriptor sets
 * buildings need to be rendered included in compute pass as well
@@ -19,12 +18,13 @@
 * validation errors at null texture destruction as it is still used by some cmd buffers.
 
 # features
-* pass frame buffer size to shader 
-* Add NetAScore layers on 3D geometry
-* Add Cars to roads
+* Get 3D geometry from host path
+* Use the OSM data for building geometry
+* Make path to 3D geometry for city and starting bottom left corner of the bounding box as input to the visualization.
 * Get NetAScore from HTTP API if possible.
 * Simulation
   * Integrate with MATSim
+* Make clang work as compiler
 
 # Bugs
 * Direction or previous node is needed for random neighbor algorithm to avoid doing a u-turn when it is possible to drive straight.

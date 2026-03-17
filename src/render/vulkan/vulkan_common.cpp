@@ -3,6 +3,74 @@ namespace vulkan
 
 // TODO: check for blitting format beforehand
 
+static void
+print_extension_list(const char* label, Buffer<String8> extensions)
+{
+    printf("%s (%llu)\n", label, (unsigned long long)extensions.size);
+    for (U32 i = 0; i < extensions.size; i++)
+    {
+        printf("  %.*s\n", str8_varg(extensions.data[i]));
+    }
+}
+
+static Buffer<String8>
+available_instance_extensions_get(Arena* arena)
+{
+    U32 property_count = 0;
+    VK_CHECK_RESULT(vkEnumerateInstanceExtensionProperties(nullptr, &property_count, nullptr));
+
+    VkExtensionProperties* properties = PushArray(arena, VkExtensionProperties, property_count);
+    VK_CHECK_RESULT(vkEnumerateInstanceExtensionProperties(nullptr, &property_count, properties));
+
+    Buffer<String8> result = BufferAlloc<String8>(arena, property_count);
+    for (U32 i = 0; i < property_count; i++)
+    {
+        result.data[i] = push_str8_copy(arena, str8_c_string(properties[i].extensionName));
+    }
+    return result;
+}
+
+static B32
+extension_in_list(String8 extension, Buffer<String8> list)
+{
+    B32 found = false;
+    for (U32 i = 0; i < list.size; i++)
+    {
+        if (str8_match(extension, list.data[i], 0))
+        {
+            found = true;
+            break;
+        }
+    }
+    return found;
+}
+
+static void
+required_instance_extensions_validate(Arena* arena, Buffer<String8> required_extensions)
+{
+    Buffer<String8> available_extensions = available_instance_extensions_get(arena);
+    B32 missing_extension = false;
+
+    for (U32 i = 0; i < required_extensions.size; i++)
+    {
+        if (!extension_in_list(required_extensions.data[i], available_extensions))
+        {
+            if (!missing_extension)
+            {
+                print_extension_list("Required Vulkan instance extensions", required_extensions);
+                print_extension_list("Available Vulkan instance extensions", available_extensions);
+            }
+            printf("Missing Vulkan instance extension: %.*s\n", str8_varg(required_extensions.data[i]));
+            missing_extension = true;
+        }
+    }
+
+    if (missing_extension)
+    {
+        exit_with_error("Required Vulkan instance extensions are not available");
+    }
+}
+
 static VkResult
 create_debug_utils_messenger_ext(VkInstance instance, const VkDebugUtilsMessengerCreateInfoEXT* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkDebugUtilsMessengerEXT* pDebugMessenger)
 {
@@ -141,6 +209,15 @@ surface_create(Context* vk_ctx, io::IO* io)
         exit_with_error("Vulkan loader or ICD loading failed!");
     }
 
+    U32 glfw_extension_count = 0;
+    const char** glfw_extensions = glfwGetRequiredInstanceExtensions(&glfw_extension_count);
+    DEBUG_LOG("GLFW platform: %d\n", glfwGetPlatform());
+    DEBUG_LOG("GLFW required Vulkan instance extensions (%u)\n", glfw_extension_count);
+    for (U32 i = 0; i < glfw_extension_count; i++)
+    {
+        DEBUG_LOG("  %s\n", glfw_extensions[i]);
+    }
+
     VkResult result = glfwCreateWindowSurface(vk_ctx->instance, io->window, nullptr, &vk_ctx->surface);
     VK_CHECK_RESULT(result);
 }
@@ -167,6 +244,7 @@ create_instance(Context* vk_ctx)
     createInfo.pApplicationInfo = &appInfo;
 
     ::Buffer<String8> extensions = required_extensions_get(vk_ctx);
+    required_instance_extensions_validate(scratch.arena, extensions);
 
     createInfo.enabledExtensionCount = (U32)extensions.size;
     createInfo.ppEnabledExtensionNames = CStrArrFromStr8Buffer(scratch.arena, extensions);

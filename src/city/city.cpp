@@ -214,7 +214,7 @@ bvh_create(Arena* arena, Buffer<RoadSegmentCorners> road_segment_buffer, U32 lea
             Vec2F32 corner = seg->corners[j];
             center = add_2f32(center, corner);
         }
-        bb_buffer.data[i].center.vec = center.vec / (F32)Corner_COUNT;
+        bb_buffer.data[i].center = scale_2f32(center, 1.0f / (F32)Corner_COUNT);
     }
 
     BvhContext* bvh = PushStruct(scratch.arena, BvhContext);
@@ -368,12 +368,14 @@ road_segment_build(Arena* arena, Buffer<city::RoadEdge> edge_buffer, F32 default
         // Road coordinates stored in buffer for 3D geometry projection
         RoadSegmentCorners* road_segment_corners = corner_buffer[i];
         road_segment_corners->edge_id = edge->id;
-        road_segment_corners->corners[RoadSegmentCornerCoord_TopLeft].vec =
-            glm::vec2(ecef_to_local * glm::dvec4(road_segment.start.top.x, road_segment.start.top.y, road_segment.start.node.pos.z, 1.0));
-        road_segment_corners->corners[RoadSegmentCornerCoord_TopRight].vec = glm::vec2(ecef_to_local * glm::dvec4(road_segment.end.top.x, road_segment.end.top.y, road_segment.end.node.pos.z, 1.0));
-        road_segment_corners->corners[RoadSegmentCornerCoord_BottomRight].vec = glm::vec2(ecef_to_local * glm::dvec4(road_segment.end.btm.x, road_segment.end.btm.y, road_segment.end.node.pos.z, 1.0));
-        road_segment_corners->corners[RoadSegmentCornerCoord_BottomLeft].vec =
-            glm::vec2(ecef_to_local * glm::dvec4(road_segment.start.btm.x, road_segment.start.btm.y, road_segment.start.node.pos.z, 1.0));
+        glm::vec2 local_top_left = glm::vec2(ecef_to_local * glm::dvec4(road_segment.start.top.x, road_segment.start.top.y, road_segment.start.node.pos.z, 1.0));
+        glm::vec2 local_top_right = glm::vec2(ecef_to_local * glm::dvec4(road_segment.end.top.x, road_segment.end.top.y, road_segment.end.node.pos.z, 1.0));
+        glm::vec2 local_bottom_right = glm::vec2(ecef_to_local * glm::dvec4(road_segment.end.btm.x, road_segment.end.btm.y, road_segment.end.node.pos.z, 1.0));
+        glm::vec2 local_bottom_left = glm::vec2(ecef_to_local * glm::dvec4(road_segment.start.btm.x, road_segment.start.btm.y, road_segment.start.node.pos.z, 1.0));
+        road_segment_corners->corners[RoadSegmentCornerCoord_TopLeft] = vec_2f32(local_top_left.x, local_top_left.y);
+        road_segment_corners->corners[RoadSegmentCornerCoord_TopRight] = vec_2f32(local_top_right.x, local_top_right.y);
+        road_segment_corners->corners[RoadSegmentCornerCoord_BottomRight] = vec_2f32(local_bottom_right.x, local_bottom_right.y);
+        road_segment_corners->corners[RoadSegmentCornerCoord_BottomLeft] = vec_2f32(local_bottom_left.x, local_bottom_left.y);
         RoadInfo* road_info = map_get(road_info_map, edge->id);
         if (road_info)
         {
@@ -770,7 +772,7 @@ car_sim_update(Arena* arena, CarSim* car, F64 time_delta, glm::dmat4& ecef_to_lo
         }
 
         glm::dvec3 z_up = glm::dvec3(0.0f, 0.0f, 1.0f);
-        glm::dvec3 dir = glm::normalize(glm::dvec3(ecef_to_local * glm::dvec4(car_info->dir.vec, 0.0)));
+        glm::dvec3 dir = glm::normalize(glm::dvec3(ecef_to_local * glm::dvec4(car_info->dir.x, car_info->dir.y, car_info->dir.z, 0.0)));
         glm::dvec3 y_basis = -dir;
 
         glm::dvec3 x_basis = glm::cross(y_basis, z_up);
@@ -779,7 +781,7 @@ car_sim_update(Arena* arena, CarSim* car, F64 time_delta, glm::dmat4& ecef_to_lo
         instance->x_basis = glm::vec4(glm::dvec4(x_basis, 0.0f));
         instance->y_basis = glm::vec4(glm::dvec4(y_basis, 0.0f));
         instance->z_basis = glm::vec4(glm::dvec4(z_basis, 0.0f));
-        instance->w_basis = glm::vec4(ecef_to_local * glm::dvec4(new_pos_3d.vec, 1.0));
+        instance->w_basis = glm::vec4(ecef_to_local * glm::dvec4(new_pos_3d.x, new_pos_3d.y, new_pos_3d.z, 1.0));
 
         car_info->cur_pos_ecef = new_pos_3d;
     }

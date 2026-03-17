@@ -244,7 +244,8 @@ dt_main_loop(void* ptr)
     F64 tileset_lat = 56.2621;
 
     // Load local 3D Tiles tileset
-    const char* tileset_url = "file:///C:/ByModel/5km_6235_580/tileset.json";
+    // const char* tileset_url = "file:///C:/ByModel/5km_6235_580/tileset.json";
+    const char* tileset_url = "file:///mnt/c/ByModel/5km_6235_580/tileset.json";
 
     ctx->buildings = city::buildings_create(cache_dir, texture_dir, input->bbox);
 

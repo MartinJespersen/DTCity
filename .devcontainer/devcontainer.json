@@ -1,0 +1,22 @@
+{
+    "name": "DTCity",
+    "build": {
+        "context": "..",
+        "dockerfile": "../dockerfile",
+        "target": "builder"
+    },
+    "workspaceFolder": "/workspaces/DTCity",
+    "containerEnv": {
+        "VCPKG_ROOT": "/opt/vcpkg",
+        "VCPKG_BINARY_SOURCES": "clear;files,/opt/vcpkg-binary-cache,readwrite"
+    },
+    "remoteEnv": {
+        "PATH": "/opt/vcpkg:${containerEnv:PATH}"
+    },
+    "mounts": [
+        "source=dtcity-vcpkg-downloads,target=/opt/vcpkg/downloads,type=volume",
+        "source=dtcity-vcpkg-binary-cache,target=/opt/vcpkg-binary-cache,type=volume"
+    ],
+    "postCreateCommand": "cmake --preset debug-linux -DVCPKG_INSTALLED_DIR=${containerWorkspaceFolder}/vcpkg_installed",
+    "remoteUser": "root"
+}

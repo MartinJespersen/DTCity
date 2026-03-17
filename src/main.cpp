@@ -21,7 +21,7 @@ ContextCreate(io::IO* io_ctx)
     {
         U32 retry_count = 0;
         String8List parent_dir_list = {};
-        const U32 retry_stop = 3;
+        const U32 retry_stop = 4;
         for (; retry_count < retry_stop && os_folder_path_exists(data_dir) == false; retry_count++)
         {
             str8_list_push(scratch.arena, &parent_dir_list, S(".."));
@@ -36,10 +36,7 @@ ContextCreate(io::IO* io_ctx)
     }
     ctx->data_dir = push_str8_copy(app_arena, data_dir);
 
-    dt_DataDirPair subdirs[] = {{dt_DataDirType::Cache, S("cache")},
-                                {dt_DataDirType::Texture, S("textures")},
-                                {dt_DataDirType::Shaders, S("shaders")},
-                                {dt_DataDirType::Assets, S("assets")}};
+    dt_DataDirPair subdirs[] = {{dt_DataDirType::Cache, S("cache")}, {dt_DataDirType::Texture, S("textures")}, {dt_DataDirType::Shaders, S("shaders")}, {dt_DataDirType::Assets, S("assets")}};
     ctx->data_subdirs = dt_dir_create(app_arena, data_dir, subdirs, ArrayCount(subdirs));
     ctx->io = io_ctx;
 
@@ -63,8 +60,7 @@ App(int argc, char** argv)
 {
     ScratchScope scratch = ScratchScope(0, 0);
 
-    io::IO* io_ctx =
-        io::window_create(S("DTCity"), vulkan::Context::WIDTH, vulkan::Context::HEIGHT);
+    io::IO* io_ctx = io::window_create(S("Digital Twin City"), vulkan::Context::WIDTH, vulkan::Context::HEIGHT);
     io::input_state_update(io_ctx);
 
     Context* ctx = ContextCreate(io_ctx);

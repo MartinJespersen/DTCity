@@ -12,13 +12,9 @@
       "name": "debug-base",
       "hidden": true,
       "inherits": "base",
-      "binaryDir": "${sourceDir}/build/debug",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Debug",
-        "ASAN_ENABLED": "ON",
-        "BUILD_DEBUG": "ON",
-        "VCPKG_TARGET_TRIPLET": "x64-windows-static-md",
-        "VCPKG_OVERLAY_TRIPLETS": "${sourceDir}/triplets"
+        "BUILD_DEBUG": "ON"
       }
     },
     {
@@ -34,7 +30,6 @@
       "name": "profile-base",
       "hidden": true,
       "inherits": "base",
-      "binaryDir": "${sourceDir}/build/profile",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "RelWithDebInfo",
         "TRACY_PROFILE_ENABLE": "ON"
@@ -45,13 +40,23 @@
       "displayName": "Debug (Windows)",
       "inherits": "debug-base",
       "generator": "Ninja",
-      "cacheVariables": {}
+      "binaryDir": "${sourceDir}/build/win/debug",
+      "cacheVariables": {
+        "ASAN_ENABLED": "ON",
+        "VCPKG_TARGET_TRIPLET": "x64-windows-static-md",
+        "VCPKG_OVERLAY_TRIPLETS": "${sourceDir}/triplets"
+      }
     },
     {
       "name": "debug-linux",
       "displayName": "Debug (Linux)",
       "inherits": "debug-base",
-      "generator": "Unix Makefiles"
+      "generator": "Unix Makefiles",
+      "binaryDir": "${sourceDir}/build/linux/debug",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "VCPKG_TARGET_TRIPLET": "x64-linux"
+      }
     },
     {
       "name": "release-windows",
@@ -66,12 +71,16 @@
       "name": "release-linux",
       "displayName": "Release (Linux)",
       "inherits": "release-base",
-      "generator": "Unix Makefiles"
+      "generator": "Unix Makefiles",
+      "cacheVariables": {
+        "VCPKG_TARGET_TRIPLET": "x64-linux-release"
+      }
     },
     {
       "name": "profile-windows",
       "displayName": "Profile (Windows)",
       "inherits": "profile-base",
+      "binaryDir": "${sourceDir}/build/win/profile",
       "generator": "Ninja",
       "cacheVariables": {
         "SHADER_DEBUG": "ON",
@@ -84,7 +93,11 @@
       "name": "profile-linux",
       "displayName": "Profile (Linux)",
       "inherits": "profile-base",
-      "generator": "Unix Makefiles"
+      "binaryDir": "${sourceDir}/build/linux/profile",
+      "generator": "Unix Makefiles",
+      "cacheVariables": {
+        "VCPKG_TARGET_TRIPLET": "x64-linux"
+      }
     }
   ]
 }

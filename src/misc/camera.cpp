@@ -34,7 +34,7 @@ camera_update(Camera* camera, io::IO* input, F32 time, Vec2U32 extent)
     camera->mouse_pos_last.y = input->mouse_pos_cur.y;
 
     camera->fov -=
-        (F32)input->scroll_y.load(std::memory_order::memory_order_seq_cst) * scroll_sensitivity;
+        (F32)input->scroll_y.load(std::memory_order_seq_cst) * scroll_sensitivity;
     if (camera->fov < 1.0f)
         camera->fov = 1.0f;
     if (camera->fov > 45.0f)
@@ -55,6 +55,6 @@ camera_update(Camera* camera, io::IO* input, F32 time, Vec2U32 extent)
     camera->projection_matrix = glm::perspective(
         glm::radians(camera->fov), (F32)((F32)extent.x / (F32)extent.y), 0.1f, 5000.0f);
     camera->projection_matrix[1][1] *= -1.0f;
-    input->scroll_y.store(0.0, std::memory_order::memory_order_seq_cst);
+    input->scroll_y.store(0.0, std::memory_order_seq_cst);
 }
 } // namespace ui

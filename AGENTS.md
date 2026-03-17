@@ -12,3 +12,6 @@
 # Permissions
 - Never ask for read permission
 - Make your preferred changes instead of writing it in the chat.
+
+# My Setup
+- I use the Zed editor: https://zed.dev/docs

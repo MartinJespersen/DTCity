@@ -21,8 +21,7 @@ window_create(String8 app_name, U32 window_width, U32 window_height)
     glfwInit();
     glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
     glfwWindowHint(GLFW_RESIZABLE, GLFW_TRUE);
-    io_ctx->window =
-        glfwCreateWindow(window_width, window_height, (char*)app_name.str, nullptr, nullptr);
+    io_ctx->window = glfwCreateWindow(window_width, window_height, (char*)app_name.str, nullptr, nullptr);
     glfwSetWindowUserPointer(io_ctx->window, io_ctx);
     glfwSetFramebufferSizeCallback(io_ctx->window, framebuffer_resize_callback);
     glfwSetScrollCallback(io_ctx->window, scroll_callback);
@@ -73,8 +72,7 @@ input_state_update(IO* input)
     input->mouse_pos_cur_s64.x = floor(mouse_x);
     input->mouse_pos_cur_s64.y = floor(mouse_y);
 
-    input->mouse_left_clicked =
-        glfwGetMouseButton(input->window, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS;
+    input->mouse_left_clicked = glfwGetMouseButton(input->window, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS;
 
     // Button updates
     input->w_btn_clicked = glfwGetKey(input->window, GLFW_KEY_W) == GLFW_PRESS;
@@ -82,9 +80,7 @@ input_state_update(IO* input)
     input->a_btn_clicked = glfwGetKey(input->window, GLFW_KEY_A) == GLFW_PRESS;
     input->d_btn_clicked = glfwGetKey(input->window, GLFW_KEY_D) == GLFW_PRESS;
 
-    input->is_cursor_inside_win =
-        input->mouse_pos_cur.x >= 0 && input->mouse_pos_cur.x < input->window_size.x &&
-        input->mouse_pos_cur.y >= 0 && input->mouse_pos_cur.y < input->window_size.y;
+    input->is_cursor_inside_win = input->mouse_pos_cur.x >= 0 && input->mouse_pos_cur.x < input->window_size.x && input->mouse_pos_cur.y >= 0 && input->mouse_pos_cur.y < input->window_size.y;
     input->is_window_focused = glfwGetWindowAttrib(input->window, GLFW_FOCUSED) == GLFW_TRUE;
 
     // framebuffer update
