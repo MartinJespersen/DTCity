@@ -66,6 +66,24 @@ CheckVkResult(VkResult result)
         VK_CHECK_RESULT(result);
 }
 
+static B32
+dt_root_tileset_url_is_readable(const char* tileset_url)
+{
+    if (!tileset_url)
+    {
+        return false;
+    }
+
+    CesiumUtility::Uri uri(tileset_url);
+    if (uri.getScheme() != "file:")
+    {
+        return false;
+    }
+
+    std::string native_path = CesiumUtility::Uri::uriPathToNativePath(std::string(uri.getPath()));
+    return os_file_path_exists(Str8((U8*)native_path.data(), native_path.size()));
+}
+
 void
 dt_imgui_setup(vulkan::Context* vk_ctx, io::IO* io_ctx)
 {
@@ -108,75 +126,108 @@ dt_imgui_setup(vulkan::Context* vk_ctx, io::IO* io_ctx)
     ImGui_ImplVulkan_Init(&init_info);
 }
 
+g_internal Vec2F64
+dt_wgs84_from_utm(Vec2F64 utm_point, const char* utm_zone)
+{
+    F64 lon;
+    F64 lat;
+    UTM::UTMtoLL(utm_point.y, utm_point.x, utm_zone, lat, lon);
+
+    return {lon, lat};
+}
+
+g_internal Vec2F64
+dt_default_bbox_size_meters_get()
+{
+    return vec_2f64(5000.0, 5000.0);
+}
+
+g_internal Vec2F64
+dt_default_tileset_wgs84_get()
+{
+    return vec_2f64(10.291206, 56.253108);
+}
+
+g_internal Vec2F64
+dt_utm_point_from_wgs84(Vec2F64 wgs84_point, char out_utm_zone[10])
+{
+    F64 northing = 0;
+    F64 easting = 0;
+    UTM::LLtoUTM(wgs84_point.y, wgs84_point.x, northing, easting, out_utm_zone);
+    return vec_2f64(easting, northing);
+}
+
+g_internal Rng2F64
+dt_wgs84_bbox_from_btm_right_corner(Vec2F64 btm_right_corner_wgs84, Vec2F64 bbox_size_meters)
+{
+    char utm_zone[10] = {};
+    Vec2F64 btm_right_utm = dt_utm_point_from_wgs84(btm_right_corner_wgs84, utm_zone);
+
+    Rng2F64 utm_bbox = {};
+    utm_bbox.min.x = btm_right_utm.x;
+    utm_bbox.min.y = btm_right_utm.y;
+    utm_bbox.max.x = btm_right_utm.x + bbox_size_meters.x;
+    utm_bbox.max.y = btm_right_utm.y + bbox_size_meters.y;
+
+    Rng2F64 wgs84_bbox = {};
+    wgs84_bbox.min = dt_wgs84_from_utm(utm_bbox.min, utm_zone);
+    wgs84_bbox.max = dt_wgs84_from_utm(utm_bbox.max, utm_zone);
+    return wgs84_bbox;
+}
+
+g_internal Rng2F64
+dt_utm_from_wgs84(Rng2F64 wgs84_bbox)
+{
+    F64 south_west_easting;
+    F64 south_west_northing;
+    F64 north_east_easting;
+    F64 north_east_northing;
+    char utm_zone[10] = {};
+    UTM::LLtoUTM(wgs84_bbox.min.y, wgs84_bbox.min.x, south_west_northing, south_west_easting, utm_zone);
+    UTM::LLtoUTM(wgs84_bbox.max.y, wgs84_bbox.max.x, north_east_northing, north_east_easting, utm_zone);
+
+    Rng2F64 utm_bbox = {};
+    utm_bbox.min = vec_2f64(south_west_easting, south_west_northing);
+    utm_bbox.max = vec_2f64(north_east_easting, north_east_northing);
+    return utm_bbox;
+}
+
 static dt_Input
 dt_interpret_input(int argc, char** argv)
 {
     dt_Input input = {};
-    Rng2F64* bbox = &input.bbox;
-    F64* bbox_coords[4] = {&bbox->min.x, &bbox->min.y, &bbox->max.x, &bbox->max.y};
 
-    if (argc != 1 && argc != 5)
+    if (argc == 4)
     {
-        exit_with_error("Invalid number of command line arguments");
+        input.tileset_url = str8_c_string(argv[1]);
+        input.btm_right_corner_wgs84.x = f64_from_str8(str8_c_string(argv[2]));
+        input.btm_right_corner_wgs84.y = f64_from_str8(str8_c_string(argv[3]));
+    }
+    else if (argc == 5)
+    {
+        printf("UTM coordinates provided: %s %s z=%s\n", argv[2], argv[3], argv[4]);
+        input.tileset_url = str8_c_string(argv[1]);
+        input.btm_right_corner_wgs84 = dt_wgs84_from_utm({f64_from_str8(str8_c_string(argv[2])), f64_from_str8(str8_c_string(argv[3]))}, argv[4]);
+    }
+    else if (argc == 1)
+    {
+        INFO_LOG("Using default coordinates");
+
+#if OS_WINDOWS
+        String8 tileset_url = S("file:///C:/ByModel/5km_6235_580/tileset.json");
+#else
+        String8 tileset_url = S("file:///mnt/c/ByModel/5km_6235_580/tileset.json");
+#endif
+
+        input.tileset_url = tileset_url;
+        input.btm_right_corner_wgs84 = dt_default_tileset_wgs84_get();
+    }
+    else
+    {
+        exit_with_error("Wrong command line input! Format should be {tileset_url longitude_in_degrees latitude_in_degress} or {tileset_url utm_easting_in_meters utm_northing_in_meters utm_zone}");
     }
 
-    B8 use_default = true;
-    if (argc == 5)
-    {
-        B8 is_input_malformed = false;
-        for (U32 i = 0; (i < (U64)argc) && (i < ArrayCount(bbox_coords)); ++i)
-        {
-            char* arg = argv[i + 1];
-            String8 arg_str = str8_c_string(arg);
-            F64 v = f64_from_str8(arg_str);
-            if (v == 0.0)
-            {
-                ERROR_LOG("Invalid input %s passed as cmd line argument\n", arg);
-                is_input_malformed = true;
-                break;
-            }
-            *bbox_coords[i] = v;
-        }
-
-        if (!is_input_malformed)
-        {
-            use_default = false;
-        }
-    }
-
-    if (argc == 1)
-    {
-        DEBUG_LOG("No command line arguments provided\n");
-        use_default = true;
-    }
-
-    if (use_default)
-    {
-        // Initialize default values
-        bbox->min.x = 10.291206;
-        bbox->min.y = 56.253108;
-        bbox->max.x = 10.37349;
-        bbox->max.y = 56.29715;
-        INFO_LOG("Using default values:\nlon_btm_left=%lf, lat_btm_left=%lf, lon_top_right=%lf, "
-                 "lat_top_right=%lf\n",
-                 bbox->min.x, bbox->min.y, bbox->max.x, bbox->max.y);
-    }
     return input;
-}
-
-// wgs84 to utm conversion
-g_internal Rng2F64
-dt_utm_from_wgs84(Rng2F64 wgs84_bbox)
-{
-    F64 south_west_lon;
-    F64 south_west_lat;
-    F64 north_east_lon;
-    F64 north_east_lat;
-    char utm_zone[10];
-    UTM::LLtoUTM(wgs84_bbox.min.y, wgs84_bbox.min.x, south_west_lat, south_west_lon, utm_zone);
-    UTM::LLtoUTM(wgs84_bbox.max.y, wgs84_bbox.max.x, north_east_lat, north_east_lon, utm_zone);
-
-    return {south_west_lon, south_west_lat, north_east_lon, north_east_lat};
 }
 
 g_internal void
@@ -212,7 +263,12 @@ dt_main_loop(void* ptr)
     io::IO* io_ctx = ctx->io;
     os_set_thread_name(str8_c_string("Entrypoint thread"));
 
-    Rng2F64 utm_coords = dt_utm_from_wgs84(input->bbox);
+    const char* tileset_url = (const char*)input->tileset_url.str;
+    F64 tileset_lon = input->btm_right_corner_wgs84.x;
+    F64 tileset_lat = input->btm_right_corner_wgs84.y;
+    Vec2F64 bbox_size_meters = dt_default_bbox_size_meters_get();
+    Rng2F64 bbox = dt_wgs84_bbox_from_btm_right_corner(input->btm_right_corner_wgs84, bbox_size_meters);
+    Rng2F64 utm_coords = dt_utm_from_wgs84(bbox);
     printf("UTM Coordinates: %f %f %f %f\n", utm_coords.min.x, utm_coords.min.y, utm_coords.max.x, utm_coords.max.y);
     render::render_ctx_create(ctx->data_subdirs.data[dt_DataDirType::Shaders], io_ctx, ctx->thread_pool);
     vulkan::Context* vk_ctx = vulkan::ctx_get();
@@ -236,22 +292,11 @@ dt_main_loop(void* ptr)
 
     ui::camera_init(ctx->camera);
 
-    // Initialize Cesium 3D Tiles
-    // Use the tileset's geographic location as the origin for the local coordinate system
-    // The tileset at C:/ByModel is located at approximately:
-    // ECEF: (3502387.3, 634289.2, 5280930.5) -> Geodetic: (10.265119° lon, 56.197934° lat)
-    F64 tileset_lon = 10.3013;
-    F64 tileset_lat = 56.2621;
-
-    // Load local 3D Tiles tileset
-    // const char* tileset_url = "file:///C:/ByModel/5km_6235_580/tileset.json";
-    const char* tileset_url = "file:///mnt/c/ByModel/5km_6235_580/tileset.json";
-
-    ctx->buildings = city::buildings_create(cache_dir, texture_dir, input->bbox);
+    ctx->buildings = city::buildings_create(cache_dir, texture_dir, bbox);
 
     city::RoadOverlayOption overlay_option_choice = city::RoadOverlayOption_None;
 
-    ctx->road = city::road_create(texture_dir, cache_dir, ctx->data_dir, input->bbox, utm_coords, &sampler_info);
+    ctx->road = city::road_create(texture_dir, cache_dir, ctx->data_dir, bbox, utm_coords, &sampler_info);
 
     CesiumGeospatial::Cartographic origin_cartographic(glm::radians(tileset_lon), glm::radians(tileset_lat), 0);
     CesiumGeospatial::LocalHorizontalCoordinateSystem* local_coord = new CesiumGeospatial::LocalHorizontalCoordinateSystem(
@@ -273,9 +318,12 @@ dt_main_loop(void* ptr)
     ctx->car_sim = city::car_sim_create(asset_dir, texture_dir, 100);
     render::gpu_work_done_wait();
 
+    if (!dt_root_tileset_url_is_readable(tileset_url))
+    {
+        exit_with_error("Cesium tileset root file cannot be read: %s", tileset_url);
+    }
     ctx->cesium_tileset = cesium::tileset_renderer_create(ctx->arena_permanent, ctx->thread_pool, tileset_url, tileset_lon, tileset_lat, 0.0);
-    // city::Buildings* buildings = ctx->buildings;
-    // buildings_build(buildings, &sampler_info, ecef_to_local, ctx->road->road_height);
+    buildings_build(ctx->buildings, &sampler_info, ecef_to_local, ctx->road->road_height);
 
     while (ctx->running)
     {
@@ -294,7 +342,6 @@ dt_main_loop(void* ptr)
         {
             ui::camera_update(ctx->camera, ctx->io, ctx->time->delta_time_sec, framebuffer_dim);
             U64 hovered_object_id = render::latest_hovered_object_id_get();
-            printf("ID: %llu\n", hovered_object_id);
             city::RoadEdge** edge_ptr = map_get(&ctx->road->edge_structure.edge_map, (S64)hovered_object_id);
             if (edge_ptr)
             {

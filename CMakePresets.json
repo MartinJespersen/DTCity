@@ -63,6 +63,7 @@
       "displayName": "Release (Windows)",
       "inherits": "release-base",
       "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build/win/release",
       "cacheVariables": {
         "VCPKG_TARGET_TRIPLET": "x64-windows-static-md"
       }
@@ -72,6 +73,7 @@
       "displayName": "Release (Linux)",
       "inherits": "release-base",
       "generator": "Unix Makefiles",
+      "binaryDir": "${sourceDir}/build/linux/release",
       "cacheVariables": {
         "VCPKG_TARGET_TRIPLET": "x64-linux-release"
       }

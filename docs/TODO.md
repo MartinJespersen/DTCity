@@ -18,9 +18,10 @@
 * validation errors at null texture destruction as it is still used by some cmd buffers.
 
 # features
-* Get 3D geometry from host path
 * Use the OSM data for building geometry
-* Make path to 3D geometry for city and starting bottom left corner of the bounding box as input to the visualization.
+* 3D geomtry
+  * Get 3D geometry from host path
+  * Create window to list 5-by-5km geometry with corresponding connection point.
 * Get NetAScore from HTTP API if possible.
 * Simulation
   * Integrate with MATSim

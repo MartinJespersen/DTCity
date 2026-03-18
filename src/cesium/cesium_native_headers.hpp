@@ -34,6 +34,7 @@
 #include <CesiumAsync/IAssetAccessor.h>
 #include <CesiumAsync/ITaskProcessor.h>
 #include <CesiumUtility/IntrusivePointer.h>
+#include <CesiumUtility/Uri.h>
 #include <CesiumGeospatial/Ellipsoid.h>
 #include <CesiumGeospatial/Cartographic.h>
 #include <CesiumGeospatial/LocalHorizontalCoordinateSystem.h>
