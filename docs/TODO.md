@@ -18,14 +18,16 @@
 * validation errors at null texture destruction as it is still used by some cmd buffers.
 
 # features
+* Get NetAScore from HTTP API if possible.
 * Use the OSM data for building geometry
-* 3D geomtry
+* 3D geometry
+  * Improve tile queue to avoid to many glitches
   * Get 3D geometry from host path
   * Create window to list 5-by-5km geometry with corresponding connection point.
-* Get NetAScore from HTTP API if possible.
 * Simulation
   * Integrate with MATSim
-* Make clang work as compiler
+* Make application work on MACOS
+  * Make clang work as compiler
 
 # Bugs
 * Direction or previous node is needed for random neighbor algorithm to avoid doing a u-turn when it is possible to drive straight.

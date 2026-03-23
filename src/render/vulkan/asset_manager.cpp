@@ -561,7 +561,6 @@ asset_manager_create(VkPhysicalDevice physical_device, VkDevice device, VkInstan
     AssetManager* asset_manager = PushStruct(arena, AssetManager);
     asset_manager->arena = arena;
     asset_manager->total_size = total_size_in_bytes;
-    asset_manager->work_queue = threads->msg_queue;
     asset_manager->threads = threads;
     asset_manager->threaded_cmd_pools = BufferAlloc<AssetManagerCommandPool>(arena, threads->thread_handles.size);
     asset_manager->descriptor_pool = desc_pool;
@@ -590,8 +589,7 @@ asset_manager_create(VkPhysicalDevice physical_device, VkDevice device, VkInstan
     }
 
     asset_manager->cmd_wait_list = asset_manager_cmd_list_create();
-    U32 cmd_queue_size = 10;
-    asset_manager->cmd_queue = async::QueueInit<CmdQueueItem>(arena, cmd_queue_size, queue_family_index);
+    asset_manager->cmd_queue = asset_manager_cmd_queue_create();
 
     descriptor_index_allocator_init(&asset_manager->descriptor_index_allocator, arena, 5000);
 
@@ -616,7 +614,7 @@ asset_manager_destroy(AssetManager* asset_manager)
     asset_manager_cmd_list_destroy(asset_manager->cmd_wait_list);
 
     // 3. Clean up remaining resources (workers are stopped, no mutex needed)
-    async::QueueDestroy(asset_manager->cmd_queue);
+    asset_manager_cmd_queue_destroy(asset_manager->cmd_queue);
     deletion_queue_empty_all();
 
 #if BUILD_DEBUG
@@ -672,7 +670,7 @@ asset_cmd_queue_item_enqueue(U32 thread_id, render::ThreadInput* thread_input)
     CmdQueueItem item = {.thread_input = thread_input, .thread_id = thread_id};
     DEBUG_LOG("Asset ID: %llu - Cmd Getting Queued", thread_input->handles.first ? thread_input->handles.first->handle.u64 : 0);
     Assert(thread_input->cmd_buffer != VK_NULL_HANDLE);
-    async::QueuePush(asset_manager->cmd_queue, &item);
+    asset_manager_cmd_queue_enqueue(asset_manager->cmd_queue, item);
 }
 
 static void
@@ -680,26 +678,28 @@ asset_manager_execute_cmds()
 {
     AssetManager* asset_manager = asset_manager_get();
 
-    for (U32 i = 0; i < asset_manager->cmd_queue->queue_size; i++)
+    for (;;)
     {
         CmdQueueItem item;
-        if (async::QueueTryRead(asset_manager->cmd_queue, &item))
+        if (!asset_manager_cmd_queue_try_dequeue(asset_manager->cmd_queue, &item))
         {
-            VkSubmitInfo submit_info{};
-            submit_info.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
-            submit_info.commandBufferCount = 1;
-            submit_info.pCommandBuffers = (VkCommandBuffer*)&item.thread_input->cmd_buffer;
-
-            VkFenceCreateInfo fence_info{};
-            fence_info.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
-            VK_CHECK_RESULT(vkCreateFence(asset_manager->device, &fence_info, nullptr, &item.fence));
-
-            VK_CHECK_RESULT(vkQueueSubmit(asset_manager->graphics_queue, 1, &submit_info, item.fence));
-
-            DEBUG_LOG("Asset ID: %llu - Submitted Command Buffer", item.thread_input->handles.first ? item.thread_input->handles.first->handle.u64 : 0);
-            Assert(item.thread_input->done_loading_func);
-            asset_manager_cmd_list_add(asset_manager->cmd_wait_list, item);
+            break;
         }
+
+        VkSubmitInfo submit_info{};
+        submit_info.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+        submit_info.commandBufferCount = 1;
+        submit_info.pCommandBuffers = (VkCommandBuffer*)&item.thread_input->cmd_buffer;
+
+        VkFenceCreateInfo fence_info{};
+        fence_info.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
+        VK_CHECK_RESULT(vkCreateFence(asset_manager->device, &fence_info, nullptr, &item.fence));
+
+        VK_CHECK_RESULT(vkQueueSubmit(asset_manager->graphics_queue, 1, &submit_info, item.fence));
+
+        DEBUG_LOG("Asset ID: %llu - Submitted Command Buffer", item.thread_input->handles.first ? item.thread_input->handles.first->handle.u64 : 0);
+        Assert(item.thread_input->done_loading_func);
+        asset_manager_cmd_list_add(asset_manager->cmd_wait_list, item);
     }
 }
 
@@ -849,6 +849,80 @@ begin_command(VkDevice device, AssetManagerCommandPool* threaded_cmd_pool)
     return commandBuffer;
 }
 
+static AssetManagerCmdQueue*
+asset_manager_cmd_queue_create()
+{
+    Arena* arena = arena_alloc();
+    AssetManagerCmdQueue* cmd_queue = PushStruct(arena, AssetManagerCmdQueue);
+    cmd_queue->arena = arena;
+    cmd_queue->mutex = OS_MutexAlloc();
+    return cmd_queue;
+}
+
+static void
+asset_manager_cmd_queue_destroy(AssetManagerCmdQueue* cmd_queue)
+{
+    if (cmd_queue)
+    {
+        OS_MutexRelease(cmd_queue->mutex);
+        arena_release(cmd_queue->arena);
+    }
+}
+
+static void
+asset_manager_cmd_queue_enqueue(AssetManagerCmdQueue* cmd_queue, CmdQueueItem item)
+{
+    OS_MutexScope(cmd_queue->mutex)
+    {
+        CmdQueueItem* item_copy = 0;
+        if (cmd_queue->free_list)
+        {
+            item_copy = cmd_queue->free_list;
+            SLLStackPop(cmd_queue->free_list);
+            MemoryZeroStruct(item_copy);
+        }
+        else
+        {
+            item_copy = PushStruct(cmd_queue->arena, CmdQueueItem);
+        }
+
+        *item_copy = item;
+        DLLPushBack(cmd_queue->first, cmd_queue->last, item_copy);
+        cmd_queue->count++;
+    }
+}
+
+static B32
+asset_manager_cmd_queue_try_dequeue(AssetManagerCmdQueue* cmd_queue, CmdQueueItem* item)
+{
+    B32 has_item = false;
+    OS_MutexScope(cmd_queue->mutex)
+    {
+        CmdQueueItem* item_node = cmd_queue->first;
+        if (item_node)
+        {
+            *item = *item_node;
+            DLLRemove(cmd_queue->first, cmd_queue->last, item_node);
+            cmd_queue->count--;
+            MemoryZeroStruct(item_node);
+            SLLStackPush(cmd_queue->free_list, item_node);
+            has_item = true;
+        }
+    }
+    return has_item;
+}
+
+static B32
+asset_manager_cmd_queue_has_pending_work(AssetManagerCmdQueue* cmd_queue)
+{
+    B32 has_pending_work = false;
+    OS_MutexScope(cmd_queue->mutex)
+    {
+        has_pending_work = cmd_queue->count > 0;
+    }
+    return has_pending_work;
+}
+
 static AssetManagerCmdList*
 asset_manager_cmd_list_create()
 {
@@ -862,10 +936,9 @@ static B32
 asset_manager_has_pending_work(AssetManagerCmdList* cmd_wait_list)
 {
     AssetManager* asset_manager = asset_manager_get();
-    B32 cmd_queue_empty = asset_manager->cmd_queue->next_index == asset_manager->cmd_queue->fill_index;
-    B32 work_queue_empty = asset_manager->work_queue->next_index == asset_manager->work_queue->fill_index;
-    B32 workers_busy = asset_manager->threads->in_flight_count.load() > 0;
-    return cmd_wait_list->list_first || !cmd_queue_empty || !work_queue_empty || workers_busy;
+    B32 cmd_queue_has_pending_work = asset_manager_cmd_queue_has_pending_work(asset_manager->cmd_queue);
+    B32 workers_busy = async::thread_pool_has_pending_work(asset_manager->threads);
+    return cmd_wait_list->list_first || cmd_queue_has_pending_work || workers_busy;
 }
 
 static void

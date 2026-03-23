@@ -8,7 +8,7 @@ namespace cesium
 class DTCityTaskProcessor : public CesiumAsync::ITaskProcessor
 {
   public:
-    DTCityTaskProcessor(async::Queue<async::QueueItem>* queue) : queue(queue)
+    DTCityTaskProcessor(async::Threads* thread_pool) : thread_pool(thread_pool)
     {
     }
 
@@ -28,7 +28,7 @@ class DTCityTaskProcessor : public CesiumAsync::ITaskProcessor
             delete func;
         };
 
-        if (!async::QueueTryPush(queue, &item))
+        if (!async::thread_pool_try_push(thread_pool, &item))
         {
             exit_with_error("Failed to enqueue task");
             (*task_copy)();
@@ -37,7 +37,7 @@ class DTCityTaskProcessor : public CesiumAsync::ITaskProcessor
     }
 
   private:
-    async::Queue<async::QueueItem>* queue;
+    async::Threads* thread_pool;
 };
 
 //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -515,7 +515,7 @@ tileset_renderer_create(Arena* arena, async::Threads* threads, const char* tiles
     renderer->tiles_to_free_mutex = OS_RWMutexAlloc();
 
     // Create task processor
-    renderer->task_processor = std::make_shared<DTCityTaskProcessor>(threads->msg_queue);
+    renderer->task_processor = std::make_shared<DTCityTaskProcessor>(threads);
 
     // Create asset accessor using CesiumCurl
     std::shared_ptr<CesiumAsync::IAssetAccessor> asset_accessor = std::make_shared<CesiumCurl::CurlAssetAccessor>();

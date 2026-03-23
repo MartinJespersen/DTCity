@@ -26,7 +26,7 @@
 #include "os_core/os_core_inc.hpp"
 
 // user defined: [hpp]
-#include "async/async.hpp"
+#include "async/async_inc.hpp"
 #include "http/http_inc.hpp"
 #include "misc/misc_inc.hpp"
 #include "render/render_inc.hpp"

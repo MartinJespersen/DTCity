@@ -403,7 +403,7 @@ texture_load_async(render::SamplerInfo* sampler_info, String8 texture_path)
     thread_input->done_loading_func = render::handle_done_loading;
 
     async::QueueItem queue_input = {.data = thread_input, .worker_func = vulkan::thread_main};
-    async::QueuePush(asset_manager->work_queue, &queue_input);
+    async::thread_pool_push(asset_manager->threads, &queue_input);
 
     return render::handle_list_first_handle(&thread_input->handles);
 }
@@ -459,7 +459,7 @@ texture_load_async(render::SamplerInfo* sampler_info, TextureUploadData* tex_upl
     thread_input->done_loading_func = render::handle_done_loading;
 
     async::QueueItem queue_input = {.data = thread_input, .worker_func = vulkan::thread_main};
-    async::QueuePush(asset_manager->work_queue, &queue_input);
+    async::thread_pool_push(asset_manager->threads, &queue_input);
 
     return handle;
 }
@@ -482,7 +482,7 @@ colormap_load_async(render::SamplerInfo* sampler_info, const U8* colormap_data, 
     thread_input->done_loading_func = render::handle_done_loading;
 
     async::QueueItem queue_input = {.data = thread_input, .worker_func = vulkan::thread_main};
-    async::QueuePush(asset_manager->work_queue, &queue_input);
+    async::thread_pool_push(asset_manager->threads, &queue_input);
 
     return render::handle_list_first_handle(&thread_input->handles);
 }
@@ -653,7 +653,7 @@ road_segment_descriptor_load_async(Arena* arena, Handle buffer_handle, Handle no
             thread_input->done_loading_func = render::handle_done_loading;
 
             async::QueueItem queue_input = {.data = thread_input, .worker_func = vulkan::thread_main};
-            async::QueuePush(asset_manager->work_queue, &queue_input);
+            async::thread_pool_push(asset_manager->threads, &queue_input);
         }
     }
     Assert("road_segment_descriptor_load_async: zero handle passed");
@@ -717,7 +717,7 @@ buffer_load_async(render::BufferInfo* buffer_info)
     thread_input->done_loading_func = render::handle_done_loading;
 
     async::QueueItem queue_input = {.data = thread_input, .worker_func = vulkan::thread_main};
-    async::QueuePush(asset_manager->work_queue, &queue_input);
+    async::thread_pool_push(asset_manager->threads, &queue_input);
 
     return asset_handle;
 }

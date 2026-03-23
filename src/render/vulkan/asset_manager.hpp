@@ -122,6 +122,16 @@ struct AssetManagerCmdList
     CmdQueueItem* free_list;
 };
 
+struct AssetManagerCmdQueue
+{
+    Arena* arena;
+    OS_Handle mutex;
+    CmdQueueItem* first;
+    CmdQueueItem* last;
+    CmdQueueItem* free_list;
+    U32 count;
+};
+
 template <typename T> struct AssetList
 {
     Arena* arena;
@@ -179,8 +189,7 @@ struct AssetManager
     // ~mgj: Threading Buffer Commands
     Buffer<AssetManagerCommandPool> threaded_cmd_pools;
     U64 total_size;
-    async::Queue<CmdQueueItem>* cmd_queue;
-    async::Queue<async::QueueItem>* work_queue;
+    AssetManagerCmdQueue* cmd_queue;
     async::Threads* threads;
     AssetManagerCmdList* cmd_wait_list;
 
@@ -292,6 +301,16 @@ static void
 asset_manager_cmd_done_check();
 static VkCommandBuffer
 begin_command(VkDevice device, AssetManagerCommandPool* threaded_cmd_pool);
+static AssetManagerCmdQueue*
+asset_manager_cmd_queue_create();
+static void
+asset_manager_cmd_queue_destroy(AssetManagerCmdQueue* cmd_queue);
+static void
+asset_manager_cmd_queue_enqueue(AssetManagerCmdQueue* cmd_queue, CmdQueueItem item);
+static B32
+asset_manager_cmd_queue_try_dequeue(AssetManagerCmdQueue* cmd_queue, CmdQueueItem* item);
+static B32
+asset_manager_cmd_queue_has_pending_work(AssetManagerCmdQueue* cmd_queue);
 static AssetManagerCmdList*
 asset_manager_cmd_list_create();
 static void

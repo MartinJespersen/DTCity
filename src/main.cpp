@@ -42,7 +42,7 @@ ContextCreate(io::IO* io_ctx)
 
     // ~mgj: -2 as 2 are used for Main thread and IO thread
     U32 thread_count = OS_GetSystemInfo()->logical_processor_count - 2;
-    U32 queue_size = 1000; // TODO: should be increased
+    U32 queue_size = 100; // TODO: should be increased
     ctx->thread_pool = async::WorkerThreadsCreate(app_arena, thread_count, queue_size);
 
     return ctx;
