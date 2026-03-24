@@ -262,6 +262,7 @@ dt_main_loop(void* ptr)
     Context* ctx = dt_ctx_get();
     io::IO* io_ctx = ctx->io;
     os_set_thread_name(str8_c_string("Entrypoint thread"));
+    AssertAlways(async::thread_pool_register_current_thread(ctx->thread_pool));
 
     const char* tileset_url = (const char*)input->tileset_url.str;
     F64 tileset_lon = input->btm_right_corner_wgs84.x;

@@ -28,12 +28,10 @@ struct Threads
 {
     B32 kill_switch;
     U32 thread_count;
-    U32 external_queue_capacity;
     std::atomic<U32> in_flight_count;
     std::atomic<U32> pending_task_count;
-    std::atomic<U32> next_external_queue_index;
+    std::atomic<U32> submitter_thread_os_id;
     Buffer<SpmcQueue<QueueItem>*> worker_queues;
-    Buffer<SpmcQueue<QueueItem>*> external_queues;
     Buffer<OS_Handle> thread_handles;
     OS_Handle work_semaphore;
 };
@@ -41,10 +39,11 @@ struct Threads
 // ~mgj: Globals /////////////////////////////
 // used for threads that want to access thread_local data
 thread_local U32 t_cur_thread_id = max_U32;
+thread_local U32 t_cur_queue_id = max_U32;
 thread_local Threads* t_thread_pool = 0;
-thread_local U32 t_external_queue_id = max_U32;
-thread_local Threads* t_external_queue_pool = 0;
 ////////////////////////////////////////////////
+static B32
+thread_pool_register_current_thread(Threads* thread_pool);
 static B32
 thread_pool_try_push(Threads* thread_pool, QueueItem* item);
 static void
