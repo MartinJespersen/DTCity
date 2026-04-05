@@ -190,7 +190,7 @@ struct AssetManager
     Buffer<AssetManagerCommandPool> threaded_cmd_pools;
     U64 total_size;
     AssetManagerCmdQueue* cmd_queue;
-    async::Threads* threads;
+    async::ThreadPool* threads;
     AssetManagerCmdList* cmd_wait_list;
 
     // ~mgj: Bindless descriptor index allocator
@@ -217,7 +217,7 @@ struct AssetManager
 g_internal AssetManager*
 asset_manager_get();
 static AssetManager*
-asset_manager_create(VkPhysicalDevice physical_device, VkDevice device, VkInstance instance, VkQueue graphics_queue, U32 queue_family_index, async::Threads* threads, U64 total_size_in_bytes,
+asset_manager_create(VkPhysicalDevice physical_device, VkDevice device, VkInstance instance, VkQueue graphics_queue, U32 queue_family_index, async::ThreadPool* threads, U64 total_size_in_bytes,
                      VkDescriptorPool desc_pool);
 static void
 asset_manager_destroy(AssetManager* asset_manager);

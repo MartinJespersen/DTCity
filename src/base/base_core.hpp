@@ -127,7 +127,6 @@
 #define EachElement(it, array) (U64 it = 0; (it) < ArrayCount(array); (it) += 1)
 #define EachEnumVal(type, it) (type it = (type)0; (it) < type##_COUNT; (it) = (type)((it) + 1))
 #define EachNonZeroEnumVal(type, it) (type(it) = (type)1; (it) < type##_COUNT; (it) = (type)((it) + 1))
-
 ////////////////////////////////
 //~ rjf: Memory Operation Macros
 

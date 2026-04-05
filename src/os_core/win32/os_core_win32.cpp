@@ -25,14 +25,12 @@ os_w32_file_property_flags_from_dwFileAttributes(DWORD dwFileAttributes)
 }
 
 static void
-os_w32_file_properties_from_attribute_data(FileProperties* properties,
-                                           WIN32_FILE_ATTRIBUTE_DATA* attributes)
+os_w32_file_properties_from_attribute_data(FileProperties* properties, WIN32_FILE_ATTRIBUTE_DATA* attributes)
 {
     properties->size = Compose64Bit(attributes->nFileSizeHigh, attributes->nFileSizeLow);
     os_w32_dense_time_from_file_time(&properties->created, &attributes->ftCreationTime);
     os_w32_dense_time_from_file_time(&properties->modified, &attributes->ftLastWriteTime);
-    properties->flags =
-        os_w32_file_property_flags_from_dwFileAttributes(attributes->dwFileAttributes);
+    properties->flags = os_w32_file_property_flags_from_dwFileAttributes(attributes->dwFileAttributes);
 }
 
 ////////////////////////////////
@@ -200,7 +198,7 @@ os_get_process_start_time_unix()
 static inline String8
 os_path_delimiter()
 {
-    return Str8Lit("\\");
+    return str8_lit("\\");
 }
 
 ////////////////////////////////
@@ -242,8 +240,7 @@ static void*
 os_reserve_large(U64 size)
 {
     // we commit on reserve because windows
-    void* result =
-        VirtualAlloc(0, size, MEM_RESERVE | MEM_COMMIT | MEM_LARGE_PAGES, PAGE_READWRITE);
+    void* result = VirtualAlloc(0, size, MEM_RESERVE | MEM_COMMIT | MEM_LARGE_PAGES, PAGE_READWRITE);
     return result;
 }
 
@@ -365,8 +362,7 @@ os_file_open(OS_AccessFlags flags, String8 path)
     {
         security_attributes.bInheritHandle = 1;
     }
-    HANDLE file = CreateFileW((WCHAR*)path16.str, access_flags, share_mode, &security_attributes,
-                              creation_disposition, FILE_ATTRIBUTE_NORMAL, 0);
+    HANDLE file = CreateFileW((WCHAR*)path16.str, access_flags, share_mode, &security_attributes, creation_disposition, FILE_ATTRIBUTE_NORMAL, 0);
     if (file != INVALID_HANDLE_VALUE)
     {
         result.u64[0] = (U64)file;
@@ -473,8 +469,7 @@ os_file_set_time(OS_Handle file, DateTime time)
     SYSTEMTIME system_time = {0};
     os_w32_system_time_from_date_time(&system_time, &time);
     FILETIME file_time = {0};
-    result = (SystemTimeToFileTime(&system_time, &file_time) &&
-              SetFileTime(handle, &file_time, &file_time, &file_time));
+    result = (SystemTimeToFileTime(&system_time, &file_time) && SetFileTime(handle, &file_time, &file_time, &file_time));
     return result;
 }
 
@@ -532,8 +527,7 @@ os_file_reserve_size(OS_Handle file, U64 size)
     alloc_info.AllocationSize.LowPart = size & max_U32;
     alloc_info.AllocationSize.HighPart = (size >> 32) & max_U32;
 
-    BOOL is_reserved =
-        SetFileInformationByHandle(handle, FileAllocationInfo, &alloc_info, sizeof(alloc_info));
+    BOOL is_reserved = SetFileInformationByHandle(handle, FileAllocationInfo, &alloc_info, sizeof(alloc_info));
     return is_reserved;
 }
 
@@ -595,8 +589,7 @@ os_file_path_exists(String8 path)
     Temp scratch = ScratchBegin(0, 0);
     String16 path16 = str16_from_8(scratch.arena, path);
     DWORD attributes = GetFileAttributesW((WCHAR*)path16.str);
-    B32 exists =
-        (attributes != INVALID_FILE_ATTRIBUTES) && !!(~attributes & FILE_ATTRIBUTE_DIRECTORY);
+    B32 exists = (attributes != INVALID_FILE_ATTRIBUTES) && !!(~attributes & FILE_ATTRIBUTE_DIRECTORY);
     ScratchEnd(scratch);
     return exists;
 }
@@ -633,9 +626,7 @@ os_properties_from_file_path(String8 path)
         WCHAR buffer[512] = {0};
         DWORD length = GetLogicalDriveStringsW(sizeof(buffer), buffer);
         U64 last_slash_pos = 0;
-        for (; last_slash_pos < path.size;
-             last_slash_pos =
-                 FindSubstr8(path, Str8Lit("/"), last_slash_pos + 1, MatchFlag_SlashInsensitive))
+        for (; last_slash_pos < path.size; last_slash_pos = FindSubstr8(path, str8_lit("/"), last_slash_pos + 1, MatchFlag_SlashInsensitive))
             ;
         String8 path_trimmed = Str8Prefix(path, last_slash_pos);
         for (U64 off = 0; off < (U64)length;)
@@ -769,7 +760,7 @@ static OS_FileIter*
 os_file_iter_begin(Arena* arena, String8 path, OS_FileIterFlags flags)
 {
     Temp scratch = ScratchBegin(&arena, 1);
-    String8 path_with_wildcard = PushStr8Cat(scratch.arena, path, Str8Lit("\\*"));
+    String8 path_with_wildcard = PushStr8Cat(scratch.arena, path, str8_lit("\\*"));
     String16 path16 = str16_from_8(scratch.arena, path_with_wildcard);
     OS_FileIter* iter = PushArray(arena, OS_FileIter, 1);
     iter->flags = flags;
@@ -854,14 +845,10 @@ os_file_iter_next(Arena* arena, OS_FileIter* iter, OS_FileInfo* info_out)
                     if (usable_file)
                     {
                         info_out->name = str8_from_16(arena, str16_cstring((U16*)file_name));
-                        info_out->props.size = (U64)w32_iter->find_data.nFileSizeLow |
-                                               (((U64)w32_iter->find_data.nFileSizeHigh) << 32);
-                        os_w32_dense_time_from_file_time(&info_out->props.created,
-                                                         &w32_iter->find_data.ftCreationTime);
-                        os_w32_dense_time_from_file_time(&info_out->props.modified,
-                                                         &w32_iter->find_data.ftLastWriteTime);
-                        info_out->props.flags =
-                            os_w32_file_property_flags_from_dwFileAttributes(attributes);
+                        info_out->props.size = (U64)w32_iter->find_data.nFileSizeLow | (((U64)w32_iter->find_data.nFileSizeHigh) << 32);
+                        os_w32_dense_time_from_file_time(&info_out->props.created, &w32_iter->find_data.ftCreationTime);
+                        os_w32_dense_time_from_file_time(&info_out->props.modified, &w32_iter->find_data.ftLastWriteTime);
+                        info_out->props.flags = os_w32_file_property_flags_from_dwFileAttributes(attributes);
                         result = 1;
                         if (!FindNextFileW(w32_iter->handle, &w32_iter->find_data))
                         {
@@ -937,9 +924,7 @@ os_shared_memory_alloc(U64 size, String8 name)
 {
     Temp scratch = ScratchBegin(0, 0);
     String16 name16 = str16_from_8(scratch.arena, name);
-    HANDLE file = CreateFileMappingW(INVALID_HANDLE_VALUE, 0, PAGE_READWRITE,
-                                     (U32)((size & 0xffffffff00000000) >> 32),
-                                     (U32)((size & 0x00000000ffffffff)), (WCHAR*)name16.str);
+    HANDLE file = CreateFileMappingW(INVALID_HANDLE_VALUE, 0, PAGE_READWRITE, (U32)((size & 0xffffffff00000000) >> 32), (U32)((size & 0x00000000ffffffff)), (WCHAR*)name16.str);
     OS_Handle result = {(U64)file};
     ScratchEnd(scratch);
     return result;
@@ -969,8 +954,7 @@ os_shared_memory_view_open(OS_Handle handle, Rng1U64 range)
     HANDLE file = (HANDLE)(handle.u64[0]);
     U64 offset = range.min;
     U64 size = range.max - range.min;
-    void* ptr = MapViewOfFile(file, FILE_MAP_ALL_ACCESS, (U32)((offset & 0xffffffff00000000) >> 32),
-                              (U32)((offset & 0x00000000ffffffff)), size);
+    void* ptr = MapViewOfFile(file, FILE_MAP_ALL_ACCESS, (U32)((offset & 0xffffffff00000000) >> 32), (U32)((offset & 0x00000000ffffffff)), size);
     return ptr;
 }
 
@@ -1063,9 +1047,9 @@ os_process_launch(OS_ProcessLaunchParams* params)
     String8 cmd = {0};
     {
         StringJoin join_params = {0};
-        join_params.pre = Str8Lit("\"");
-        join_params.sep = Str8Lit("\" \"");
-        join_params.post = Str8Lit("\"");
+        join_params.pre = str8_lit("\"");
+        join_params.sep = str8_lit("\" \"");
+        join_params.post = str8_lit("\"");
         cmd = str8_list_join(scratch.arena, &params->cmd_line, &join_params);
     }
 
@@ -1074,8 +1058,8 @@ os_process_launch(OS_ProcessLaunchParams* params)
     String8 env = {0};
     {
         StringJoin join_params2 = {0};
-        join_params2.sep = Str8Lit("\0");
-        join_params2.post = Str8Lit("\0");
+        join_params2.sep = str8_lit("\0");
+        join_params2.post = str8_lit("\0");
         String8List all_opts = params->env;
         if (params->inherit_env != 0)
         {
@@ -1086,8 +1070,7 @@ os_process_launch(OS_ProcessLaunchParams* params)
                 {
                     str8_list_push(scratch.arena, &all_opts, n->string);
                 }
-                for (String8Node* n = os_w32_state.process_info.environment.first; n != 0;
-                     n = n->next)
+                for (String8Node* n = os_w32_state.process_info.environment.first; n != 0; n = n->next)
                 {
                     str8_list_push(scratch.arena, &all_opts, n->string);
                 }
@@ -1144,9 +1127,7 @@ os_process_launch(OS_ProcessLaunchParams* params)
         inherit_handles = 1;
     }
     PROCESS_INFORMATION process_info = {0};
-    if (CreateProcessW(0, (WCHAR*)cmd16.str, 0, 0, inherit_handles, creation_flags,
-                       use_null_env_arg ? 0 : (WCHAR*)env16.str, (WCHAR*)dir16.str, &startup_info,
-                       &process_info))
+    if (CreateProcessW(0, (WCHAR*)cmd16.str, 0, 0, inherit_handles, creation_flags, use_null_env_arg ? 0 : (WCHAR*)env16.str, (WCHAR*)dir16.str, &startup_info, &process_info))
     {
         result.u64[0] = (U64)process_info.hProcess;
         CloseHandle(process_info.hThread);
@@ -1181,8 +1162,7 @@ OS_ThreadLaunch(OS_ThreadFunctionType* func, void* ptr, void* params)
     OS_W32_Entity* entity = os_w32_entity_alloc(OS_W32_EntityKind_Thread);
     entity->thread.func = func;
     entity->thread.ptr = ptr;
-    entity->thread.handle =
-        CreateThread(0, 0, os_w32_thread_entry_point, entity, 0, &entity->thread.tid);
+    entity->thread.handle = CreateThread(0, 0, os_w32_thread_entry_point, entity, 0, &entity->thread.tid);
     OS_Handle result = {IntFromPtr(entity)};
     return result;
 }
@@ -1251,7 +1231,7 @@ OS_MutexDrop(OS_Handle mutex)
 //- rjf: reader/writer mutexes
 
 static OS_Handle
-OS_RWMutexAlloc()
+os_rw_mutex_alloc()
 {
     OS_W32_Entity* entity = os_w32_entity_alloc(OS_W32_EntityKind_RWMutex);
     InitializeSRWLock(&entity->rw_mutex);
@@ -1335,8 +1315,7 @@ os_condition_variable_wait_rw_r(OS_Handle cv, OS_Handle mutex_rw, U64 endt_us)
     {
         OS_W32_Entity* entity = (OS_W32_Entity*)PtrFromInt(cv.u64[0]);
         OS_W32_Entity* mutex_entity = (OS_W32_Entity*)PtrFromInt(mutex_rw.u64[0]);
-        result = SleepConditionVariableSRW(&entity->cv, &mutex_entity->rw_mutex, sleep_ms,
-                                           CONDITION_VARIABLE_LOCKMODE_SHARED);
+        result = SleepConditionVariableSRW(&entity->cv, &mutex_entity->rw_mutex, sleep_ms, CONDITION_VARIABLE_LOCKMODE_SHARED);
     }
     return result;
 }
@@ -1565,45 +1544,33 @@ win32_exception_filter(EXCEPTION_POINTERS* exception_ptrs)
     int buflen = 0;
 
     DWORD exception_code = exception_ptrs->ExceptionRecord->ExceptionCode;
-    buflen += wnsprintfW(buffer + buflen, ArrayCount(buffer) - buflen,
-                         L"A fatal exception (code 0x%x) occurred. The process is terminating.\n",
-                         exception_code);
+    buflen += wnsprintfW(buffer + buflen, ArrayCount(buffer) - buflen, L"A fatal exception (code 0x%x) occurred. The process is terminating.\n", exception_code);
 
     // load dbghelp dynamically just in case if it is missing
     HMODULE dbghelp = LoadLibraryA("dbghelp.dll");
     if (dbghelp)
     {
         DWORD(WINAPI * dbg_SymSetOptions)(DWORD SymOptions);
-        BOOL(WINAPI * dbg_SymInitializeW)(HANDLE hProcess, PCWSTR UserSearchPath,
-                                          BOOL fInvadeProcess);
-        BOOL(WINAPI * dbg_StackWalk64)(DWORD MachineType, HANDLE hProcess, HANDLE hThread,
-                                       LPSTACKFRAME64 StackFrame, PVOID ContextRecord,
-                                       PREAD_PROCESS_MEMORY_ROUTINE64 ReadMemoryRoutine,
-                                       PFUNCTION_TABLE_ACCESS_ROUTINE64 FunctionTableAccessRoutine,
-                                       PGET_MODULE_BASE_ROUTINE64 GetModuleBaseRoutine,
-                                       PTRANSLATE_ADDRESS_ROUTINE64 TranslateAddress);
+        BOOL(WINAPI * dbg_SymInitializeW)(HANDLE hProcess, PCWSTR UserSearchPath, BOOL fInvadeProcess);
+        BOOL(WINAPI * dbg_StackWalk64)(DWORD MachineType, HANDLE hProcess, HANDLE hThread, LPSTACKFRAME64 StackFrame, PVOID ContextRecord, PREAD_PROCESS_MEMORY_ROUTINE64 ReadMemoryRoutine,
+                                       PFUNCTION_TABLE_ACCESS_ROUTINE64 FunctionTableAccessRoutine, PGET_MODULE_BASE_ROUTINE64 GetModuleBaseRoutine, PTRANSLATE_ADDRESS_ROUTINE64 TranslateAddress);
         PVOID(WINAPI * dbg_SymFunctionTableAccess64)(HANDLE hProcess, DWORD64 AddrBase);
         DWORD64(WINAPI * dbg_SymGetModuleBase64)(HANDLE hProcess, DWORD64 qwAddr);
-        BOOL(WINAPI * dbg_SymFromAddrW)(HANDLE hProcess, DWORD64 Address, PDWORD64 Displacement,
-                                        PSYMBOL_INFOW Symbol);
-        BOOL(WINAPI * dbg_SymGetLineFromAddrW64)(HANDLE hProcess, DWORD64 dwAddr,
-                                                 PDWORD pdwDisplacement, PIMAGEHLP_LINEW64 Line);
-        BOOL(WINAPI * dbg_SymGetModuleInfoW64)(HANDLE hProcess, DWORD64 qwAddr,
-                                               PIMAGEHLP_MODULEW64 ModuleInfo);
+        BOOL(WINAPI * dbg_SymFromAddrW)(HANDLE hProcess, DWORD64 Address, PDWORD64 Displacement, PSYMBOL_INFOW Symbol);
+        BOOL(WINAPI * dbg_SymGetLineFromAddrW64)(HANDLE hProcess, DWORD64 dwAddr, PDWORD pdwDisplacement, PIMAGEHLP_LINEW64 Line);
+        BOOL(WINAPI * dbg_SymGetModuleInfoW64)(HANDLE hProcess, DWORD64 qwAddr, PIMAGEHLP_MODULEW64 ModuleInfo);
 
         *(FARPROC*)&dbg_SymSetOptions = GetProcAddress(dbghelp, "SymSetOptions");
         *(FARPROC*)&dbg_SymInitializeW = GetProcAddress(dbghelp, "SymInitializeW");
         *(FARPROC*)&dbg_StackWalk64 = GetProcAddress(dbghelp, "StackWalk64");
-        *(FARPROC*)&dbg_SymFunctionTableAccess64 =
-            GetProcAddress(dbghelp, "SymFunctionTableAccess64");
+        *(FARPROC*)&dbg_SymFunctionTableAccess64 = GetProcAddress(dbghelp, "SymFunctionTableAccess64");
         *(FARPROC*)&dbg_SymGetModuleBase64 = GetProcAddress(dbghelp, "SymGetModuleBase64");
         *(FARPROC*)&dbg_SymFromAddrW = GetProcAddress(dbghelp, "SymFromAddrW");
         *(FARPROC*)&dbg_SymGetLineFromAddrW64 = GetProcAddress(dbghelp, "SymGetLineFromAddrW64");
         *(FARPROC*)&dbg_SymGetModuleInfoW64 = GetProcAddress(dbghelp, "SymGetModuleInfoW64");
 
-        if (dbg_SymSetOptions && dbg_SymInitializeW && dbg_StackWalk64 &&
-            dbg_SymFunctionTableAccess64 && dbg_SymGetModuleBase64 && dbg_SymFromAddrW &&
-            dbg_SymGetLineFromAddrW64 && dbg_SymGetModuleInfoW64)
+        if (dbg_SymSetOptions && dbg_SymInitializeW && dbg_StackWalk64 && dbg_SymFunctionTableAccess64 && dbg_SymGetModuleBase64 && dbg_SymFromAddrW && dbg_SymGetLineFromAddrW64 &&
+            dbg_SymGetModuleInfoW64)
         {
             HANDLE process = GetCurrentProcess();
             HANDLE thread = GetCurrentThread();
@@ -1613,8 +1580,7 @@ win32_exception_filter(EXCEPTION_POINTERS* exception_ptrs)
             GetModuleFileNameW(NULL, module_path, ArrayCount(module_path));
             PathRemoveFileSpecW(module_path);
 
-            dbg_SymSetOptions(SYMOPT_EXACT_SYMBOLS | SYMOPT_FAIL_CRITICAL_ERRORS |
-                              SYMOPT_LOAD_LINES | SYMOPT_UNDNAME);
+            dbg_SymSetOptions(SYMOPT_EXACT_SYMBOLS | SYMOPT_FAIL_CRITICAL_ERRORS | SYMOPT_LOAD_LINES | SYMOPT_UNDNAME);
             if (dbg_SymInitializeW(process, module_path, TRUE))
             {
                 // check that raddbg.pdb file is good
@@ -1630,11 +1596,10 @@ win32_exception_filter(EXCEPTION_POINTERS* exception_ptrs)
 
                 if (!raddbg_pdb_valid)
                 {
-                    buflen +=
-                        wnsprintfW(buffer + buflen, sizeof(buffer) - buflen,
-                                   L"\nThe PDB debug information file for this executable is not "
-                                   L"valid or was "
-                                   L"not found. Please rebuild binary to get the call stack.\n");
+                    buflen += wnsprintfW(buffer + buflen, sizeof(buffer) - buflen,
+                                         L"\nThe PDB debug information file for this executable is not "
+                                         L"valid or was "
+                                         L"not found. Please rebuild binary to get the call stack.\n");
                 }
                 else
                 {
@@ -1665,14 +1630,11 @@ win32_exception_filter(EXCEPTION_POINTERS* exception_ptrs)
                         const U32 max_frames = 32;
                         if (idx == max_frames)
                         {
-                            buflen +=
-                                wnsprintfW(buffer + buflen, ArrayCount(buffer) - buflen, L"...");
+                            buflen += wnsprintfW(buffer + buflen, ArrayCount(buffer) - buflen, L"...");
                             break;
                         }
 
-                        if (!dbg_StackWalk64(image_type, process, thread, &frame, context, 0,
-                                             dbg_SymFunctionTableAccess64, dbg_SymGetModuleBase64,
-                                             0))
+                        if (!dbg_StackWalk64(image_type, process, thread, &frame, context, 0, dbg_SymFunctionTableAccess64, dbg_SymGetModuleBase64, 0))
                         {
                             break;
                         }
@@ -1686,24 +1648,18 @@ win32_exception_filter(EXCEPTION_POINTERS* exception_ptrs)
                         if (idx == 0)
                         {
 #if BUILD_CONSOLE_INTERFACE
-                            buflen +=
-                                wnsprintfW(buffer + buflen, ArrayCount(buffer) - buflen,
-                                           L"\nCreate a new issue with this report at %S.\n\n",
-                                           BUILD_ISSUES_LINK_STRING_LITERAL);
+                            buflen += wnsprintfW(buffer + buflen, ArrayCount(buffer) - buflen, L"\nCreate a new issue with this report at %S.\n\n", BUILD_ISSUES_LINK_STRING_LITERAL);
 #else
                             buflen += wnsprintfW(buffer + buflen, ArrayCount(buffer) - buflen,
                                                  L"\nPress Ctrl+C to copy this text to clipboard, "
                                                  L"then create a new issue at\n"
                                                  L"<a href=\"%S\">%S</a>\n\n",
-                                                 BUILD_ISSUES_LINK_STRING_LITERAL,
-                                                 BUILD_ISSUES_LINK_STRING_LITERAL);
+                                                 BUILD_ISSUES_LINK_STRING_LITERAL, BUILD_ISSUES_LINK_STRING_LITERAL);
 #endif
-                            buflen += wnsprintfW(buffer + buflen, ArrayCount(buffer) - buflen,
-                                                 L"Call stack:\n");
+                            buflen += wnsprintfW(buffer + buflen, ArrayCount(buffer) - buflen, L"Call stack:\n");
                         }
 
-                        buflen += wnsprintfW(buffer + buflen, ArrayCount(buffer) - buflen,
-                                             L"%u. [0x%I64x]", idx + 1, address);
+                        buflen += wnsprintfW(buffer + buflen, ArrayCount(buffer) - buflen, L"%u. [0x%I64x]", idx + 1, address);
 
                         struct
                         {
@@ -1717,19 +1673,15 @@ win32_exception_filter(EXCEPTION_POINTERS* exception_ptrs)
                         DWORD64 displacement = 0;
                         if (dbg_SymFromAddrW(process, address, &displacement, &symbol.info))
                         {
-                            buflen += wnsprintfW(buffer + buflen, ArrayCount(buffer) - buflen,
-                                                 L" %s +%u", symbol.info.Name, (DWORD)displacement);
+                            buflen += wnsprintfW(buffer + buflen, ArrayCount(buffer) - buflen, L" %s +%u", symbol.info.Name, (DWORD)displacement);
 
                             IMAGEHLP_LINEW64 line = {0};
                             line.SizeOfStruct = sizeof(line);
 
                             DWORD line_displacement = 0;
-                            if (dbg_SymGetLineFromAddrW64(process, address, &line_displacement,
-                                                          &line))
+                            if (dbg_SymGetLineFromAddrW64(process, address, &line_displacement, &line))
                             {
-                                buflen += wnsprintfW(buffer + buflen, ArrayCount(buffer) - buflen,
-                                                     L", %s:%u", PathFindFileNameW(line.FileName),
-                                                     line.LineNumber);
+                                buflen += wnsprintfW(buffer + buflen, ArrayCount(buffer) - buflen, L", %s:%u", PathFindFileNameW(line.FileName), line.LineNumber);
                             }
                         }
                         else
@@ -1738,8 +1690,7 @@ win32_exception_filter(EXCEPTION_POINTERS* exception_ptrs)
                             module.SizeOfStruct = sizeof(module);
                             if (dbg_SymGetModuleInfoW64(process, address, &module))
                             {
-                                buflen += wnsprintfW(buffer + buflen, ArrayCount(buffer) - buflen,
-                                                     L" %s", module.ModuleName);
+                                buflen += wnsprintfW(buffer + buflen, ArrayCount(buffer) - buflen, L" %s", module.ModuleName);
                             }
                         }
 
@@ -1750,8 +1701,7 @@ win32_exception_filter(EXCEPTION_POINTERS* exception_ptrs)
         }
     }
 
-    buflen += wnsprintfW(buffer + buflen, ArrayCount(buffer) - buflen, L"\nVersion: %S%S",
-                         BUILD_VERSION_STRING_LITERAL, BUILD_GIT_HASH_STRING_LITERAL_APPEND);
+    buflen += wnsprintfW(buffer + buflen, ArrayCount(buffer) - buflen, L"\nVersion: %S%S", BUILD_VERSION_STRING_LITERAL, BUILD_GIT_HASH_STRING_LITERAL_APPEND);
     (void)buflen;
 
 #if BUILD_CONSOLE_INTERFACE
@@ -1775,8 +1725,7 @@ win32_exception_filter(EXCEPTION_POINTERS* exception_ptrs)
 #undef OS_WINDOWS // shlwapi uses its own OS_WINDOWS include inside
 #define OS_WINDOWS 1
 
-#if !BUILD_TEST
-static void
+static int
 w32_entry_point_caller(int argc, WCHAR** wargv)
 {
     SetUnhandledExceptionFilter(&win32_exception_filter);
@@ -1785,8 +1734,7 @@ w32_entry_point_caller(int argc, WCHAR** wargv)
     // in all SDKs
     {
         HMODULE module = LoadLibraryA("kernel32.dll");
-        w32_SetThreadDescription_func =
-            (W32_SetThreadDescription_Type*)GetProcAddress(module, "SetThreadDescription");
+        w32_SetThreadDescription_func = (W32_SetThreadDescription_Type*)GetProcAddress(module, "SetThreadDescription");
         FreeLibrary(module);
     }
 
@@ -1839,21 +1787,18 @@ w32_entry_point_caller(int argc, WCHAR** wargv)
     }
 
     //- rjf: extract arguments
-    ArenaParams params = {
-        .reserve_size = MB(1), .commit_size = KB(32), .flags = arena_default_flags};
-    Arena* args_arena = ArenaAlloc(&params);
+    ArenaParams params = {.reserve_size = MB(1), .commit_size = KB(32), .flags = arena_default_flags};
+    Arena* args_arena = arena_alloc(&params);
     char** argv = PushArray(args_arena, char*, argc);
     for (int i = 0; i < argc; i += 1)
     {
         String16 arg16 = str16_cstring((U16*)wargv[i]);
         String8 arg8 = str8_from_16(args_arena, arg16);
-        if (str8_match(arg8, Str8Lit("--quiet"), MatchFlag_CaseInsensitive) ||
-            str8_match(arg8, Str8Lit("-quiet"), MatchFlag_CaseInsensitive))
+        if (str8_match(arg8, str8_lit("--quiet"), MatchFlag_CaseInsensitive) || str8_match(arg8, str8_lit("-quiet"), MatchFlag_CaseInsensitive))
         {
             win32_g_is_quiet = 1;
         }
-        if (str8_match(arg8, Str8Lit("--large_pages"), MatchFlag_CaseInsensitive) ||
-            str8_match(arg8, Str8Lit("-large_pages"), MatchFlag_CaseInsensitive))
+        if (str8_match(arg8, str8_lit("--large_pages"), MatchFlag_CaseInsensitive) || str8_match(arg8, str8_lit("-large_pages"), MatchFlag_CaseInsensitive))
         {
             arena_default_flags = ArenaFlag_LargePages;
             arena_default_reserve_size = Max(MB(64), os_w32_state.system_info.large_page_size);
@@ -1929,22 +1874,19 @@ w32_entry_point_caller(int argc, WCHAR** wargv)
     os_w32_state.entity_arena = arena_alloc();
     InitializeCriticalSection(&os_w32_state.entity_mutex);
 
-    App(argc, argv);
+    return App(argc, argv);
 }
 
 #if BUILD_CONSOLE_INTERFACE
 int
 wmain(int argc, WCHAR** argv)
 {
-    w32_entry_point_caller(argc, argv);
-    return 0;
+    return w32_entry_point_caller(argc, argv);
 }
 #else
 int
 wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPWSTR lpCmdLine, int nShowCmd)
 {
-    w32_entry_point_caller(__argc, __wargv);
-    return 0;
+    return w32_entry_point_caller(__argc, __wargv);
 }
 #endif
-#endif // !BUILD_TEST

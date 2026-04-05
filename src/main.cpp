@@ -2,7 +2,7 @@
 #include "includes.cpp"
 
 static Context*
-ContextCreate(io::IO* io_ctx)
+ctx_create(io::IO* io_ctx)
 {
     HTTP_Init();
 
@@ -10,8 +10,9 @@ ContextCreate(io::IO* io_ctx)
     //~mgj: app context setup
     Arena* app_arena = (Arena*)arena_alloc();
     Context* ctx = PushStruct(app_arena, Context);
-    ctx->arena_permanent = app_arena;
+    ctx->arena_main_permanent = app_arena;
     ctx->arena_frame = arena_alloc();
+    ctx->async_arena = async::async_arena_alloc();
     ctx->io = PushStruct(app_arena, io::IO);
     ctx->camera = PushStruct(app_arena, ui::Camera);
     ctx->time = PushStruct(app_arena, dt_Time);
@@ -43,7 +44,7 @@ ContextCreate(io::IO* io_ctx)
     // ~mgj: -2 as 2 are used for Main thread and IO thread
     U32 thread_count = OS_GetSystemInfo()->logical_processor_count - 2;
     U32 queue_size = 100; // TODO: should be increased
-    ctx->thread_pool = async::WorkerThreadsCreate(app_arena, thread_count, queue_size);
+    ctx->thread_pool = async::worker_threads_create(app_arena, thread_count, queue_size);
 
     return ctx;
 }
@@ -51,11 +52,12 @@ ContextCreate(io::IO* io_ctx)
 static void
 ctx_destroy(Context* ctx)
 {
-    async::WorkerThreadsDestroy(ctx->thread_pool);
-    arena_release(ctx->arena_permanent);
+    async::worker_threads_destroy(ctx->thread_pool);
+    arena_release(ctx->arena_main_permanent);
+    async::async_arena_release(ctx->async_arena);
 }
 
-void
+int
 App(int argc, char** argv)
 {
     ScratchScope scratch = ScratchScope(0, 0);
@@ -63,7 +65,7 @@ App(int argc, char** argv)
     io::IO* io_ctx = io::window_create(S("Digital Twin City"), vulkan::Context::WIDTH, vulkan::Context::HEIGHT);
     io::input_state_update(io_ctx);
 
-    Context* ctx = ContextCreate(io_ctx);
+    Context* ctx = ctx_create(io_ctx);
     dt_ctx_set(ctx);
     dt_time_init(ctx->time);
     dt_Input input = dt_interpret_input(argc, argv);
@@ -77,4 +79,5 @@ App(int argc, char** argv)
     io::window_destroy(io_ctx);
     arena_release(ctx->arena_frame);
     ctx_destroy(ctx);
+    return 0;
 }

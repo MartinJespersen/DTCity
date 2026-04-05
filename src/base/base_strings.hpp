@@ -180,7 +180,7 @@ cstring32_length(U32* c);
 ////////////////////////////////
 //~ rjf: String Constructors
 
-#define Str8Lit(S) Str8((U8*)(S), sizeof(S) - 1)
+#define str8_lit(S) Str8((U8*)(S), sizeof(S) - 1)
 #define str8_lit_comp(S)                                                                                                                                                                               \
     {                                                                                                                                                                                                  \
         (U8*)(S),                                                                                                                                                                                      \
@@ -246,7 +246,7 @@ static U64
 str8_find_needle_reverse(String8 string, U64 start_pos, String8 needle, StringMatchFlags flags);
 static B32
 str8_ends_with(String8 string, String8 end, StringMatchFlags flags);
-#define str8_ends_with_lit(string, end_lit, flags) str8_ends_with((string), Str8Lit(end_lit), (flags))
+#define str8_ends_with_lit(string, end_lit, flags) str8_ends_with((string), str8_lit(end_lit), (flags))
 
 ////////////////////////////////
 //~ rjf: String Slicing
@@ -256,7 +256,7 @@ Str8Substr(String8 str, Rng1U64 range);
 static String8
 Str8Prefix(String8 str, U64 size);
 static String8
-Str8Skip(String8 str, U64 amt);
+str8_skip(String8 str, U64 amt);
 static String8
 str8_postfix(String8 str, U64 size);
 static String8

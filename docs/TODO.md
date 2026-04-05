@@ -2,6 +2,7 @@
 * vulkan descriptor layout specified twice some places (e.g. compute storage buffers descriptor)
 * Reconsider the number of descriptor pools (whether 1 is enough) and the descriptor numbers
 * In function RoadSegmentFromTwoRoadNodes: the normalize function leads to values being Nan. Handle this in a better way.
+* Find a way to make threads sleep 
 
 # Less urgent changes
 * Improve the threading in the asset manager (e.g. too many mutexes are used at the moment)
@@ -19,18 +20,20 @@
 
 # features
 * Get NetAScore from HTTP API if possible.
-* Use the OSM data for building geometry
+  * read env variable for netascore API key.
+  * refactor to separate source file
+  * move the netascore http call function to netascore layer
+  * make the netascore results cacheable
+  * Is web socket viable solution for this?
+* Use the OSM data for showing data about buildings
 * 3D geometry
-  * Improve tile queue to avoid to many glitches
+  * Improve tile queue to avoid too many glitches
   * Get 3D geometry from host path
   * Create window to list 5-by-5km geometry with corresponding connection point.
 * Simulation
   * Integrate with MATSim
 * Make application work on MACOS
   * Make clang work as compiler
-
-# Bugs
-* Direction or previous node is needed for random neighbor algorithm to avoid doing a u-turn when it is possible to drive straight.
 
 # Changes along the way
 * Make the asset manager thread safe - accessing texture and buffer lists are not thread safe at the moment

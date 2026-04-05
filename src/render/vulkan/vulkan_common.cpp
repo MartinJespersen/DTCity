@@ -99,7 +99,6 @@ destroy_debug_utils_messenger_ext(VkInstance instance, VkDebugUtilsMessengerEXT 
 static VkFormat
 supported_format(VkPhysicalDevice physical_device, VkFormat* candidates, U32 candidate_count, VkImageTiling tiling, VkFormatFeatureFlags features)
 {
-    VkFormat format = VK_FORMAT_UNDEFINED;
     for (U32 i = 0; i < candidate_count; i++)
     {
         VkFormatProperties props;
@@ -112,7 +111,6 @@ supported_format(VkPhysicalDevice physical_device, VkFormat* candidates, U32 can
     }
 
     exit_with_error("failed to find supported format!");
-    return format;
 }
 
 static void

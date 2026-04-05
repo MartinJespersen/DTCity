@@ -18,6 +18,5 @@
 #include "base_strings.hpp"
 #include "base_thread_context.h"
 #include "container.hpp"
-#include "os_core/os_core_inc.hpp"
 
 #endif // BASE_INC_H

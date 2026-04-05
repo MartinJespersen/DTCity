@@ -192,6 +192,322 @@ dt_utm_from_wgs84(Rng2F64 wgs84_bbox)
     return utm_bbox;
 }
 
+struct dt_NetascoreDownloadNode
+{
+    dt_NetascoreDownloadNode* next;
+    String8 key;
+    String8 file_name;
+};
+
+struct dt_NetascoreDownloadQueue
+{
+    dt_NetascoreDownloadNode* first;
+    dt_NetascoreDownloadNode* last;
+    String8 current_file_name;
+    String8 job_id;
+    B32 wrote_primary_geojson;
+};
+
+static dt_NetascoreDownloadQueue g_netascore_download_queue;
+
+static String8
+dt_mobilitylab_jobs_api_get()
+{
+    return S("https://api.mobilitylab.zgis.at/citwin/jobs/");
+}
+
+static String8
+dt_mobilitylab_api_key_header_get(Arena* arena)
+{
+    OS_ProcessInfo* proc_info = os_get_process_info();
+    String8 netascore_api_key = S("NETASCORE_API_KEY");
+
+    String8 netascore_api_key_v = {};
+    for (String8Node* n = proc_info->environment.first; n; n = n->next)
+    {
+        if (str8_match(n->string, netascore_api_key, MatchFlag_RightSideSloppy))
+        {
+            netascore_api_key_v = str8_skip(n->string, netascore_api_key.size);
+        }
+    }
+    String8List parts = {};
+    str8_list_push(arena, &parts, str8_lit("X-API-Key: "));
+    str8_list_push(arena, &parts, netascore_api_key_v);
+
+    String8 result = str8_list_join(arena, &parts, 0);
+    return result;
+}
+
+static S32
+dt_target_srid_from_wgs84(Vec2F64 wgs84_point)
+{
+    char utm_zone[10] = {};
+    dt_utm_point_from_wgs84(wgs84_point, utm_zone);
+
+    S32 zone_number = 0;
+    for (char* c = utm_zone; *c >= '0' && *c <= '9'; c += 1)
+    {
+        zone_number = zone_number * 10 + (*c - '0');
+    }
+
+    if (zone_number < 1 || zone_number > 60)
+    {
+        return 0;
+    }
+
+    S32 srid_base = wgs84_point.y >= 0 ? 32600 : 32700;
+    return srid_base + zone_number;
+}
+
+static bool
+dt_async_http_check_result(std::shared_ptr<async::AsyncCallCtx>& async_call, String8 name)
+{
+    B32 done = async_call->done.load(std::memory_order_acquire);
+    if (done)
+    {
+        return true;
+    }
+
+    switch (async_call->async_result)
+    {
+        case async::AsyncResult::CurlError:
+        {
+            exit_with_error("%.*s failed with curl error %u at %s:%u", str8_varg(name), async_call->curl_error, async_call->err_file, async_call->err_line);
+        }
+        break;
+        case async::AsyncResult::HttpError:
+        {
+            exit_with_error("%.*s failed with http error %u at %s:%u", str8_varg(name), async_call->http_error_code, async_call->err_file, async_call->err_line);
+        }
+        break;
+        case async::AsyncResult::UserFunctionError:
+        {
+            exit_with_error("%.*s failed: %.*s", str8_varg(name), str8_varg(async_call->user_error_str));
+        }
+        break;
+    }
+    return false;
+}
+
+static void
+dt_netascore_download_enqueue(Arena* arena, String8 key, String8 file_name)
+{
+    dt_NetascoreDownloadNode* node = PushStruct(arena, dt_NetascoreDownloadNode);
+    node->key = push_str8_copy(arena, key);
+    node->file_name = push_str8_copy(arena, file_name);
+    SLLQueuePush(g_netascore_download_queue.first, g_netascore_download_queue.last, node);
+}
+
+static async::HttpInfo*
+dt_netascore_next_download_http_info(Arena* arena)
+{
+    dt_NetascoreDownloadNode* node = g_netascore_download_queue.first;
+    if (node == 0)
+    {
+        return 0;
+    }
+
+    SLLQueuePop(g_netascore_download_queue.first, g_netascore_download_queue.last);
+    g_netascore_download_queue.current_file_name = node->file_name;
+
+    String8 download_api = push_str8f(arena, "%.*s%.*s/download/%.*s", str8_varg(dt_mobilitylab_jobs_api_get()), str8_varg(g_netascore_download_queue.job_id), str8_varg(node->key));
+    return async::http_info_create_get(arena, download_api, async::ContentType::None, {dt_mobilitylab_api_key_header_get(arena)});
+}
+
+static async::UserFuncResult
+dt_netascore_download_file_complete(Arena* arena, String8 body)
+{
+    if (g_netascore_download_queue.current_file_name.size == 0)
+    {
+        return async::UserFuncResult::failure(arena, "Missing current NetAScore download file name");
+    }
+
+    String8 file_path = str8_path_from_str8_list(arena, {dt_ctx_get()->data_dir, g_netascore_download_queue.current_file_name});
+    if (!os_write_data_to_file_path(file_path, body))
+    {
+        return async::UserFuncResult::failure(arena, "Failed to write NetAScore download to %.*s", str8_varg(file_path));
+    }
+
+    if (str8_ends_with_lit(g_netascore_download_queue.current_file_name, ".geojson", MatchFlag_CaseInsensitive))
+    {
+        String8 canonical_file_name = S("netascore.geojson");
+        B32 file_is_canonical = str8_match(g_netascore_download_queue.current_file_name, canonical_file_name, MatchFlag_CaseInsensitive);
+        if (!g_netascore_download_queue.wrote_primary_geojson || file_is_canonical)
+        {
+            if (!file_is_canonical)
+            {
+                String8 canonical_file_path = str8_path_from_str8_list(arena, {dt_ctx_get()->data_dir, canonical_file_name});
+                if (!os_write_data_to_file_path(canonical_file_path, body))
+                {
+                    return async::UserFuncResult::failure(arena, "Failed to write NetAScore alias file to %.*s", str8_varg(canonical_file_path));
+                }
+            }
+            g_netascore_download_queue.wrote_primary_geojson = true;
+        }
+    }
+
+    g_netascore_download_queue.current_file_name = {};
+
+    async::HttpInfo* next_http_info = dt_netascore_next_download_http_info(arena);
+    if (next_http_info != 0)
+    {
+        return async::UserFuncResult::success(next_http_info, dt_netascore_download_file_complete);
+    }
+
+    return async::UserFuncResult::success(nullptr);
+}
+
+static async::UserFuncResult
+dt_netascore_downloads_complete(Arena* arena, String8 body)
+{
+    simdjson::dom::parser parser;
+    simdjson::dom::element doc = {};
+    simdjson::error_code err = parser.parse(body.str, body.size).get(doc);
+    if (err)
+    {
+        return async::UserFuncResult::failure(arena, "Failed to parse NetAScore downloads response");
+    }
+
+    simdjson::dom::array downloads = {};
+    err = doc.get_array().get(downloads);
+    if (err)
+    {
+        return async::UserFuncResult::failure(arena, "Expected NetAScore downloads response to be an array");
+    }
+
+    g_netascore_download_queue.wrote_primary_geojson = false;
+    U32 geojson_download_count = 0;
+    for (simdjson::dom::element elem : downloads)
+    {
+        simdjson::dom::object item = {};
+        err = elem.get_object().get(item);
+        if (err)
+        {
+            return async::UserFuncResult::failure(arena, "Failed to parse NetAScore download item");
+        }
+
+        const char* key = 0;
+        const char* file_name = 0;
+        simdjson::error_code err_key = item["key"].get_c_str().get(key);
+        simdjson::error_code err_file_name = item["filename"].get_c_str().get(file_name);
+        if (err_key || err_file_name)
+        {
+            return async::UserFuncResult::failure(arena, "NetAScore download item is missing key or filename");
+        }
+
+        String8 file_name_str = str8_c_string(file_name);
+        if (!str8_ends_with_lit(file_name_str, ".geojson", MatchFlag_CaseInsensitive))
+        {
+            continue;
+        }
+
+        dt_netascore_download_enqueue(arena, str8_c_string(key), file_name_str);
+        geojson_download_count += 1;
+    }
+
+    if (geojson_download_count == 0)
+    {
+        return async::UserFuncResult::failure(arena, "NetAScore downloads response did not contain any .geojson files");
+    }
+
+    async::HttpInfo* next_http_info = dt_netascore_next_download_http_info(arena);
+    AssertAlways(next_http_info != 0);
+    return async::UserFuncResult::success(next_http_info, dt_netascore_download_file_complete);
+}
+
+static async::UserFuncResult
+dt_netascore_job_status_complete(Arena* arena, String8 body)
+{
+    simdjson::dom::parser parser;
+    simdjson::dom::element doc = {};
+    simdjson::error_code err = parser.parse(body.str, body.size).get(doc);
+    if (err)
+    {
+        return async::UserFuncResult::failure(arena, "Failed to parse NetAScore status response");
+    }
+
+    simdjson::dom::object obj = {};
+    err = doc.get_object().get(obj);
+    if (err)
+    {
+        return async::UserFuncResult::failure(arena, "Expected NetAScore status response to be an object");
+    }
+
+    const char* status = 0;
+    const char* job_id = 0;
+    simdjson::error_code err_status = obj["status"].get_c_str().get(status);
+    simdjson::error_code err_job_id = obj["job_id"].get_c_str().get(job_id);
+    if (err_status || err_job_id)
+    {
+        return async::UserFuncResult::failure(arena, "NetAScore status response is missing status or job_id");
+    }
+
+    g_netascore_download_queue.job_id = push_str8_copy(arena, str8_c_string(job_id));
+    if (c_str_equal(status, "queued") || c_str_equal(status, "running"))
+    {
+        return async::UserFuncResult::reschedule(1'000'000); // 1'000'000 ms = 1 sec delay
+    }
+
+    if (c_str_equal(status, "done"))
+    {
+        String8 downloads_api = push_str8f(arena, "%.*s%.*s/downloads", str8_varg(dt_mobilitylab_jobs_api_get()), str8_varg(g_netascore_download_queue.job_id));
+        async::HttpInfo* http_info = async::http_info_create_get(arena, downloads_api, async::ContentType::None, {dt_mobilitylab_api_key_header_get(arena)});
+        return async::UserFuncResult::success(http_info);
+    }
+
+    if (c_str_equal(status, "failed"))
+    {
+        const char* error_msg = 0;
+        if (obj["error"].get_c_str().get(error_msg) == simdjson::SUCCESS && error_msg != 0)
+        {
+            return async::UserFuncResult::failure(arena, "NetAScore job %s failed: %s", job_id, error_msg);
+        }
+        return async::UserFuncResult::failure(arena, "NetAScore job %s failed", job_id);
+    }
+
+    return async::UserFuncResult::failure(arena, "Unexpected NetAScore job status: %s", status);
+}
+
+static async::UserFuncResult
+dt_netascore_job_create_complete(Arena* arena, String8 body)
+{
+    simdjson::dom::parser parser;
+    simdjson::dom::element doc = {};
+    simdjson::error_code err = parser.parse(body.str, body.size).get(doc);
+    if (err)
+    {
+        return async::UserFuncResult::failure(arena, "Failed to parse NetAScore job creation response");
+    }
+
+    simdjson::dom::object obj = {};
+    err = doc.get_object().get(obj);
+    if (err)
+    {
+        return async::UserFuncResult::failure(arena, "Expected NetAScore job creation response to be an object");
+    }
+
+    const char* status = 0;
+    const char* job_id = 0;
+    simdjson::error_code err_status = obj["status"].get_c_str().get(status);
+    simdjson::error_code err_job_id = obj["job_id"].get_c_str().get(job_id);
+    if (err_status || err_job_id)
+    {
+        return async::UserFuncResult::failure(arena, "NetAScore job creation response is missing status or job_id");
+    }
+
+    if (!c_str_equal(status, "queued") && !c_str_equal(status, "running"))
+    {
+        return async::UserFuncResult::failure(arena, "Unexpected NetAScore job creation status: %s", status);
+    }
+
+    g_netascore_download_queue = {};
+    g_netascore_download_queue.job_id = push_str8_copy(arena, str8_c_string(job_id));
+
+    String8 status_api = push_str8f(arena, "%.*s%.*s", str8_varg(dt_mobilitylab_jobs_api_get()), str8_varg(g_netascore_download_queue.job_id));
+    async::HttpInfo* http_info = async::http_info_create_get(arena, status_api, async::ContentType::None, {dt_mobilitylab_api_key_header_get(arena)});
+    return async::UserFuncResult::success(http_info);
+}
+
 static dt_Input
 dt_interpret_input(int argc, char** argv)
 {
@@ -231,11 +547,13 @@ dt_interpret_input(int argc, char** argv)
 }
 
 g_internal void
-imgui_debug_window(cesium::TilesetRenderer* renderer)
+imgui_debug_window(cesium::TilesetRenderer* renderer, std::shared_ptr<async::AsyncCallCtx>& netascore_result)
 {
     vulkan::AssetManager* asset_manager = vulkan::asset_manager_get();
     const ImGuiViewport* viewport = ImGui::GetMainViewport();
+    F32 max_debug_window_width = ClampTop(720.0f, viewport->WorkSize.x * 0.6f);
     ImGui::SetNextWindowPos(ImVec2(viewport->WorkPos.x, viewport->WorkPos.y + viewport->WorkSize.y), ImGuiCond_Always, ImVec2(0.0f, 1.0f));
+    ImGui::SetNextWindowSizeConstraints(ImVec2(0.0f, 0.0f), ImVec2(max_debug_window_width, FLT_MAX));
 
     ImGui::Begin("Debug Info", nullptr, ImGuiWindowFlags_AlwaysAutoResize);
     ImGui::Text("FPS: %f", ImGui::GetIO().Framerate);
@@ -249,6 +567,31 @@ imgui_debug_window(cesium::TilesetRenderer* renderer)
     ImGui::Text("Deletetion Queue Free List: %d active", asset_manager->deletion_queue_free_list_count);
     ImGui::Text("Tileset Renderer Show: %d active", renderer->tiles_to_show_count);
     ImGui::Text("Tileset Renderer Free List Count: %d", renderer->tiles_to_free_stack_count);
+
+    // netascore status
+    ImGui::Text("Netascore Status: ");
+    bool netascore_ready = netascore_result->done.load(std::memory_order_acquire);
+    if (netascore_ready && !netascore_result->success)
+    {
+        ImGui::Text("Error");
+        const char* user_error_msg = netascore_result->user_error_str.size > 0 ? (const char*)netascore_result->user_error_str.str : "<missing error message>";
+        const char* err_file = netascore_result->err_file ? netascore_result->err_file : "<unknown file>";
+        ImGui::Text("NetaScore Error Code: %u", (U32)netascore_result->async_result);
+        ImGui::TextWrapped("Message: %s", user_error_msg);
+        ImGui::TextWrapped("Location: %s:%d", err_file, netascore_result->err_line);
+        if (netascore_result->http_error_code > 0)
+        {
+            ImGui::Text("Http Error Code: %u", netascore_result->http_error_code);
+        }
+    }
+    else if (netascore_ready)
+    {
+        ImGui::Text("Ready");
+    }
+    else
+    {
+        ImGui::Text("Waiting...");
+    }
 
     ImGui::End();
 }
@@ -264,11 +607,37 @@ dt_main_loop(void* ptr)
     os_set_thread_name(str8_c_string("Entrypoint thread"));
     AssertAlways(async::thread_pool_register_current_thread(ctx->thread_pool));
 
+    Vec2F64 bbox_size_meters = dt_default_bbox_size_meters_get();
+    Rng2F64 bbox = dt_wgs84_bbox_from_btm_right_corner(input->btm_right_corner_wgs84, bbox_size_meters);
+    S32 target_srid = dt_target_srid_from_wgs84(input->btm_right_corner_wgs84);
+    if (target_srid == 0)
+    {
+        exit_with_error("Failed to derive a valid UTM SRID from the provided WGS84 coordinates");
+    }
+
+    String8List bbox_param_list = {};
+    str8_list_push(scratch.arena, &bbox_param_list, push_str8f(scratch.arena, "%.6f", bbox.min.y));
+    str8_list_push(scratch.arena, &bbox_param_list, push_str8f(scratch.arena, "%.6f", bbox.min.x));
+    str8_list_push(scratch.arena, &bbox_param_list, push_str8f(scratch.arena, "%.6f", bbox.max.y));
+    str8_list_push(scratch.arena, &bbox_param_list, push_str8f(scratch.arena, "%.6f", bbox.max.x));
+    StringJoin sep = {.pre = S("bbox_str="), .sep = S(","), .post = S("")};
+    String8 bbox_str = str8_list_join(scratch.arena, &bbox_param_list, &sep);
+
+    g_netascore_download_queue = {};
+    String8 netascore_api = push_str8f(scratch.arena, "%.*snetascore", str8_varg(dt_mobilitylab_jobs_api_get()));
+    std::shared_ptr<async::AsyncCallCtx> netascore_results;
+    async::AsyncResult async_result =
+        async::async_http_call_create(&netascore_results, ctx->thread_pool, HTTP_Method_Post, netascore_api, async::ContentType::FormUrlEncoded,
+                                      {push_str8f(scratch.arena, "target_srid=%d", target_srid), bbox_str, S("output_format=GeoJSON")}, {dt_mobilitylab_api_key_header_get(ctx->arena_main_permanent)},
+                                      {dt_netascore_job_create_complete, dt_netascore_job_status_complete, dt_netascore_downloads_complete}, 3);
+    if ((bool)async_result)
+    {
+        exit_with_error("Error at %s:%d with error code: %d and curl error code: %d", netascore_results->err_file, netascore_results->err_line, async_result, netascore_results->curl_error);
+    }
+
     const char* tileset_url = (const char*)input->tileset_url.str;
     F64 tileset_lon = input->btm_right_corner_wgs84.x;
     F64 tileset_lat = input->btm_right_corner_wgs84.y;
-    Vec2F64 bbox_size_meters = dt_default_bbox_size_meters_get();
-    Rng2F64 bbox = dt_wgs84_bbox_from_btm_right_corner(input->btm_right_corner_wgs84, bbox_size_meters);
     Rng2F64 utm_coords = dt_utm_from_wgs84(bbox);
     printf("UTM Coordinates: %f %f %f %f\n", utm_coords.min.x, utm_coords.min.y, utm_coords.max.x, utm_coords.max.y);
     render::render_ctx_create(ctx->data_subdirs.data[dt_DataDirType::Shaders], io_ctx, ctx->thread_pool);
@@ -296,6 +665,11 @@ dt_main_loop(void* ptr)
     ctx->buildings = city::buildings_create(cache_dir, texture_dir, bbox);
 
     city::RoadOverlayOption overlay_option_choice = city::RoadOverlayOption_None;
+    String8 netascore_file_path = str8_path_from_str8_list(scratch.arena, {ctx->data_dir, S("netascore.geojson")});
+    if (!os_file_path_exists(netascore_file_path))
+    {
+        exit_with_error("Expected NetAScore download at %.*s", str8_varg(netascore_file_path));
+    }
 
     ctx->road = city::road_create(texture_dir, cache_dir, ctx->data_dir, bbox, utm_coords, &sampler_info);
 
@@ -314,7 +688,7 @@ dt_main_loop(void* ptr)
     render::BufferInfo road_segment_node_buffer_info = render::BufferInfo(ctx->road->road_build_result.bvh_result.node_buffer, render::BufferType_StorageBuffer);
     render::Handle road_segment_node_buffer_handle = render::buffer_load_async(&road_segment_node_buffer_info);
 
-    render::Handle road_segment_handle = render::road_segment_descriptor_load_async(ctx->arena_permanent, road_segment_buffer_handle, road_segment_node_buffer_handle);
+    render::Handle road_segment_handle = render::road_segment_descriptor_load_async(ctx->arena_main_permanent, road_segment_buffer_handle, road_segment_node_buffer_handle);
 
     ctx->car_sim = city::car_sim_create(asset_dir, texture_dir, 100);
     render::gpu_work_done_wait();
@@ -323,7 +697,7 @@ dt_main_loop(void* ptr)
     {
         exit_with_error("Cesium tileset root file cannot be read: %s", tileset_url);
     }
-    ctx->cesium_tileset = cesium::tileset_renderer_create(ctx->arena_permanent, ctx->thread_pool, tileset_url, tileset_lon, tileset_lat, 0.0);
+    ctx->cesium_tileset = cesium::tileset_renderer_create(ctx->arena_main_permanent, ctx->thread_pool, tileset_url, tileset_lon, tileset_lat, 0.0);
     buildings_build(ctx->buildings, &sampler_info, ecef_to_local, ctx->road->road_height);
 
     while (ctx->running)
@@ -335,9 +709,11 @@ dt_main_loop(void* ptr)
         render::new_frame();
         ImGui::NewFrame();
 
-#if BUILD_DEBUG
-        imgui_debug_window(ctx->cesium_tileset);
-#endif
+        // bool async_netascore_result = dt_async_http_check_result(netascore_results, S("NetAScore download"));
+        // #if BUILD_DEBUG
+        imgui_debug_window(ctx->cesium_tileset, netascore_results);
+        // #endif
+
         Vec2U32 framebuffer_dim = {(U32)io_ctx->framebuffer_width, (U32)io_ctx->framebuffer_height};
 
         {

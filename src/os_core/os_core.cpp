@@ -191,7 +191,7 @@ os_cmd_line_launch(String8 string)
         String8Node* stdout_delimiter_n = 0;
         for (String8Node* n = parts.first; n != 0; n = n->next)
         {
-            if (str8_match(n->string, Str8Lit(">"), 0))
+            if (str8_match(n->string, str8_lit(">"), 0))
             {
                 stdout_delimiter_n = n;
                 break;
@@ -211,10 +211,7 @@ os_cmd_line_launch(String8 string)
         {
             OS_Handle file = os_file_open(OS_AccessFlag_Write | OS_AccessFlag_Read, stdout_path);
             os_file_close(file);
-            stdout_handle =
-                os_file_open(OS_AccessFlag_Write | OS_AccessFlag_Append | OS_AccessFlag_ShareRead |
-                                 OS_AccessFlag_ShareWrite | OS_AccessFlag_Inherited,
-                             stdout_path);
+            stdout_handle = os_file_open(OS_AccessFlag_Write | OS_AccessFlag_Append | OS_AccessFlag_ShareRead | OS_AccessFlag_ShareWrite | OS_AccessFlag_Inherited, stdout_path);
         }
 
         // rjf: form command line

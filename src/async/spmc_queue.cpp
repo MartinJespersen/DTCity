@@ -1,90 +1,11 @@
 namespace async
 {
-template <typename T>
-static U64
-spmc_queue_segment_capacity(U64 segment_index)
-{
-    Assert(segment_index < SPMC_QUEUE_MAX_SEGMENT_COUNT);
-    return 1ull << (SPMC_QUEUE_SEGMENT_SHIFT + segment_index);
-}
 
 template <typename T>
 static U64
-spmc_queue_capacity_for_segment_count(U64 segment_count)
+_spmc_queue_capacity(SpmcQueue<T>* queue)
 {
-    Assert(segment_count <= SPMC_QUEUE_MAX_SEGMENT_COUNT);
-
-    if (segment_count == 0)
-    {
-        return 0;
-    }
-
-    return (1ull << (SPMC_QUEUE_SEGMENT_SHIFT + segment_count)) - (1ull << SPMC_QUEUE_SEGMENT_SHIFT);
-}
-
-template <typename T>
-static U64
-spmc_queue_segment_index(U64 index)
-{
-    U64 shifted_index = (index >> SPMC_QUEUE_SEGMENT_SHIFT) + 1;
-    return 63 - clz64(shifted_index);
-}
-
-template <typename T>
-static U64
-spmc_queue_capacity(SpmcQueue<T>* queue)
-{
-    return spmc_queue_buffer_capacity(&queue->buffer);
-}
-
-template <typename T>
-static U64
-spmc_queue_buffer_capacity(SpmcQueueBuffer<T>* buffer)
-{
-    U64 segment_count = buffer->segment_count.load(std::memory_order_acquire);
-    return spmc_queue_capacity_for_segment_count<T>(segment_count);
-}
-
-template <typename T>
-static T&
-spmc_queue_slot(SpmcQueueBuffer<T>* buffer, U64 index)
-{
-    U64 segment_index = spmc_queue_segment_index<T>(index);
-    U64 segment_offset = index - spmc_queue_capacity_for_segment_count<T>(segment_index);
-    T* segment = buffer->segments[segment_index].load(std::memory_order_acquire);
-    Assert(segment);
-    return segment[segment_offset];
-}
-
-template <typename T>
-static void
-spmc_queue_buffer_ensure_segment(SpmcQueue<T>* queue, U64 segment_index)
-{
-    Assert(segment_index < SPMC_QUEUE_MAX_SEGMENT_COUNT);
-
-    U64 segment_count = queue->buffer.segment_count.load(std::memory_order_acquire);
-    while (segment_count <= segment_index)
-    {
-        U64 next_segment = segment_count;
-        T* segment = PushArray(queue->arena, T, spmc_queue_segment_capacity<T>(next_segment));
-        queue->buffer.segments[next_segment].store(segment, std::memory_order_release);
-        segment_count = next_segment + 1;
-        queue->buffer.segment_count.store(segment_count, std::memory_order_release);
-    }
-}
-
-template <typename T>
-static void
-spmc_queue_reserve(SpmcQueue<T>* queue, U64 capacity)
-{
-    U64 segment_count = 1;
-    while (spmc_queue_capacity_for_segment_count<T>(segment_count) < capacity)
-    {
-        segment_count++;
-        Assert(segment_count <= SPMC_QUEUE_MAX_SEGMENT_COUNT);
-    }
-
-    spmc_queue_buffer_ensure_segment(queue, segment_count - 1);
+    return segment_buffer_capacity(&queue->buffer);
 }
 
 template <typename T>
@@ -102,7 +23,7 @@ spmc_queue_create(Arena* arena, U64 capacity)
     {
         queue->buffer.segments[segment_index].store(0, std::memory_order_relaxed);
     }
-    spmc_queue_reserve(queue, capacity);
+    _spmc_queue_reserve(queue, capacity);
     return queue;
 }
 
@@ -121,9 +42,9 @@ B32
 spmc_queue_push(SpmcQueue<T>* queue, const T& value)
 {
     U64 bottom = queue->bottom.load(std::memory_order_relaxed);
-    U64 segment_index = spmc_queue_segment_index<T>(bottom);
-    spmc_queue_buffer_ensure_segment(queue, segment_index);
-    spmc_queue_slot(&queue->buffer, bottom) = value;
+    U64 segment_index = segment_buffer_segment_index<T>(bottom);
+    _spmc_queue_buffer_ensure_segment(queue, segment_index);
+    spmc_queue_slot_get(&queue->buffer, bottom) = value;
     std::atomic_thread_fence(std::memory_order_release);
     queue->bottom.store(bottom + 1, std::memory_order_relaxed);
     return true;
@@ -150,7 +71,7 @@ spmc_queue_pop(SpmcQueue<T>* queue, T& value)
         return false;
     }
 
-    T popped_value = spmc_queue_slot(&queue->buffer, bottom);
+    T popped_value = spmc_queue_slot_get(&queue->buffer, bottom);
 
     if (top == bottom)
     {
@@ -180,7 +101,7 @@ spmc_queue_steal(SpmcQueue<T>* queue, T& value)
         return false;
     }
 
-    T stolen_value = spmc_queue_slot(&queue->buffer, top);
+    T stolen_value = spmc_queue_slot_get<T>(&queue->buffer, top);
     if (!queue->top.compare_exchange_strong(top, top + 1, std::memory_order_seq_cst, std::memory_order_relaxed))
     {
         return false;
@@ -190,4 +111,53 @@ spmc_queue_steal(SpmcQueue<T>* queue, T& value)
     return true;
 }
 
+template <typename T>
+static void
+_spmc_queue_buffer_ensure_segment(SpmcQueue<T>* queue, U64 segment_index)
+{
+    Assert(segment_index < SPMC_QUEUE_MAX_SEGMENT_COUNT);
+
+    U64 segment_count = queue->buffer.segment_count.load(std::memory_order_acquire);
+    while (segment_count <= segment_index)
+    {
+        U64 next_segment = segment_count;
+        T* segment = PushArray(queue->arena, T, segment_buffer_capacity<T>(next_segment));
+        queue->buffer.segments[next_segment].store(segment, std::memory_order_release);
+        segment_count = next_segment + 1;
+        queue->buffer.segment_count.store(segment_count, std::memory_order_release);
+    }
+}
+
+template <typename T>
+static void
+_spmc_queue_reserve(SpmcQueue<T>* queue, U64 capacity)
+{
+    U64 segment_count = 1;
+    while (segment_buffer_capacity_from_segment_count<T>(segment_count) < capacity)
+    {
+        segment_count++;
+        Assert(segment_count <= SPMC_QUEUE_MAX_SEGMENT_COUNT);
+    }
+
+    _spmc_queue_buffer_ensure_segment(queue, segment_count - 1);
+}
+
+template <typename T>
+static U64
+spmc_queue_capacity(AsyncSpmcFifoQueue<T>* buffer)
+{
+    U64 segment_count = buffer->segment_count.load(std::memory_order_acquire);
+    return segment_buffer_capacity_from_segment_count<T>(segment_count);
+}
+
+template <typename T>
+static T&
+spmc_queue_slot_get(AsyncSpmcFifoQueue<T>* buffer, U64 index)
+{
+    U64 segment_index = segment_buffer_segment_index<T>(index);
+    U64 segment_offset = index - segment_buffer_capacity_from_segment_count<T>(segment_index);
+    T* segment = buffer->segments[segment_index].load(std::memory_order_acquire);
+    Assert(segment);
+    return segment[segment_offset];
+}
 } // namespace async

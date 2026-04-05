@@ -1,13 +1,3 @@
-#include "third_party/doctest/doctest.h"
-
-#include "glm/glm.hpp"
-
-#include "base/base_inc.hpp"
-#include "os_core/os_core_inc.hpp"
-
-#include "base/base_inc.cpp"
-#include "os_core/os_core_inc.cpp"
-
 TEST_CASE("char classification")
 {
     CHECK(char_is_alpha('a'));
@@ -35,7 +25,7 @@ TEST_CASE("char conversion")
 
 TEST_CASE("String8 construction")
 {
-    String8 s = Str8Lit("hello");
+    String8 s = str8_lit("hello");
     CHECK(s.size == 5);
     CHECK(s.str[0] == 'h');
     CHECK(s.str[4] == 'o');
@@ -47,10 +37,10 @@ TEST_CASE("String8 construction")
 
 TEST_CASE("str8_match")
 {
-    String8 a = Str8Lit("hello");
-    String8 b = Str8Lit("hello");
-    String8 c = Str8Lit("world");
-    String8 d = Str8Lit("HELLO");
+    String8 a = str8_lit("hello");
+    String8 b = str8_lit("hello");
+    String8 c = str8_lit("world");
+    String8 d = str8_lit("HELLO");
 
     CHECK(str8_match(a, b, 0));
     CHECK_FALSE(str8_match(a, c, 0));

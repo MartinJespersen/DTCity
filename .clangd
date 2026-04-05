@@ -28,7 +28,7 @@ Hover:
   ShowAKA: true
 ---
 If:
-  PathMatch: (src\/third_party|src\/os_core|src\/http)\/.*
+  PathMatch: (src\/third_party\/os_core|src\/http)\/.*
 Diagnostics:
   Suppress: "*"
 CompileFlags:

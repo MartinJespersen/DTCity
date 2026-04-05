@@ -7,6 +7,10 @@
 - Instead of repeating a function call various places try to find a structure code to run that function a single place. Not a strict rule though. 
 - I am trying to follow ZII (zero is initialization), which means the code should still work in cases where object are initialized to zero using e.g. using a function like PushStruct that zeroes memory when memory is allocated.
 - Try to create pure functions as long as it makes sense, and try to make them testable. If they are testable then create tests in the test directory.
+- Try to use the Arena in the base layer for memory allocations. When a library is used, check the library for any custom allocator hooks.
+- Avoid making small function that just returns a single value. Instead just create a variable.
+- You should never sleep at any point as it will block other stuff that needs to run. Find another way or cry to me about it.
+- functions that are not used outside a namespace should have a name starting with an underscore.
 
 # Third party libraries
 - Cesium Native library source code can be found at https://github.com/CesiumGS/cesium-native or C:/repos/cesium-native

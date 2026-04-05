@@ -22,9 +22,11 @@
 #pragma comment(lib, "comctl32")
 #pragma comment(lib, "gdi32")
 
-#pragma comment(                                                                                   \
-    linker,                                                                                        \
-    "\"/manifestdependency:type='win32' name='Microsoft.Windows.Common-Controls' version='6.0.0.0' processorArchitecture='*' publicKeyToken='6595b64144ccf1df' language='*'\"") // this is required for loading correct comctl32 dll file
+#pragma comment(                                                                                                                                                                                       \
+    linker,                                                                                                                                                                                            \
+    "\"/manifestdependency:type='win32' name='Microsoft.Windows.Common-Controls' version='6.0.0.0' processorArchitecture='*' publicKeyToken='6595b64144ccf1df' language='*'\"") // this is required for
+                                                                                                                                                                                // loading correct
+                                                                                                                                                                                // comctl32 dll file
 
 ////////////////////////////////
 //~ rjf: File Iterator Types
@@ -102,8 +104,7 @@ static OS_W32_State os_w32_state = {0};
 static FilePropertyFlags
 os_w32_file_property_flags_from_dwFileAttributes(DWORD dwFileAttributes);
 static void
-os_w32_file_properties_from_attribute_data(FileProperties* properties,
-                                           WIN32_FILE_ATTRIBUTE_DATA* attributes);
+os_w32_file_properties_from_attribute_data(FileProperties* properties, WIN32_FILE_ATTRIBUTE_DATA* attributes);
 
 ////////////////////////////////
 //~ rjf: Time Conversion Helpers
@@ -129,7 +130,7 @@ os_w32_entity_release(OS_W32_Entity* entity);
 
 static DWORD
 os_w32_thread_entry_point(void* ptr);
-static void
+static int
 w32_entry_point_caller(int argc, WCHAR** wargv);
 
 #endif // OS_CORE_WIN32_H

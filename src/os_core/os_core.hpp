@@ -237,8 +237,7 @@ static void
 os_file_close(OS_Handle file);
 static U64
 os_file_read(OS_Handle file, Rng1U64 rng, void* out_data);
-#define os_file_read_struct(f, off, ptr)                                                           \
-    OS_FileRead((f), r1u64((off), (off) + sizeof(*(ptr))), (ptr))
+#define os_file_read_struct(f, off, ptr) OS_FileRead((f), r1u64((off), (off) + sizeof(*(ptr))), (ptr))
 static U64
 OS_FileWrite(OS_Handle file, Rng1U64 rng, void* data);
 static B32
@@ -351,7 +350,7 @@ OS_MutexDrop(OS_Handle mutex);
 
 //- rjf: reader/writer mutexes
 static OS_Handle
-OS_RWMutexAlloc();
+os_rw_mutex_alloc();
 static void
 OS_RWMutexRelease(OS_Handle rw_mutex);
 static void
@@ -398,9 +397,7 @@ OS_SemaphoreDrop(OS_Handle semaphore);
 #define OS_MutexScope(mutex) DeferLoop(OS_MutexTake(mutex), OS_MutexDrop(mutex))
 #define OS_MutexScopeR(mutex) DeferLoop(OS_RWMutexTakeR(mutex), OS_RWMutexDropR(mutex))
 #define OS_MutexScopeW(mutex) DeferLoop(OS_RWMutexTakeW(mutex), OS_RWMutexDropW(mutex))
-#define OS_MutexScopeRWPromote(mutex)                                                              \
-    DeferLoop((OS_RWMutexDropR(mutex), OS_RWMutexTakeW(mutex)),                                    \
-              (OS_RWMutexDropW(mutex), OS_RWMutexTakeR(mutex)))
+#define OS_MutexScopeRWPromote(mutex) DeferLoop((OS_RWMutexDropR(mutex), OS_RWMutexTakeW(mutex)), (OS_RWMutexDropW(mutex), OS_RWMutexTakeR(mutex)))
 
 ////////////////////////////////
 //~ rjf: @os_hooks Dynamically-Loaded Libraries (Implemented Per-OS)
@@ -436,7 +433,7 @@ OS_SystemTimerFreqGet();
 g_internal void
 os_graphical_message(B32 error, String8 title, String8 message);
 //~ mgj: Entrypoint to the application from os layer
-void
+int
 App(int argc, char** argv);
 
 #endif // OS_CORE_H

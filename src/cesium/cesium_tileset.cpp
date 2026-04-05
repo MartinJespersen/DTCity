@@ -8,17 +8,18 @@ namespace cesium
 class DTCityTaskProcessor : public CesiumAsync::ITaskProcessor
 {
   public:
-    DTCityTaskProcessor(async::Threads* thread_pool) : thread_pool(thread_pool)
+    DTCityTaskProcessor(async::ThreadPool* thread_pool) : thread_pool(thread_pool)
     {
     }
 
     void
     startTask(std::function<void()> task) override
     {
+        prof_scope_marker;
         // Create a copy of the task on the heap
         auto* task_copy = new std::function<void()>(std::move(task));
 
-        async::QueueItem item = {};
+        async::WorkerTask item = {};
         item.data = task_copy;
         item.worker_func = [](async::ThreadInfo, void* data)
         {
@@ -37,7 +38,7 @@ class DTCityTaskProcessor : public CesiumAsync::ITaskProcessor
     }
 
   private:
-    async::Threads* thread_pool;
+    async::ThreadPool* thread_pool;
 };
 
 //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -506,13 +507,13 @@ tile_render_data_from_gltf(const CesiumGltf::Model& model, const glm::dmat4& ece
 //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 g_internal TilesetRenderer*
-tileset_renderer_create(Arena* arena, async::Threads* threads, const char* tileset_url, F64 origin_longitude, F64 origin_latitude, F64 origin_height)
+tileset_renderer_create(Arena* arena, async::ThreadPool* threads, const char* tileset_url, F64 origin_longitude, F64 origin_latitude, F64 origin_height)
 {
     // Register all tile content types
     Cesium3DTilesContent::registerAllTileContentTypes();
 
     TilesetRenderer* renderer = PushArrayNoZero(arena, TilesetRenderer, 1);
-    renderer->tiles_to_free_mutex = OS_RWMutexAlloc();
+    renderer->tiles_to_free_mutex = os_rw_mutex_alloc();
 
     // Create task processor
     renderer->task_processor = std::make_shared<DTCityTaskProcessor>(threads);

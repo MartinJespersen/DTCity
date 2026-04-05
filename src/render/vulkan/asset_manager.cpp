@@ -554,7 +554,7 @@ deletion_queue_empty_all()
 }
 
 static AssetManager*
-asset_manager_create(VkPhysicalDevice physical_device, VkDevice device, VkInstance instance, VkQueue graphics_queue, U32 queue_family_index, async::Threads* threads, U64 total_size_in_bytes,
+asset_manager_create(VkPhysicalDevice physical_device, VkDevice device, VkInstance instance, VkQueue graphics_queue, U32 queue_family_index, async::ThreadPool* threads, U64 total_size_in_bytes,
                      VkDescriptorPool desc_pool)
 {
     Arena* arena = arena_alloc();
@@ -594,9 +594,9 @@ asset_manager_create(VkPhysicalDevice physical_device, VkDevice device, VkInstan
     descriptor_index_allocator_init(&asset_manager->descriptor_index_allocator, arena, 5000);
 
     // ~mgj: Mutex for asset operations (Textures and Buffers)
-    asset_manager->texture_mutex = OS_RWMutexAlloc();
-    asset_manager->buffer_mutex = OS_RWMutexAlloc();
-    asset_manager->descriptor_set_mutex = OS_RWMutexAlloc();
+    asset_manager->texture_mutex = os_rw_mutex_alloc();
+    asset_manager->buffer_mutex = os_rw_mutex_alloc();
+    asset_manager->descriptor_set_mutex = os_rw_mutex_alloc();
     asset_manager->arena_mutex = OS_MutexAlloc();
 
     // Set global pointer

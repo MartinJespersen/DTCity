@@ -35,7 +35,8 @@ struct Context
     Buffer<String8> data_subdirs;
 
     Arena* arena_frame;
-    Arena* arena_permanent;
+    Arena* arena_main_permanent;
+    async::AsyncArena* async_arena;
 
     io::IO* io;
     ui::Camera* camera;
@@ -45,7 +46,7 @@ struct Context
     city::Buildings* buildings;
     cesium::TilesetRenderer* cesium_tileset;
 
-    async::Threads* thread_pool;
+    async::ThreadPool* thread_pool;
 };
 
 // ~mgj: Globals

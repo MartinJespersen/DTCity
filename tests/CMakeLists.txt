@@ -1,9 +1,10 @@
 add_executable(city_tests)
+list(APPEND ALL_TARGETS city_tests)
+set(ALL_TARGETS "${ALL_TARGETS}" PARENT_SCOPE)
 
 target_sources(city_tests
     PRIVATE
     test_main.cpp
-    base/test_strings.cpp
 )
 
 target_include_directories(city_tests PRIVATE

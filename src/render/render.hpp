@@ -312,7 +312,7 @@ handle_list_first_handle(HandleList* list);
 // ~mgj: function declaration to be implemented by backend
 
 static void
-render_ctx_create(String8 shader_path, io::IO* io_ctx, async::Threads* thread_pool);
+render_ctx_create(String8 shader_path, io::IO* io_ctx, async::ThreadPool* thread_pool);
 static void
 render_ctx_destroy();
 static void

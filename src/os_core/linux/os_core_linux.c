@@ -155,7 +155,7 @@ OS_GetCurrentPath(Arena* arena)
 static inline String8
 os_path_delimiter()
 {
-    return Str8Lit("/");
+    return str8_lit("/");
 }
 
 static U32
@@ -923,7 +923,7 @@ OS_MutexDrop(OS_Handle mutex)
 //- rjf: reader/writer mutexes
 
 static OS_Handle
-OS_RWMutexAlloc()
+os_rw_mutex_alloc()
 {
     OS_LNX_Entity* entity = os_lnx_entity_alloc(OS_LNX_EntityKind_RWMutex);
     int init_result = pthread_rwlock_init(&entity->rwmutex_handle, 0);
@@ -1477,5 +1477,5 @@ main(int argc, char** argv)
     }
 
     //- rjf: call into "real" entry point
-    App(argc, argv);
+    return App(argc, argv);
 }
