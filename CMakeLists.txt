@@ -17,33 +17,30 @@ option(SHADER_DEBUG "Enable Shader Debugging" OFF)
 
 # cmake macro -> compiler macro
 if(BUILD_DEBUG OR SHADER_DEBUG)
-    list(APPEND GLSL_SHADER_FLAGS -gVS)
+  list(APPEND GLSL_SHADER_FLAGS -gVS)
 endif()
 
 if(BUILD_DEBUG)
-    add_compile_definitions(BUILD_DEBUG=1)
+  add_compile_definitions(BUILD_DEBUG=1)
 endif()
 
 if(ASAN_ENABLED)
-    add_compile_definitions(ASAN_ENABLED=1)
+  add_compile_definitions(ASAN_ENABLED=1)
 endif()
 
 
 # Compiler specific options
 if (MSVC)
-    if(BUILD_DEBUG)
-        message(DEBUG "Setting MSVC flags to /Z7 for ccache compatibility.  Current flags: ${CMAKE_CXX_FLAGS_DEBUG}")
-        string(REPLACE "/Zi" "/Z7" CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG}")
-        string(REPLACE "/Zi" "/Z7" CMAKE_C_FLAGS_DEBUG "${CMAKE_C_FLAGS_DEBUG}")
-        string(REPLACE "/Zi" "/Z7" CMAKE_CXX_FLAGS_RELWITHDEBINFO "${CMAKE_CXX_FLAGS_RELWITHDEBINFO}")
-        string(REPLACE "/Zi" "/Z7" CMAKE_C_FLAGS_RELWITHDEBINFO "${CMAKE_C_FLAGS_RELWITHDEBINFO}")
-        message(DEBUG "New flags: ${CMAKE_CXX_FLAGS_DEBUG}")
+  if(BUILD_DEBUG)
+    message(DEBUG "Setting MSVC flags to /Z7 for ccache compatibility.  Current flags: ${CMAKE_CXX_FLAGS_DEBUG}")
+    string(REPLACE "/Zi" "/Z7" CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG}")
+    string(REPLACE "/Zi" "/Z7" CMAKE_C_FLAGS_DEBUG "${CMAKE_C_FLAGS_DEBUG}")
+    string(REPLACE "/Zi" "/Z7" CMAKE_CXX_FLAGS_RELWITHDEBINFO "${CMAKE_CXX_FLAGS_RELWITHDEBINFO}")
+    string(REPLACE "/Zi" "/Z7" CMAKE_C_FLAGS_RELWITHDEBINFO "${CMAKE_C_FLAGS_RELWITHDEBINFO}")
+    message(DEBUG "New flags: ${CMAKE_CXX_FLAGS_DEBUG}")
 
-        add_compile_options(
-   /Z7
-  )
-    endif()
-    add_compile_options(
+  endif()
+  add_compile_options(
             /W4
             /wd4201  /wd4005 /wd4838 /wd4244 /wd4996 /wd4310 /wd4245 /wd4100 /wd4505
             /EHsc
@@ -52,35 +49,41 @@ if (MSVC)
             /Zc:__cplusplus
         )
 
-    add_compile_definitions(BUILD_CONSOLE_INTERFACE ON)
-
-    list(APPEND ASAN_LINK_FLAGS /INCREMENTAL:NO)
-    list(APPEND ASAN_COMPILE_FLAGS /fsanitize=address /D_DISABLE_STRING_ANNOTATION /D_DISABLE_VECTOR_ANNOTATION)
-elseif(CMAKE_COMPILER_IS_GNUCXX)
+  if(NOT NDEBUG)
     add_compile_options(
+   /Z7
+  )
+  endif()
+
+  add_compile_definitions(BUILD_CONSOLE_INTERFACE ON)
+
+  list(APPEND ASAN_LINK_FLAGS /INCREMENTAL:NO)
+  list(APPEND ASAN_COMPILE_FLAGS /fsanitize=address /D_DISABLE_STRING_ANNOTATION /D_DISABLE_VECTOR_ANNOTATION)
+elseif(CMAKE_COMPILER_IS_GNUCXX)
+  add_compile_options(
     -maes
     -msse4
     )
-    if(BUILD_DEBUG AND NOT NDEBUG)
-        add_compile_options(
+  if(BUILD_DEBUG AND NOT NDEBUG)
+    add_compile_options(
         -Wall -Wextra -Wno-attributes -Wno-format -Wno-unused-function -Wno-unused-parameter -Wno-narrowing -Wno-missing-field-initializers -Wno-sign-conversion -Wno-write-strings -Wno-class-memaccess -Wno-comment -Wno-pedantic
     )
 
-    else()
+  else()
 
-        add_compile_options(-w)
-    endif()
+    add_compile_options(-w)
+  endif()
 
-    list(APPEND ASAN_LINK_FLAGS -fsanitize=address)
-    list(APPEND ASAN_COMPILE_FLAGS -fsanitize=address)
+  list(APPEND ASAN_LINK_FLAGS -fsanitize=address)
+  list(APPEND ASAN_COMPILE_FLAGS -fsanitize=address)
 else()
-    message(FATAL_ERROR "Unsupported compiler")
+  message(FATAL_ERROR "Unsupported compiler")
 endif()
 
 find_package(glm CONFIG REQUIRED)
 
 if(BUILD_TESTS)
-    add_subdirectory(tests)
+  add_subdirectory(tests)
 endif()
 add_executable(city)
 
@@ -89,19 +92,19 @@ include_directories(${CMAKE_CURRENT_SOURCE_DIR}/src ${CMAKE_CURRENT_SOURCE_DIR}/
 
 # address sanitizer
 if(ASAN_ENABLED)
-    foreach(target ${ALL_TARGETS})
-        target_compile_options(${target} PRIVATE ${ASAN_COMPILE_FLAGS})
-        target_link_options(${target} PRIVATE ${ASAN_LINK_FLAGS})
-    endforeach()
+  foreach(target ${ALL_TARGETS})
+    target_compile_options(${target} PRIVATE ${ASAN_COMPILE_FLAGS})
+    target_link_options(${target} PRIVATE ${ASAN_LINK_FLAGS})
+  endforeach()
 endif()
 
 
 # tracy profiler
 option(TRACY_PROFILE_ENABLE "Enable Tracy profiler" OFF)
 if (TRACY_PROFILE_ENABLE)
-    add_compile_definitions(TRACY_ENABLE)
-    add_compile_definitions(TRACY_PROFILE_ENABLE)
-    target_sources(city PRIVATE ${THIRD_PARTY_LIBS_DIR}/tracy/TracyClient.cpp)
+  add_compile_definitions(TRACY_ENABLE)
+  add_compile_definitions(TRACY_PROFILE_ENABLE)
+  target_sources(city PRIVATE ${THIRD_PARTY_LIBS_DIR}/tracy/TracyClient.cpp)
 endif()
 
 # compile shaders
@@ -114,22 +117,22 @@ file(GLOB_RECURSE GLSL_SOURCE_FILES
 
 find_program(GLSL_VALIDATOR glslangValidator)
 if (NOT GLSL_VALIDATOR)
-    message(FATAL_ERROR "glslangValidator not found!")
+  message(FATAL_ERROR "glslangValidator not found!")
 endif()
 
 foreach(GLSL ${GLSL_SOURCE_FILES})
-    get_filename_component(FILE_NAME ${GLSL} NAME_WE)
-    get_filename_component(EXT_WITH_DOT ${GLSL} EXT)
-    string(SUBSTRING ${EXT_WITH_DOT} 1 -1 EXT)
-    set(SPIRV "${SHADER_BINARY_DIR}/${FILE_NAME}_${EXT}.spv")
-    add_custom_command(
+  get_filename_component(FILE_NAME ${GLSL} NAME_WE)
+  get_filename_component(EXT_WITH_DOT ${GLSL} EXT)
+  string(SUBSTRING ${EXT_WITH_DOT} 1 -1 EXT)
+  set(SPIRV "${SHADER_BINARY_DIR}/${FILE_NAME}_${EXT}.spv")
+  add_custom_command(
         OUTPUT ${SPIRV}
         COMMAND ${CMAKE_COMMAND} -E make_directory "${SHADER_BINARY_DIR}"
         COMMAND ${GLSL_VALIDATOR} -V ${GLSL} ${GLSL_SHADER_FLAGS} -o ${SPIRV}
         DEPENDS ${GLSL}
         COMMENT "Compiling ${FILE_NAME} to SPIR-V"
     )
-    list(APPEND SPIRV_BINARY_FILES ${SPIRV})
+  list(APPEND SPIRV_BINARY_FILES ${SPIRV})
 endforeach()
 add_custom_target(CompileShaders ALL DEPENDS ${SPIRV_BINARY_FILES})
 

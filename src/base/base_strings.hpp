@@ -241,7 +241,7 @@ backslashed_from_str8(Arena* arena, String8 string);
 static B32
 str8_match(String8 a, String8 b, StringMatchFlags flags);
 static U64
-FindSubstr8(String8 string, String8 needle, U64 start_pos, StringMatchFlags flags);
+str8_substr_find(String8 string, String8 needle, U64 start_pos, StringMatchFlags flags);
 static U64
 str8_find_needle_reverse(String8 string, U64 start_pos, String8 needle, StringMatchFlags flags);
 static B32
@@ -254,7 +254,7 @@ str8_ends_with(String8 string, String8 end, StringMatchFlags flags);
 static String8
 Str8Substr(String8 str, Rng1U64 range);
 static String8
-Str8Prefix(String8 str, U64 size);
+str8_prefix(String8 str, U64 size);
 static String8
 str8_skip(String8 str, U64 amt);
 static String8
@@ -262,7 +262,7 @@ str8_postfix(String8 str, U64 size);
 static String8
 str8_chop(String8 str, U64 amt);
 static String8
-Str8SkipChopWhitespace(String8 string);
+str8_whitespace_skip(String8 string);
 static String8
 str8_skip_chop_slashes(String8 string);
 

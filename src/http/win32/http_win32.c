@@ -34,22 +34,22 @@ HTTP_Request(Arena* arena, String8 host, String8 path, String8 body, HTTP_Reques
         String8 url_hostname_part = {0};
         String8 url_path_part = {0};
         {
-            U64 protocol_delimiter_pos = FindSubstr8(url, str8_lit("://"), 0, 0);
+            U64 protocol_delimiter_pos = str8_substr_find(url, str8_lit("://"), 0, 0);
             U64 post_protocol_pos = 0;
             if (protocol_delimiter_pos < url.size)
             {
                 post_protocol_pos = protocol_delimiter_pos + 3;
-                url_protocol_part = Str8Prefix(url, post_protocol_pos);
+                url_protocol_part = str8_prefix(url, post_protocol_pos);
             }
-            U64 last_colon_pos = FindSubstr8(url, str8_lit(":"), post_protocol_pos, 0);
+            U64 last_colon_pos = str8_substr_find(url, str8_lit(":"), post_protocol_pos, 0);
             if (last_colon_pos < url.size)
             {
                 url_port_part = str8_skip(url, last_colon_pos + 1);
             }
-            U64 first_non_protocol_slash_pos = FindSubstr8(url, str8_lit("/"), post_protocol_pos, 0);
+            U64 first_non_protocol_slash_pos = str8_substr_find(url, str8_lit("/"), post_protocol_pos, 0);
             if (first_non_protocol_slash_pos < url.size)
             {
-                url_hostname_part = Str8Prefix(url, first_non_protocol_slash_pos);
+                url_hostname_part = str8_prefix(url, first_non_protocol_slash_pos);
                 url_hostname_part = str8_skip(url_hostname_part, post_protocol_pos);
                 url_path_part = str8_skip(url, first_non_protocol_slash_pos);
             }

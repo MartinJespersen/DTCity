@@ -2,7 +2,6 @@
 * vulkan descriptor layout specified twice some places (e.g. compute storage buffers descriptor)
 * Reconsider the number of descriptor pools (whether 1 is enough) and the descriptor numbers
 * In function RoadSegmentFromTwoRoadNodes: the normalize function leads to values being Nan. Handle this in a better way.
-* Find a way to make threads sleep 
 
 # Less urgent changes
 * Improve the threading in the asset manager (e.g. too many mutexes are used at the moment)
@@ -20,7 +19,7 @@
 
 # features
 * Get NetAScore from HTTP API if possible.
-  * read env variable for netascore API key.
+  * read env variables from .env file
   * refactor to separate source file
   * move the netascore http call function to netascore layer
   * make the netascore results cacheable
@@ -35,11 +34,8 @@
 * Make application work on MACOS
   * Make clang work as compiler
 
-# Changes along the way
-* Make the asset manager thread safe - accessing texture and buffer lists are not thread safe at the moment
-* Add linting and static analysis checks
-* Change the naming convention for functions from PascalCase to snake_case
-* Cleanup entrypoint main loop
+# Documentation
+* Explain the use of NetAScore Environment variable.
 
 # Tools or features for debugging
 * validation layers should show the source location of layer

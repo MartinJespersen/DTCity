@@ -29,7 +29,7 @@ class DTCityTaskProcessor : public CesiumAsync::ITaskProcessor
             delete func;
         };
 
-        if (!async::thread_pool_try_push(thread_pool, &item))
+        if (!async::thread_pool_push(thread_pool, &item))
         {
             exit_with_error("Failed to enqueue task");
             (*task_copy)();

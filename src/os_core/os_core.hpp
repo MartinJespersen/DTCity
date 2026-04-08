@@ -188,7 +188,7 @@ OS_GetSystemInfo();
 static OS_ProcessInfo*
 os_get_process_info();
 static String8
-OS_GetCurrentPath(Arena* arena);
+os_current_path_get(Arena* arena);
 static U32
 os_get_process_start_time_unix();
 static inline String8

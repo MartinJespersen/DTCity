@@ -184,7 +184,7 @@ os_cmd_line_launch(String8 string)
         String8 exe_folder = str8_chop_last_slash(exe);
         if (exe_folder.size == 0)
         {
-            exe_folder = OS_GetCurrentPath(scratch.arena);
+            exe_folder = os_current_path_get(scratch.arena);
         }
 
         // rjf: find stdout delimiter

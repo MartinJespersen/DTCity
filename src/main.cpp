@@ -16,7 +16,7 @@ ctx_create(io::IO* io_ctx)
     ctx->io = PushStruct(app_arena, io::IO);
     ctx->camera = PushStruct(app_arena, ui::Camera);
     ctx->time = PushStruct(app_arena, dt_Time);
-    ctx->cwd = OS_GetCurrentPath(scratch.arena);
+    ctx->cwd = os_current_path_get(scratch.arena);
 
     String8 data_dir = str8_path_from_str8_list(scratch.arena, {ctx->cwd, S("data")});
     {

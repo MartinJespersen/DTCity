@@ -30,3 +30,4 @@ nul
 .vs
 .claude
 vcpkg_installed/**
+.env

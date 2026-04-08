@@ -219,20 +219,92 @@ dt_mobilitylab_jobs_api_get()
 static String8
 dt_mobilitylab_api_key_header_get(Arena* arena)
 {
+    ScratchScope scratch = ScratchScope(&arena, 1);
+
     OS_ProcessInfo* proc_info = os_get_process_info();
     String8 netascore_api_key = S("NETASCORE_API_KEY");
 
+    String8List env_strs = {};
+    {
+        // create list from path string
+        String8 cur_path = os_current_path_get(scratch.arena);
+        String8List path_str_list = str8_split_path(scratch.arena, cur_path);
+
+        // create array of string8list for every path
+        Buffer<String8List> str_list_buf = BufferAlloc<String8List>(scratch.arena, path_str_list.node_count);
+
+        // find .env file by iterating parents
+        String8Node* cur_node = path_str_list.first;
+        for (U32 i = 0; i < path_str_list.node_count && cur_node; ++i, cur_node = cur_node->next)
+        {
+            for (U32 j = i; j < path_str_list.node_count; ++j)
+            {
+                String8List* list = str_list_buf[j];
+                String8Node* node = PushStruct(scratch.arena, String8Node);
+                node->string = push_str8_copy(scratch.arena, cur_node->string);
+                str8_list_push_node(list, node);
+            }
+        }
+
+        String8 env_file_path = {};
+        // add .env to lists and set env list
+        StringJoin join_params = {.sep = os_path_delimiter()};
+        for (U32 i = 0; i < str_list_buf.size; ++i)
+        {
+            String8List buf_elem = str_list_buf.data[str_list_buf.size - i - 1];
+            str8_list_push(scratch.arena, &buf_elem, S(".env"));
+            String8 file_path = str8_list_join(scratch.arena, &buf_elem, &join_params);
+            if (os_file_path_exists(file_path))
+            {
+                env_file_path = file_path;
+                break;
+            }
+        }
+
+        String8List env_file_strs = {};
+        // if .env file exists then add each non empty line to string list
+        if (env_file_path.size > 0)
+        {
+            OS_Handle file_handle = os_file_open(OS_AccessFlag_ShareRead, env_file_path);
+            defer(os_file_close(file_handle));
+
+            String8 file_str = os_data_from_file_path(scratch.arena, env_file_path);
+            if (file_str.size > 0)
+            {
+                env_file_strs = str8_split_by_string_chars(scratch.arena, file_str, str8_lit("\n"), 0);
+                for (String8Node* n = env_file_strs.first; n; n = n->next)
+                {
+                    if (str8_ends_with_lit(n->string, "\r", 0)) // windows line ending check and chop
+                    {
+                        n->string = str8_chop(n->string, 1);
+                    }
+                    n->string = str8_whitespace_skip(n->string);
+                }
+            }
+        }
+
+        // join .env string list with process environment list
+        str8_list_concat_in_place(&env_strs, &env_file_strs);
+    }
+
+    // add process environment to str list
+    str8_list_concat_in_place(&env_strs, &proc_info->environment);
+
+    // find the netascore api key in environment
     String8 netascore_api_key_v = {};
-    for (String8Node* n = proc_info->environment.first; n; n = n->next)
+    for (String8Node* n = env_strs.first; n; n = n->next)
     {
         if (str8_match(n->string, netascore_api_key, MatchFlag_RightSideSloppy))
         {
-            netascore_api_key_v = str8_skip(n->string, netascore_api_key.size);
+            U64 split_pos = str8_substr_find(n->string, str8_lit("="), 0, 0);
+            String8 right = split_pos < n->string.size ? str8_skip(n->string, split_pos + 1) : Str8Zero();
+            netascore_api_key_v = right;
         }
     }
+
     String8List parts = {};
-    str8_list_push(arena, &parts, str8_lit("X-API-Key: "));
-    str8_list_push(arena, &parts, netascore_api_key_v);
+    str8_list_push(scratch.arena, &parts, str8_lit("X-API-Key: "));
+    str8_list_push(scratch.arena, &parts, netascore_api_key_v);
 
     String8 result = str8_list_join(arena, &parts, 0);
     return result;
@@ -547,7 +619,7 @@ dt_interpret_input(int argc, char** argv)
 }
 
 g_internal void
-imgui_debug_window(cesium::TilesetRenderer* renderer, std::shared_ptr<async::AsyncCallCtx>& netascore_result)
+imgui_debug_window(cesium::TilesetRenderer* renderer, std::shared_ptr<async::AsyncCallCtx>& netascore_result, async::ThreadPool* thread_pool)
 {
     vulkan::AssetManager* asset_manager = vulkan::asset_manager_get();
     const ImGuiViewport* viewport = ImGui::GetMainViewport();
@@ -567,6 +639,7 @@ imgui_debug_window(cesium::TilesetRenderer* renderer, std::shared_ptr<async::Asy
     ImGui::Text("Deletetion Queue Free List: %d active", asset_manager->deletion_queue_free_list_count);
     ImGui::Text("Tileset Renderer Show: %d active", renderer->tiles_to_show_count);
     ImGui::Text("Tileset Renderer Free List Count: %d", renderer->tiles_to_free_stack_count);
+    ImGui::Text("ThreadPool pending tasks: %u", thread_pool->pending_task_count.load());
 
     // netascore status
     ImGui::Text("Netascore Status: ");
@@ -711,7 +784,7 @@ dt_main_loop(void* ptr)
 
         // bool async_netascore_result = dt_async_http_check_result(netascore_results, S("NetAScore download"));
         // #if BUILD_DEBUG
-        imgui_debug_window(ctx->cesium_tileset, netascore_results);
+        imgui_debug_window(ctx->cesium_tileset, netascore_results, ctx->thread_pool);
         // #endif
 
         Vec2U32 framebuffer_dim = {(U32)io_ctx->framebuffer_width, (U32)io_ctx->framebuffer_height};

@@ -351,7 +351,7 @@ str8_match(String8 a, String8 b, StringMatchFlags flags)
 }
 
 static U64
-FindSubstr8(String8 string, String8 needle, U64 start_pos, StringMatchFlags flags)
+str8_substr_find(String8 string, String8 needle, U64 start_pos, StringMatchFlags flags)
 {
     U8* p = string.str + start_pos;
     U64 stop_offset = Max(string.size + 1, needle.size) - needle.size;
@@ -428,7 +428,7 @@ Str8Substr(String8 str, Rng1U64 range)
 }
 
 static String8
-Str8Prefix(String8 str, U64 size)
+str8_prefix(String8 str, U64 size)
 {
     str.size = ClampTop(size, str.size);
     return (str);
@@ -461,7 +461,7 @@ str8_chop(String8 str, U64 amt)
 }
 
 static String8
-Str8SkipChopWhitespace(String8 string)
+str8_whitespace_skip(String8 string)
 {
     U8* first = string.str;
     U8* opl = first + string.size;
@@ -654,12 +654,12 @@ try_u64_from_str8_c_rules(String8 string, U64* x)
     else
     {
         String8 hex_string = str8_skip(string, 2);
-        if (str8_match(Str8Prefix(string, 2), str8_lit("0x"), 0) && str8_is_integer(hex_string, 0x10))
+        if (str8_match(str8_prefix(string, 2), str8_lit("0x"), 0) && str8_is_integer(hex_string, 0x10))
         {
             is_integer = 1;
             *x = U64FromStr8(hex_string, 0x10);
         }
-        else if (str8_match(Str8Prefix(string, 2), str8_lit("0b"), 0) && str8_is_integer(hex_string, 2))
+        else if (str8_match(str8_prefix(string, 2), str8_lit("0b"), 0) && str8_is_integer(hex_string, 2))
         {
             is_integer = 1;
             *x = U64FromStr8(hex_string, 2);
@@ -667,7 +667,7 @@ try_u64_from_str8_c_rules(String8 string, U64* x)
         else
         {
             String8 oct_string = str8_skip(string, 1);
-            if (str8_match(Str8Prefix(string, 1), str8_lit("0"), 0) && str8_is_integer(hex_string, 010))
+            if (str8_match(str8_prefix(string, 1), str8_lit("0"), 0) && str8_is_integer(hex_string, 010))
             {
                 is_integer = 1;
                 *x = U64FromStr8(oct_string, 010);
@@ -1334,7 +1334,7 @@ str8_chop_last_dot(String8 string)
         p -= 1;
         if (string.str[p] == '.')
         {
-            result = Str8Prefix(string, p);
+            result = str8_prefix(string, p);
             break;
         }
     }
@@ -1515,7 +1515,7 @@ str8_txt_pt_pair_from_string(String8 string)
             U8 next_byte = ((idx + 1 < string.size) ? (string.str[idx + 1]) : 0);
             if (byte == ':' && next_byte != '/' && next_byte != '\\')
             {
-                file_part = Str8Prefix(string, idx);
+                file_part = str8_prefix(string, idx);
                 line_part = str8_skip(string, idx + 1);
                 break;
             }
@@ -1528,11 +1528,11 @@ str8_txt_pt_pair_from_string(String8 string)
 
         // rjf: grab line/column
         {
-            U64 colon_pos = FindSubstr8(line_part, str8_lit(":"), 0, 0);
+            U64 colon_pos = str8_substr_find(line_part, str8_lit(":"), 0, 0);
             if (colon_pos < line_part.size)
             {
                 col_part = str8_skip(line_part, colon_pos + 1);
-                line_part = Str8Prefix(line_part, colon_pos);
+                line_part = str8_prefix(line_part, colon_pos);
             }
         }
 
@@ -2083,7 +2083,7 @@ indented_from_string(Arena* arena, String8 string)
             case '\n':
             case 0:
             {
-                String8 line = Str8SkipChopWhitespace(Str8Substr(string, r1u64(line_begin_off, off)));
+                String8 line = str8_whitespace_skip(Str8Substr(string, r1u64(line_begin_off, off)));
                 if (line.size != 0)
                 {
                     Str8ListPushF(scratch.arena, &indented_strings, "%.*s%s\n", (int)depth * 2, indentation_bytes, (char*)line.str);
@@ -2357,7 +2357,7 @@ fuzzy_match_find(Arena* arena, String8 needle, String8 haystack)
         U64 find_pos = 0;
         for (; find_pos < haystack.size;)
         {
-            find_pos = FindSubstr8(haystack, needle_n->string, find_pos, MatchFlag_CaseInsensitive);
+            find_pos = str8_substr_find(haystack, needle_n->string, find_pos, MatchFlag_CaseInsensitive);
             B32 is_in_gathered_ranges = 0;
             for (FuzzyMatchRangeNode* n = result.first; n != 0; n = n->next)
             {

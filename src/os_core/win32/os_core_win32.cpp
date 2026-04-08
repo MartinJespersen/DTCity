@@ -169,7 +169,7 @@ os_get_process_info()
 }
 
 static String8
-OS_GetCurrentPath(Arena* arena)
+os_current_path_get(Arena* arena)
 {
     Temp scratch = ScratchBegin(&arena, 1);
     DWORD length = GetCurrentDirectoryW(0, 0);
@@ -626,9 +626,9 @@ os_properties_from_file_path(String8 path)
         WCHAR buffer[512] = {0};
         DWORD length = GetLogicalDriveStringsW(sizeof(buffer), buffer);
         U64 last_slash_pos = 0;
-        for (; last_slash_pos < path.size; last_slash_pos = FindSubstr8(path, str8_lit("/"), last_slash_pos + 1, MatchFlag_SlashInsensitive))
+        for (; last_slash_pos < path.size; last_slash_pos = str8_substr_find(path, str8_lit("/"), last_slash_pos + 1, MatchFlag_SlashInsensitive))
             ;
-        String8 path_trimmed = Str8Prefix(path, last_slash_pos);
+        String8 path_trimmed = str8_prefix(path, last_slash_pos);
         for (U64 off = 0; off < (U64)length;)
         {
             String16 next_drive_string_16 = str16_cstring((U16*)buffer + off);
@@ -1837,7 +1837,7 @@ w32_entry_point_caller(int argc, WCHAR** wargv)
             info->binary_path = push_str8_copy(arena, name_chopped);
             ScratchEnd(scratch);
         }
-        info->initial_path = OS_GetCurrentPath(arena);
+        info->initial_path = os_current_path_get(arena);
         {
             Temp scratch = ScratchBegin(0, 0);
             U64 size = KB(32);
