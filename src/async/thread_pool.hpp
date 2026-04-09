@@ -54,7 +54,7 @@ _thread_pool_wake_workers(ThreadPool* thread_pool, B32 wake_all);
 static B32
 thread_pool_register_current_thread(ThreadPool* thread_pool);
 static B32
-thread_pool_push(ThreadPool* thread_pool, WorkerTask* item, S64 microsecond_delay = 0);
+thread_pool_push(ThreadPool* thread_pool, WorkerTask* item, S64 us_delay = 0);
 static B32
 thread_pool_has_pending_work(ThreadPool* thread_pool);
 static void

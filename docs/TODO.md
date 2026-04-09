@@ -19,9 +19,10 @@
 
 # features
 * Get NetAScore from HTTP API if possible.
-  * read env variables from .env file
+  * retry the whole task instead of call single function
   * refactor to separate source file
-  * move the netascore http call function to netascore layer
+  * move the netascore http call function to neta layer
+    * move memory handling to neta layer as well
   * make the netascore results cacheable
   * Is web socket viable solution for this?
 * Use the OSM data for showing data about buildings

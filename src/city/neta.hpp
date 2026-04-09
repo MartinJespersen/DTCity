@@ -30,6 +30,19 @@ struct EdgeList
     EdgeNode* last;
 };
 
+struct NetaState
+{
+    Arena* arena;
+
+    String8 mobility_api_key;
+};
+
+// Global State ////////////////////////////
+g_internal NetaState* g_neta_state = 0;
+/////////////////////////////////////////////
+g_internal void
+neta_init();
+
 static Map<S64, EdgeList>*
 osm_way_to_edges_map_create(Arena* arena, String8 file_path, Rng2F64 utm_bbox);
 

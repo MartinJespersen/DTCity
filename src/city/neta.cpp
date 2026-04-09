@@ -1,6 +1,20 @@
 namespace neta
 {
 
+g_internal void
+neta_init()
+{
+    Arena* arena = arena_alloc();
+    g_neta_state = PushStruct(arena, NetaState);
+    AssertAlways(g_neta_state);
+
+    B32 error = env_vars_value_get(arena, S("NETASCORE_API_KEY"), &g_neta_state->mobility_api_key, 1);
+    if (error)
+    {
+        ERROR_LOG("NETASCORE_API_KEY environment variable could not be found");
+    }
+}
+
 static Result<Buffer<Edge>>
 edge_in_osm_area(Arena* arena, simdjson::ondemand::document& doc, Rng2F64 utm_bbox)
 {
@@ -47,8 +61,7 @@ edge_in_osm_area(Arena* arena, simdjson::ondemand::document& doc, Rng2F64 utm_bb
         for (auto point : geometry)
         {
             auto coords = point.get_array();
-            if (coords.error() != simdjson::error_code::SUCCESS ||
-                coords.value().count_elements() != 2)
+            if (coords.error() != simdjson::error_code::SUCCESS || coords.value().count_elements() != 2)
             {
                 err |= coords.error();
                 continue;
@@ -62,8 +75,7 @@ edge_in_osm_area(Arena* arena, simdjson::ondemand::document& doc, Rng2F64 utm_bb
                 arr_idx += 1;
             }
 
-            if (utm_bbox.min.x < coord_arr[0] && coord_arr[0] < utm_bbox.max.x &&
-                utm_bbox.min.y < coord_arr[1] && coord_arr[1] < utm_bbox.max.y)
+            if (utm_bbox.min.x < coord_arr[0] && coord_arr[0] < utm_bbox.max.x && utm_bbox.min.y < coord_arr[1] && coord_arr[1] < utm_bbox.max.y)
             {
                 *coords_buf[coord_idx] = {coord_arr[0], coord_arr[1]};
                 coord_idx += 1;

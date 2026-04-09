@@ -192,6 +192,7 @@ dt_utm_from_wgs84(Rng2F64 wgs84_bbox)
     return utm_bbox;
 }
 
+// TODO: move neta related code to neta layer
 struct dt_NetascoreDownloadNode
 {
     dt_NetascoreDownloadNode* next;
@@ -208,6 +209,10 @@ struct dt_NetascoreDownloadQueue
     B32 wrote_primary_geojson;
 };
 
+struct NetaTaskState
+{
+    String8 mobility_api_key_header;
+};
 static dt_NetascoreDownloadQueue g_netascore_download_queue;
 
 static String8
@@ -217,94 +222,13 @@ dt_mobilitylab_jobs_api_get()
 }
 
 static String8
-dt_mobilitylab_api_key_header_get(Arena* arena)
+dt_mobilitylab_api_key_header_get(Arena* arena, String8 api_key)
 {
     ScratchScope scratch = ScratchScope(&arena, 1);
 
-    OS_ProcessInfo* proc_info = os_get_process_info();
-    String8 netascore_api_key = S("NETASCORE_API_KEY");
-
-    String8List env_strs = {};
-    {
-        // create list from path string
-        String8 cur_path = os_current_path_get(scratch.arena);
-        String8List path_str_list = str8_split_path(scratch.arena, cur_path);
-
-        // create array of string8list for every path
-        Buffer<String8List> str_list_buf = BufferAlloc<String8List>(scratch.arena, path_str_list.node_count);
-
-        // find .env file by iterating parents
-        String8Node* cur_node = path_str_list.first;
-        for (U32 i = 0; i < path_str_list.node_count && cur_node; ++i, cur_node = cur_node->next)
-        {
-            for (U32 j = i; j < path_str_list.node_count; ++j)
-            {
-                String8List* list = str_list_buf[j];
-                String8Node* node = PushStruct(scratch.arena, String8Node);
-                node->string = push_str8_copy(scratch.arena, cur_node->string);
-                str8_list_push_node(list, node);
-            }
-        }
-
-        String8 env_file_path = {};
-        // add .env to lists and set env list
-        StringJoin join_params = {.sep = os_path_delimiter()};
-        for (U32 i = 0; i < str_list_buf.size; ++i)
-        {
-            String8List buf_elem = str_list_buf.data[str_list_buf.size - i - 1];
-            str8_list_push(scratch.arena, &buf_elem, S(".env"));
-            String8 file_path = str8_list_join(scratch.arena, &buf_elem, &join_params);
-            if (os_file_path_exists(file_path))
-            {
-                env_file_path = file_path;
-                break;
-            }
-        }
-
-        String8List env_file_strs = {};
-        // if .env file exists then add each non empty line to string list
-        if (env_file_path.size > 0)
-        {
-            OS_Handle file_handle = os_file_open(OS_AccessFlag_ShareRead, env_file_path);
-            defer(os_file_close(file_handle));
-
-            String8 file_str = os_data_from_file_path(scratch.arena, env_file_path);
-            if (file_str.size > 0)
-            {
-                env_file_strs = str8_split_by_string_chars(scratch.arena, file_str, str8_lit("\n"), 0);
-                for (String8Node* n = env_file_strs.first; n; n = n->next)
-                {
-                    if (str8_ends_with_lit(n->string, "\r", 0)) // windows line ending check and chop
-                    {
-                        n->string = str8_chop(n->string, 1);
-                    }
-                    n->string = str8_whitespace_skip(n->string);
-                }
-            }
-        }
-
-        // join .env string list with process environment list
-        str8_list_concat_in_place(&env_strs, &env_file_strs);
-    }
-
-    // add process environment to str list
-    str8_list_concat_in_place(&env_strs, &proc_info->environment);
-
-    // find the netascore api key in environment
-    String8 netascore_api_key_v = {};
-    for (String8Node* n = env_strs.first; n; n = n->next)
-    {
-        if (str8_match(n->string, netascore_api_key, MatchFlag_RightSideSloppy))
-        {
-            U64 split_pos = str8_substr_find(n->string, str8_lit("="), 0, 0);
-            String8 right = split_pos < n->string.size ? str8_skip(n->string, split_pos + 1) : Str8Zero();
-            netascore_api_key_v = right;
-        }
-    }
-
     String8List parts = {};
     str8_list_push(scratch.arena, &parts, str8_lit("X-API-Key: "));
-    str8_list_push(scratch.arena, &parts, netascore_api_key_v);
+    str8_list_push(scratch.arena, &parts, api_key);
 
     String8 result = str8_list_join(arena, &parts, 0);
     return result;
@@ -331,8 +255,9 @@ dt_target_srid_from_wgs84(Vec2F64 wgs84_point)
     return srid_base + zone_number;
 }
 
+template <typename T>
 static bool
-dt_async_http_check_result(std::shared_ptr<async::AsyncCallCtx>& async_call, String8 name)
+dt_async_http_check_result(std::shared_ptr<async::AsyncCallCtx<T>>& async_call, String8 name)
 {
     B32 done = async_call->done.load(std::memory_order_acquire);
     if (done)
@@ -370,8 +295,11 @@ dt_netascore_download_enqueue(Arena* arena, String8 key, String8 file_name)
     SLLQueuePush(g_netascore_download_queue.first, g_netascore_download_queue.last, node);
 }
 
-static async::HttpInfo*
-dt_netascore_next_download_http_info(Arena* arena)
+static async::UserFuncResult<NetaTaskState>
+dt_netascore_download_file_complete(Arena* arena, String8 body, NetaTaskState* task_state);
+
+static async::HttpInfo<NetaTaskState>*
+dt_netascore_next_download_http_info(Arena* arena, String8 mobility_api_key_header)
 {
     dt_NetascoreDownloadNode* node = g_netascore_download_queue.first;
     if (node == 0)
@@ -383,21 +311,23 @@ dt_netascore_next_download_http_info(Arena* arena)
     g_netascore_download_queue.current_file_name = node->file_name;
 
     String8 download_api = push_str8f(arena, "%.*s%.*s/download/%.*s", str8_varg(dt_mobilitylab_jobs_api_get()), str8_varg(g_netascore_download_queue.job_id), str8_varg(node->key));
-    return async::http_info_create_get(arena, download_api, async::ContentType::None, {dt_mobilitylab_api_key_header_get(arena)});
+    async::HttpInfo<NetaTaskState>* http_info = async::http_info_create_get<NetaTaskState>(arena, download_api, async::ContentType::None, {mobility_api_key_header});
+    http_info->next_func = dt_netascore_download_file_complete;
+    return http_info;
 }
 
-static async::UserFuncResult
-dt_netascore_download_file_complete(Arena* arena, String8 body)
+static async::UserFuncResult<NetaTaskState>
+dt_netascore_download_file_complete(Arena* arena, String8 body, NetaTaskState* task_state)
 {
     if (g_netascore_download_queue.current_file_name.size == 0)
     {
-        return async::UserFuncResult::failure(arena, "Missing current NetAScore download file name");
+        return async::UserFuncResult<NetaTaskState>::failure(arena, "Missing current NetAScore download file name");
     }
 
     String8 file_path = str8_path_from_str8_list(arena, {dt_ctx_get()->data_dir, g_netascore_download_queue.current_file_name});
     if (!os_write_data_to_file_path(file_path, body))
     {
-        return async::UserFuncResult::failure(arena, "Failed to write NetAScore download to %.*s", str8_varg(file_path));
+        return async::UserFuncResult<NetaTaskState>::failure(arena, "Failed to write NetAScore download to %.*s", str8_varg(file_path));
     }
 
     if (str8_ends_with_lit(g_netascore_download_queue.current_file_name, ".geojson", MatchFlag_CaseInsensitive))
@@ -411,7 +341,7 @@ dt_netascore_download_file_complete(Arena* arena, String8 body)
                 String8 canonical_file_path = str8_path_from_str8_list(arena, {dt_ctx_get()->data_dir, canonical_file_name});
                 if (!os_write_data_to_file_path(canonical_file_path, body))
                 {
-                    return async::UserFuncResult::failure(arena, "Failed to write NetAScore alias file to %.*s", str8_varg(canonical_file_path));
+                    return async::UserFuncResult<NetaTaskState>::failure(arena, "Failed to write NetAScore alias file to %.*s", str8_varg(canonical_file_path));
                 }
             }
             g_netascore_download_queue.wrote_primary_geojson = true;
@@ -420,31 +350,31 @@ dt_netascore_download_file_complete(Arena* arena, String8 body)
 
     g_netascore_download_queue.current_file_name = {};
 
-    async::HttpInfo* next_http_info = dt_netascore_next_download_http_info(arena);
+    async::HttpInfo<NetaTaskState>* next_http_info = dt_netascore_next_download_http_info(arena, task_state->mobility_api_key_header);
     if (next_http_info != 0)
     {
-        return async::UserFuncResult::success(next_http_info, dt_netascore_download_file_complete);
+        return async::UserFuncResult<NetaTaskState>::success(next_http_info);
     }
 
-    return async::UserFuncResult::success(nullptr);
+    return async::UserFuncResult<NetaTaskState>::success();
 }
 
-static async::UserFuncResult
-dt_netascore_downloads_complete(Arena* arena, String8 body)
+static async::UserFuncResult<NetaTaskState>
+dt_netascore_downloads_complete(Arena* arena, String8 body, NetaTaskState* task_state)
 {
     simdjson::dom::parser parser;
     simdjson::dom::element doc = {};
     simdjson::error_code err = parser.parse(body.str, body.size).get(doc);
     if (err)
     {
-        return async::UserFuncResult::failure(arena, "Failed to parse NetAScore downloads response");
+        return async::UserFuncResult<NetaTaskState>::failure(arena, "Failed to parse NetAScore downloads response");
     }
 
     simdjson::dom::array downloads = {};
     err = doc.get_array().get(downloads);
     if (err)
     {
-        return async::UserFuncResult::failure(arena, "Expected NetAScore downloads response to be an array");
+        return async::UserFuncResult<NetaTaskState>::failure(arena, "Expected NetAScore downloads response to be an array");
     }
 
     g_netascore_download_queue.wrote_primary_geojson = false;
@@ -455,7 +385,7 @@ dt_netascore_downloads_complete(Arena* arena, String8 body)
         err = elem.get_object().get(item);
         if (err)
         {
-            return async::UserFuncResult::failure(arena, "Failed to parse NetAScore download item");
+            return async::UserFuncResult<NetaTaskState>::failure(arena, "Failed to parse NetAScore download item");
         }
 
         const char* key = 0;
@@ -464,7 +394,7 @@ dt_netascore_downloads_complete(Arena* arena, String8 body)
         simdjson::error_code err_file_name = item["filename"].get_c_str().get(file_name);
         if (err_key || err_file_name)
         {
-            return async::UserFuncResult::failure(arena, "NetAScore download item is missing key or filename");
+            return async::UserFuncResult<NetaTaskState>::failure(arena, "NetAScore download item is missing key or filename");
         }
 
         String8 file_name_str = str8_c_string(file_name);
@@ -479,30 +409,30 @@ dt_netascore_downloads_complete(Arena* arena, String8 body)
 
     if (geojson_download_count == 0)
     {
-        return async::UserFuncResult::failure(arena, "NetAScore downloads response did not contain any .geojson files");
+        return async::UserFuncResult<NetaTaskState>::failure(arena, "NetAScore downloads response did not contain any .geojson files");
     }
 
-    async::HttpInfo* next_http_info = dt_netascore_next_download_http_info(arena);
+    async::HttpInfo<NetaTaskState>* next_http_info = dt_netascore_next_download_http_info(arena, task_state->mobility_api_key_header);
     AssertAlways(next_http_info != 0);
-    return async::UserFuncResult::success(next_http_info, dt_netascore_download_file_complete);
+    return async::UserFuncResult<NetaTaskState>::success(next_http_info);
 }
 
-static async::UserFuncResult
-dt_netascore_job_status_complete(Arena* arena, String8 body)
+static async::UserFuncResult<NetaTaskState>
+dt_netascore_job_status_complete(Arena* arena, String8 body, NetaTaskState* task_state)
 {
     simdjson::dom::parser parser;
     simdjson::dom::element doc = {};
     simdjson::error_code err = parser.parse(body.str, body.size).get(doc);
     if (err)
     {
-        return async::UserFuncResult::failure(arena, "Failed to parse NetAScore status response");
+        return async::UserFuncResult<NetaTaskState>::failure(arena, "Failed to parse NetAScore status response");
     }
 
     simdjson::dom::object obj = {};
     err = doc.get_object().get(obj);
     if (err)
     {
-        return async::UserFuncResult::failure(arena, "Expected NetAScore status response to be an object");
+        return async::UserFuncResult<NetaTaskState>::failure(arena, "Expected NetAScore status response to be an object");
     }
 
     const char* status = 0;
@@ -511,20 +441,21 @@ dt_netascore_job_status_complete(Arena* arena, String8 body)
     simdjson::error_code err_job_id = obj["job_id"].get_c_str().get(job_id);
     if (err_status || err_job_id)
     {
-        return async::UserFuncResult::failure(arena, "NetAScore status response is missing status or job_id");
+        return async::UserFuncResult<NetaTaskState>::failure(arena, "NetAScore status response is missing status or job_id");
     }
 
     g_netascore_download_queue.job_id = push_str8_copy(arena, str8_c_string(job_id));
     if (c_str_equal(status, "queued") || c_str_equal(status, "running"))
     {
-        return async::UserFuncResult::reschedule(1'000'000); // 1'000'000 ms = 1 sec delay
+        return async::UserFuncResult<NetaTaskState>::reschedule(1'000'000); // 1'000'000 ms = 1 sec delay
     }
 
     if (c_str_equal(status, "done"))
     {
         String8 downloads_api = push_str8f(arena, "%.*s%.*s/downloads", str8_varg(dt_mobilitylab_jobs_api_get()), str8_varg(g_netascore_download_queue.job_id));
-        async::HttpInfo* http_info = async::http_info_create_get(arena, downloads_api, async::ContentType::None, {dt_mobilitylab_api_key_header_get(arena)});
-        return async::UserFuncResult::success(http_info);
+        async::HttpInfo<NetaTaskState>* http_info = async::http_info_create_get<NetaTaskState>(arena, downloads_api, async::ContentType::None, {task_state->mobility_api_key_header});
+        http_info->next_func = dt_netascore_downloads_complete;
+        return async::UserFuncResult<NetaTaskState>::success(http_info);
     }
 
     if (c_str_equal(status, "failed"))
@@ -532,30 +463,30 @@ dt_netascore_job_status_complete(Arena* arena, String8 body)
         const char* error_msg = 0;
         if (obj["error"].get_c_str().get(error_msg) == simdjson::SUCCESS && error_msg != 0)
         {
-            return async::UserFuncResult::failure(arena, "NetAScore job %s failed: %s", job_id, error_msg);
+            return async::UserFuncResult<NetaTaskState>::failure(arena, "NetAScore job %s failed: %s", job_id, error_msg);
         }
-        return async::UserFuncResult::failure(arena, "NetAScore job %s failed", job_id);
+        return async::UserFuncResult<NetaTaskState>::failure(arena, "NetAScore job %s failed", job_id);
     }
 
-    return async::UserFuncResult::failure(arena, "Unexpected NetAScore job status: %s", status);
+    return async::UserFuncResult<NetaTaskState>::failure(arena, "Unexpected NetAScore job status: %s", status);
 }
 
-static async::UserFuncResult
-dt_netascore_job_create_complete(Arena* arena, String8 body)
+static async::UserFuncResult<NetaTaskState>
+dt_netascore_job_create_complete(Arena* arena, String8 body, NetaTaskState* task_state)
 {
     simdjson::dom::parser parser;
     simdjson::dom::element doc = {};
     simdjson::error_code err = parser.parse(body.str, body.size).get(doc);
     if (err)
     {
-        return async::UserFuncResult::failure(arena, "Failed to parse NetAScore job creation response");
+        return async::UserFuncResult<NetaTaskState>::failure(arena, "Failed to parse NetAScore job creation response");
     }
 
     simdjson::dom::object obj = {};
     err = doc.get_object().get(obj);
     if (err)
     {
-        return async::UserFuncResult::failure(arena, "Expected NetAScore job creation response to be an object");
+        return async::UserFuncResult<NetaTaskState>::failure(arena, "Expected NetAScore job creation response to be an object");
     }
 
     const char* status = 0;
@@ -564,20 +495,21 @@ dt_netascore_job_create_complete(Arena* arena, String8 body)
     simdjson::error_code err_job_id = obj["job_id"].get_c_str().get(job_id);
     if (err_status || err_job_id)
     {
-        return async::UserFuncResult::failure(arena, "NetAScore job creation response is missing status or job_id");
+        return async::UserFuncResult<NetaTaskState>::failure(arena, "NetAScore job creation response is missing status or job_id");
     }
 
     if (!c_str_equal(status, "queued") && !c_str_equal(status, "running"))
     {
-        return async::UserFuncResult::failure(arena, "Unexpected NetAScore job creation status: %s", status);
+        return async::UserFuncResult<NetaTaskState>::failure(arena, "Unexpected NetAScore job creation status: %s", status);
     }
 
     g_netascore_download_queue = {};
     g_netascore_download_queue.job_id = push_str8_copy(arena, str8_c_string(job_id));
 
     String8 status_api = push_str8f(arena, "%.*s%.*s", str8_varg(dt_mobilitylab_jobs_api_get()), str8_varg(g_netascore_download_queue.job_id));
-    async::HttpInfo* http_info = async::http_info_create_get(arena, status_api, async::ContentType::None, {dt_mobilitylab_api_key_header_get(arena)});
-    return async::UserFuncResult::success(http_info);
+    async::HttpInfo<NetaTaskState>* http_info = async::http_info_create_get<NetaTaskState>(arena, status_api, async::ContentType::None, {task_state->mobility_api_key_header});
+    http_info->next_func = dt_netascore_job_status_complete;
+    return async::UserFuncResult<NetaTaskState>::success(http_info);
 }
 
 static dt_Input
@@ -619,7 +551,7 @@ dt_interpret_input(int argc, char** argv)
 }
 
 g_internal void
-imgui_debug_window(cesium::TilesetRenderer* renderer, std::shared_ptr<async::AsyncCallCtx>& netascore_result, async::ThreadPool* thread_pool)
+imgui_debug_window(cesium::TilesetRenderer* renderer, std::shared_ptr<async::AsyncCallCtx<NetaTaskState>>& netascore_result, async::ThreadPool* thread_pool)
 {
     vulkan::AssetManager* asset_manager = vulkan::asset_manager_get();
     const ImGuiViewport* viewport = ImGui::GetMainViewport();
@@ -696,16 +628,18 @@ dt_main_loop(void* ptr)
     StringJoin sep = {.pre = S("bbox_str="), .sep = S(","), .post = S("")};
     String8 bbox_str = str8_list_join(scratch.arena, &bbox_param_list, &sep);
 
+    neta::neta_init();
+
     g_netascore_download_queue = {};
+    std::shared_ptr<async::AsyncCallCtx<NetaTaskState>> netascore_task_ctx = async::async_ctx_create<NetaTaskState>();
     String8 netascore_api = push_str8f(scratch.arena, "%.*snetascore", str8_varg(dt_mobilitylab_jobs_api_get()));
-    std::shared_ptr<async::AsyncCallCtx> netascore_results;
-    async::AsyncResult async_result =
-        async::async_http_call_create(&netascore_results, ctx->thread_pool, HTTP_Method_Post, netascore_api, async::ContentType::FormUrlEncoded,
-                                      {push_str8f(scratch.arena, "target_srid=%d", target_srid), bbox_str, S("output_format=GeoJSON")}, {dt_mobilitylab_api_key_header_get(ctx->arena_main_permanent)},
-                                      {dt_netascore_job_create_complete, dt_netascore_job_status_complete, dt_netascore_downloads_complete}, 3);
+    netascore_task_ctx->task_state.mobility_api_key_header = dt_mobilitylab_api_key_header_get(netascore_task_ctx->arena, neta::g_neta_state->mobility_api_key);
+    async::AsyncResult async_result = async::async_http_task_create(netascore_task_ctx, ctx->thread_pool, HTTP_Method_Post, netascore_api, async::ContentType::FormUrlEncoded,
+                                                                    {push_str8f(scratch.arena, "target_srid=%d", target_srid), bbox_str, S("output_format=GeoJSON")},
+                                                                    {netascore_task_ctx->task_state.mobility_api_key_header}, dt_netascore_job_create_complete, 5, 1);
     if ((bool)async_result)
     {
-        exit_with_error("Error at %s:%d with error code: %d and curl error code: %d", netascore_results->err_file, netascore_results->err_line, async_result, netascore_results->curl_error);
+        exit_with_error("Error at %s:%d with error code: %d and curl error code: %d", netascore_task_ctx->err_file, netascore_task_ctx->err_line, async_result, netascore_task_ctx->curl_error);
     }
 
     const char* tileset_url = (const char*)input->tileset_url.str;
@@ -782,9 +716,8 @@ dt_main_loop(void* ptr)
         render::new_frame();
         ImGui::NewFrame();
 
-        // bool async_netascore_result = dt_async_http_check_result(netascore_results, S("NetAScore download"));
         // #if BUILD_DEBUG
-        imgui_debug_window(ctx->cesium_tileset, netascore_results, ctx->thread_pool);
+        imgui_debug_window(ctx->cesium_tileset, netascore_task_ctx, ctx->thread_pool);
         // #endif
 
         Vec2U32 framebuffer_dim = {(U32)io_ctx->framebuffer_width, (U32)io_ctx->framebuffer_height};

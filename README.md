@@ -40,7 +40,7 @@ apt update && apt install -y libvulkan1
 
 ## 1. Create build directory
 
-The CMakePreset.json file in the project root consists of 3 different build configurations for both x64 windows and x64 linux. 
+The CMakePresets.json file in the project root consists of 3 different build configurations for both x64 windows and x64 linux. 
 
 The combinations are:
 * debug-windows
@@ -54,7 +54,7 @@ An example of setting up the build for the debug preset for windows is shown bel
 - cmake --preset=debug-windows
 
 For each of the 3 different build configurations, a build directory is created (build/<configuration_name>).
-The different build configuration are: debug, release and profile.
+The different build configurations are: debug, release and profile.
 
 To build for debug on either windows or linux, run the following commands:
 - cmake --build build/debug

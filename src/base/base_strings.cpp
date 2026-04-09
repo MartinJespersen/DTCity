@@ -2718,6 +2718,108 @@ hash_u128_from_str8(String8 str)
     return result;
 }
 
+// ~mgj: Environment
+g_internal String8List
+env_vars_from_env_file(Arena* arena)
+{
+    ScratchScope scratch = ScratchScope(&arena, 1);
+
+    String8 current_path = os_current_path_get(scratch.arena);
+    String8List current_path_parts = str8_split_path(scratch.arena, current_path);
+
+    // create an array of path-part lists for each parent path candidate
+    Buffer<String8List> candidate_parent_paths = BufferAlloc<String8List>(scratch.arena, current_path_parts.node_count);
+
+    // find .env file by iterating parents
+    String8Node* current_path_part = current_path_parts.first;
+    for (U32 i = 0; i < current_path_parts.node_count && current_path_part; ++i, current_path_part = current_path_part->next)
+    {
+        for (U32 j = i; j < current_path_parts.node_count; ++j)
+        {
+            String8List* candidate_path_list = candidate_parent_paths[j];
+            String8Node* path_part_node = PushStruct(scratch.arena, String8Node);
+            path_part_node->string = push_str8_copy(scratch.arena, current_path_part->string);
+            str8_list_push_node(candidate_path_list, path_part_node);
+        }
+    }
+
+    String8 env_file_path = {};
+    // add .env to each candidate path and keep the first file that exists
+    StringJoin join_params = {.sep = os_path_delimiter()};
+    for (U32 i = 0; i < candidate_parent_paths.size; ++i)
+    {
+        String8List candidate_path = candidate_parent_paths.data[candidate_parent_paths.size - i - 1];
+        str8_list_push(scratch.arena, &candidate_path, S(".env"));
+        String8 candidate_env_file_path = str8_list_join(scratch.arena, &candidate_path, &join_params);
+        if (os_file_path_exists(candidate_env_file_path))
+        {
+            env_file_path = candidate_env_file_path;
+            break;
+        }
+    }
+
+    String8List env_lines = {};
+    // if a .env file exists, split it into lines and trim each line
+    if (env_file_path.size > 0)
+    {
+        OS_Handle file_handle = os_file_open(OS_AccessFlag_ShareRead, env_file_path);
+        defer(os_file_close(file_handle));
+
+        String8 env_file_data = os_data_from_file_path(scratch.arena, env_file_path);
+        if (env_file_data.size > 0)
+        {
+            env_lines = str8_split_by_string_chars(scratch.arena, env_file_data, str8_lit("\n"), 0);
+            for (String8Node* line_node = env_lines.first; line_node; line_node = line_node->next)
+            {
+                if (str8_ends_with_lit(line_node->string, "\r", 0)) // windows line ending check and chop
+                {
+                    line_node->string = str8_chop(line_node->string, 1);
+                }
+                line_node->string = str8_whitespace_skip(line_node->string);
+            }
+        }
+    }
+
+    // copy string environment to output arena
+    String8List env_output = str8_list_copy(arena, &env_lines);
+    return env_output;
+}
+
+g_internal B32
+env_vars_value_get(Arena* arena, const String8 key, String8* out_value, bool env_file_included)
+{
+    ScratchScope scratch = ScratchScope(&arena, 1);
+    OS_ProcessInfo* proc_info = os_get_process_info();
+
+    String8List env_strs = {};
+    if (env_file_included)
+    {
+        // create list from path string
+        String8List env_file_strs = env_vars_from_env_file(arena);
+
+        // join .env string list with process environment list
+        str8_list_concat_in_place(&env_strs, &env_file_strs);
+    }
+
+    // add process environment to str list
+    str8_list_concat_in_place(&env_strs, &proc_info->environment);
+
+    // find the value for the key provided
+    B32 error = true;
+    *out_value = {};
+    for (String8Node* n = env_strs.first; n; n = n->next)
+    {
+        if (str8_match(n->string, key, MatchFlag_RightSideSloppy))
+        {
+            U64 split_pos = str8_substr_find(n->string, str8_lit("="), 0, 0);
+            String8 right = split_pos < n->string.size ? str8_skip(n->string, split_pos + 1) : Str8Zero();
+            *out_value = push_str8_copy(arena, right);
+            error = false;
+        }
+    }
+
+    return error;
+}
 // ~mgj: Errors
 static void
 exit_with_error(const char* msg, ...)

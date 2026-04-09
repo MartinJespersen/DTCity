@@ -133,8 +133,7 @@ bswap_u16(U16 x)
 static U32
 bswap_u32(U32 x)
 {
-    U32 result = (((x & 0xFF000000) >> 24) | ((x & 0x00FF0000) >> 8) | ((x & 0x0000FF00) << 8) |
-                  ((x & 0x000000FF) << 24));
+    U32 result = (((x & 0xFF000000) >> 24) | ((x & 0x00FF0000) >> 8) | ((x & 0x0000FF00) << 8) | ((x & 0x000000FF) << 24));
     return result;
 }
 
@@ -143,10 +142,8 @@ bswap_u64(U64 x)
 {
     // TODO(nick): naive bswap, replace with something that is faster like an
     // intrinsic
-    U64 result = (((x & 0xFF00000000000000ULL) >> 56) | ((x & 0x00FF000000000000ULL) >> 40) |
-                  ((x & 0x0000FF0000000000ULL) >> 24) | ((x & 0x000000FF00000000ULL) >> 8) |
-                  ((x & 0x00000000FF000000ULL) << 8) | ((x & 0x0000000000FF0000ULL) << 24) |
-                  ((x & 0x000000000000FF00ULL) << 40) | ((x & 0x00000000000000FFULL) << 56));
+    U64 result = (((x & 0xFF00000000000000ULL) >> 56) | ((x & 0x00FF000000000000ULL) >> 40) | ((x & 0x0000FF0000000000ULL) >> 24) | ((x & 0x000000FF00000000ULL) >> 8) |
+                  ((x & 0x00000000FF000000ULL) << 8) | ((x & 0x0000000000FF0000ULL) << 24) | ((x & 0x000000000000FF00ULL) << 40) | ((x & 0x00000000000000FFULL) << 56));
     return result;
 }
 
@@ -394,8 +391,7 @@ txt_rng_union(TxtRng a, TxtRng b)
 static B32
 txt_rng_contains(TxtRng r, TxtPt pt)
 {
-    B32 result =
-        ((txt_pt_less_than(r.min, pt) || txt_pt_match(r.min, pt)) && txt_pt_less_than(pt, r.max));
+    B32 result = ((txt_pt_less_than(r.min, pt) || txt_pt_match(r.min, pt)) && txt_pt_less_than(pt, r.max));
     return result;
 }
 

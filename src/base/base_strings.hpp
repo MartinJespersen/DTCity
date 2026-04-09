@@ -569,6 +569,12 @@ F32FromStr8(String8 string, F32* out);
 static U128
 hash_u128_from_str8(String8 str);
 
+// ~mgj: environment
+static String8List
+env_vars_from_env_file(Arena* arena);
+g_internal B32
+env_vars_value_get(Arena* arena, const String8 key, String8* out_value, bool env_file_included);
+
 // ~mgj: Errors
 static void
 exit_with_error(const char* msg, ...);

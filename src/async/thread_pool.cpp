@@ -73,7 +73,7 @@ thread_pool_register_current_thread(ThreadPool* thread_pool)
 }
 
 static B32
-thread_pool_push(ThreadPool* thread_pool, WorkerTask* item, S64 microseconds_delay)
+thread_pool_push(ThreadPool* thread_pool, WorkerTask* item, S64 us_delay)
 {
     AssertAlways(thread_pool);
     AssertAlways(item);
@@ -90,11 +90,11 @@ thread_pool_push(ThreadPool* thread_pool, WorkerTask* item, S64 microseconds_del
 
     thread_pool->pending_task_count.fetch_add(1);
 
-    if (microseconds_delay > 0)
+    if (us_delay > 0)
     {
         U64 now = os_now_microseconds();
         S64 now_s64 = now > (U64)max_S64 ? max_S64 : (S64)now;
-        S64 cutoff_time = now_s64 + microseconds_delay;
+        S64 cutoff_time = now_s64 + us_delay;
         async::async_min_heap_push(thread_pool->timer_min_heap, *item, cutoff_time);
     }
     else
