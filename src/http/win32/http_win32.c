@@ -23,7 +23,7 @@ static HTTP_Response
 HTTP_Request(Arena* arena, String8 host, String8 path, String8 body, HTTP_RequestParams* params)
 {
     Temp scratch = ScratchBegin(&arena, 1);
-    String8 url = PushStr8Cat(scratch.arena, host, path);
+    String8 url = str8_concat(scratch.arena, host, path);
     B32 good = 1;
     U32 code = 0;
     String8List response_data_strings = {0};

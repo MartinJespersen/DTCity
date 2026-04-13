@@ -359,12 +359,19 @@ dt_main_loop(void* ptr)
     str8_list_push(scratch.arena, &bbox_param_list, push_str8f(scratch.arena, "%.6f", bbox.max.x));
     StringJoin sep = {.pre = S("bbox_str="), .sep = S(","), .post = S("")};
     String8 bbox_str = str8_list_join(scratch.arena, &bbox_param_list, &sep);
+    Rng2F64 utm_coords = dt_utm_from_wgs84(bbox);
 
     neta::neta_init();
 
+    // 1. read file to check if it is there
+    // 2. make file name input to async_http_task_create
+    //
     std::shared_ptr<async::AsyncCallCtx<neta::NetaTaskState>> netascore_task_ctx = async::async_ctx_create<neta::NetaTaskState>();
-    String8 netascore_api = push_str8f(scratch.arena, "%.*snetascore", str8_varg(neta::mobilitylab_jobs_api_get()));
+    String8 netascore_api = push_str8f(netascore_task_ctx->arena, "%.*snetascore", str8_varg(neta::mobilitylab_jobs_api_get()));
+    String8 neta_file_path = str8_path_from_str8_list(netascore_task_ctx->arena, {ctx->data_subdirs.data[dt_DataDirType::Cache], S("netascore_edges.geojson")});
     netascore_task_ctx->task_state.mobility_api_key_header = neta::mobilitylab_api_key_header_get(netascore_task_ctx->arena, neta::g_neta_state->mobility_api_key);
+    netascore_task_ctx->task_state.utm_coords = utm_coords;
+    netascore_task_ctx->task_state.file_path = neta_file_path;
     async::AsyncResult async_result = async::async_http_task_create(netascore_task_ctx, ctx->thread_pool, HTTP_Method_Post, netascore_api, async::ContentType::FormUrlEncoded,
                                                                     {push_str8f(scratch.arena, "target_srid=%d", target_srid), bbox_str, S("output_format=GeoJSON")},
                                                                     {netascore_task_ctx->task_state.mobility_api_key_header}, neta::netascore_job_create_complete, 5, 1);
@@ -376,7 +383,6 @@ dt_main_loop(void* ptr)
     const char* tileset_url = (const char*)input->tileset_url.str;
     F64 tileset_lon = input->btm_right_corner_wgs84.x;
     F64 tileset_lat = input->btm_right_corner_wgs84.y;
-    Rng2F64 utm_coords = dt_utm_from_wgs84(bbox);
     printf("UTM Coordinates: %f %f %f %f\n", utm_coords.min.x, utm_coords.min.y, utm_coords.max.x, utm_coords.max.y);
     render::render_ctx_create(ctx->data_subdirs.data[dt_DataDirType::Shaders], io_ctx, ctx->thread_pool);
     vulkan::Context* vk_ctx = vulkan::ctx_get();

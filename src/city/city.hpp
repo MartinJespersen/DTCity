@@ -276,15 +276,6 @@ EarClipping(Arena* arena, Buffer<Vec2F64> node_buffer);
 // ~mgj: HTTP and caching
 g_internal String8
 city_http_call_wrapper(Arena* arena, String8 query_str, HTTP_RequestParams* params);
-g_internal Result<String8>
-cache_read(Arena* arena, String8 cache_file, String8 cache_meta_file, String8 hash_input);
-g_internal void
-cache_write(String8 cache_file, String8 cache_meta_file, String8 content, String8 hash_content);
-
-g_internal U64
-hash_u64_from_str8(String8 str);
-g_internal B32
-cache_needs_update(String8 data_file_str, String8 cache_meta_file_path);
 g_internal String8
 str8_from_bbox(Arena* arena, Rng2F64 bbox);
 g_internal render::Model3DPipelineDataList

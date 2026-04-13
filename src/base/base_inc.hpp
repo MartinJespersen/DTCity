@@ -18,5 +18,6 @@
 #include "base_strings.hpp"
 #include "base_thread_context.h"
 #include "container.hpp"
+#include "cache.hpp"
 
 #endif // BASE_INC_H
