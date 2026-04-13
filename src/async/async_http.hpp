@@ -613,7 +613,7 @@ template <typename T> struct AsyncCallCtxDeleter
 
 template <typename T>
 g_internal std::shared_ptr<AsyncCallCtx<T>>
-async_ctx_create()
+async_task_create()
 {
     Arena* arena = arena_alloc();
     AsyncCallCtx<T>* async_ctx = PushStruct(arena, AsyncCallCtx<T>);

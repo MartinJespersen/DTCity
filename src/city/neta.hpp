@@ -76,6 +76,9 @@ mobilitylab_jobs_api_get();
 g_internal String8
 mobilitylab_api_key_header_get(Arena* arena, String8 api_key);
 
+g_internal async::AsyncResult
+netascore_async_task_create(String8 cache_path, Vec2F64 btm_right_corner_wgs84);
+
 // private fields
 g_internal Result<Buffer<Edge>>
 _edge_in_osm_area(Arena* arena, simdjson::ondemand::document& doc, Rng2F64 utm_bbox);

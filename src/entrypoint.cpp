@@ -126,93 +126,6 @@ dt_imgui_setup(vulkan::Context* vk_ctx, io::IO* io_ctx)
     ImGui_ImplVulkan_Init(&init_info);
 }
 
-g_internal Vec2F64
-dt_wgs84_from_utm(Vec2F64 utm_point, const char* utm_zone)
-{
-    F64 lon;
-    F64 lat;
-    UTM::UTMtoLL(utm_point.y, utm_point.x, utm_zone, lat, lon);
-
-    return {lon, lat};
-}
-
-g_internal Vec2F64
-dt_default_bbox_size_meters_get()
-{
-    return vec_2f64(5000.0, 5000.0);
-}
-
-g_internal Vec2F64
-dt_default_tileset_wgs84_get()
-{
-    return vec_2f64(10.291206, 56.253108);
-}
-
-g_internal Vec2F64
-dt_utm_point_from_wgs84(Vec2F64 wgs84_point, char out_utm_zone[10])
-{
-    F64 northing = 0;
-    F64 easting = 0;
-    UTM::LLtoUTM(wgs84_point.y, wgs84_point.x, northing, easting, out_utm_zone);
-    return vec_2f64(easting, northing);
-}
-
-g_internal Rng2F64
-dt_wgs84_bbox_from_btm_right_corner(Vec2F64 btm_right_corner_wgs84, Vec2F64 bbox_size_meters)
-{
-    char utm_zone[10] = {};
-    Vec2F64 btm_right_utm = dt_utm_point_from_wgs84(btm_right_corner_wgs84, utm_zone);
-
-    Rng2F64 utm_bbox = {};
-    utm_bbox.min.x = btm_right_utm.x;
-    utm_bbox.min.y = btm_right_utm.y;
-    utm_bbox.max.x = btm_right_utm.x + bbox_size_meters.x;
-    utm_bbox.max.y = btm_right_utm.y + bbox_size_meters.y;
-
-    Rng2F64 wgs84_bbox = {};
-    wgs84_bbox.min = dt_wgs84_from_utm(utm_bbox.min, utm_zone);
-    wgs84_bbox.max = dt_wgs84_from_utm(utm_bbox.max, utm_zone);
-    return wgs84_bbox;
-}
-
-g_internal Rng2F64
-dt_utm_from_wgs84(Rng2F64 wgs84_bbox)
-{
-    F64 south_west_easting;
-    F64 south_west_northing;
-    F64 north_east_easting;
-    F64 north_east_northing;
-    char utm_zone[10] = {};
-    UTM::LLtoUTM(wgs84_bbox.min.y, wgs84_bbox.min.x, south_west_northing, south_west_easting, utm_zone);
-    UTM::LLtoUTM(wgs84_bbox.max.y, wgs84_bbox.max.x, north_east_northing, north_east_easting, utm_zone);
-
-    Rng2F64 utm_bbox = {};
-    utm_bbox.min = vec_2f64(south_west_easting, south_west_northing);
-    utm_bbox.max = vec_2f64(north_east_easting, north_east_northing);
-    return utm_bbox;
-}
-
-static S32
-dt_target_srid_from_wgs84(Vec2F64 wgs84_point)
-{
-    char utm_zone[10] = {};
-    dt_utm_point_from_wgs84(wgs84_point, utm_zone);
-
-    S32 zone_number = 0;
-    for (char* c = utm_zone; *c >= '0' && *c <= '9'; c += 1)
-    {
-        zone_number = zone_number * 10 + (*c - '0');
-    }
-
-    if (zone_number < 1 || zone_number > 60)
-    {
-        return 0;
-    }
-
-    S32 srid_base = wgs84_point.y >= 0 ? 32600 : 32700;
-    return srid_base + zone_number;
-}
-
 template <typename T>
 static bool
 dt_async_http_check_result(std::shared_ptr<async::AsyncCallCtx<T>>& async_call, String8 name)
@@ -259,7 +172,7 @@ dt_interpret_input(int argc, char** argv)
     {
         printf("UTM coordinates provided: %s %s z=%s\n", argv[2], argv[3], argv[4]);
         input.tileset_url = str8_c_string(argv[1]);
-        input.btm_right_corner_wgs84 = dt_wgs84_from_utm({f64_from_str8(str8_c_string(argv[2])), f64_from_str8(str8_c_string(argv[3]))}, argv[4]);
+        input.btm_right_corner_wgs84 = util::wgs84_from_utm({f64_from_str8(str8_c_string(argv[2])), f64_from_str8(str8_c_string(argv[3]))}, argv[4]);
     }
     else if (argc == 1)
     {
@@ -272,7 +185,7 @@ dt_interpret_input(int argc, char** argv)
 #endif
 
         input.tileset_url = tileset_url;
-        input.btm_right_corner_wgs84 = dt_default_tileset_wgs84_get();
+        input.btm_right_corner_wgs84 = util::default_tileset_wgs84_get();
     }
     else
     {
@@ -344,46 +257,12 @@ dt_main_loop(void* ptr)
     os_set_thread_name(str8_c_string("Entrypoint thread"));
     AssertAlways(async::thread_pool_register_current_thread(ctx->thread_pool));
 
-    Vec2F64 bbox_size_meters = dt_default_bbox_size_meters_get();
-    Rng2F64 bbox = dt_wgs84_bbox_from_btm_right_corner(input->btm_right_corner_wgs84, bbox_size_meters);
-    S32 target_srid = dt_target_srid_from_wgs84(input->btm_right_corner_wgs84);
-    if (target_srid == 0)
-    {
-        exit_with_error("Failed to derive a valid UTM SRID from the provided WGS84 coordinates");
-    }
-
-    String8List bbox_param_list = {};
-    str8_list_push(scratch.arena, &bbox_param_list, push_str8f(scratch.arena, "%.6f", bbox.min.y));
-    str8_list_push(scratch.arena, &bbox_param_list, push_str8f(scratch.arena, "%.6f", bbox.min.x));
-    str8_list_push(scratch.arena, &bbox_param_list, push_str8f(scratch.arena, "%.6f", bbox.max.y));
-    str8_list_push(scratch.arena, &bbox_param_list, push_str8f(scratch.arena, "%.6f", bbox.max.x));
-    StringJoin sep = {.pre = S("bbox_str="), .sep = S(","), .post = S("")};
-    String8 bbox_str = str8_list_join(scratch.arena, &bbox_param_list, &sep);
-    Rng2F64 utm_coords = dt_utm_from_wgs84(bbox);
-
     neta::neta_init();
 
-    // 1. read file to check if it is there
-    // 2. make file name input to async_http_task_create
-    //
-    std::shared_ptr<async::AsyncCallCtx<neta::NetaTaskState>> netascore_task_ctx = async::async_ctx_create<neta::NetaTaskState>();
-    String8 netascore_api = push_str8f(netascore_task_ctx->arena, "%.*snetascore", str8_varg(neta::mobilitylab_jobs_api_get()));
-    String8 neta_file_path = str8_path_from_str8_list(netascore_task_ctx->arena, {ctx->data_subdirs.data[dt_DataDirType::Cache], S("netascore_edges.geojson")});
-    netascore_task_ctx->task_state.mobility_api_key_header = neta::mobilitylab_api_key_header_get(netascore_task_ctx->arena, neta::g_neta_state->mobility_api_key);
-    netascore_task_ctx->task_state.utm_coords = utm_coords;
-    netascore_task_ctx->task_state.file_path = neta_file_path;
-    async::AsyncResult async_result = async::async_http_task_create(netascore_task_ctx, ctx->thread_pool, HTTP_Method_Post, netascore_api, async::ContentType::FormUrlEncoded,
-                                                                    {push_str8f(scratch.arena, "target_srid=%d", target_srid), bbox_str, S("output_format=GeoJSON")},
-                                                                    {netascore_task_ctx->task_state.mobility_api_key_header}, neta::netascore_job_create_complete, 5, 1);
-    if ((bool)async_result)
-    {
-        exit_with_error("Error at %s:%d with error code: %d and curl error code: %d", netascore_task_ctx->err_file, netascore_task_ctx->err_line, async_result, netascore_task_ctx->curl_error);
-    }
-
+    neta::netascore_async_task_create(ctx->data_subdirs.data[dt_DataDirType::Cache], input->btm_right_corner_wgs84);
     const char* tileset_url = (const char*)input->tileset_url.str;
     F64 tileset_lon = input->btm_right_corner_wgs84.x;
     F64 tileset_lat = input->btm_right_corner_wgs84.y;
-    printf("UTM Coordinates: %f %f %f %f\n", utm_coords.min.x, utm_coords.min.y, utm_coords.max.x, utm_coords.max.y);
     render::render_ctx_create(ctx->data_subdirs.data[dt_DataDirType::Shaders], io_ctx, ctx->thread_pool);
     vulkan::Context* vk_ctx = vulkan::ctx_get();
     dt_imgui_setup(vk_ctx, io_ctx);
@@ -415,7 +294,7 @@ dt_main_loop(void* ptr)
         exit_with_error("Expected NetAScore download at %.*s", str8_varg(netascore_file_path));
     }
 
-    ctx->road = city::road_create(texture_dir, cache_dir, ctx->data_dir, bbox, utm_coords, &sampler_info);
+    ctx->road = city::road_create(cache_dir, bbox);
 
     CesiumGeospatial::Cartographic origin_cartographic(glm::radians(tileset_lon), glm::radians(tileset_lat), 0);
     CesiumGeospatial::LocalHorizontalCoordinateSystem* local_coord = new CesiumGeospatial::LocalHorizontalCoordinateSystem(
@@ -454,7 +333,7 @@ dt_main_loop(void* ptr)
         ImGui::NewFrame();
 
         // #if BUILD_DEBUG
-        imgui_debug_window(ctx->cesium_tileset, netascore_task_ctx, ctx->thread_pool);
+        imgui_debug_window(ctx->cesium_tileset, task_state, ctx->thread_pool);
         // #endif
 
         Vec2U32 framebuffer_dim = {(U32)io_ctx->framebuffer_width, (U32)io_ctx->framebuffer_height};

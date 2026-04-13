@@ -70,18 +70,5 @@ dt_imgui_setup(vulkan::Context* vk_ctx, io::IO* io_ctx);
 static void
 dt_main_loop(void* ptr);
 
-g_internal Vec2F64
-dt_default_bbox_size_meters_get();
-g_internal Vec2F64
-dt_default_tileset_wgs84_get();
-g_internal Rng2F64
-dt_wgs84_bbox_from_btm_right_corner(Vec2F64 btm_right_corner_wgs84, Vec2F64 bbox_size_meters);
-g_internal Vec2F64
-dt_utm_point_from_wgs84(Vec2F64 wgs84_point, char out_utm_zone[10]);
-g_internal Rng2F64
-dt_utm_from_wgs84(Rng2F64 wgs84_bbox);
-g_internal Vec2F64
-dt_wgs84_from_utm(Vec2F64 utm_point, const char* utm_zone);
-
 static Buffer<String8>
 dt_dir_create(Arena* arena, String8 parent, dt_DataDirPair* dirs, U32 count);

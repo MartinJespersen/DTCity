@@ -665,7 +665,6 @@ buildings_create(String8 cache_path, String8 texture_path, Rng2F64 bbox)
 
         String8 query_str = PushStr8F(scratch.arena, (char*)query.str, bbox.min.y, bbox.min.x, bbox.max.y, bbox.max.x);
         String8 cache_data_file = str8_path_from_str8_list(scratch.arena, {cache_path, buildings->cache_file_name});
-        String8 cache_meta_file = str8_concat(scratch.arena, cache_data_file, S(".meta"));
 
         String8 input_str = str8_from_bbox(scratch.arena, bbox);
 
@@ -1260,7 +1259,7 @@ str8_from_bbox(Arena* arena, Rng2F64 bbox)
 }
 
 g_internal Road*
-road_create(String8 texture_path, String8 cache_path, String8 data_dir, Rng2F64 bbox, Rng2F64 utm_coords, render::SamplerInfo* sampler_info)
+road_create(String8 cache_path, Rng2F64 bbox)
 {
     prof_scope_marker;
 

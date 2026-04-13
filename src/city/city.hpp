@@ -285,7 +285,7 @@ land_destroy(render::Model3DPipelineDataList list);
 g_internal render::SamplerInfo
 sampler_from_cgltf_sampler(gltfw_Sampler sampler);
 g_internal Road*
-road_create(String8 texture_path, String8 cache_path, String8 data_dir, Rng2F64 bbox, Rng2F64 utm_coords, render::SamplerInfo* sampler_info);
+road_create(String8 cache_path, Rng2F64 bbox);
 g_internal void
 road_vertex_buffer_switch(Road* road, RoadOverlayOption overlay_option);
 g_internal EdgeStructure

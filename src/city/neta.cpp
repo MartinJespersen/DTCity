@@ -360,4 +360,51 @@ netascore_job_create_complete(Arena* arena, String8 body, NetaTaskState* task_st
     return async::UserFuncResult<NetaTaskState>::success(http_info);
 }
 
+g_internal std::shared_ptr<async::AsyncCallCtx<neta::NetaTaskState>>
+neta_task_state_create(String8 file, Rng2F64 utm_coords)
+{
+    std::shared_ptr<async::AsyncCallCtx<neta::NetaTaskState>> netascore_task_ctx = async::async_task_create<neta::NetaTaskState>();
+    netascore_task_ctx->task_state.mobility_api_key_header = neta::mobilitylab_api_key_header_get(netascore_task_ctx->arena, neta::g_neta_state->mobility_api_key);
+    netascore_task_ctx->task_state.utm_coords = utm_coords;
+    netascore_task_ctx->task_state.file_path = push_str8_copy(netascore_task_ctx->arena, file);
+
+    return netascore_task_ctx;
+}
+
+g_internal async::AsyncResult
+netascore_async_task_create(String8 cache_path, Vec2F64 btm_right_corner_wgs84)
+{
+    Context* ctx = dt_ctx_get();
+    ScratchScope scratch = ScratchScope(0, 0);
+
+    Vec2F64 bbox_size_meters = util::default_bbox_size_meters_get();
+    Rng2F64 bbox = util::wgs84_bbox_from_btm_right_corner(btm_right_corner_wgs84, bbox_size_meters);
+    S32 target_srid = util::target_srid_from_wgs84(btm_right_corner_wgs84);
+    if (target_srid == 0)
+    {
+        exit_with_error("Failed to derive a valid UTM SRID from the provided WGS84 coordinates");
+    }
+
+    String8List bbox_param_list = {};
+    str8_list_push(scratch.arena, &bbox_param_list, push_str8f(scratch.arena, "%.6f", bbox.min.y));
+    str8_list_push(scratch.arena, &bbox_param_list, push_str8f(scratch.arena, "%.6f", bbox.min.x));
+    str8_list_push(scratch.arena, &bbox_param_list, push_str8f(scratch.arena, "%.6f", bbox.max.y));
+    str8_list_push(scratch.arena, &bbox_param_list, push_str8f(scratch.arena, "%.6f", bbox.max.x));
+    StringJoin sep = {.pre = S("bbox_str="), .sep = S(","), .post = S("")};
+    String8 bbox_str = str8_list_join(scratch.arena, &bbox_param_list, &sep);
+    Rng2F64 utm_coords = util::utm_from_wgs84(bbox);
+    String8 neta_file_path = str8_path_from_str8_list(scratch.arena, {cache_path, S("netascore_edges.geojson")});
+
+    Result<String8> netascore_result = cache_read(g_neta_state->arena, neta_file_path, bbox_str);
+    async::AsyncResult async_result = {};
+    if (netascore_result.err)
+    {
+        std::shared_ptr<async::AsyncCallCtx<neta::NetaTaskState>> task_state = neta::neta_task_state_create(neta_file_path, utm_coords);
+        String8 netascore_api = push_str8f(scratch.arena, "%.*snetascore", str8_varg(neta::mobilitylab_jobs_api_get()));
+        async_result = async::async_http_task_create(task_state, ctx->thread_pool, HTTP_Method_Post, netascore_api, async::ContentType::FormUrlEncoded,
+                                                     {push_str8f(scratch.arena, "target_srid=%d", target_srid), bbox_str, S("output_format=GeoJSON")}, {task_state->task_state.mobility_api_key_header},
+                                                     neta::netascore_job_create_complete, 5, 1);
+    }
+    return async_result;
+}
 } // namespace neta
