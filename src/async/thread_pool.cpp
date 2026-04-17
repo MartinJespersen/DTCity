@@ -1,6 +1,18 @@
 namespace async
 {
 
+static B32
+_thread_pool_is_worker_thread(ThreadPool* thread_pool)
+{
+    return t_thread_pool == thread_pool && t_cur_thread_id != max_U32;
+}
+
+static B32
+_thread_pool_is_main_thread(ThreadPool* thread_pool)
+{
+    return t_thread_pool == thread_pool && t_cur_thread_id == max_U32;
+}
+
 static U64
 _thread_pool_next_deadline(ThreadPool* thread_pool)
 {
@@ -43,7 +55,7 @@ _thread_pool_try_get_work(ThreadPool* thread_pool, WorkerTask* item)
 static void
 _thread_pool_wake_workers(ThreadPool* thread_pool, B32 wake_all)
 {
-    OS_MutexScope(thread_pool->work_mutex)
+    os_mutex_scope(thread_pool->work_mutex)
     {
         thread_pool->work_generation.fetch_add(1);
         if (wake_all)
@@ -113,6 +125,71 @@ thread_pool_has_pending_work(ThreadPool* thread_pool)
     return thread_pool->pending_task_count.load() > 0 || thread_pool->in_flight_count.load() > 0;
 }
 
+static B32
+thread_pool_main_thread_queue_push(ThreadPool* thread_pool, WorkerTask* item)
+{
+    AssertAlways(thread_pool);
+    AssertAlways(item);
+    AssertAlways(thread_pool_register_current_thread(thread_pool));
+    AssertAlways(_thread_pool_is_worker_thread(thread_pool));
+
+    os_mutex_take(thread_pool->main_thread_queue_mutex);
+    for (;;)
+    {
+        if (thread_pool->kill_switch)
+        {
+            os_mutex_drop(thread_pool->main_thread_queue_mutex);
+            return false;
+        }
+
+        if (queue_try_push(thread_pool->main_thread_queue, item))
+        {
+            os_condition_variable_broadcast(thread_pool->main_thread_queue_cv);
+            os_mutex_drop(thread_pool->main_thread_queue_mutex);
+            return true;
+        }
+
+        os_condition_variable_wait(thread_pool->main_thread_queue_cv, thread_pool->main_thread_queue_mutex, max_U64);
+    }
+}
+
+static B32
+thread_pool_main_thread_queue_try_pull(ThreadPool* thread_pool, WorkerTask* item)
+{
+    AssertAlways(thread_pool);
+    AssertAlways(item);
+    AssertAlways(thread_pool_register_current_thread(thread_pool));
+    AssertAlways(_thread_pool_is_main_thread(thread_pool));
+
+    os_mutex_take(thread_pool->main_thread_queue_mutex);
+    B32 has_item = queue_try_read(thread_pool->main_thread_queue, item);
+    if (has_item)
+    {
+        os_condition_variable_broadcast(thread_pool->main_thread_queue_cv);
+    }
+    os_mutex_drop(thread_pool->main_thread_queue_mutex);
+
+    return has_item;
+}
+
+static void
+thread_pool_main_thread_queue_drain(ThreadPool* thread_pool)
+{
+    AssertAlways(thread_pool);
+    AssertAlways(thread_pool_register_current_thread(thread_pool));
+    AssertAlways(_thread_pool_is_main_thread(thread_pool));
+
+    ThreadInfo thread_info = {};
+    thread_info.thread_pool = thread_pool;
+    thread_info.thread_id = max_U32;
+
+    WorkerTask item = {};
+    while (thread_pool_main_thread_queue_try_pull(thread_pool, &item))
+    {
+        item.worker_func(thread_info, item.data);
+    }
+}
+
 static void
 thread_worker(void* data)
 {
@@ -120,6 +197,8 @@ thread_worker(void* data)
     ThreadInput* input = (ThreadInput*)data;
     ThreadPool* thread_pool = input->thread_pool;
     U32 thread_id = input->thread_id;
+    OS_Handle work_mutex = thread_pool->work_mutex;
+    OS_Handle work_cv = thread_pool->work_cv;
 
     os_set_thread_name(PushStr8F(scratch.arena, "ThreadWorker: %zu", thread_id));
     ThreadInfo thread_info = {};
@@ -146,12 +225,12 @@ thread_worker(void* data)
         }
 
         U64 next_deadline = _thread_pool_next_deadline(thread_pool);
-        OS_MutexTake(thread_pool->work_mutex);
+        os_mutex_take(work_mutex);
         if (!thread_pool->kill_switch && work_generation == thread_pool->work_generation.load(std::memory_order_acquire))
         {
-            os_condition_variable_wait(thread_pool->work_cv, thread_pool->work_mutex, next_deadline);
+            os_condition_variable_wait(work_cv, work_mutex, next_deadline);
         }
-        OS_MutexDrop(thread_pool->work_mutex);
+        os_mutex_drop(work_mutex);
     }
 
     t_cur_thread_id = max_U32;
@@ -159,7 +238,7 @@ thread_worker(void* data)
 }
 
 static ThreadPool*
-worker_threads_create(Arena* arena, U32 thread_count, U32 mpmc_queue_size)
+thread_pool_create(Arena* arena, U32 thread_count, U32 mpmc_queue_size, U32 main_thread_queue_size)
 {
     ThreadPool* thread_info = PushStruct(arena, ThreadPool);
     thread_info->thread_handles = BufferAlloc<OS_Handle>(arena, thread_count);
@@ -172,6 +251,9 @@ worker_threads_create(Arena* arena, U32 thread_count, U32 mpmc_queue_size)
     thread_info->mpmc_queue = queue_alloc<WorkerTask>(arena, mpmc_queue_size);
     thread_info->work_mutex = OS_MutexAlloc();
     thread_info->work_cv = os_condition_variable_alloc();
+    thread_info->main_thread_queue = queue_alloc<WorkerTask>(arena, main_thread_queue_size);
+    thread_info->main_thread_queue_mutex = OS_MutexAlloc();
+    thread_info->main_thread_queue_cv = os_condition_variable_alloc();
 
     for (U32 i = 0; i < thread_count; i++)
     {
@@ -185,17 +267,21 @@ worker_threads_create(Arena* arena, U32 thread_count, U32 mpmc_queue_size)
 }
 
 static void
-worker_threads_destroy(ThreadPool* thread_info)
+thread_pool_destroy(ThreadPool* thread_info)
 {
     thread_info->kill_switch = 1;
     _thread_pool_wake_workers(thread_info, true);
+    os_condition_variable_broadcast(thread_info->main_thread_queue_cv);
 
     for (U32 i = 0; i < thread_info->thread_handles.size; i++)
     {
-        OS_ThreadJoin(thread_info->thread_handles.data[i], max_U32);
+        AssertAlways(OS_ThreadJoin(thread_info->thread_handles.data[i], max_U64));
     }
 
     queue_release(thread_info->mpmc_queue);
+    queue_release(thread_info->main_thread_queue);
+    os_condition_variable_release(thread_info->main_thread_queue_cv);
+    OS_MutexRelease(thread_info->main_thread_queue_mutex);
     os_condition_variable_release(thread_info->work_cv);
     OS_MutexRelease(thread_info->work_mutex);
     async::async_heap_release(thread_info->timer_min_heap);

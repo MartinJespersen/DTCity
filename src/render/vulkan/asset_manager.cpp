@@ -606,25 +606,8 @@ asset_manager_create(VkPhysicalDevice physical_device, VkDevice device, VkInstan
 }
 
 static void
-asset_manager_destroy(AssetManager* asset_manager)
+asset_manager_live_resources_destroy(AssetManager* asset_manager)
 {
-    // 1. Drain all pending work while workers are still running normally.
-    //    Workers finish current items and push to cmd_queue, which the drain
-    //    loop submits to the GPU and waits for completion.
-    asset_manager_cmd_list_destroy(asset_manager->cmd_wait_list);
-
-    // 3. Clean up remaining resources (workers are stopped, no mutex needed)
-    asset_manager_cmd_queue_destroy(asset_manager->cmd_queue);
-    deletion_queue_empty_all();
-
-#if BUILD_DEBUG
-    {
-        char* vma_json = nullptr;
-        vmaBuildStatsString(asset_manager->allocator, &vma_json, VK_TRUE);
-        DEBUG_LOG("VMA live allocations at shutdown:\n%s", vma_json);
-        vmaFreeStatsString(asset_manager->allocator, vma_json);
-    }
-#else
     for (render::AssetItem<BufferHandle>* item = asset_manager->buffer_list.first; item != NULL; item = item->next)
     {
         DEBUG_LOG("Buffer Not Destroyed: gen_id=%llu", (U64)item->gen_id);
@@ -644,7 +627,32 @@ asset_manager_destroy(AssetManager* asset_manager)
         DEBUG_LOG("DescriptorSet Not Destroyed: gen_id=%llu", (U64)item->gen_id);
         vkDestroyDescriptorSetLayout(asset_manager->device, item->item.desc_layout, nullptr);
     }
+}
+
+static void
+asset_manager_destroy(AssetManager* asset_manager)
+{
+    asset_manager->shutting_down = true;
+
+    // 1. Drain all pending work while workers are still running normally.
+    //    Workers finish current items and push to cmd_queue, which the drain
+    //    loop submits to the GPU and waits for completion.
+    asset_manager_cmd_list_destroy(asset_manager->cmd_wait_list);
+
+    // 3. Clean up remaining resources (workers are stopped, no mutex needed)
+    asset_manager_cmd_queue_destroy(asset_manager->cmd_queue);
+    deletion_queue_empty_all();
+
+#if BUILD_DEBUG
+    {
+        char* vma_json = nullptr;
+        vmaBuildStatsString(asset_manager->allocator, &vma_json, VK_TRUE);
+        DEBUG_LOG("VMA live allocations at shutdown:\n%s", vma_json);
+        vmaFreeStatsString(asset_manager->allocator, vma_json);
+    }
 #endif
+
+    asset_manager_live_resources_destroy(asset_manager);
 
     for (U32 i = 0; i < asset_manager->threaded_cmd_pools.size; i++)
     {
@@ -658,6 +666,7 @@ asset_manager_destroy(AssetManager* asset_manager)
     OS_MutexRelease(asset_manager->arena_mutex);
 
     vmaDestroyAllocator(asset_manager->allocator);
+    g_asset_manager = 0;
 
     arena_release(asset_manager->arena);
 }
@@ -775,7 +784,7 @@ asset_manager_item_create(render::AssetItemList<T>* list, render::AssetItemList<
     }
     else
     {
-        OS_MutexScope(asset_manager->arena_mutex)
+        os_mutex_scope(asset_manager->arena_mutex)
         {
             asset_item = PushStruct(arena, render::AssetItem<T>);
         }
@@ -802,7 +811,7 @@ asset_manager_cmd_done_check()
         if (result == VK_SUCCESS)
         {
             render::ThreadInput* thread_input = cmd_queue_item->thread_input;
-            OS_MutexScope(asset_manager->threaded_cmd_pools.data[cmd_queue_item->thread_id].mutex)
+            os_mutex_scope(asset_manager->threaded_cmd_pools.data[cmd_queue_item->thread_id].mutex)
             {
                 vkFreeCommandBuffers(asset_manager->device, asset_manager->threaded_cmd_pools.data[cmd_queue_item->thread_id].cmd_pool, 1, (VkCommandBuffer*)&thread_input->cmd_buffer);
             }
@@ -835,7 +844,7 @@ begin_command(VkDevice device, AssetManagerCommandPool* threaded_cmd_pool)
     allocInfo.commandBufferCount = 1;
 
     VkCommandBuffer commandBuffer;
-    OS_MutexScope(threaded_cmd_pool->mutex)
+    os_mutex_scope(threaded_cmd_pool->mutex)
     {
         VK_CHECK_RESULT(vkAllocateCommandBuffers(device, &allocInfo, &commandBuffer));
     }
@@ -872,7 +881,7 @@ asset_manager_cmd_queue_destroy(AssetManagerCmdQueue* cmd_queue)
 static void
 asset_manager_cmd_queue_enqueue(AssetManagerCmdQueue* cmd_queue, CmdQueueItem item)
 {
-    OS_MutexScope(cmd_queue->mutex)
+    os_mutex_scope(cmd_queue->mutex)
     {
         CmdQueueItem* item_copy = 0;
         if (cmd_queue->free_list)
@@ -896,7 +905,7 @@ static B32
 asset_manager_cmd_queue_try_dequeue(AssetManagerCmdQueue* cmd_queue, CmdQueueItem* item)
 {
     B32 has_item = false;
-    OS_MutexScope(cmd_queue->mutex)
+    os_mutex_scope(cmd_queue->mutex)
     {
         CmdQueueItem* item_node = cmd_queue->first;
         if (item_node)
@@ -916,7 +925,7 @@ static B32
 asset_manager_cmd_queue_has_pending_work(AssetManagerCmdQueue* cmd_queue)
 {
     B32 has_pending_work = false;
-    OS_MutexScope(cmd_queue->mutex)
+    os_mutex_scope(cmd_queue->mutex)
     {
         has_pending_work = cmd_queue->count > 0;
     }
@@ -1018,7 +1027,10 @@ asset_manager_texture_free(render::Handle handle)
     {
         OS_MutexScopeW(asset_manager->texture_mutex)
         {
-            descriptor_set_clear_bindless_texture(item->item.descriptor_set_idx);
+            if (asset_manager->shutting_down == false)
+            {
+                descriptor_set_clear_bindless_texture(item->item.descriptor_set_idx);
+            }
             descriptor_index_free(&asset_manager->descriptor_index_allocator, item->item.descriptor_set_idx);
             texture_destroy(&item->item);
             asset_manager_item_free(item, &asset_manager->texture_list, &asset_manager->texture_free_list);

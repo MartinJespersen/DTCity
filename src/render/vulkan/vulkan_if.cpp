@@ -166,11 +166,6 @@ render_ctx_destroy()
 
     vkDeviceWaitIdle(vk_ctx->device);
 
-    if (vk_ctx->enable_validation_layers)
-    {
-        vulkan::destroy_debug_utils_messenger_ext(vk_ctx->instance, vk_ctx->debug_messenger, nullptr);
-    }
-
     vulkan::camera_cleanup(vk_ctx);
     vulkan::profile_buffers_destroy(vk_ctx);
 
@@ -187,7 +182,6 @@ render_ctx_destroy()
     // destroy null texture
     vulkan::image_resource_destroy(vk_ctx->null_image_resource);
     vkDestroySampler(vk_ctx->device, vk_ctx->null_sampler, nullptr);
-
     vulkan::asset_manager_destroy(vk_ctx->asset_manager);
     vkDestroyCommandPool(vk_ctx->device, vk_ctx->command_pool, nullptr);
 
@@ -211,7 +205,12 @@ render_ctx_destroy()
     vkDestroyDescriptorSetLayout(vk_ctx->device, vk_ctx->car_height_calculate_descriptor_set_layout, nullptr);
 
     vkDestroyDevice(vk_ctx->device, nullptr);
+    if (vk_ctx->enable_validation_layers)
+    {
+        vulkan::destroy_debug_utils_messenger_ext(vk_ctx->instance, vk_ctx->debug_messenger, nullptr);
+    }
     vkDestroyInstance(vk_ctx->instance, nullptr);
+    vulkan::ctx_release();
 
     arena_release(vk_ctx->draw_frame_arena);
 

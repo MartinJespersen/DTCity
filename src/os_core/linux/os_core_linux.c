@@ -899,7 +899,7 @@ OS_MutexRelease(OS_Handle mutex)
 }
 
 static void
-OS_MutexTake(OS_Handle mutex)
+os_mutex_take(OS_Handle mutex)
 {
     if (OS_HandleMatch(mutex, OS_HandleIsZero()))
     {

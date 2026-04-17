@@ -44,7 +44,8 @@ ctx_create(io::IO* io_ctx)
     // ~mgj: -2 as 2 are used for Main thread and IO thread
     U32 thread_count = OS_GetSystemInfo()->logical_processor_count - 2;
     U32 queue_size = 100; // TODO: should be increased
-    ctx->thread_pool = async::worker_threads_create(app_arena, thread_count, queue_size);
+    U32 main_thread_queue_size = 10;
+    ctx->thread_pool = async::thread_pool_create(app_arena, thread_count, queue_size, main_thread_queue_size);
 
     return ctx;
 }
@@ -52,9 +53,9 @@ ctx_create(io::IO* io_ctx)
 static void
 ctx_destroy(Context* ctx)
 {
-    async::worker_threads_destroy(ctx->thread_pool);
-    arena_release(ctx->arena_main_permanent);
+    async::thread_pool_destroy(ctx->thread_pool);
     async::async_arena_release(ctx->async_arena);
+    arena_release(ctx->arena_main_permanent);
 }
 
 int

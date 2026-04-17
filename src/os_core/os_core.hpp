@@ -344,9 +344,9 @@ OS_MutexAlloc();
 static void
 OS_MutexRelease(OS_Handle mutex);
 static void
-OS_MutexTake(OS_Handle mutex);
+os_mutex_take(OS_Handle mutex);
 static void
-OS_MutexDrop(OS_Handle mutex);
+os_mutex_drop(OS_Handle mutex);
 
 //- rjf: reader/writer mutexes
 static OS_Handle
@@ -394,7 +394,7 @@ static void
 OS_SemaphoreDrop(OS_Handle semaphore);
 
 //- rjf: scope macros
-#define OS_MutexScope(mutex) DeferLoop(OS_MutexTake(mutex), OS_MutexDrop(mutex))
+#define os_mutex_scope(mutex) DeferLoop(os_mutex_take(mutex), os_mutex_drop(mutex))
 #define OS_MutexScopeR(mutex) DeferLoop(OS_RWMutexTakeR(mutex), OS_RWMutexDropR(mutex))
 #define OS_MutexScopeW(mutex) DeferLoop(OS_RWMutexTakeW(mutex), OS_RWMutexDropW(mutex))
 #define OS_MutexScopeRWPromote(mutex) DeferLoop((OS_RWMutexDropR(mutex), OS_RWMutexTakeW(mutex)), (OS_RWMutexDropW(mutex), OS_RWMutexTakeR(mutex)))

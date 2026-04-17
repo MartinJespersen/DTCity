@@ -19,12 +19,10 @@
 
 # features
 * Get NetAScore from HTTP API if possible.
-  * retry the whole task instead of call single function
   * refactor to separate source file
-  * move the netascore http call function to neta layer
-    * move memory handling to neta layer as well
   * make the netascore results cacheable
-  * Is web socket viable solution for this?
+  * Memory handling with shared pointer might not be the way to go
+  * (maybe) specify function to run after async http task
 * Use the OSM data for showing data about buildings
 * 3D geometry
   * Improve tile queue to avoid too many glitches

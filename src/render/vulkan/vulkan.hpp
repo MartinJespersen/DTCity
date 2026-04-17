@@ -11,12 +11,6 @@ struct CameraUniformBuffer
     glm::vec2 viewport_dim;
 };
 
-struct RoadPushConstants
-{
-    F32 road_height;
-    F32 texture_scale;
-};
-
 struct Pipeline
 {
     VkPipeline pipeline;
@@ -254,6 +248,8 @@ camera_descriptor_set_create(Context* vk_ctx);
 // ~mgj: Vulkan Lifetime
 static void
 ctx_set(Context* vk_ctx);
+static void
+ctx_release();
 g_internal Context*
 ctx_get();
 

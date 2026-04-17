@@ -2,8 +2,10 @@
 
 namespace async
 {
-template <typename T> struct Heap;
-template <typename T> struct Queue;
+template <typename T>
+struct Heap;
+template <typename T>
+struct Queue;
 struct ThreadPool;
 struct ThreadInfo;
 typedef void (*WorkerFunc)(ThreadInfo, void*);
@@ -27,9 +29,10 @@ struct ThreadInput
 struct ThreadPool
 {
     B32 kill_switch;
-    U32 thread_count;
 
+    // worker thread queues
     // Workers read immediate tasks from the shared queue and delayed tasks from the timer heap.
+    U32 thread_count;
     std::atomic<U64> work_generation;
     std::atomic<U32> in_flight_count;
     std::atomic<U32> pending_task_count;
@@ -38,6 +41,11 @@ struct ThreadPool
     Queue<WorkerTask>* mpmc_queue;
     OS_Handle work_mutex;
     OS_Handle work_cv;
+
+    // main thread queue: main thread pulls and worker thread push to this queue
+    Queue<WorkerTask>* main_thread_queue;
+    OS_Handle main_thread_queue_mutex;
+    OS_Handle main_thread_queue_cv;
 };
 
 // ~mgj: Globals /////////////////////////////
@@ -60,8 +68,15 @@ thread_pool_has_pending_work(ThreadPool* thread_pool);
 static void
 thread_worker(void* data);
 static ThreadPool*
-worker_threads_create(Arena* arena, U32 thread_count, U32 mpmc_queue_size);
+thread_pool_create(Arena* arena, U32 thread_count, U32 mpmc_queue_size, U32 main_thread_queue_size);
 static void
-worker_threads_destroy(ThreadPool* thread_info);
+thread_pool_destroy(ThreadPool* thread_info);
 
+// main thread queue functions
+static B32
+thread_pool_main_thread_queue_push(ThreadPool* thread_pool, WorkerTask* item);
+static B32
+thread_pool_main_thread_queue_try_pull(ThreadPool* thread_pool, WorkerTask* item);
+static void
+thread_pool_main_thread_queue_drain(ThreadPool* thread_pool);
 } // namespace async

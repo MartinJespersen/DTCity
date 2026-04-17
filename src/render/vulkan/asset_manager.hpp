@@ -132,7 +132,8 @@ struct AssetManagerCmdQueue
     U32 count;
 };
 
-template <typename T> struct AssetList
+template <typename T>
+struct AssetList
 {
     Arena* arena;
     render::AssetItemList<T> list;
@@ -202,6 +203,7 @@ struct AssetManager
     U64 deletion_queue_idx;
     PendingDeletion* deletion_queue_free_list;
     U32 deletion_queue_free_list_count;
+    B32 shutting_down;
 
     // ~mgj: Arena mutex - protects concurrent PushStruct calls across different asset types
     OS_Handle arena_mutex;

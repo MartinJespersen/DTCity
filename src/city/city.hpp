@@ -5,7 +5,8 @@
 namespace city
 {
 
-typedef S64 EdgeId;
+struct Buildings;
+
 enum RoadSegmentCornerCoord
 {
     RoadSegmentCornerCoord_TopLeft,
@@ -43,7 +44,7 @@ struct RoadInfo
 
 struct alignas(8) RoadSegmentCorners
 {
-    EdgeId edge_id;
+    osm::EdgeId edge_id;
     Vec2F32 corners[RoadSegmentCornerCoord_Count];
     RoadInfo road_info;
 };
@@ -131,52 +132,36 @@ struct RoadBuildResult
     BvhResult bvh_result;
 };
 
-struct RoadEdge
-{
-    RoadEdge* prev;
-    RoadEdge* next;
-    S64 id;
-    S64 node_id_from;
-    S64 node_id_to;
-    S64 way_id;
-};
-
-struct EdgeStructure
-{
-    Buffer<RoadEdge> edges;
-    Map<EdgeId, RoadEdge*> edge_map;
-};
-
 struct Road
 {
     Arena* arena;
 
     /////////////////////////////
-    String8 openapi_data_file_name;
     // raw data OpenAPI data
     F32 road_height;
     F32 default_road_width;
-    F32 texture_scale;
-    EdgeStructure edge_structure;
-    Map<EdgeId, RoadInfo>* road_info_map;
+    glm::dmat4 ecef_to_local;
+    Map<osm::EdgeId, RoadInfo>* road_info_map;
+
     RoadBuildResult road_build_result;
 
     ////////////////////////////////
     // Graphics API
+
     render::Handle zero_colormap_handle;
     render::Handle colormap_handle;
+    render::SamplerInfo colormap_sampler;
     U32 current_handle_idx;
     bool new_vertex_handle_loading;
     RoadOverlayOption overlay_option_cur;
-    render::Handle vertex_buffer_handle;
-    render::Handle index_buffer_handle;
+    // render::Handle vertex_buffer_handle;
+    // render::Handle index_buffer_handle;
+    render::Handle segment_buffer_handle;
+    render::Handle segment_node_buffer_handle;
+    render::Handle segment_handle;
     /////////////////////////
-};
 
-struct AdjacentNodeLL
-{
-    AdjacentNodeLL* next;
-    osm::Node* node;
+    std::atomic<B32> data_ready;
 };
 
 struct RoadCrossSection
@@ -219,6 +204,7 @@ struct CarSim
     render::Handle index_handle;
 
     String8 texture_path;
+    std::atomic<B32> cars_created;
 };
 
 struct BuildingRenderInfo
@@ -247,20 +233,10 @@ struct Buildings
 g_internal void
 road_destroy(Road* road);
 g_internal city::RoadBuildResult
-road_segment_build(Arena* arena, Buffer<city::RoadEdge> edge_buffer, F32 default_road_width, F32 road_height, glm::dmat4& ecef_to_local, Map<EdgeId, RoadInfo>* road_info_map);
+road_segment_build(Arena* arena, Buffer<osm::RoadEdge> edge_buffer, F32 default_road_width, F32 road_height, glm::dmat4& ecef_to_local, Map<osm::EdgeId, RoadInfo>* road_info_map);
 
 g_internal void
 quad_to_buffer_add(RoadSegmentCorners* road_segment, Buffer<render::Vertex3DBlend> buffer, Buffer<U32> indices, U64 edge_id, F32 road_height, U32* cur_vertex_idx, U32* cur_index_idx);
-g_internal void
-RoadIntersectionPointsFind(Road* road, RoadSegment* in_out_segment, osm::Way* current_road_way, osm::Network* node_utm_structure);
-// ~mgj: Cars
-g_internal CarSim*
-car_sim_create(String8 asset_path, String8 texture_path, U32 car_count);
-g_internal void
-car_sim_destroy(CarSim* car_sim);
-g_internal Buffer<render::Model3DInstance>
-car_sim_update(Arena* arena, CarSim* car, F64 time_delta, glm::dmat4& ecef_to_local);
-
 // ~mgj: Buildings
 g_internal Buildings*
 buildings_create(String8 cache_path, String8 texture_path, Rng2F64 bbox);
@@ -272,29 +248,29 @@ g_internal void
 buildings_buffers_create(Arena* arena, F32 road_height, glm::dmat4& ecef_to_local, BuildingRenderInfo* out_render_info);
 g_internal Buffer<U32>
 EarClipping(Arena* arena, Buffer<Vec2F64> node_buffer);
-
+// ~mgj: Cars
+g_internal CarSim*
+car_sim_create();
+g_internal void
+cars_create(CarSim* car_sim, String8 asset_path, String8 texture_path, U32 car_count);
+g_internal void
+car_sim_destroy(CarSim* car_sim);
+g_internal Buffer<render::Model3DInstance>
+car_sim_update(Arena* arena, CarSim* car, F64 time_delta, glm::dmat4& ecef_to_local);
 // ~mgj: HTTP and caching
 g_internal String8
 city_http_call_wrapper(Arena* arena, String8 query_str, HTTP_RequestParams* params);
 g_internal String8
 str8_from_bbox(Arena* arena, Rng2F64 bbox);
-g_internal render::Model3DPipelineDataList
-land_create(Arena* arena, String8 glb_path);
-g_internal void
-land_destroy(render::Model3DPipelineDataList list);
 g_internal render::SamplerInfo
 sampler_from_cgltf_sampler(gltfw_Sampler sampler);
 g_internal Road*
-road_create(String8 cache_path, Rng2F64 bbox);
-g_internal void
-road_vertex_buffer_switch(Road* road, RoadOverlayOption overlay_option);
-g_internal EdgeStructure
-road_edge_structure_create(Arena* arena);
-g_internal Map<EdgeId, RoadInfo>*
-road_info_from_edge_id(Arena* arena, Buffer<RoadEdge> road_edge_buf, Map<S64, neta::EdgeList>* neta_edge_map);
+road_create(glm::dmat4& ecef_to_local);
+g_internal Map<osm::EdgeId, RoadInfo>*
+road_info_from_edge_id(Arena* arena, Buffer<osm::RoadEdge> road_edge_buf, Map<S64, neta::EdgeList>* neta_edge_map);
 
 g_internal neta::Edge*
-edge_from_road_edge(RoadEdge* road_edge, Map<S64, neta::EdgeList>* edge_list_map);
+edge_from_road_edge(osm::RoadEdge* road_edge, Map<S64, neta::EdgeList>* edge_list_map);
 
 g_internal Buffer<render::Vertex3D>
 vertex_3d_from_gltfw_vertex(Arena* arena, Buffer<gltfw_Vertex3D> in_vertex_buffer);

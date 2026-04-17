@@ -11,8 +11,7 @@ AlwaysBreakAfterReturnType: All
 
 # Break before braces
 BreakBeforeBraces: Allman
-
-# BreakAfterTemplateDeclaration: true
+AlwaysBreakTemplateDeclarations: Yes
 
 IndentCaseLabels: true
 

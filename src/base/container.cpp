@@ -33,8 +33,7 @@ BufferItemRemove(Buffer<T>* in_out_buffer, U32 index)
 {
     Assert(index < in_out_buffer->size);
     U32 type_size = sizeof(T);
-    MemoryCopy(in_out_buffer->data + index, in_out_buffer->data + index + 1,
-               type_size * (in_out_buffer->size - index - 1));
+    MemoryCopy(in_out_buffer->data + index, in_out_buffer->data + index + 1, type_size * (in_out_buffer->size - index - 1));
     in_out_buffer->size--;
 }
 
@@ -290,7 +289,6 @@ map_insert(Map<K, V>* m, K key, V& value)
         }
     }
 
-    U64 i = 0;
     if (!chunk || chunk->count >= ArrayCount(chunk->v))
     {
         chunk = PushStruct(m->arena, KeyPair);
@@ -299,6 +297,7 @@ map_insert(Map<K, V>* m, K key, V& value)
     }
 
     chunk = chunk_list->last;
+    U64 i = chunk->count;
     chunk->v[i].key = key;
     chunk->v[i].value = value;
     chunk_list->total_count += 1;

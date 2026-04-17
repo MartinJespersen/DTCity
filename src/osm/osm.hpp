@@ -1,16 +1,16 @@
 #pragma once
 
+namespace neta
+{
+struct EdgeList;
+}
+
 namespace osm
 {
 
+typedef S64 EdgeId;
 typedef U64 NodeId;
 typedef S64 WayId;
-
-enum class Result : B32
-{
-    Success = 0,
-    NotFound = (1 << 0),
-};
 
 struct WgsNode
 {
@@ -97,6 +97,35 @@ struct EcefLocation
     Vec3F64 pos;
 };
 
+struct WgsLocation
+{
+    NodeId id;
+    F64 lat;
+    F64 lon;
+};
+
+struct OsmTaskState
+{
+    String8 file;
+    String8 bbox_str;
+    String8 body;
+};
+
+struct RoadEdge
+{
+    RoadEdge* prev;
+    RoadEdge* next;
+    S64 id;
+    S64 node_id_from;
+    S64 node_id_to;
+    S64 way_id;
+};
+
+struct EdgeStructure
+{
+    Buffer<RoadEdge> edges;
+    Map<EdgeId, RoadEdge*> edge_map;
+};
 EcefLocation
 ecef_location_create(U64 id, Vec3F64 pos)
 {
@@ -110,22 +139,38 @@ struct NodeList
     Node* last;
 };
 
-enum WayType
+#define WAYTYPE_OPTIONS                                                                                                                                                                                \
+    X(Building, "building")                                                                                                                                                                            \
+    X(Highway, "highway")
+
+enum class WayType : U32
 {
-    WayType_Road,
-    WayType_Building,
-    WayType_Count
+#define X(name, str) name,
+    WAYTYPE_OPTIONS
+#undef X
+        Count
+};
+
+read_only g_internal const char* g_waytype_osm_tag[] = {
+#define X(name, str) str,
+    WAYTYPE_OPTIONS
+#undef X
 };
 
 struct Network
 {
     Arena* arena;
-    Buffer<NodeList> utm_node_hashmap; // key is the node id
-    Map<NodeId, EcefLocation>* ecef_location_map;
 
-    Buffer<WayList> way_hashmap;         // view into way buffers
-    Buffer<Way> ways_arr[WayType_Count]; // buffer storage
-    Buffer<NodeId> node_id_arr[WayType_Count];
+    Buffer<NodeList> node_hashmap; // key is the node id
+    Map<NodeId, EcefLocation>* ecef_location_map;
+    Map<NodeId, WgsLocation>* wgs_location_map;
+
+    Buffer<WayList> way_hashmap;                    // view into way buffers
+    Buffer<Way> ways_arr[enum_idx(WayType::Count)]; // buffer storage
+    Buffer<NodeId> node_id_arr[enum_idx(WayType::Count)];
+    EdgeStructure edge_structure;
+    Map<S64, neta::EdgeList>* neta_edge_map;
+    std::atomic<B32> network_ready;
 };
 
 ///////////////////////
@@ -139,14 +184,18 @@ g_internal void
 structure_init(U64 node_hashmap_size, U64 way_hashmap_size);
 g_internal void
 structure_cleanup();
+g_internal async::AsyncHttpTaskCreateResult<OsmTaskState>
+async_structure_create(Rng2F64 bbox);
 g_internal void
-structure_add(Buffer<RoadNodeList> node_hashmap, String8 json, WayType key_type);
+edge_map_create(Arena* arena, String8 file_path, Rng2F64 bbox_wgs84);
 g_internal TagResult
 tag_find(Arena* arena, Buffer<Tag> tags, String8 tag_to_find);
 g_internal WayNode*
 way_find(WayId way_id);
 g_internal EcefLocation
 location_get(U64 node_id);
+g_internal WgsLocation
+wgs_location_get(U64 node_id);
 g_internal Node*
 node_get(U64 node_id);
 g_internal Node*
@@ -157,9 +206,12 @@ g_internal NodeId
 random_node_id_from_type_get(WayType type);
 
 // Privates
+g_internal std::shared_ptr<async::AsyncTaskState<OsmTaskState>>
+_osm_task_state_create(String8 file, String8 bbox_str);
+g_internal void
+_road_edge_structure_create();
 g_internal WgsNode*
-wgs_node_find(Buffer<RoadNodeList> node_hashmap, U64 node_id);
-
+_wgs_node_find(Buffer<RoadNodeList> node_hashmap, U64 node_id);
 g_internal B32
-node_hashmap_insert(U64 node_id, Way* way, Node** out);
+_node_hashmap_insert(U64 node_id, Way* way, Node** out);
 } // namespace osm

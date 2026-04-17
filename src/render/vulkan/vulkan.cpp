@@ -13,7 +13,13 @@ ctx_set(Context* vk_ctx)
     g_vk_ctx = vk_ctx;
 }
 
-inline static Context*
+static void
+ctx_release()
+{
+    g_vk_ctx = 0;
+}
+
+g_internal Context*
 ctx_get()
 {
     Assert(g_vk_ctx);

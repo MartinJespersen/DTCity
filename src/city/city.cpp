@@ -4,10 +4,13 @@ namespace city
 g_internal void
 road_destroy(Road* road)
 {
-    render::handle_destroy(road->vertex_buffer_handle);
-    render::handle_destroy(road->index_buffer_handle);
+    render::handle_destroy(road->road_build_result.vertex_buffer_handle);
+    render::handle_destroy(road->road_build_result.index_buffer_handle);
     render::handle_destroy(road->colormap_handle);
     render::handle_destroy(road->zero_colormap_handle);
+    render::handle_destroy_deferred(road->segment_buffer_handle);
+    render::handle_destroy_deferred(road->segment_node_buffer_handle);
+    render::handle_destroy_deferred(road->segment_handle);
 
     arena_release(road->arena);
 }
@@ -320,7 +323,7 @@ bvh_create(Arena* arena, Buffer<RoadSegmentCorners> road_segment_buffer, U32 lea
 }
 
 g_internal city::RoadBuildResult
-road_segment_build(Arena* arena, Buffer<city::RoadEdge> edge_buffer, F32 default_road_width, F32 road_height, glm::dmat4& ecef_to_local, Map<EdgeId, RoadInfo>* road_info_map)
+road_segment_build(Arena* arena, Buffer<osm::RoadEdge> edge_buffer, F32 default_road_width, F32 road_height, glm::dmat4& ecef_to_local, Map<osm::EdgeId, RoadInfo>* road_info_map)
 {
     prof_scope_marker;
     ScratchScope scratch = ScratchScope(0, 0);
@@ -333,7 +336,7 @@ road_segment_build(Arena* arena, Buffer<city::RoadEdge> edge_buffer, F32 default
     U32 cur_index_idx = 0;
     for (U32 i = 0; i < edge_buffer.size; i++)
     {
-        city::RoadEdge* edge = edge_buffer[i];
+        osm::RoadEdge* edge = edge_buffer[i];
 
         osm::EcefLocation start_node = osm::location_get(edge->node_id_from);
         osm::EcefLocation end_node = osm::location_get(edge->node_id_to);
@@ -345,7 +348,7 @@ road_segment_build(Arena* arena, Buffer<city::RoadEdge> edge_buffer, F32 default
         RoadSegment road_segment;
         road_segment_from_road_nodes(&road_segment, start_node, end_node, default_road_width);
 
-        RoadEdge* prev_edge = edge->prev;
+        osm::RoadEdge* prev_edge = edge->prev;
         if (prev_edge)
         {
             osm::EcefLocation start_node_prev = osm::location_get(prev_edge->node_id_from);
@@ -355,7 +358,7 @@ road_segment_build(Arena* arena, Buffer<city::RoadEdge> edge_buffer, F32 default
             road_segments_coalesce(&road_segment_prev, &road_segment, road_width);
         }
 
-        RoadEdge* next_edge = edge->next;
+        osm::RoadEdge* next_edge = edge->next;
         if (next_edge)
         {
             osm::EcefLocation start_node_next = osm::location_get(next_edge->node_id_from);
@@ -518,22 +521,28 @@ car_center_height_offset(Buffer<gltfw_Vertex3D> vertices)
 g_internal osm::EcefLocation
 random_ecef_road_node_get()
 {
-    osm::NodeId node_id = osm::random_node_id_from_type_get(osm::WayType_Road);
+    osm::NodeId node_id = osm::random_node_id_from_type_get(osm::WayType::Highway);
     Assert(node_id != 0);
     osm::EcefLocation node_loc = osm::location_get(node_id);
     return node_loc;
 }
 
 g_internal CarSim*
-car_sim_create(String8 asset_path, String8 texture_path, U32 car_count)
+car_sim_create()
+{
+    prof_scope_marker;
+    Arena* arena = arena_alloc();
+    CarSim* car_sim = PushStruct(arena, CarSim);
+    car_sim->arena = arena;
+    return car_sim;
+}
+
+g_internal void
+cars_create(CarSim* car_sim, String8 asset_path, String8 texture_path, U32 car_count)
 {
     prof_scope_marker;
     ScratchScope scratch = ScratchScope(0, 0);
-
-    Arena* arena = arena_alloc();
-
-    CarSim* car_sim = PushStruct(arena, CarSim);
-    car_sim->arena = arena;
+    Arena* arena = car_sim->arena;
 
     // parse gltf file
     String8 gltf_path = str8_path_from_str8_list(scratch.arena, {asset_path, S("cars/scene.gltf")});
@@ -566,8 +575,6 @@ car_sim_create(String8 asset_path, String8 texture_path, U32 car_count)
         Vec3F64 dir = sub_3f64(target_loc.pos, source_loc.pos);
         car->dir = normalize_3f64(dir);
     }
-
-    return car_sim;
 }
 
 g_internal void
@@ -642,6 +649,7 @@ g_internal Buildings*
 buildings_create(String8 cache_path, String8 texture_path, Rng2F64 bbox)
 {
     prof_scope_marker;
+
     ScratchScope scratch = ScratchScope(0, 0);
     Arena* arena = arena_alloc();
     Buildings* buildings = PushStruct(arena, Buildings);
@@ -693,7 +701,7 @@ buildings_create(String8 cache_path, String8 texture_path, Rng2F64 bbox)
             }
         }
 
-        osm::structure_add(json_result.road_nodes, http_data, osm::WayType_Building);
+        // osm::async_structure_create(json_result.road_nodes, http_data);
     }
 
     buildings->facade_texture_path = str8_path_from_str8_list(arena, {texture_path, S("brick_wall.ktx2")});
@@ -737,7 +745,7 @@ buildings_buffers_create(Arena* arena, F32 road_height, glm::dmat4& ecef_to_loca
     prof_scope_marker;
     osm::Network* osm_network = osm::g_network;
     ScratchScope scratch = ScratchScope(&arena, 1);
-    Buffer<osm::Way> ways = osm_network->ways_arr[osm::WayType_Building];
+    Buffer<osm::Way> ways = osm_network->ways_arr[enum_idx(osm::WayType::Building)];
     F32 building_height = 3;
 
     // ~mgj: Calculate vertex buffer size based on node count
@@ -1085,57 +1093,6 @@ EarClipping(Arena* arena, Buffer<Vec2F64> node_buffer)
     return out_vertex_index_buffer;
 }
 
-g_internal void
-land_destroy(render::Model3DPipelineDataList list)
-{
-    for (render::Model3DPipelineDataNode* data = list.first; data; data = data->next)
-    {
-        render::handle_destroy(data->handles.index_buffer_handle);
-        render::handle_destroy(data->handles.vertex_buffer_handle);
-        render::handle_destroy(data->handles.texture_handle);
-    }
-}
-
-g_internal render::Model3DPipelineDataList
-land_create(Arena* arena, String8 glb_path)
-{
-    ScratchScope scratch = ScratchScope(&arena, 1);
-
-    gltfw_Result glb_data = gltfw_glb_read(arena, glb_path);
-
-    // create render handles
-    Buffer<render::Handle> tex_handles = BufferAlloc<render::Handle>(scratch.arena, glb_data.textures.size);
-    {
-        for (U32 i = 0; i < glb_data.textures.size; ++i)
-        {
-            gltfw_Texture* texture = &glb_data.textures.data[i];
-            render::SamplerInfo sampler_info = city::sampler_from_cgltf_sampler(texture->sampler);
-            tex_handles.data[i] = render::texture_handle_create(&sampler_info);
-            render::texture_gpu_upload_sync(tex_handles.data[i], texture->tex_buf);
-        }
-    }
-
-    // create vertex and index buffers
-    render::Model3DPipelineDataList handles_list = {};
-    {
-        for (gltfw_Primitive* primitive = glb_data.primitives.first; primitive; primitive = primitive->next)
-        {
-            Buffer<render::Vertex3D> vertex_buffer = vertex_3d_from_gltfw_vertex(arena, primitive->vertices);
-            render::BufferInfo vertex_buffer_info = render::BufferInfo(vertex_buffer, render::BufferType_Vertex);
-            render::BufferInfo index_buffer = render::BufferInfo(primitive->indices, render::BufferType_Index);
-
-            render::Handle vertex_handle = render::buffer_load_async(&vertex_buffer_info);
-            render::Handle index_handle = render::buffer_load_async(&index_buffer);
-            render::Handle texture_handle = tex_handles.data[primitive->tex_idx];
-
-            render::Model3DPipelineDataNode* node = PushStruct(arena, render::Model3DPipelineDataNode);
-            node->handles = {.vertex_buffer_handle = vertex_handle, .index_buffer_handle = index_handle, .texture_handle = texture_handle, .index_count = primitive->indices.size, .index_offset = 0};
-            SLLQueuePush(handles_list.first, handles_list.last, node);
-        }
-    }
-    return handles_list;
-}
-
 g_internal render::SamplerInfo
 sampler_from_cgltf_sampler(gltfw_Sampler sampler)
 {
@@ -1259,137 +1216,40 @@ str8_from_bbox(Arena* arena, Rng2F64 bbox)
 }
 
 g_internal Road*
-road_create(String8 cache_path, Rng2F64 bbox)
+road_create(glm::dmat4& ecef_to_local)
 {
     prof_scope_marker;
 
     ScratchScope scratch = ScratchScope(0, 0);
     Arena* arena = arena_alloc();
-
     Road* road = PushStruct(arena, Road);
-
-    road->openapi_data_file_name = push_str8_copy(arena, S("openapi_node_ways_highway.json"));
+    road->ecef_to_local = ecef_to_local;
     road->arena = arena;
     road->road_height = 10.0f;
     road->default_road_width = 2.0f;
 
-    // TODO: make this an input and check for input conditions
-    String8 query = S(R"(data=
-        [out:json] [timeout:25];
-        (
-          way["highway"](%f, %f, %f, %f);
-        );
-        out body;
-        >;
-        out skel qt;
-    )");
-    HTTP_RequestParams params = {};
-    params.method = HTTP_Method_Post;
-    params.content_type = S("text/html");
-
-    String8 query_str = PushStr8F(scratch.arena, (char*)query.str, bbox.min.y, bbox.min.x, bbox.max.y, bbox.max.x);
-    String8 cache_data_file = str8_path_from_str8_list(scratch.arena, {cache_path, road->openapi_data_file_name});
-
-    String8 input_str = str8_from_bbox(scratch.arena, bbox);
-
-    Result<String8> cache_read_result = cache_read(scratch.arena, cache_data_file, input_str);
-    String8 http_data = cache_read_result.v;
-    if (cache_read_result.err)
-    {
-        http_data = city::city_http_call_wrapper(scratch.arena, query_str, &params);
-        cache_write(cache_data_file, http_data, input_str);
-    }
-    osm::RoadNodeParseResult json_result = wrapper::node_buffer_from_simd_json(scratch.arena, http_data, 100);
-
-    B8 error = true;
-    while (error && json_result.error)
-    {
-        ERROR_LOG("RoadCreate: Failed to create Road Data Structure\n Retrying...");
-        http_data = city::city_http_call_wrapper(scratch.arena, query_str, &params);
-        if (http_data.size)
-        {
-            json_result = wrapper::node_buffer_from_simd_json(scratch.arena, http_data, 100);
-            if (json_result.error == false)
-            {
-                cache_write(cache_data_file, http_data, input_str);
-                error = false;
-            }
-        }
-    }
-
-    Buffer<osm::RoadNodeList> node_hashmap = json_result.road_nodes;
-    osm::structure_add(node_hashmap, http_data, osm::WayType_Road);
-
-    road->edge_structure = city::road_edge_structure_create(road->arena);
-
-    road->road_info_map = city::road_info_from_edge_id(road->arena, road->edge_structure.edges, neta::g_neta_state->edge_map);
-
     constexpr U64 colormap_byte_size = 256ULL * 3 * sizeof(F32);
     U8* zero_arr = PushArray(road->arena, U8, colormap_byte_size);
 
-    render::SamplerInfo colormap_sampler = {
+    road->colormap_sampler = {
         .min_filter = render::Filter_Linear,
         .mag_filter = render::Filter_Linear,
         .mip_map_mode = render::MipMapMode_Linear,
         .address_mode_u = render::SamplerAddressMode_MirroredRepeat,
         .address_mode_v = render::SamplerAddressMode_ClampToEdge,
     };
-
-    road->colormap_handle = render::colormap_load_async(&colormap_sampler, g_colormap_inferno, colormap_byte_size);
-    road->zero_colormap_handle = render::colormap_load_async(&colormap_sampler, zero_arr, colormap_byte_size);
+    road->zero_colormap_handle = render::colormap_load_async(&road->colormap_sampler, zero_arr, colormap_byte_size);
 
     return road;
 }
 
-g_internal EdgeStructure
-road_edge_structure_create(Arena* arena)
+g_internal Map<osm::EdgeId, RoadInfo>*
+road_info_from_edge_id(Arena* arena, Buffer<osm::RoadEdge> road_edge_buf, Map<S64, neta::EdgeList>* neta_edge_map)
 {
     prof_scope_marker;
-    osm::Network* network = osm::g_network;
-    Buffer<osm::Way> way_buf = network->ways_arr[osm::WayType_Road];
+    Map<osm::EdgeId, RoadInfo>* road_info_map = map_create<osm::EdgeId, RoadInfo>(arena, 1024);
 
-    ChunkList<RoadEdge>* chunk_list = chunk_list_create<RoadEdge>(arena, 1024);
-    for (const osm::Way& way : way_buf)
-    {
-        RoadEdge* prev_edge = 0;
-        for (S32 node_idx = 1; node_idx < way.node_count; node_idx++)
-        {
-            U64 prev_node_id = way.node_ids[node_idx - 1];
-            U64 node_id = way.node_ids[node_idx];
-
-            RoadEdge* road_edge = chunk_list_get_next(arena, chunk_list);
-            road_edge->id = random_u64();
-            road_edge->way_id = way.id;
-            road_edge->node_id_from = prev_node_id;
-            road_edge->node_id_to = node_id;
-            road_edge->prev = prev_edge;
-
-            if (prev_edge)
-            {
-                prev_edge->next = road_edge;
-            }
-            prev_edge = road_edge;
-        }
-    }
-
-    Buffer<RoadEdge> road_edge_buf = buffer_from_chunk_list(arena, chunk_list);
-    Map<S64, RoadEdge*>* road_edge_map = map_create<S64, RoadEdge*>(arena, 1024);
-    for (RoadEdge* edge = road_edge_buf.begin(); edge < road_edge_buf.end(); edge++)
-    {
-        map_insert(road_edge_map, edge->id, edge);
-    }
-
-    EdgeStructure edge_structure = {.edges = road_edge_buf, .edge_map = *road_edge_map};
-    return edge_structure;
-}
-
-g_internal Map<EdgeId, RoadInfo>*
-road_info_from_edge_id(Arena* arena, Buffer<RoadEdge> road_edge_buf, Map<S64, neta::EdgeList>* neta_edge_map)
-{
-    prof_scope_marker;
-    Map<EdgeId, RoadInfo>* road_info_map = map_create<EdgeId, RoadInfo>(arena, 1024);
-
-    for (RoadEdge& edge : road_edge_buf)
+    for (osm::RoadEdge& edge : road_edge_buf)
     {
         neta::Edge* neta_edge = edge_from_road_edge(&edge, neta_edge_map);
         if (neta_edge)
@@ -1407,15 +1267,15 @@ road_info_from_edge_id(Arena* arena, Buffer<RoadEdge> road_edge_buf, Map<S64, ne
 }
 
 g_internal neta::Edge*
-edge_from_road_edge(RoadEdge* road_edge, Map<osm::WayId, neta::EdgeList>* edge_list_map)
+edge_from_road_edge(osm::RoadEdge* road_edge, Map<osm::WayId, neta::EdgeList>* edge_list_map)
 {
     S64 from_id = road_edge->node_id_from;
     S64 to_id = road_edge->node_id_to;
 
-    osm::EcefLocation from_node_loc = osm::location_get(from_id);
-    osm::EcefLocation to_node_loc = osm::location_get(to_id);
-    Vec2F64 from_node_coord = vec_2f64(from_node_loc.pos.x, from_node_loc.pos.y);
-    Vec2F64 to_node_coord = vec_2f64(to_node_loc.pos.x, to_node_loc.pos.y);
+    osm::WgsLocation from_node_loc = osm::wgs_location_get(from_id);
+    osm::WgsLocation to_node_loc = osm::wgs_location_get(to_id);
+    Vec2F64 from_node_coord = vec_2f64(from_node_loc.lon, from_node_loc.lat);
+    Vec2F64 to_node_coord = vec_2f64(to_node_loc.lon, to_node_loc.lat);
 
     S64 way_id = road_edge->way_id;
     neta::EdgeList* edge_list = map_get(edge_list_map, way_id);

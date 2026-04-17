@@ -982,4 +982,7 @@ u64_array_bsearch(U64* arr, U64 count, U64 value);
 #error compiler not supported
 #endif
 
+// type casts
+
+#define enum_idx(a) static_cast<U32>(a)
 #endif // BASE_CORE_H

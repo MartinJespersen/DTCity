@@ -14,8 +14,8 @@ async_arena_alloc()
 g_internal void
 async_arena_release(async::AsyncArena* async_arena)
 {
-    arena_release(async_arena->arena);
     OS_RWMutexRelease(async_arena->mutex);
+    arena_release(async_arena->arena);
 }
 
 g_internal void*
