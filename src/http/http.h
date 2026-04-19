@@ -152,27 +152,4 @@ struct HTTP_Response
 static HTTP_StatusKind
 HTTP_StatusKindFromCode(HTTP_StatusCode code);
 
-////////////////////////////////////////////////////////////////
-//~ rjf: Main Layer Initialization
-
-static void
-HTTP_Init();
-
-////////////////////////////////////////////////////////////////
-//~ rjf: Low-Level Request Functions
-
-static HTTP_Response
-HTTP_Request(Arena* arena, String8 host, String8 path, String8 body, HTTP_RequestParams* params);
-////////////////////////////////////////////////////////////////
-//~ rjf: High-Level Request Wrappers
-
-// #define HTTP_Get(arena, url, ...)                                                                  \
-//     HTTP_Request((arena), (url), Str8Zero(), .method = HTTP_Method_Get, __VA_ARGS__)
-// #define HTTP_Put(arena, url, body, ...)                                                            \
-//     HTTP_Request((arena), (url), (body), .method = HTTP_Method_Put, __VA_ARGS__)
-// #define HTTP_Post(arena, url, body, ...)                                                           \
-//     HTTP_Request((arena), (url), (body), .method = HTTP_Method_Post, __VA_ARGS__)
-// #define HTTP_Delete(arena, url, body, ...)                                                         \
-//     HTTP_Request((arena), (url), (body), .method = HTTP_Method_Delete, __VA_ARGS__)
-
 #endif // HTTP_H

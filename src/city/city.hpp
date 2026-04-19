@@ -259,8 +259,6 @@ g_internal Buffer<render::Model3DInstance>
 car_sim_update(Arena* arena, CarSim* car, F64 time_delta, glm::dmat4& ecef_to_local);
 // ~mgj: HTTP and caching
 g_internal String8
-city_http_call_wrapper(Arena* arena, String8 query_str, HTTP_RequestParams* params);
-g_internal String8
 str8_from_bbox(Arena* arena, Rng2F64 bbox);
 g_internal render::SamplerInfo
 sampler_from_cgltf_sampler(gltfw_Sampler sampler);

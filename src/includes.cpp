@@ -3,7 +3,6 @@
 #include "os_core/os_core_inc.cpp"
 
 #include "utility/utility_inc.cpp"
-#include "http/http_inc.cpp"
 #include "async/async_inc.cpp"
 #include "lib_wrappers/lib_wrappers_inc.cpp"
 #include "gltfw/gltfw.cpp"

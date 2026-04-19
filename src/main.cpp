@@ -4,8 +4,6 @@
 static Context*
 ctx_create(io::IO* io_ctx)
 {
-    HTTP_Init();
-
     ScratchScope scratch = ScratchScope(0, 0);
     //~mgj: app context setup
     Arena* app_arena = (Arena*)arena_alloc();

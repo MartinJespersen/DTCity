@@ -405,45 +405,6 @@ road_segment_build(Arena* arena, Buffer<osm::RoadEdge> edge_buffer, F32 default_
     return road_build_result;
 }
 
-g_internal String8
-city_http_call_wrapper(Arena* arena, String8 query_str, HTTP_RequestParams* params)
-{
-    prof_scope_marker;
-    DEBUG_LOG("DataFetch: Fetching data from overpass-api.de\n");
-    String8 host = S("http://overpass-api.de");
-    String8 path = S("/api/interpreter");
-
-    const U32 retry_count = 3;
-    S32 retries_left = retry_count;
-    B32 http_success = false;
-    U32 retry_time_interval_ms = 2000;
-    HTTP_Response response;
-    do
-    {
-        response = HTTP_Request(arena, host, path, query_str, params);
-
-        if (response.good && response.code == HTTP_StatusCode_OK)
-        {
-            http_success = true;
-            break;
-        }
-
-        INFO_LOG("DataFetch: Retrying...");
-        os_sleep_milliseconds(retry_time_interval_ms);
-        retries_left -= 1;
-    } while (retries_left >= 0);
-
-    if (http_success == false)
-    {
-        exit_with_error("DataFetch: http request did not succeed after %d retries\n"
-                        "Failed with error code: %d\n"
-                        "Error message: %s\n",
-                        retry_count, response.code, response.body.str);
-    }
-
-    return response.body;
-}
-
 g_internal Vec3F64
 height_dim_add(Vec2F64 pos, F64 height)
 {
@@ -680,7 +641,7 @@ buildings_create(String8 cache_path, String8 texture_path, Rng2F64 bbox)
         String8 http_data = cache_read_result.v;
         if (cache_read_result.err)
         {
-            http_data = city_http_call_wrapper(scratch.arena, query_str, &params);
+            // http_data = city_http_call_wrapper(scratch.arena, query_str, &params);
             cache_write(cache_data_file, http_data, input_str);
         }
         osm::RoadNodeParseResult json_result = wrapper::node_buffer_from_simd_json(scratch.arena, http_data, 100);
@@ -689,7 +650,7 @@ buildings_create(String8 cache_path, String8 texture_path, Rng2F64 bbox)
         while (error && json_result.error)
         {
             ERROR_LOG("BuildingsCreate: Failed to parse OSM node data from json file\n");
-            http_data = city_http_call_wrapper(scratch.arena, query_str, &params);
+            // http_data = city_http_call_wrapper(scratch.arena, query_str, &params);
             if (http_data.size)
             {
                 json_result = wrapper::node_buffer_from_simd_json(scratch.arena, http_data, 100);

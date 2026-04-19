@@ -9,7 +9,6 @@
 * Use vulkan push descriptor and buffer device address instead of descriptor sets
 * buildings need to be rendered included in compute pass as well
 * simplify render interface (a little too verbose at the moment)
-* Reconsider async loading for none cesium objects.
 * Remove the printf logging and find way to log the queue messages
 * make descriptor_pool and functionallity part of asset_manager.
 * Make TilesetRenderer into global variable
@@ -20,9 +19,7 @@
 # features
 * Get NetAScore from HTTP API if possible.
   * refactor to separate source file
-  * make the netascore results cacheable
   * Memory handling with shared pointer might not be the way to go
-  * (maybe) specify function to run after async http task
 * Use the OSM data for showing data about buildings
 * 3D geometry
   * Improve tile queue to avoid too many glitches
@@ -35,6 +32,26 @@
 
 # Documentation
 * Explain the use of NetAScore Environment variable.
+
+
+
+# Future Improvements:
+* Create a draw layer 
+* Improve BufferInfo creation and especially the render interface functions.
+* Descriptor set layouts are badly handled at the moment and the how it is allocated, used and destroyed should be improved.
+* Layers should compile as seperate units
+* Error handling improvements - error handling should not be ExitWithError everywhere
+* Consider testing and how to do it
+* Improve the HTTP library implementation
+  * Probably consider using a cross platform library only instead of a mix
+* Threads in asset store should manage have more than one available command buffer in the thread command pool.
+* Linux support:
+  * HTTP client implementation improvements on linux (move away from httplib)
+* Make executable stand alone:
+  * What to do about shaders
+    * compiled directly into executable?
+  * What to do about assets and textures that are not part of executable
+* Add performance tests in developer workflow and in Github Actions
 
 # Tools or features for debugging
 * validation layers should show the source location of layer
@@ -55,28 +72,3 @@
   * SPV_KHR_non_semantic_info (16:06 in video above)
 * What to do about VK_DEVICE_LOST_LOST (video at 18:00)
 * Other tools (video 18:30)
-
-# Future Improvements:
-* Create a draw layer 
-* Improve BufferInfo creation and especially the render interface functions.
-* Descriptor set layouts are badly handled at the moment and the how it is allocated, used and destroyed should be improved.
-* Layers should compile as seperate units
-* Error handling improvements - error handling should not be ExitWithError everywhere
-* Consider testing and how to do it
-* Improve the HTTP library implementation
-  * Probably consider using a cross platform library only instead of a mix
-* Threads in asset store should manage have more than one available command buffer in the thread command pool.
-* Linux support:
-  * entrypoint caller currently implemented for windows should change to linux.
-  * HTTP client implementation improvements on linux (move away from httplib)
-  * hot reloading refactor to simplify the implementation for linux
-  * Base library fixes
-* Make executable stand alone:
-  * What to do about shaders
-    * compiled directly into executable?
-  * What to do about assets and textures that are not part of executable
-* Add performance tests in developer workflow and in Github Actions
-
-# Linux Info
-* Compiling (incl. linking) takes a very long time at the moment.
-* remember to link crypto and ssl libraries when using https and define the macro CPPHTTPLIB_OPENSSL_SUPPORT in httplib

@@ -2,7 +2,7 @@
 
 #include "curl/curl.h"
 
-#include "http/http_inc.hpp"
+#include "http/http.h"
 #include "segment_buffer.hpp"
 #include "async_heap.hpp"
 #include "mpmc_queue.hpp"

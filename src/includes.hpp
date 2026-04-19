@@ -28,7 +28,6 @@
 // user defined: [hpp]
 #include "utility/utility_inc.hpp"
 #include "async/async_inc.hpp"
-#include "http/http_inc.hpp"
 #include "misc/misc_inc.hpp"
 #include "render/render_inc.hpp"
 #include "lib_wrappers/lib_wrappers_inc.hpp"
