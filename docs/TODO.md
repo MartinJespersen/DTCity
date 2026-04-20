@@ -17,13 +17,11 @@
 * validation errors at null texture destruction as it is still used by some cmd buffers.
 
 # features
-* Get NetAScore from HTTP API if possible.
-  * refactor to separate source file
-  * Memory handling with shared pointer might not be the way to go
 * Use the OSM data for showing data about buildings
-* Create memory viewer
 * Logging should be improved to not always print to console 
-  * Per thread logging
+  * Look at handmade hero debugging for inspiration how to do this
+  * Per thread logging 
+  * Create memory viewer
 <!--* 3D assets 
   * Bicycles -->
 * 3D geometry
@@ -36,6 +34,7 @@
 * Make application work on arm arhitecture 
   * Make clang work as compiler
   * Make app work on MACOS
+* Memory handling with shared pointer might not be the way to go for http 
 
 # Documentation
 * Explain the use of NetAScore Environment variable.

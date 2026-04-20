@@ -19,5 +19,6 @@
 #include "base_thread_context.h"
 #include "container.hpp"
 #include "cache.hpp"
+#include "base_lists.hpp"
 
 #endif // BASE_INC_H
