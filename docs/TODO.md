@@ -21,14 +21,21 @@
   * refactor to separate source file
   * Memory handling with shared pointer might not be the way to go
 * Use the OSM data for showing data about buildings
+* Create memory viewer
+* Logging should be improved to not always print to console 
+  * Per thread logging
+<!--* 3D assets 
+  * Bicycles -->
 * 3D geometry
+  <!--* include LOD2 geometry-->
   * Improve tile queue to avoid too many glitches
   * Get 3D geometry from host path
   * Create window to list 5-by-5km geometry with corresponding connection point.
 * Simulation
   * Integrate with MATSim
-* Make application work on MACOS
+* Make application work on arm arhitecture 
   * Make clang work as compiler
+  * Make app work on MACOS
 
 # Documentation
 * Explain the use of NetAScore Environment variable.
