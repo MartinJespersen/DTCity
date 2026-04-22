@@ -20,7 +20,8 @@ void main()
 {
     vec4 base_color = texture(texture_sampler[nonuniformEXT(PushConstants.base_tex)], in_uv);
     vec4 road_color = texture(texture_sampler[nonuniformEXT(PushConstants.colormap_tex_idx)], vec2(in_overlay_option, 1.0));
-    out_color = vec4(mix(base_color.xyz, road_color.xyz, in_overlay_option), 1);
+    vec3 color = mix(vec3(1.0, 0, 0), base_color.xyz, base_color.w);
+    out_color = vec4(mix(color, road_color.xyz, in_overlay_option), 1);
 
     out_object_id = in_object_id;
 }

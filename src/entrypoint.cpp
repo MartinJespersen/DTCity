@@ -179,13 +179,15 @@ dt_interpret_input(int argc, char** argv)
         INFO_LOG("Using default coordinates");
 
 #if OS_WINDOWS
+        // String8 tileset_url = S("file:///C:/ByModel/eskiltuna/Totalstad_2025_q3/tileset.json");
+
         String8 tileset_url = S("file:///C:/ByModel/5km_6235_580/tileset.json");
 #else
         String8 tileset_url = S("file:///mnt/c/ByModel/5km_6235_580/tileset.json");
 #endif
 
         input.tileset_url = tileset_url;
-        input.btm_right_corner_wgs84 = util::default_tileset_wgs84_get();
+        input.btm_right_corner_wgs84 = vec_2f64(10.291206, 56.253108); // vec_2f64(16.49952138067, 59.36163877297);
     }
     else
     {
@@ -559,12 +561,16 @@ dt_main_loop(void* ptr)
                 U32 instance_buffer_offset = instance_draw->total_instance_buffer_byte_count + (align - 1);
                 instance_buffer_offset -= instance_buffer_offset % align;
 
-                render::car_instance_render_bucket_add(ctx->car_sim->vertex_handle, ctx->car_sim->index_handle, ctx->car_sim->texture_handle, &instance_buffer_info, instance_buffer_offset);
+                B32 car_render_queued =
+                    render::car_instance_render_bucket_add(ctx->car_sim->vertex_handle, ctx->car_sim->index_handle, ctx->car_sim->texture_handle, &instance_buffer_info, instance_buffer_offset);
 
-                for (cesium::TileRenderData* tile = renderer->tile_to_show.first; tile; tile = tile->render_next)
+                if (car_render_queued)
                 {
-                    render::car_instance_compute_bucket_add(&instance_buffer_info, tile->render_data.vertex_buffer_handle, tile->render_data.index_buffer_handle, -ctx->car_sim->car_center_offset.min,
-                                                            instance_buffer_offset);
+                    for (cesium::TileRenderData* tile = renderer->tile_to_show.first; tile; tile = tile->render_next)
+                    {
+                        render::car_instance_compute_bucket_add(&instance_buffer_info, tile->render_data.vertex_buffer_handle, tile->render_data.index_buffer_handle,
+                                                                -ctx->car_sim->car_center_offset.min, instance_buffer_offset);
+                    }
                 }
             }
         }

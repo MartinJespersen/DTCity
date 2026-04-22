@@ -159,9 +159,11 @@ struct BufferInfo
     {
     }
 
-    template <typename T> BufferInfo(Buffer<T> buffer, U32 buffer_type);
+    template <typename T>
+    BufferInfo(Buffer<T> buffer, U32 buffer_type);
 
-    template <typename T> BufferInfo(Arena* arena, T* buffer, U32 buffer_type);
+    template <typename T>
+    BufferInfo(Arena* arena, T* buffer, U32 buffer_type);
 };
 
 enum class PipelineLayoutType
@@ -173,7 +175,8 @@ enum class PipelineLayoutType
     Blend3D_ColorMap
 };
 
-template <typename T> struct AssetItem
+template <typename T>
+struct AssetItem
 {
     AssetItem* next;
     AssetItem* prev;
@@ -184,7 +187,8 @@ template <typename T> struct AssetItem
     T item;
 };
 
-template <typename T> struct AssetItemList
+template <typename T>
+struct AssetItemList
 {
     AssetItem<T>* first;
     AssetItem<T>* last;
@@ -326,6 +330,8 @@ latest_hovered_object_id_get();
 
 // ~mgj: Texture loading interface
 g_internal Handle
+texture_zero_handle_get();
+g_internal Handle
 texture_handle_create(SamplerInfo* sampler_info);
 g_internal Handle
 texture_load_async(SamplerInfo* sampler_info, String8 texture_path);
@@ -352,7 +358,7 @@ model_3d_draw(Model3DPipelineData pipeline_input, render::Handle colormap_handle
 g_internal void
 blend_3d_draw(Blend3DPipelineData pipeline_input);
 
-g_internal void
+g_internal bool
 car_instance_render_bucket_add(render::Handle vertex_buffer_handle, render::Handle index_buffer_handle, render::Handle tex_handle, render::BufferInfo* instance_buffer_info,
                                U32 instance_buffer_offset);
 

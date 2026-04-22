@@ -1029,7 +1029,7 @@ asset_manager_texture_free(render::Handle handle)
         {
             if (asset_manager->shutting_down == false)
             {
-                descriptor_set_clear_bindless_texture(item->item.descriptor_set_idx);
+                descriptor_set_clear_bindless_texture(item->item.descriptor_set_idx, item);
             }
             descriptor_index_free(&asset_manager->descriptor_index_allocator, item->item.descriptor_set_idx);
             texture_destroy(&item->item);

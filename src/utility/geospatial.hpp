@@ -7,9 +7,6 @@ g_internal Vec2F64
 default_bbox_size_meters_get();
 
 g_internal Vec2F64
-default_tileset_wgs84_get();
-
-g_internal Vec2F64
 utm_point_from_wgs84(Vec2F64 wgs84_point, char out_utm_zone[10]);
 
 g_internal Rng2F64

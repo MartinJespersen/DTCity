@@ -17,6 +17,8 @@
 * validation errors at null texture destruction as it is still used by some cmd buffers.
 
 # features
+* Osm data visualizer should not be affected by netascore not showing
+* Raster overlays should show for eksiltuna 
 * Use the OSM data for showing data about buildings
 * Logging should be improved to not always print to console 
   * Look at handmade hero debugging for inspiration how to do this

@@ -1307,13 +1307,14 @@ descriptor_set_update_bindless_texture(U32 array_index, VkImageView image_view, 
 }
 
 static void
-descriptor_set_clear_bindless_texture(U32 array_index)
+descriptor_set_clear_bindless_texture(U32 array_index, render::AssetItem<TextureHandle>* null_texture)
 {
     vulkan::Context* vk_ctx = ctx_get();
+
     VkDescriptorImageInfo image_info{};
     image_info.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-    image_info.imageView = vk_ctx->null_image_resource.image_view_resource.image_view;
-    image_info.sampler = vk_ctx->null_sampler;
+    image_info.imageView = null_texture->item.image_resource.image_view_resource.image_view;
+    image_info.sampler = null_texture->item.sampler;
 
     VkWriteDescriptorSet write{};
     write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;

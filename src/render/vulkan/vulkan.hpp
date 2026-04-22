@@ -209,8 +209,7 @@ struct Context
     VkDescriptorSet bindless_descriptor_set;
 
     // ~mgj: Null texture used to clear freed bindless descriptor slots
-    VkSampler null_sampler;
-    ImageResource null_image_resource;
+    render::Handle null_texture_handle;
 
     // ~mgj: Asset Streaming
     AssetManager* asset_manager;

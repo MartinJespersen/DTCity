@@ -17,6 +17,7 @@
 #include "base_random.hpp"
 #include "base_strings.hpp"
 #include "base_thread_context.h"
+#include "base_debug_log.hpp"
 #include "container.hpp"
 #include "cache.hpp"
 #include "base_lists.hpp"

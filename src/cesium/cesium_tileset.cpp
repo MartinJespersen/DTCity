@@ -287,127 +287,133 @@ tile_render_data_from_gltf(const CesiumGltf::Model& model, const glm::dmat4& ece
         Assert(model.nodes[i].children.size() == 0);
     }
     PrimitiveList primitive_list = {};
-    for (const CesiumGltf::Mesh& mesh : model.meshes)
+    for (const CesiumGltf::Node& node : model.nodes)
     {
-        for (const CesiumGltf::MeshPrimitive& primitive : mesh.primitives)
+        for (const CesiumGltf::Mesh& mesh : model.meshes)
         {
-            auto pos_it = primitive.attributes.find("POSITION");
-            if (pos_it == primitive.attributes.end())
-                continue;
-
-            const CesiumGltf::Accessor* pos_accessor = CesiumGltf::Model::getSafe(&model.accessors, pos_it->second);
-            if (!pos_accessor)
-                continue;
-
-            // Get UV accessor if available
-            const CesiumGltf::Accessor* uv_accessor = nullptr;
-            auto uv_it = primitive.attributes.find("TEXCOORD_0");
-            if (uv_it != primitive.attributes.end())
+            for (const CesiumGltf::MeshPrimitive& primitive : mesh.primitives)
             {
-                uv_accessor = CesiumGltf::Model::getSafe(&model.accessors, uv_it->second);
-            }
+                auto pos_it = primitive.attributes.find("POSITION");
+                if (pos_it == primitive.attributes.end())
+                    continue;
 
-            // Get buffer views and buffers for position
-            const CesiumGltf::BufferView* pos_buffer_view = CesiumGltf::Model::getSafe(&model.bufferViews, pos_accessor->bufferView);
-            if (!pos_buffer_view)
-                continue;
+                const CesiumGltf::Accessor* pos_accessor = CesiumGltf::Model::getSafe(&model.accessors, pos_it->second);
+                if (!pos_accessor)
+                    continue;
 
-            const CesiumGltf::Buffer* pos_buffer = CesiumGltf::Model::getSafe(&model.buffers, pos_buffer_view->buffer);
-            if (!pos_buffer)
-                continue;
-
-            // Read positions
-            const U8* pos_data = (U8*)pos_buffer->cesium.data.data() + pos_buffer_view->byteOffset + pos_accessor->byteOffset;
-
-            // Stride cannot change dynamically with current implementation
-            S64 pos_stride = pos_buffer_view->byteStride.value_or(0);
-            Assert(pos_stride == 0 || pos_stride == (sizeof(F32) * 3));
-            pos_stride = sizeof(F32) * 3;
-
-            // Get UV data if available
-            const U8* uv_data = nullptr;
-            U32 uv_stride = 0;
-            if (uv_accessor)
-            {
-                const CesiumGltf::BufferView* uv_buffer_view = CesiumGltf::Model::getSafe(&model.bufferViews, uv_accessor->bufferView);
-                if (uv_buffer_view)
+                // Get UV accessor if available
+                const CesiumGltf::Accessor* uv_accessor = nullptr;
+                auto uv_it = primitive.attributes.find("TEXCOORD_0");
+                if (uv_it != primitive.attributes.end())
                 {
-                    const CesiumGltf::Buffer* uv_buffer = CesiumGltf::Model::getSafe(&model.buffers, uv_buffer_view->buffer);
-                    if (uv_buffer)
+                    uv_accessor = CesiumGltf::Model::getSafe(&model.accessors, uv_it->second);
+                }
+
+                // Get buffer views and buffers for position
+                const CesiumGltf::BufferView* pos_buffer_view = CesiumGltf::Model::getSafe(&model.bufferViews, pos_accessor->bufferView);
+                if (!pos_buffer_view)
+                    continue;
+
+                const CesiumGltf::Buffer* pos_buffer = CesiumGltf::Model::getSafe(&model.buffers, pos_buffer_view->buffer);
+                if (!pos_buffer)
+                    continue;
+
+                // Read positions
+                const U8* pos_data = (U8*)pos_buffer->cesium.data.data() + pos_buffer_view->byteOffset + pos_accessor->byteOffset;
+
+                // Stride cannot change dynamically with current implementation
+                S64 pos_stride = pos_buffer_view->byteStride.value_or(0);
+                Assert(pos_stride == 0 || pos_stride == (sizeof(F32) * 3));
+                pos_stride = sizeof(F32) * 3;
+
+                // Get UV data if available
+                const U8* uv_data = nullptr;
+                U32 uv_stride = 0;
+                if (uv_accessor)
+                {
+                    const CesiumGltf::BufferView* uv_buffer_view = CesiumGltf::Model::getSafe(&model.bufferViews, uv_accessor->bufferView);
+                    if (uv_buffer_view)
                     {
-                        uv_data = (U8*)uv_buffer->cesium.data.data() + uv_buffer_view->byteOffset + uv_accessor->byteOffset;
-                        U32 uv_byte_stride = uv_buffer_view->byteStride.value_or(0);
-                        uv_stride = uv_byte_stride > 0 ? uv_byte_stride : sizeof(F32) * 2;
+                        const CesiumGltf::Buffer* uv_buffer = CesiumGltf::Model::getSafe(&model.buffers, uv_buffer_view->buffer);
+                        if (uv_buffer)
+                        {
+                            uv_data = (U8*)uv_buffer->cesium.data.data() + uv_buffer_view->byteOffset + uv_accessor->byteOffset;
+                            U32 uv_byte_stride = uv_buffer_view->byteStride.value_or(0);
+                            uv_stride = uv_byte_stride > 0 ? uv_byte_stride : sizeof(F32) * 2;
+                        }
                     }
                 }
-            }
 
-            const CesiumGltf::Accessor* index_accessor = CesiumGltf::Model::getSafe(&model.accessors, primitive.indices);
+                const CesiumGltf::Accessor* index_accessor = CesiumGltf::Model::getSafe(&model.accessors, primitive.indices);
 
-            // Allocate buffers
-            Buffer<render::Vertex3D> vertices = BufferAlloc<render::Vertex3D>(scratch.arena, pos_accessor->count);
-            Buffer<U32> indices = BufferAlloc<U32>(scratch.arena, index_accessor->count);
+                // Allocate buffers
+                Buffer<render::Vertex3D> vertices = BufferAlloc<render::Vertex3D>(scratch.arena, pos_accessor->count);
+                Buffer<U32> indices = BufferAlloc<U32>(scratch.arena, index_accessor->count);
 
-            // Copy vertices
-            for (U32 i = 0; i < (U32)pos_accessor->count; ++i)
-            {
-                render::Vertex3D* vertex = &vertices.data[i];
-
-                // glTF uses right-handed Y-up, convert to right-handed Z-up: (x, y, z) -> (x, z,
-                // -y) Then transform applies: tile_transform (to ECEF) -> ecef_to_local (to local
-                // ENU)
-                const F32* pos = (const F32*)(pos_data + i * pos_stride);
-                glm::dvec4 pos_zup = ecef_to_local * tile_transform * glm::dvec4(pos[0], -pos[2], pos[1], 1.0);
-
-                vertex->pos.x = (F32)pos_zup.x;
-                vertex->pos.y = (F32)pos_zup.y;
-                vertex->pos.z = (F32)pos_zup.z;
-
-                AssertAlways(uv_data);
-                const F32* uv = (const F32*)(uv_data + (U64)i * (U64)uv_stride);
-                vertex->uv.x = uv[0];
-                vertex->uv.y = uv[1];
-            }
-
-            // Read indices
-            if (primitive.indices >= 0)
-            {
-                if (index_accessor)
+                // Copy vertices
+                for (U32 i = 0; i < (U32)pos_accessor->count; ++i)
                 {
-                    const CesiumGltf::BufferView* index_buffer_view = CesiumGltf::Model::getSafe(&model.bufferViews, index_accessor->bufferView);
-                    if (index_buffer_view)
+                    render::Vertex3D* vertex = &vertices.data[i];
+
+                    // glTF uses right-handed Y-up, convert to right-handed Z-up: (x, y, z) -> (x, z,
+                    // -y) Then transform applies: tile_transform (to ECEF) -> ecef_to_local (to local
+                    // ENU)
+                    const F32* pos = (const F32*)(pos_data + i * pos_stride);
+                    glm::dmat4 node_matrix(glm::dvec4(node.matrix[0], node.matrix[1], node.matrix[2], node.matrix[3]), glm::dvec4(node.matrix[4], node.matrix[5], node.matrix[6], node.matrix[7]),
+                                           glm::dvec4(node.matrix[8], node.matrix[9], node.matrix[10], node.matrix[11]),
+                                           glm::dvec4(node.matrix[12], node.matrix[13], node.matrix[14], node.matrix[15]));
+                    glm::dvec4 pos_yup = node_matrix * glm::dvec4(pos[0], pos[1], pos[2], 1.0);
+                    glm::dvec4 pos_zup = ecef_to_local * tile_transform * glm::dvec4(pos_yup[0], -pos_yup[2], pos_yup[1], 1.0);
+                    // glm::dvec4 pos_zup = ecef_to_local * tile_transform * glm::dvec4(pos[1], -pos[2], pos[0], 1.0);
+
+                    vertex->pos.x = (F32)pos_zup.x;
+                    vertex->pos.y = (F32)pos_zup.y;
+                    vertex->pos.z = (F32)pos_zup.z;
+
+                    AssertAlways(uv_data);
+                    const F32* uv = (const F32*)(uv_data + (U64)i * (U64)uv_stride);
+                    vertex->uv.x = uv[0];
+                    vertex->uv.y = uv[1];
+                }
+
+                // Read indices
+                if (primitive.indices >= 0)
+                {
+                    if (index_accessor)
                     {
-                        const CesiumGltf::Buffer* index_buffer = CesiumGltf::Model::getSafe(&model.buffers, index_buffer_view->buffer);
-                        if (index_buffer)
+                        const CesiumGltf::BufferView* index_buffer_view = CesiumGltf::Model::getSafe(&model.bufferViews, index_accessor->bufferView);
+                        if (index_buffer_view)
                         {
-                            U8* index_data = (U8*)index_buffer->cesium.data.data() + index_buffer_view->byteOffset + index_accessor->byteOffset;
-
-                            U32 stride = index_accessor->componentType == CesiumGltf::Accessor::ComponentType::UNSIGNED_BYTE    ? sizeof(U8)
-                                         : index_accessor->componentType == CesiumGltf::Accessor::ComponentType::UNSIGNED_SHORT ? sizeof(U16)
-                                                                                                                                : sizeof(U32);
-
-                            for (U32 i = 0; i < (U32)index_accessor->count; ++i)
+                            const CesiumGltf::Buffer* index_buffer = CesiumGltf::Model::getSafe(&model.buffers, index_buffer_view->buffer);
+                            if (index_buffer)
                             {
-                                U8* base = index_data + (U64)i * stride;
-                                MemoryCopy(indices.data + i, base, stride);
+                                U8* index_data = (U8*)index_buffer->cesium.data.data() + index_buffer_view->byteOffset + index_accessor->byteOffset;
+
+                                U32 stride = index_accessor->componentType == CesiumGltf::Accessor::ComponentType::UNSIGNED_BYTE    ? sizeof(U8)
+                                             : index_accessor->componentType == CesiumGltf::Accessor::ComponentType::UNSIGNED_SHORT ? sizeof(U16)
+                                                                                                                                    : sizeof(U32);
+
+                                for (U32 i = 0; i < (U32)index_accessor->count; ++i)
+                                {
+                                    U8* base = index_data + (U64)i * stride;
+                                    MemoryCopy(indices.data + i, base, stride);
+                                }
                             }
                         }
                     }
                 }
+
+                PrimitiveNode* primitive_node = PushStruct(scratch.arena, PrimitiveNode);
+                primitive_node->vertices = vertices;
+                primitive_node->indices = indices;
+                primitive_node->material_idx = primitive.material;
+
+                SLLQueuePush(primitive_list.first, primitive_list.last, primitive_node);
             }
-
-            PrimitiveNode* primitive_node = PushStruct(scratch.arena, PrimitiveNode);
-            primitive_node->vertices = vertices;
-            primitive_node->indices = indices;
-            primitive_node->material_idx = primitive.material;
-
-            SLLQueuePush(primitive_list.first, primitive_list.last, primitive_node);
         }
     }
-
-    Assert(model.textures.size() > 0);
-    Assert(model.images.size() > 0);
-    for (U32 mat_idx = 0; mat_idx < model.materials.size(); ++mat_idx)
+    U32 mat_count = model.materials.size();
+    for (U32 mat_idx = 0; mat_idx < mat_count; ++mat_idx)
     {
         TileRenderData* render_data = PushStruct(tile_render_data_list->arena, TileRenderData);
         SLLQueuePush(tile_render_data_list->first, tile_render_data_list->last, render_data);
@@ -469,34 +475,38 @@ tile_render_data_from_gltf(const CesiumGltf::Model& model, const glm::dmat4& ece
                 tex_idx = pbr.baseColorTexture->index;
             }
         }
-        AssertAlways(tex_idx >= 0);
-        CesiumGltf::Texture texture = model.textures[tex_idx];
-        AssertAlways(texture.source >= 0);
-        const CesiumGltf::ImageAsset& image = *model.images[texture.source].pAsset;
 
-        // Extract sampler from glTF
-        render::SamplerInfo sampler_info = {.min_filter = render::Filter_Linear,
-                                            .mag_filter = render::Filter_Linear,
-                                            .mip_map_mode = render::MipMapMode_Linear,
-                                            .address_mode_u = render::SamplerAddressMode_Repeat,
-                                            .address_mode_v = render::SamplerAddressMode_Repeat};
-        if (texture.sampler >= 0 && texture.sampler < (S32)model.samplers.size())
+        render_data->render_data.texture_handle = render::texture_zero_handle_get();
+        if (tex_idx >= 0)
         {
-            sampler_info = sampler_info_from_cesium_sampler(model.samplers[texture.sampler]);
+            CesiumGltf::Texture texture = model.textures[tex_idx];
+            AssertAlways(texture.source >= 0);
+            const CesiumGltf::ImageAsset& image = *model.images[texture.source].pAsset;
+
+            // Extract sampler from glTF
+            render::SamplerInfo sampler_info = {.min_filter = render::Filter_Linear,
+                                                .mag_filter = render::Filter_Linear,
+                                                .mip_map_mode = render::MipMapMode_Linear,
+                                                .address_mode_u = render::SamplerAddressMode_Repeat,
+                                                .address_mode_v = render::SamplerAddressMode_Repeat};
+            if (texture.sampler >= 0 && texture.sampler < (S32)model.samplers.size())
+            {
+                sampler_info = sampler_info_from_cesium_sampler(model.samplers[texture.sampler]);
+            }
+
+            const std::byte* bytes = image.pixelData.data();
+            U32 byte_count = (U32)image.pixelData.size();
+            AssertAlways(byte_count);
+            U8* tex_buffer = PushArray(tile_render_data_list->arena, U8, byte_count);
+            MemoryCopy(tex_buffer, (U8*)bytes, byte_count);
+            U32 width = image.width;
+            U32 height = image.height;
+            U32 channels = image.channels;                 // e.g., 4 for RGBA
+            U32 bytes_per_channel = image.bytesPerChannel; // typically 1
+
+            render::TextureUploadData tex_data = render::TextureUploadData::init(tex_buffer, (U32)width, (U32)height, channels, bytes_per_channel, byte_count);
+            render_data->render_data.texture_handle = render::texture_load_sync(&sampler_info, &tex_data, (VkCommandBuffer)thread_input->cmd_buffer);
         }
-
-        const std::byte* bytes = image.pixelData.data();
-        U32 byte_count = (U32)image.pixelData.size();
-        AssertAlways(byte_count);
-        U8* tex_buffer = PushArray(tile_render_data_list->arena, U8, byte_count);
-        MemoryCopy(tex_buffer, (U8*)bytes, byte_count);
-        U32 width = image.width;
-        U32 height = image.height;
-        U32 channels = image.channels;                 // e.g., 4 for RGBA
-        U32 bytes_per_channel = image.bytesPerChannel; // typically 1
-
-        render::TextureUploadData tex_data = render::TextureUploadData::init(tex_buffer, (U32)width, (U32)height, channels, bytes_per_channel, byte_count);
-        render_data->render_data.texture_handle = render::texture_load_sync(&sampler_info, &tex_data, (VkCommandBuffer)thread_input->cmd_buffer);
     }
 
     return tile_render_data_list;
@@ -535,14 +545,34 @@ tileset_renderer_create(Arena* arena, async::ThreadPool* threads, const char* ti
     // Create prepare renderer resources (pass coordinate system for ECEF->local transforms)
     auto prepare_renderer_resources = std::make_shared<DTCityPrepareRendererResources>(renderer->ecef_to_local, renderer);
 
+    std::shared_ptr<spdlog::logger> logger = spdlog::default_logger();
+    if (logger)
+    {
+        logger->set_level(spdlog::level::trace);
+        logger->flush_on(spdlog::level::warn);
+    }
+
     // Keep Cesium's default logger instead of overwriting it with nullptr.
-    Cesium3DTilesSelection::TilesetExternals externals{asset_accessor, prepare_renderer_resources, renderer->async_system, nullptr, spdlog::default_logger(), nullptr};
+    Cesium3DTilesSelection::TilesetExternals externals{asset_accessor, prepare_renderer_resources, renderer->async_system, nullptr, logger, nullptr};
 
     // Create tileset options
     Cesium3DTilesSelection::TilesetOptions options;
     options.maximumScreenSpaceError = 16.0;
     options.maximumSimultaneousTileLoads = 20;
     options.loadingDescendantLimit = 20;
+    options.loadErrorCallback = [](const Cesium3DTilesSelection::TilesetLoadFailureDetails& details)
+    {
+        const char* load_type = "Unknown";
+        switch (details.type)
+        {
+            case Cesium3DTilesSelection::TilesetLoadType::CesiumIon: load_type = "CesiumIon"; break;
+            case Cesium3DTilesSelection::TilesetLoadType::TilesetJson: load_type = "TilesetJson"; break;
+            case Cesium3DTilesSelection::TilesetLoadType::Unknown: break;
+            default: break;
+        }
+
+        exit_with_error("Cesium load error: type=%s status=%u message=%s\n", load_type, (U32)details.statusCode, details.message.c_str());
+    };
 
     // Create the tileset
     renderer->tileset = std::make_shared<Cesium3DTilesSelection::Tileset>(externals, tileset_url, options);

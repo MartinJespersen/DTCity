@@ -4,6 +4,13 @@ namespace render
 static void
 null_texture_create(vulkan::Context* vk_ctx)
 {
+    render::SamplerInfo sampler_info = {
+        .min_filter = render::Filter_Nearest,
+        .mag_filter = render::Filter_Nearest,
+        .mip_map_mode = render::MipMapMode_Nearest,
+        .address_mode_u = render::SamplerAddressMode_Repeat,
+        .address_mode_v = render::SamplerAddressMode_Repeat,
+    };
     // Create a 1x1 RGBA8 image
     VmaAllocationCreateInfo vma_info = {.usage = VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE};
     vulkan::ImageAllocation image_alloc = vulkan::image_allocation_create(1, 1, VK_SAMPLE_COUNT_1_BIT, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_TILING_OPTIMAL,
@@ -53,17 +60,14 @@ null_texture_create(vulkan::Context* vk_ctx)
 
     vkFreeCommandBuffers(vk_ctx->device, vk_ctx->command_pool, 1, &cmd);
 
-    // Create sampler
-    VkSamplerCreateInfo sampler_create_info{};
-    sampler_create_info.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
-    sampler_create_info.magFilter = VK_FILTER_NEAREST;
-    sampler_create_info.minFilter = VK_FILTER_NEAREST;
-    sampler_create_info.addressModeU = VK_SAMPLER_ADDRESS_MODE_REPEAT;
-    sampler_create_info.addressModeV = VK_SAMPLER_ADDRESS_MODE_REPEAT;
-    sampler_create_info.addressModeW = VK_SAMPLER_ADDRESS_MODE_REPEAT;
-    vk_ctx->null_sampler = vulkan::sampler_create(vk_ctx->device, &sampler_create_info);
+    vk_ctx->null_texture_handle = render::texture_handle_create(&sampler_info);
+    render::AssetItem<vulkan::TextureHandle>* tex_asset = vulkan::asset_manager_texture_item_get(vk_ctx->null_texture_handle);
+    AssertAlways(tex_asset);
+    tex_asset->item.image_resource = vulkan::ImageResource(image_alloc, image_view_resource);
+    tex_asset->item.staging_allocation = {};
+    tex_asset->is_loaded = 1;
 
-    vk_ctx->null_image_resource = vulkan::ImageResource(image_alloc, image_view_resource);
+    vulkan::descriptor_set_update_bindless_texture(tex_asset->item.descriptor_set_idx, image_view_resource.image_view, tex_asset->item.sampler);
 }
 
 // ~mgj: Vulkan Interface
@@ -179,9 +183,7 @@ render_ctx_destroy()
 
     vulkan::swapchain_cleanup(vk_ctx->device, vk_ctx->swapchain_resources);
 
-    // destroy null texture
-    vulkan::image_resource_destroy(vk_ctx->null_image_resource);
-    vkDestroySampler(vk_ctx->device, vk_ctx->null_sampler, nullptr);
+    render::handle_destroy(vk_ctx->null_texture_handle);
     vulkan::asset_manager_destroy(vk_ctx->asset_manager);
     vkDestroyCommandPool(vk_ctx->device, vk_ctx->command_pool, nullptr);
 
@@ -359,6 +361,13 @@ latest_hovered_object_id_get()
 }
 
 // ~mgj: Texture interface functions
+g_internal Handle
+texture_zero_handle_get()
+{
+    vulkan::Context* vk_ctx = vulkan::ctx_get();
+    return vk_ctx->null_texture_handle;
+}
+
 g_internal Handle
 texture_handle_create(SamplerInfo* sampler_info)
 {
@@ -773,6 +782,11 @@ g_internal void
 car_instance_compute_bucket_add(render::BufferInfo* instance_buffer_info, render::Handle tile_vertex_buffer_handle, render::Handle tile_index_buffer_handle, F32 car_center_to_road_offset,
                                 U32 instance_buffer_offset)
 {
+    if (instance_buffer_info->buffer.size == 0 || instance_buffer_info->elem_count == 0)
+    {
+        return;
+    }
+
     vulkan::Context* vk_ctx = vulkan::ctx_get();
     vulkan::DrawFrame* draw_frame = vk_ctx->draw_frame;
     vulkan::CarInstanceCompute* instance_draw = &draw_frame->car_instance_compute_list;
@@ -796,9 +810,14 @@ car_instance_compute_bucket_add(render::BufferInfo* instance_buffer_info, render
     }
 }
 
-g_internal void
+g_internal bool
 car_instance_render_bucket_add(render::Handle vertex_buffer_handle, render::Handle index_buffer_handle, render::Handle tex_handle, render::BufferInfo* instance_buffer_info, U32 instance_buffer_offset)
 {
+    if (instance_buffer_info->buffer.size == 0 || instance_buffer_info->elem_count == 0)
+    {
+        return false;
+    }
+
     vulkan::Context* vk_ctx = vulkan::ctx_get();
     vulkan::DrawFrame* draw_frame = vk_ctx->draw_frame;
     vulkan::CarInstanceRender* instance_draw = &draw_frame->car_instance_render_list;
@@ -822,7 +841,10 @@ car_instance_render_bucket_add(render::Handle vertex_buffer_handle, render::Hand
 
         // push work
         SLLQueuePush(instance_draw->list.first, instance_draw->list.last, node);
+        return true;
     }
+
+    return false;
 }
 
 g_internal bool
