@@ -439,7 +439,6 @@ texture_load_sync(render::SamplerInfo* sampler_info, TextureUploadData* tex_data
         {
             buffer_destroy(&image_allocation_resource.staging_buffer_alloc);
             image_resource_destroy(image_allocation_resource.image_resource);
-            DEBUG_LOG("texture_loading_thread: Asset Item: %llu - Not Found", handle.u64);
         }
     }
     return handle;
@@ -462,6 +461,7 @@ texture_load_async(render::SamplerInfo* sampler_info, TextureUploadData* tex_upl
 
     thread_input->user_data = tex_upload_data;
     render::Handle handle = render::texture_handle_create(sampler_info);
+    render::handle_list_push(thread_input->arena, &thread_input->handles, handle);
 
     thread_input->loading_func = vulkan::texture_loading_thread;
     thread_input->done_loading_func = render::handle_done_loading;
@@ -564,7 +564,6 @@ buffer_load_sync(VkCommandBuffer cmd, render::BufferInfo* buffer_info)
     }
     else
     {
-        DEBUG_LOG("buffer_loading_thread: Asset Item: %llu - Not Found", asset_handle.u64);
         buffer_destroy(&staging_buffer_alloc);
     }
 
@@ -763,18 +762,34 @@ texture_gpu_upload_sync(render::Handle tex_handle, Buffer<U8> tex_buf)
 g_internal void
 model_3d_draw(Model3DPipelineData pipeline_input, render::Handle colormap_handle)
 {
-    if (render::is_handle_zero(pipeline_input.index_buffer_handle) || render::is_handle_zero(pipeline_input.vertex_buffer_handle) || render::is_handle_zero(pipeline_input.texture_handle) ||
-        render::is_handle_zero(colormap_handle))
-        return;
-
-    if (render::is_resource_loaded(pipeline_input.vertex_buffer_handle) && render::is_resource_loaded(pipeline_input.index_buffer_handle) &&
-        render::is_resource_loaded(pipeline_input.texture_handle) && render::is_resource_loaded(colormap_handle))
+    B32 vertex_loaded = render::is_resource_loaded(pipeline_input.vertex_buffer_handle);
+    B32 index_loaded = render::is_resource_loaded(pipeline_input.index_buffer_handle);
+    B32 base_texture_loaded = render::is_resource_loaded(pipeline_input.texture_handle);
+    B32 colormap_loaded = render::is_resource_loaded(colormap_handle);
+    if (vertex_loaded && index_loaded && base_texture_loaded && colormap_loaded)
     {
         render::AssetItem<vulkan::BufferHandle>* asset_vertex_buffer = vulkan::asset_manager_buffer_item_get(pipeline_input.vertex_buffer_handle);
         render::AssetItem<vulkan::BufferHandle>* asset_index_buffer = vulkan::asset_manager_buffer_item_get(pipeline_input.index_buffer_handle);
         render::AssetItem<vulkan::TextureHandle>* asset_texture = vulkan::asset_manager_texture_item_get(colormap_handle);
-        vulkan::model_3d_bucket_add(&asset_vertex_buffer->item.buffer_alloc, &asset_index_buffer->item.buffer_alloc, pipeline_input.texture_handle, false, pipeline_input.index_offset,
-                                    pipeline_input.index_count, asset_texture->item.descriptor_set_idx);
+        render::Handle overlay_texture_handle = render::texture_zero_handle_get();
+        B32 overlay_enabled = false;
+        if (pipeline_input.has_overlay_uv && pipeline_input.overlay_texture_coordinate_id == 0 && render::is_handle_zero(pipeline_input.overlay_texture_handle) == false &&
+            render::is_resource_loaded(pipeline_input.overlay_texture_handle))
+        {
+            overlay_texture_handle = pipeline_input.overlay_texture_handle;
+            overlay_enabled = true;
+        }
+
+        vulkan::model_3d_bucket_add(&asset_vertex_buffer->item.buffer_alloc, &asset_index_buffer->item.buffer_alloc, pipeline_input.texture_handle, overlay_texture_handle, overlay_enabled,
+                                    pipeline_input.overlay_translation, pipeline_input.overlay_scale, false, pipeline_input.index_offset, pipeline_input.index_count,
+                                    asset_texture->item.descriptor_set_idx);
+    }
+    else
+    {
+        DEBUG_LOG("\x1b[31mmodel_3d_draw skipped: vertex=%d(%llu) index=%d(%llu) base_tex=%d(%llu) colormap=%d(%llu) has_overlay_uv=%d overlay_coord=%d overlay_handle=%llu overlay_loaded=%d\x1b[0m",
+                  vertex_loaded, pipeline_input.vertex_buffer_handle.u64, index_loaded, pipeline_input.index_buffer_handle.u64, base_texture_loaded, pipeline_input.texture_handle.u64, colormap_loaded,
+                  colormap_handle.u64, pipeline_input.has_overlay_uv, pipeline_input.overlay_texture_coordinate_id, pipeline_input.overlay_texture_handle.u64,
+                  render::is_handle_zero(pipeline_input.overlay_texture_handle) ? 0 : render::is_resource_loaded(pipeline_input.overlay_texture_handle));
     }
 }
 
@@ -895,9 +910,32 @@ blend_3d_draw(render::Blend3DPipelineData pipeline_input)
 g_internal bool
 is_resource_loaded(render::Handle handle)
 {
-    // TODO: Refactor asset item to not be a template
-    render::AssetItem<S64>* asset = (render::AssetItem<S64>*)handle.ptr;
-    return asset->is_loaded;
+    if (render::is_handle_zero(handle))
+    {
+        return false;
+    }
+
+    switch (handle.type)
+    {
+        case render::HandleType::Buffer:
+        {
+            render::AssetItem<vulkan::BufferHandle>* asset = vulkan::asset_manager_buffer_item_get(handle);
+            return asset ? asset->is_loaded : false;
+        }
+        case render::HandleType::Texture:
+        {
+            render::AssetItem<vulkan::TextureHandle>* asset = vulkan::asset_manager_texture_item_get(handle);
+            return asset ? asset->is_loaded : false;
+        }
+        case render::HandleType::DescriptorSet:
+        {
+            render::AssetItem<vulkan::DescriptorSetHandle>* asset = vulkan::asset_manager_descriptor_set_item_get(handle);
+            return asset ? asset->is_loaded : false;
+        }
+        default: break;
+    }
+
+    return false;
 }
 
 Handle
@@ -968,6 +1006,7 @@ handle_done_loading(render::HandleList handles)
                     buffer_destroy(&asset->item.staging_buffer);
                     asset->item.staging_buffer.buffer = 0;
                     asset->is_loaded = 1;
+                    node->work_on_gpu_done = 1;
                 }
             }
             break;
@@ -980,6 +1019,7 @@ handle_done_loading(render::HandleList handles)
                     vulkan::descriptor_set_update_bindless_texture(texture->descriptor_set_idx, texture->image_resource.image_view_resource.image_view, texture->sampler);
                     buffer_destroy(&asset->item.staging_allocation);
                     asset->is_loaded = 1;
+                    node->work_on_gpu_done = 1;
                 }
             }
             break;
@@ -994,6 +1034,7 @@ handle_done_loading(render::HandleList handles)
                     descriptor_handle->desc_set = desc_info.set;
                     Assert(descriptor_handle->desc_layout);
                     asset->is_loaded = 1;
+                    node->work_on_gpu_done = 1;
                 }
             }
             break;

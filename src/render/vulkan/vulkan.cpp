@@ -199,12 +199,14 @@ model_3d_pipeline_create(Context* vk_ctx, String8 shader_path)
     U32 pos_offset = offsetof(render::Vertex3D, pos);
     U32 colormap_value_offset = offsetof(render::Vertex3D, colormap_value);
     U32 uv_offset = offsetof(render::Vertex3D, uv);
+    U32 overlay_uv_offset = offsetof(render::Vertex3D, overlay_uv);
     U32 object_id_offset = offsetof(render::Vertex3D, object_id);
 
     VkVertexInputAttributeDescription attr_desc[] = {{.location = 0, .binding = 0, .format = VK_FORMAT_R32G32B32_SFLOAT, .offset = pos_offset},
                                                      {.location = 1, .binding = 0, .format = VK_FORMAT_R32_SFLOAT, .offset = colormap_value_offset},
                                                      {.location = 2, .binding = 0, .format = VK_FORMAT_R32G32_SFLOAT, .offset = uv_offset},
-                                                     {.location = 3, .binding = 0, .format = vk_ctx->object_id_format, .offset = object_id_offset}};
+                                                     {.location = 3, .binding = 0, .format = VK_FORMAT_R32G32_SFLOAT, .offset = overlay_uv_offset},
+                                                     {.location = 4, .binding = 0, .format = vk_ctx->object_id_format, .offset = object_id_offset}};
 
     VkVertexInputBindingDescription input_desc[] = {{.binding = 0, .stride = sizeof(render::Vertex3D), .inputRate = VK_VERTEX_INPUT_RATE_VERTEX}};
 
@@ -957,18 +959,25 @@ pipeline_destroy(Pipeline* pipeline)
 }
 
 static void
-model_3d_bucket_add(BufferAllocation* vertex_buffer_allocation, BufferAllocation* index_buffer_allocation, render::Handle tex_handle, B32 depth_write_per_draw_call_only, U32 index_buffer_offset,
-                    U32 index_count, U32 colormap_idx)
+model_3d_bucket_add(BufferAllocation* vertex_buffer_allocation, BufferAllocation* index_buffer_allocation, render::Handle tex_handle, render::Handle overlay_tex_handle, B32 overlay_enabled,
+                    Vec2F32 overlay_translation, Vec2F32 overlay_scale, B32 depth_write_per_draw_call_only, U32 index_buffer_offset, U32 index_count, U32 colormap_idx)
 {
     Context* vk_ctx = ctx_get();
     DrawFrame* draw_frame = vk_ctx->draw_frame;
 
     render::AssetItem<TextureHandle>* base_tex = asset_manager_texture_item_get(tex_handle);
-    if (base_tex)
+    render::AssetItem<TextureHandle>* overlay_tex = asset_manager_texture_item_get(overlay_tex_handle);
+    if (base_tex && overlay_tex)
     {
         Model3dPushConstants push_constants = {};
         push_constants.tex_idx = base_tex->item.descriptor_set_idx;
         push_constants.colormap_idx = colormap_idx;
+        push_constants.overlay_tex_idx = overlay_tex->item.descriptor_set_idx;
+        push_constants.overlay_enabled = overlay_enabled;
+        push_constants.overlay_translation_x = overlay_translation.x;
+        push_constants.overlay_translation_y = overlay_translation.y;
+        push_constants.overlay_scale_x = overlay_scale.x;
+        push_constants.overlay_scale_y = overlay_scale.y;
 
         Model3DNode* node = PushStruct(vk_ctx->draw_frame_arena, Model3DNode);
         node->vertex_alloc = *vertex_buffer_allocation;

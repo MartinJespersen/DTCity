@@ -164,7 +164,9 @@ os_write_data_to_file_path(String8 path, String8 data);
 static B32
 os_write_data_list_to_file_path(String8 path, String8List list);
 static B32
-os_append_data_to_file_path(String8 path, String8 data);
+os_append_data_to_file_path(String8 path, String8 data, OS_AccessFlags additional_flags);
+static B32
+os_clear_directory(String8 path);
 static OS_FileID
 os_id_from_file_path(String8 path);
 static S64
@@ -239,7 +241,7 @@ static U64
 os_file_read(OS_Handle file, Rng1U64 rng, void* out_data);
 #define os_file_read_struct(f, off, ptr) OS_FileRead((f), r1u64((off), (off) + sizeof(*(ptr))), (ptr))
 static U64
-OS_FileWrite(OS_Handle file, Rng1U64 rng, void* data);
+os_file_write(OS_Handle file, Rng1U64 rng, void* data);
 static B32
 os_file_set_times(OS_Handle file, DateTime time);
 static FileProperties
@@ -250,6 +252,8 @@ static B32
 os_file_reserve_size(OS_Handle file, U64 size);
 static B32
 os_delete_file_at_path(String8 path);
+static B32
+os_delete_directory_at_path(String8 path);
 static B32
 os_copy_file_path(String8 dst, String8 src);
 static B32

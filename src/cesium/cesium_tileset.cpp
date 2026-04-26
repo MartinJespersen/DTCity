@@ -41,6 +41,284 @@ class DTCityTaskProcessor : public CesiumAsync::ITaskProcessor
     async::ThreadPool* thread_pool;
 };
 
+struct RasterLoadThreadResult
+{
+    Arena* arena;
+    render::SamplerInfo sampler_info;
+    render::TextureUploadData texture_upload;
+    render::Handle texture_handle;
+    U32 width;
+    U32 height;
+};
+
+g_internal render::SamplerInfo
+_raster_sampler_info_get(const std::any& renderer_options)
+{
+    render::SamplerInfo sampler_info = {
+        .min_filter = render::Filter_Linear,
+        .mag_filter = render::Filter_Linear,
+        .mip_map_mode = render::MipMapMode_Linear,
+        .address_mode_u = render::SamplerAddressMode_ClampToEdge,
+        .address_mode_v = render::SamplerAddressMode_ClampToEdge,
+        .unnormalized_coordinates = false,
+    };
+
+    if (const render::SamplerInfo* opt = std::any_cast<render::SamplerInfo>(&renderer_options))
+    {
+        sampler_info = *opt;
+    }
+
+    return sampler_info;
+}
+
+g_internal bool
+_raster_texture_upload_data_prepare(Arena* arena, const CesiumGltf::ImageAsset& image, render::TextureUploadData* out_texture_upload)
+{
+    if (!out_texture_upload)
+    {
+        return false;
+    }
+
+    if (image.width <= 0 || image.height <= 0 || image.channels <= 0 || image.pixelData.empty())
+    {
+        return false;
+    }
+
+    if (image.bytesPerChannel != 1)
+    {
+        DEBUG_LOG("Unsupported Cesium raster image format: %d bytes per channel", image.bytesPerChannel);
+        return false;
+    }
+
+    U64 pixel_count_u64 = (U64)image.width * (U64)image.height;
+    U64 src_byte_count = pixel_count_u64 * (U64)image.channels;
+    if ((U64)image.pixelData.size() < src_byte_count)
+    {
+        DEBUG_LOG("Cesium raster image buffer is smaller than expected");
+        return false;
+    }
+
+    if (pixel_count_u64 > (U64)(max_U32 / 4))
+    {
+        DEBUG_LOG("Cesium raster image is too large to upload");
+        return false;
+    }
+
+    const U8* src = (const U8*)image.pixelData.data();
+    U32 pixel_count = safe_cast_u32(pixel_count_u64);
+    U32 dst_byte_count = safe_cast_u32(pixel_count_u64 * 4);
+    U8* dst = PushArray(arena, U8, dst_byte_count);
+
+    switch (image.channels)
+    {
+        case 1:
+        {
+            for (U32 i = 0; i < pixel_count; ++i)
+            {
+                U8 value = src[i];
+                dst[i * 4 + 0] = value;
+                dst[i * 4 + 1] = value;
+                dst[i * 4 + 2] = value;
+                dst[i * 4 + 3] = 255;
+            }
+        }
+        break;
+
+        case 2:
+        {
+            for (U32 i = 0; i < pixel_count; ++i)
+            {
+                U8 value = src[i * 2 + 0];
+                dst[i * 4 + 0] = value;
+                dst[i * 4 + 1] = value;
+                dst[i * 4 + 2] = value;
+                dst[i * 4 + 3] = src[i * 2 + 1];
+            }
+        }
+        break;
+
+        case 3:
+        {
+            for (U32 i = 0; i < pixel_count; ++i)
+            {
+                dst[i * 4 + 0] = src[i * 3 + 0];
+                dst[i * 4 + 1] = src[i * 3 + 1];
+                dst[i * 4 + 2] = src[i * 3 + 2];
+                dst[i * 4 + 3] = 255;
+            }
+        }
+        break;
+
+        case 4:
+        {
+            MemoryCopy(dst, src, dst_byte_count);
+        }
+        break;
+
+        default:
+        {
+            DEBUG_LOG("Unsupported Cesium raster image channel count: %d", image.channels);
+            return false;
+        }
+    }
+
+    *out_texture_upload = render::TextureUploadData::init(dst, (U32)image.width, (U32)image.height, 4, 1, dst_byte_count);
+    return true;
+}
+
+g_internal TileRenderDataList*
+_tile_render_data_list_get(const Cesium3DTilesSelection::Tile& tile)
+{
+    const Cesium3DTilesSelection::TileContent& content = tile.getContent();
+    const Cesium3DTilesSelection::TileRenderContent* render_content = content.getRenderContent();
+    if (!render_content)
+    {
+        return nullptr;
+    }
+
+    return static_cast<TileRenderDataList*>(render_content->getRenderResources());
+}
+
+g_internal TileRasterOverlayAttachment*
+_tile_raster_attachment_find(TileRenderDataList* render_data_list, const CesiumRasterOverlays::RasterOverlayTile& raster_tile, S32 overlay_texture_coordinate_id)
+{
+    if (!render_data_list)
+    {
+        return nullptr;
+    }
+
+    for (TileRasterOverlayAttachment* attachment = render_data_list->raster_overlay_first; attachment; attachment = attachment->next)
+    {
+        if (attachment->raster_tile == &raster_tile && attachment->overlay_texture_coordinate_id == overlay_texture_coordinate_id)
+        {
+            return attachment;
+        }
+    }
+
+    return nullptr;
+}
+
+g_internal TileRasterOverlayAttachment*
+_tile_active_raster_attachment_get(TileRenderDataList* render_data_list)
+{
+    if (!render_data_list)
+    {
+        return nullptr;
+    }
+
+    for (TileRasterOverlayAttachment* attachment = render_data_list->raster_overlay_first; attachment; attachment = attachment->next)
+    {
+        if (attachment->overlay_texture_coordinate_id == 0 && render::is_handle_zero(attachment->texture_handle) == false)
+        {
+            return attachment;
+        }
+    }
+
+    return nullptr;
+}
+
+g_internal void
+_tile_render_data_overlay_apply(TileRenderDataList* render_data_list)
+{
+    TileRasterOverlayAttachment* attachment = _tile_active_raster_attachment_get(render_data_list);
+
+    for (TileRenderData* render_data = render_data_list ? render_data_list->first : nullptr; render_data; render_data = render_data->next)
+    {
+        render_data->render_data.overlay_texture_handle = {};
+        render_data->render_data.overlay_translation = {};
+        render_data->render_data.overlay_scale = {1.0f, 1.0f};
+        render_data->render_data.overlay_texture_coordinate_id = -1;
+
+        if (attachment)
+        {
+            render_data->render_data.overlay_texture_handle = attachment->texture_handle;
+            render_data->render_data.overlay_translation.x = (F32)attachment->translation.x;
+            render_data->render_data.overlay_translation.y = (F32)attachment->translation.y;
+            render_data->render_data.overlay_scale.x = (F32)attachment->scale.x;
+            render_data->render_data.overlay_scale.y = (F32)attachment->scale.y;
+            render_data->render_data.overlay_texture_coordinate_id = attachment->overlay_texture_coordinate_id;
+        }
+    }
+}
+
+g_internal std::string
+_std_string_from_str8(String8 string)
+{
+    return std::string((const char*)string.str, (size_t)string.size);
+}
+
+g_internal void
+_ion_raster_overlay_example_add_if_present(TilesetRenderer* renderer)
+{
+    if (!renderer || !renderer->tileset)
+    {
+        return;
+    }
+
+    ScratchScope scratch = ScratchScope(0, 0);
+
+    String8 ion_access_token = {};
+    if (env_vars_value_get(scratch.arena, S("CESIUM_ION_ACCESS_TOKEN"), &ion_access_token, 1))
+    {
+        return;
+    }
+
+    String8 ion_raster_asset_id_str = {};
+    if (env_vars_value_get(scratch.arena, S("CESIUM_ION_RASTER_OVERLAY_ASSET_ID"), &ion_raster_asset_id_str, 1))
+    {
+        INFO_LOG("Cesium Ion raster overlay example disabled. Set CESIUM_ION_RASTER_OVERLAY_ASSET_ID to enable it.\n");
+        return;
+    }
+
+    S64 ion_raster_asset_id = s64_from_str8(ion_raster_asset_id_str, 10);
+    if (ion_raster_asset_id <= 0)
+    {
+        ERROR_LOG("Invalid CESIUM_ION_RASTER_OVERLAY_ASSET_ID value: %.*s\n", str8_varg(ion_raster_asset_id_str));
+        return;
+    }
+
+    String8 overlay_name_str = {};
+    std::string overlay_name = "cesium_ion_raster_overlay";
+    if (!env_vars_value_get(scratch.arena, S("CESIUM_ION_RASTER_OVERLAY_NAME"), &overlay_name_str, 1))
+    {
+        overlay_name = _std_string_from_str8(overlay_name_str);
+    }
+
+    render::SamplerInfo sampler_info = {
+        .min_filter = render::Filter_Linear,
+        .mag_filter = render::Filter_Linear,
+        .mip_map_mode = render::MipMapMode_Linear,
+        .address_mode_u = render::SamplerAddressMode_ClampToEdge,
+        .address_mode_v = render::SamplerAddressMode_ClampToEdge,
+        .unnormalized_coordinates = false,
+    };
+
+    CesiumRasterOverlays::RasterOverlayOptions overlay_options = {};
+    overlay_options.maximumSimultaneousTileLoads = 20;
+    overlay_options.maximumTextureSize = 2048;
+    overlay_options.maximumScreenSpaceError = 2.0;
+    overlay_options.rendererOptions = sampler_info;
+    overlay_options.loadErrorCallback = [](const CesiumRasterOverlays::RasterOverlayLoadFailureDetails& details)
+    {
+        const char* load_type = "Unknown";
+        switch (details.type)
+        {
+            case CesiumRasterOverlays::RasterOverlayLoadType::CesiumIon: load_type = "CesiumIon"; break;
+            case CesiumRasterOverlays::RasterOverlayLoadType::TileProvider: load_type = "TileProvider"; break;
+            case CesiumRasterOverlays::RasterOverlayLoadType::Unknown: break;
+            default: break;
+        }
+
+        ERROR_LOG("Cesium ion raster overlay load error: type=%s message=%s\n", load_type, details.message.c_str());
+    };
+
+    CesiumUtility::IntrusivePointer<const CesiumRasterOverlays::RasterOverlay> ion_overlay =
+        new CesiumRasterOverlays::IonRasterOverlay(overlay_name, ion_raster_asset_id, _std_string_from_str8(ion_access_token), overlay_options);
+
+    renderer->tileset->getOverlays().add(ion_overlay);
+    INFO_LOG("Added Cesium ion raster overlay example: %s (asset_id=%lld)\n", overlay_name.c_str(), ion_raster_asset_id);
+}
+
 //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 // Prepare Renderer Resources Implementation
 //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -103,47 +381,96 @@ class DTCityPrepareRendererResources : public Cesium3DTilesSelection::IPrepareRe
     void*
     prepareRasterInLoadThread(CesiumGltf::ImageAsset& image, const std::any& rendererOptions) override
     {
-        (void)image;
-        (void)rendererOptions;
-        return nullptr;
+        prof_scope_marker;
+
+        render::ThreadInput* thread_input = render::thread_input_create();
+        RasterTileInfo tile_info(image, rendererOptions);
+        render::ThreadSyncCallback callback = render::ThreadSyncCallback(&tile_info, render_raster_tile_record);
+
+        void* raster_tile = render::thread_cmd_buffer_record(thread_input, callback);
+
+        return raster_tile;
     }
 
     void*
     prepareRasterInMainThread(CesiumRasterOverlays::RasterOverlayTile& rasterTile, void* pLoadThreadResult) override
     {
         (void)rasterTile;
-        (void)pLoadThreadResult;
-        return nullptr;
+        RasterLoadThreadResult* load_result = static_cast<RasterLoadThreadResult*>(pLoadThreadResult);
+        if (!load_result)
+        {
+            return nullptr;
+        }
+
+        return load_result;
     }
 
     void
     freeRaster(const CesiumRasterOverlays::RasterOverlayTile& rasterTile, void* pLoadThreadResult, void* pMainThreadResult) noexcept override
     {
         (void)rasterTile;
-        (void)pLoadThreadResult;
-        (void)pMainThreadResult;
+        RasterLoadThreadResult* result = static_cast<RasterLoadThreadResult*>(pMainThreadResult ? pMainThreadResult : pLoadThreadResult);
+        if (result)
+        {
+            Assert(render::is_handle_zero(result->texture_handle) == false);
+            render::handle_destroy_deferred(result->texture_handle);
+            arena_release(result->arena);
+        }
     }
 
     void
     attachRasterInMainThread(const Cesium3DTilesSelection::Tile& tile, int32_t overlayTextureCoordinateID, const CesiumRasterOverlays::RasterOverlayTile& rasterTile,
                              void* pMainThreadRendererResources, const glm::dvec2& translation, const glm::dvec2& scale) override
     {
-        (void)tile;
-        (void)overlayTextureCoordinateID;
-        (void)rasterTile;
-        (void)pMainThreadRendererResources;
-        (void)translation;
-        (void)scale;
+        TileRenderDataList* render_data_list = _tile_render_data_list_get(tile);
+        RasterLoadThreadResult* raster_resources = static_cast<RasterLoadThreadResult*>(pMainThreadRendererResources);
+        if (!render_data_list || !render_data_list->arena || !raster_resources)
+        {
+            return;
+        }
+
+        TileRasterOverlayAttachment* attachment = _tile_raster_attachment_find(render_data_list, rasterTile, overlayTextureCoordinateID);
+        if (!attachment)
+        {
+            attachment = PushStruct(render_data_list->arena, TileRasterOverlayAttachment);
+            SLLStackPush(render_data_list->raster_overlay_first, attachment);
+        }
+
+        attachment->raster_tile = &rasterTile;
+        attachment->raster_renderer_resources = pMainThreadRendererResources;
+        attachment->texture_handle = raster_resources->texture_handle;
+        attachment->overlay_texture_coordinate_id = overlayTextureCoordinateID;
+        attachment->translation = translation;
+        attachment->scale = scale;
     }
 
     void
     detachRasterInMainThread(const Cesium3DTilesSelection::Tile& tile, int32_t overlayTextureCoordinateID, const CesiumRasterOverlays::RasterOverlayTile& rasterTile,
                              void* pMainThreadRendererResources) noexcept override
     {
-        (void)tile;
-        (void)overlayTextureCoordinateID;
-        (void)rasterTile;
-        (void)pMainThreadRendererResources;
+        TileRenderDataList* render_data_list = _tile_render_data_list_get(tile);
+        if (!render_data_list)
+        {
+            return;
+        }
+
+        TileRasterOverlayAttachment** prev_next = &render_data_list->raster_overlay_first;
+        for (TileRasterOverlayAttachment* attachment = render_data_list->raster_overlay_first; attachment; attachment = attachment->next)
+        {
+            bool same_raster = attachment->raster_tile == &rasterTile;
+            if (!same_raster && pMainThreadRendererResources)
+            {
+                same_raster = attachment->raster_renderer_resources == pMainThreadRendererResources;
+            }
+
+            if (same_raster && attachment->overlay_texture_coordinate_id == overlayTextureCoordinateID)
+            {
+                *prev_next = attachment->next;
+                break;
+            }
+
+            prev_next = &attachment->next;
+        }
     }
 
   private:
@@ -246,7 +573,12 @@ render_list_record(render::ThreadInput* thread_input, render::FuncData user_data
         {
             render::handle_list_push(thread_input->arena, &thread_input->handles, data->render_data.vertex_buffer_handle);
             render::handle_list_push(thread_input->arena, &thread_input->handles, data->render_data.index_buffer_handle);
-            render::handle_list_push(thread_input->arena, &thread_input->handles, data->render_data.texture_handle);
+            render::Handle null_texture_handle = render::texture_zero_handle_get();
+            if (data->render_data.texture_handle.u64 != null_texture_handle.u64 || data->render_data.texture_handle.gen_id != null_texture_handle.gen_id ||
+                data->render_data.texture_handle.type != null_texture_handle.type)
+            {
+                render::handle_list_push(thread_input->arena, &thread_input->handles, data->render_data.texture_handle);
+            }
 
             render::handle_list_push(thread_input->arena, &thread_input->handles, data->render_data.storage_buffer_handle);
 
@@ -255,6 +587,36 @@ render_list_record(render::ThreadInput* thread_input, render::FuncData user_data
         }
     }
     return render_data_list;
+}
+
+g_internal void*
+render_raster_tile_record(render::ThreadInput* thread_input, render::FuncData user_data)
+{
+    RasterTileInfo* tile_info = (RasterTileInfo*)user_data;
+    Arena* raster_arena = arena_alloc();
+    RasterLoadThreadResult* result = PushStruct(raster_arena, RasterLoadThreadResult);
+    result->arena = raster_arena;
+    result->sampler_info = _raster_sampler_info_get(tile_info->renderer_options);
+    if (!_raster_texture_upload_data_prepare(raster_arena, tile_info->image, &result->texture_upload))
+    {
+        arena_release(raster_arena);
+        return nullptr;
+    }
+    result->width = result->texture_upload.width;
+    result->height = result->texture_upload.height;
+    result->texture_handle = render::texture_load_sync(&result->sampler_info, &result->texture_upload, (VkCommandBuffer)thread_input->cmd_buffer);
+    {
+        auto stub_func = [](void* data, render::ThreadInput* thread_input)
+        {
+            (void)data;
+            (void)thread_input;
+        };
+
+        render::handle_list_push(thread_input->arena, &thread_input->handles, result->texture_handle);
+        thread_input->done_loading_func = render::handle_done_loading;
+        thread_input->loading_func = stub_func;
+    }
+    return result;
 }
 
 g_internal TileRenderDataList*
@@ -273,6 +635,7 @@ tile_render_data_from_gltf(const CesiumGltf::Model& model, const glm::dmat4& ece
         Buffer<render::Vertex3D> vertices;
         Buffer<U32> indices;
         U32 material_idx;
+        B32 has_overlay_uv;
     };
 
     struct PrimitiveList
@@ -309,6 +672,13 @@ tile_render_data_from_gltf(const CesiumGltf::Model& model, const glm::dmat4& ece
                     uv_accessor = CesiumGltf::Model::getSafe(&model.accessors, uv_it->second);
                 }
 
+                const CesiumGltf::Accessor* overlay_uv_accessor = nullptr;
+                auto overlay_uv_it = primitive.attributes.find("_CESIUMOVERLAY_0");
+                if (overlay_uv_it != primitive.attributes.end())
+                {
+                    overlay_uv_accessor = CesiumGltf::Model::getSafe(&model.accessors, overlay_uv_it->second);
+                }
+
                 // Get buffer views and buffers for position
                 const CesiumGltf::BufferView* pos_buffer_view = CesiumGltf::Model::getSafe(&model.bufferViews, pos_accessor->bufferView);
                 if (!pos_buffer_view)
@@ -321,10 +691,12 @@ tile_render_data_from_gltf(const CesiumGltf::Model& model, const glm::dmat4& ece
                 // Read positions
                 const U8* pos_data = (U8*)pos_buffer->cesium.data.data() + pos_buffer_view->byteOffset + pos_accessor->byteOffset;
 
-                // Stride cannot change dynamically with current implementation
                 S64 pos_stride = pos_buffer_view->byteStride.value_or(0);
-                Assert(pos_stride == 0 || pos_stride == (sizeof(F32) * 3));
-                pos_stride = sizeof(F32) * 3;
+                if (pos_stride == 0)
+                {
+                    pos_stride = sizeof(F32) * 3;
+                }
+                // Assert(pos_stride <= (S64)(sizeof(F32) * 3));
 
                 // Get UV data if available
                 const U8* uv_data = nullptr;
@@ -344,6 +716,23 @@ tile_render_data_from_gltf(const CesiumGltf::Model& model, const glm::dmat4& ece
                     }
                 }
 
+                const U8* overlay_uv_data = nullptr;
+                U32 overlay_uv_stride = 0;
+                if (overlay_uv_accessor)
+                {
+                    const CesiumGltf::BufferView* overlay_uv_buffer_view = CesiumGltf::Model::getSafe(&model.bufferViews, overlay_uv_accessor->bufferView);
+                    if (overlay_uv_buffer_view)
+                    {
+                        const CesiumGltf::Buffer* overlay_uv_buffer = CesiumGltf::Model::getSafe(&model.buffers, overlay_uv_buffer_view->buffer);
+                        if (overlay_uv_buffer)
+                        {
+                            overlay_uv_data = (U8*)overlay_uv_buffer->cesium.data.data() + overlay_uv_buffer_view->byteOffset + overlay_uv_accessor->byteOffset;
+                            U32 overlay_uv_byte_stride = overlay_uv_buffer_view->byteStride.value_or(0);
+                            overlay_uv_stride = overlay_uv_byte_stride > 0 ? overlay_uv_byte_stride : sizeof(F32) * 2;
+                        }
+                    }
+                }
+
                 const CesiumGltf::Accessor* index_accessor = CesiumGltf::Model::getSafe(&model.accessors, primitive.indices);
 
                 // Allocate buffers
@@ -354,6 +743,10 @@ tile_render_data_from_gltf(const CesiumGltf::Model& model, const glm::dmat4& ece
                 for (U32 i = 0; i < (U32)pos_accessor->count; ++i)
                 {
                     render::Vertex3D* vertex = &vertices.data[i];
+                    vertex->colormap_value = 0.0f;
+                    vertex->uv = {};
+                    vertex->overlay_uv = {};
+                    vertex->object_id = {};
 
                     // glTF uses right-handed Y-up, convert to right-handed Z-up: (x, y, z) -> (x, z,
                     // -y) Then transform applies: tile_transform (to ECEF) -> ecef_to_local (to local
@@ -370,10 +763,19 @@ tile_render_data_from_gltf(const CesiumGltf::Model& model, const glm::dmat4& ece
                     vertex->pos.y = (F32)pos_zup.y;
                     vertex->pos.z = (F32)pos_zup.z;
 
-                    AssertAlways(uv_data);
-                    const F32* uv = (const F32*)(uv_data + (U64)i * (U64)uv_stride);
-                    vertex->uv.x = uv[0];
-                    vertex->uv.y = uv[1];
+                    if (uv_data)
+                    {
+                        const F32* uv = (const F32*)(uv_data + (U64)i * (U64)uv_stride);
+                        vertex->uv.x = uv[0];
+                        vertex->uv.y = uv[1];
+                    }
+
+                    if (overlay_uv_data)
+                    {
+                        const F32* overlay_uv = (const F32*)(overlay_uv_data + (U64)i * (U64)overlay_uv_stride);
+                        vertex->overlay_uv.x = overlay_uv[0];
+                        vertex->overlay_uv.y = overlay_uv[1];
+                    }
                 }
 
                 // Read indices
@@ -407,6 +809,7 @@ tile_render_data_from_gltf(const CesiumGltf::Model& model, const glm::dmat4& ece
                 primitive_node->vertices = vertices;
                 primitive_node->indices = indices;
                 primitive_node->material_idx = primitive.material;
+                primitive_node->has_overlay_uv = overlay_uv_data != nullptr;
 
                 SLLQueuePush(primitive_list.first, primitive_list.last, primitive_node);
             }
@@ -422,15 +825,18 @@ tile_render_data_from_gltf(const CesiumGltf::Model& model, const glm::dmat4& ece
         // First pass: count vertices/indices only for primitives with this material
         U32 vertex_count = 0;
         U32 index_count = 0;
+        B32 has_overlay_uv = false;
         for (PrimitiveNode* prim_node = primitive_list.first; prim_node; prim_node = prim_node->next)
         {
             if (prim_node->material_idx == mat_idx)
             {
                 vertex_count += prim_node->vertices.size;
                 index_count += prim_node->indices.size;
+                has_overlay_uv |= prim_node->has_overlay_uv;
             }
         }
         render_data->render_data.index_count = index_count;
+        render_data->render_data.has_overlay_uv = has_overlay_uv;
 
         // Second pass: copy and merge vertices/indices
         U32 vertex_offset = 0;
@@ -522,17 +928,22 @@ tileset_renderer_create(Arena* arena, async::ThreadPool* threads, const char* ti
     // Register all tile content types
     Cesium3DTilesContent::registerAllTileContentTypes();
 
-    TilesetRenderer* renderer = PushArrayNoZero(arena, TilesetRenderer, 1);
+    TilesetRenderer* renderer = PushStruct(arena, TilesetRenderer);
     renderer->tiles_to_free_mutex = os_rw_mutex_alloc();
 
     // Create task processor
-    renderer->task_processor = std::make_shared<DTCityTaskProcessor>(threads);
+    DTCityTaskProcessor* task_processor = PushStructNoZero(arena, DTCityTaskProcessor);
+    new (task_processor) DTCityTaskProcessor(threads);
+    renderer->task_processor = task_processor;
+    std::shared_ptr<CesiumAsync::ITaskProcessor> task_processor_ref(renderer->task_processor, [](CesiumAsync::ITaskProcessor*) {});
 
     // Create asset accessor using CesiumCurl
     std::shared_ptr<CesiumAsync::IAssetAccessor> asset_accessor = std::make_shared<CesiumCurl::CurlAssetAccessor>();
 
     // Create async system
-    new (&renderer->async_system) CesiumAsync::AsyncSystem(renderer->task_processor);
+    new (&renderer->async_system) CesiumAsync::AsyncSystem(task_processor_ref);
+    renderer->credit_system = new CesiumUtility::CreditSystem();
+    std::shared_ptr<CesiumUtility::CreditSystem> credit_system_ref(renderer->credit_system, [](CesiumUtility::CreditSystem*) {});
 
     // Set up local coordinate system centered at the origin
     CesiumGeospatial::Cartographic origin_cartographic(glm::radians(origin_longitude), glm::radians(origin_latitude), origin_height);
@@ -553,7 +964,7 @@ tileset_renderer_create(Arena* arena, async::ThreadPool* threads, const char* ti
     }
 
     // Keep Cesium's default logger instead of overwriting it with nullptr.
-    Cesium3DTilesSelection::TilesetExternals externals{asset_accessor, prepare_renderer_resources, renderer->async_system, nullptr, logger, nullptr};
+    Cesium3DTilesSelection::TilesetExternals externals{asset_accessor, prepare_renderer_resources, renderer->async_system, credit_system_ref, logger, nullptr};
 
     // Create tileset options
     Cesium3DTilesSelection::TilesetOptions options;
@@ -575,7 +986,8 @@ tileset_renderer_create(Arena* arena, async::ThreadPool* threads, const char* ti
     };
 
     // Create the tileset
-    renderer->tileset = std::make_shared<Cesium3DTilesSelection::Tileset>(externals, tileset_url, options);
+    renderer->tileset = new Cesium3DTilesSelection::Tileset(externals, tileset_url, options);
+    _ion_raster_overlay_example_add_if_present(renderer);
 
     return renderer;
 }
@@ -605,7 +1017,12 @@ tileset_renderer_free_tile_ressource(TilesetRenderer* renderer)
         {
             render::handle_destroy_deferred(render_data->render_data.vertex_buffer_handle);
             render::handle_destroy_deferred(render_data->render_data.index_buffer_handle);
-            render::handle_destroy_deferred(render_data->render_data.texture_handle);
+            render::Handle null_texture_handle = render::texture_zero_handle_get();
+            if (render_data->render_data.texture_handle.u64 != null_texture_handle.u64 || render_data->render_data.texture_handle.gen_id != null_texture_handle.gen_id ||
+                render_data->render_data.texture_handle.type != null_texture_handle.type)
+            {
+                render::handle_destroy_deferred(render_data->render_data.texture_handle);
+            }
             render::handle_destroy_deferred(render_data->render_data.storage_buffer_handle);
         }
         arena_release(tile_data->arena);
@@ -622,8 +1039,16 @@ tileset_renderer_destroy(TilesetRenderer* renderer)
             DEBUG_LOG("Failed to wait for all tile loads to complete");
         }
 
-        renderer->tileset.reset();
-        renderer->task_processor.reset();
+        delete renderer->tileset;
+        renderer->tileset = nullptr;
+
+        renderer->async_system.~AsyncSystem();
+
+        delete renderer->credit_system;
+        renderer->credit_system = nullptr;
+
+        ((DTCityTaskProcessor*)renderer->task_processor)->~DTCityTaskProcessor();
+        renderer->task_processor = nullptr;
     }
 
     tileset_renderer_free_tile_ressource(renderer);
@@ -706,6 +1131,7 @@ tileset_update_view(Arena* arena, TilesetRenderer* renderer, ui::Camera* camera,
         if (render_data->tile_is_loaded)
         {
             prof_scope_marker_named("tileset_update_view:schedule_loaded_tiles");
+            _tile_render_data_overlay_apply(render_data);
             for (TileRenderData* render_data_node = render_data->first; render_data_node; render_data_node = render_data_node->next)
             {
                 SLLQueuePush_N(renderer->tile_to_show.first, renderer->tile_to_show.last, render_data_node, render_next);

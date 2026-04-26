@@ -21,6 +21,7 @@
 #include <Cesium3DTilesSelection/TilesetOptions.h>
 #include <Cesium3DTilesSelection/IPrepareRendererResources.h>
 #include <Cesium3DTilesContent/registerAllTileContentTypes.h>
+#include <CesiumRasterOverlays/IonRasterOverlay.h>
 #include <CesiumRasterOverlays/RasterOverlayTile.h>
 #include <CesiumGltfReader/GltfReader.h>
 #include <CesiumGltf/Model.h>
@@ -33,6 +34,7 @@
 #include <CesiumAsync/AsyncSystem.h>
 #include <CesiumAsync/IAssetAccessor.h>
 #include <CesiumAsync/ITaskProcessor.h>
+#include <CesiumUtility/CreditSystem.h>
 #include <CesiumUtility/IntrusivePointer.h>
 #include <CesiumUtility/Uri.h>
 #include <CesiumGeospatial/Ellipsoid.h>

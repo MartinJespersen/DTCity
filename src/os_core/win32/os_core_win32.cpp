@@ -21,6 +21,10 @@ os_w32_file_property_flags_from_dwFileAttributes(DWORD dwFileAttributes)
     {
         flags |= FilePropertyFlag_IsFolder;
     }
+    if (dwFileAttributes & FILE_ATTRIBUTE_REPARSE_POINT)
+    {
+        flags |= FilePropertyFlag_IsLink;
+    }
     return flags;
 }
 
@@ -423,7 +427,7 @@ os_file_read(OS_Handle file, Rng1U64 rng, void* out_data)
 }
 
 static U64
-OS_FileWrite(OS_Handle file, Rng1U64 rng, void* data)
+os_file_write(OS_Handle file, Rng1U64 rng, void* data)
 {
     if (OS_HandleMatch(file, OS_HandleIsZero()))
     {
@@ -537,6 +541,16 @@ os_delete_file_at_path(String8 path)
     Temp scratch = ScratchBegin(0, 0);
     String16 path16 = str16_from_8(scratch.arena, path);
     B32 result = DeleteFileW((WCHAR*)path16.str);
+    ScratchEnd(scratch);
+    return result;
+}
+
+static B32
+os_delete_directory_at_path(String8 path)
+{
+    Temp scratch = ScratchBegin(0, 0);
+    String16 path16 = str16_from_8(scratch.arena, path);
+    B32 result = RemoveDirectoryW((WCHAR*)path16.str);
     ScratchEnd(scratch);
     return result;
 }

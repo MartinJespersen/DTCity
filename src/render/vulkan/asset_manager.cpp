@@ -366,7 +366,6 @@ buffer_loading_thread(void* data, render::ThreadInput* thread_input)
         }
         else
         {
-            DEBUG_LOG("buffer_loading_thread: Asset Item: %llu - Not Found", handle.u64);
             buffer_destroy(&staging_buffer_alloc);
         }
     }
@@ -394,7 +393,6 @@ texture_loading_thread(void* data, render::ThreadInput* thread_input)
         {
             buffer_destroy(&image_allocation_resource.staging_buffer_alloc);
             image_resource_destroy(image_allocation_resource.image_resource);
-            DEBUG_LOG("texture_loading_thread: Asset Item: %llu - Not Found", handle.u64);
         }
     }
 }
@@ -506,6 +504,8 @@ deletion_queue_push(render::Handle handle)
 
         deletion->handle = handle;
 
+        Debug_Asset_Push_ScheduleDeletion(handle);
+
         DLLPushBack(queue->first, queue->last, deletion);
         queue->list_count++;
     }
@@ -521,8 +521,6 @@ deletion_queue_empty(DeletionQueue* queue)
             PendingDeletion* deletion = queue->first;
             DLLRemove(queue->first, queue->last, deletion);
             queue->list_count--;
-
-            DEBUG_LOG("Asset ID: %llu - Force deleting from deletion queue", deletion->handle.u64);
 
             asset_manager_handle_free(deletion->handle);
             SLLStackPush(asset_manager->deletion_queue_free_list, deletion);
@@ -677,7 +675,10 @@ asset_cmd_queue_item_enqueue(U32 thread_id, render::ThreadInput* thread_input)
     AssetManager* asset_manager = asset_manager_get();
 
     CmdQueueItem item = {.thread_input = thread_input, .thread_id = thread_id};
-    DEBUG_LOG("Asset ID: %llu - Cmd Getting Queued", thread_input->handles.first ? thread_input->handles.first->handle.u64 : 0);
+    for (render::HandleNode* node = thread_input->handles.first; node; node = node->next)
+    {
+        Debug_Asset_Push_Queued(node->handle);
+    }
     Assert(thread_input->cmd_buffer != VK_NULL_HANDLE);
     asset_manager_cmd_queue_enqueue(asset_manager->cmd_queue, item);
 }
@@ -706,7 +707,10 @@ asset_manager_execute_cmds()
 
         VK_CHECK_RESULT(vkQueueSubmit(asset_manager->graphics_queue, 1, &submit_info, item.fence));
 
-        DEBUG_LOG("Asset ID: %llu - Submitted Command Buffer", item.thread_input->handles.first ? item.thread_input->handles.first->handle.u64 : 0);
+        for (render::HandleNode* node = item.thread_input->handles.first; node; node = node->next)
+        {
+            Debug_Asset_Push_GpuSubmitted(node->handle);
+        }
         Assert(item.thread_input->done_loading_func);
         asset_manager_cmd_list_add(asset_manager->cmd_wait_list, item);
     }
@@ -718,15 +722,25 @@ asset_manager_item_get(render::Handle handle)
 {
     Assert(handle.u64 != 0);
     render::AssetItem<T>* asset_item = (render::AssetItem<T>*)handle.ptr;
-    if (asset_item && asset_item->gen_id == handle.gen_id && handle.type == asset_item->type)
-        return asset_item;
-
-    if (!render::is_handle_zero(handle))
+    if (!asset_item)
     {
-        DEBUG_LOG("Asset ID: %llu - Not Found", handle.u64);
+        Debug_Asset_Push_NotFound(handle);
+        return 0;
     }
 
-    return 0;
+    if (asset_item->gen_id != handle.gen_id)
+    {
+        Debug_Asset_Push_WrongGenId(handle);
+        return 0;
+    }
+
+    if (asset_item->type != handle.type)
+    {
+        Debug_Asset_Push_WrongHandleType(handle);
+        return 0;
+    }
+
+    return asset_item;
 }
 
 static render::AssetItem<BufferHandle>*
@@ -797,6 +811,7 @@ asset_manager_item_create(render::AssetItemList<T>* list, render::AssetItemList<
 
     Assert(asset_item);
     render::Handle handle = render::Handle(asset_item, asset_item->gen_id, handle_type);
+    Debug_Asset_Push_Created(handle);
     return handle;
 }
 
@@ -821,7 +836,13 @@ asset_manager_cmd_done_check()
             Assert(thread_input->done_loading_func != nullptr);
             thread_input->done_loading_func(thread_input->handles);
 
-            DEBUG_LOG("Asset: %llu - Finished loading", thread_input->handles.first->handle.u64);
+            for (render::HandleNode* node = thread_input->handles.first; node; node = node->next)
+            {
+                if (node->work_on_gpu_done)
+                {
+                    Debug_Asset_Push_GpuSubmissionDone(node->handle);
+                }
+            }
             vkDestroyFence(asset_manager->device, cmd_queue_item->fence, 0);
             render::thread_input_destroy(cmd_queue_item->thread_input);
             asset_manager_cmd_list_item_remove(asset_manager->cmd_wait_list, cmd_queue_item);
@@ -1079,6 +1100,7 @@ asset_manager_handle_free(render::Handle handle)
         break;
         default: InvalidPath; break;
     }
+    Debug_Asset_Push_Deletion(handle);
 }
 
 //~mgj: Buffer Allocation Functions (VMA)

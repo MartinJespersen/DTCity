@@ -14,6 +14,7 @@ cache_needs_update(String8 cache_data_file, String8 cache_meta_file)
 
     U64 meta_file_size = 0;
     OS_Handle meta_data_file_handle = os_file_open(OS_AccessFlag_Read, cache_meta_file);
+    defer(os_file_close(meta_data_file_handle));
     FileProperties meta_file_props = os_properties_from_file(meta_data_file_handle);
     meta_file_size = meta_file_props.size;
     if (meta_file_size == 0)
@@ -72,7 +73,6 @@ cache_needs_update(String8 cache_data_file, String8 cache_meta_file)
                 }
             }
         }
-        os_file_close(meta_data_file_handle);
     }
 
     return update_needed;
@@ -89,12 +89,12 @@ cache_write(String8 cache_file, String8 content, String8 hash_content)
 
     // ~mgj: write to cache file
     OS_Handle file_write_handle = os_file_open(OS_AccessFlag_Write, cache_file);
-    U64 bytes_written = OS_FileWrite(file_write_handle, r1u64(0, content.size), content.str);
+    defer(os_file_close(file_write_handle));
+    U64 bytes_written = os_file_write(file_write_handle, r1u64(0, content.size), content.str);
     if (bytes_written != content.size)
     {
         DEBUG_LOG("DataFetch: Was not able to write OSM data to cache\n");
     }
-    os_file_close(file_write_handle);
 
     // ~mgj: write to cache meta file
     if (content.size > 0)
@@ -104,12 +104,12 @@ cache_write(String8 cache_file, String8 content, String8 hash_content)
         String8 meta_str = PushStr8F(scratch.arena, "%llu\t%llu", new_hash, timestamp);
 
         OS_Handle file_write_handle_meta = os_file_open(OS_AccessFlag_Write, cache_meta_file);
-        U64 bytes_written_meta = OS_FileWrite(file_write_handle_meta, r1u64(0, meta_str.size), meta_str.str);
+        defer(os_file_close(file_write_handle_meta));
+        U64 bytes_written_meta = os_file_write(file_write_handle_meta, r1u64(0, meta_str.size), meta_str.str);
         if (bytes_written_meta != meta_str.size)
         {
             DEBUG_LOG("DataFetch: Was not able to write meta data to cache\n");
         }
-        os_file_close(file_write_handle_meta);
     }
 }
 
@@ -136,6 +136,7 @@ cache_read(Arena* arena, String8 cache_file, String8 hash_input)
     if (read_from_cache)
     {
         OS_Handle file_handle = os_file_open(OS_AccessFlag_Read, cache_file);
+        defer(os_file_close(file_handle));
         FileProperties file_props = os_properties_from_file(file_handle);
 
         str = push_str8_fill_byte(arena, file_props.size, 0);
@@ -145,7 +146,6 @@ cache_read(Arena* arena, String8 cache_file, String8 hash_input)
         {
             DEBUG_LOG("DataFetch: Could not read everything from cache\n");
         }
-        os_file_close(file_handle);
 
         B32 needs_update = cache_needs_update(hash_input, cache_meta_file);
         read_from_cache = !needs_update;

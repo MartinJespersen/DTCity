@@ -1,9 +1,14 @@
 # Urgent changes
+* DEBUG_LOG macro is commented out
+* thread_input arena might not be deallocated everywhere (used in asset loading from cesium). Consider using some form of smart pointer.
+* Staged regression findings:
+  * Raster overlay upload failure can enqueue a command buffer without handles or done_loading_func.
+  * Asset deletion logging emits ScheduleDeletion when the queued deletion is actually being executed.
+
+# Less urgent changes
 * vulkan descriptor layout specified twice some places (e.g. compute storage buffers descriptor)
 * Reconsider the number of descriptor pools (whether 1 is enough) and the descriptor numbers
 * In function RoadSegmentFromTwoRoadNodes: the normalize function leads to values being Nan. Handle this in a better way.
-
-# Less urgent changes
 * Improve the threading in the asset manager (e.g. too many mutexes are used at the moment)
 * The implementation of draw functions and similar for compute is ugly
 * Use vulkan push descriptor and buffer device address instead of descriptor sets
@@ -18,7 +23,8 @@
 
 # features
 * Osm data visualizer should not be affected by netascore not showing
-* Raster overlays should show for eksiltuna 
+* It should be possible to switch between cities in the editor
+* Raster overlays should show for Eskilstuna
 * Use the OSM data for showing data about buildings
 * Logging should be improved to not always print to console 
   * Look at handmade hero debugging for inspiration how to do this
@@ -38,10 +44,11 @@
   * Make app work on MACOS
 * Memory handling with shared pointer might not be the way to go for http 
 
+# Debug Log Suggestions
+* arena: alloc, push, pop and releases
+* HTTP debug log
 # Documentation
 * Explain the use of NetAScore Environment variable.
-
-
 
 # Future Improvements:
 * Create a draw layer 

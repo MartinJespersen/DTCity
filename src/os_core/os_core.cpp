@@ -85,7 +85,7 @@ os_write_data_to_file_path(String8 path, String8 data)
     if (!OS_HandleMatch(file, OS_HandleIsZero()))
     {
         good = 1;
-        OS_FileWrite(file, r1u64(0, data.size), data.str);
+        os_file_write(file, r1u64(0, data.size), data.str);
         os_file_close(file);
     }
     return good;
@@ -102,7 +102,7 @@ os_write_data_list_to_file_path(String8 path, String8List list)
         U64 off = 0;
         for (String8Node* n = list.first; n != 0; n = n->next)
         {
-            OS_FileWrite(file, r1u64(off, off + n->string.size), n->string.str);
+            os_file_write(file, r1u64(off, off + n->string.size), n->string.str);
             off += n->string.size;
         }
         os_file_close(file);
@@ -111,20 +111,56 @@ os_write_data_list_to_file_path(String8 path, String8List list)
 }
 
 static B32
-os_append_data_to_file_path(String8 path, String8 data)
+os_append_data_to_file_path(String8 path, String8 data, OS_AccessFlags additional_flags)
 {
     B32 good = 0;
     if (data.size != 0)
     {
-        OS_Handle file = os_file_open(OS_AccessFlag_Write | OS_AccessFlag_Append, path);
+        OS_Handle file = os_file_open(OS_AccessFlag_Write | OS_AccessFlag_Append | additional_flags, path);
         if (!OS_HandleMatch(file, OS_HandleIsZero()))
         {
             good = 1;
             U64 pos = os_properties_from_file(file).size;
-            OS_FileWrite(file, r1u64(pos, pos + data.size), data.str);
+            os_file_write(file, r1u64(pos, pos + data.size), data.str);
             os_file_close(file);
         }
     }
+    return good;
+}
+
+static B32
+os_clear_directory(String8 path)
+{
+    if (!os_folder_path_exists(path))
+    {
+        return 0;
+    }
+
+    B32 good = 1;
+    Temp scratch = ScratchBegin(0, 0);
+    OS_FileIter* iter = os_file_iter_begin(scratch.arena, path, 0);
+    OS_FileInfo info = {0};
+    while (os_file_iter_next(scratch.arena, iter, &info))
+    {
+        String8 child_path = str8_path_from_str8_list(scratch.arena, {path, info.name});
+        B32 is_folder = !!(info.props.flags & FilePropertyFlag_IsFolder);
+        B32 is_link = !!(info.props.flags & FilePropertyFlag_IsLink);
+        if (is_folder && !is_link)
+        {
+            good = os_clear_directory(child_path) && good;
+            good = os_delete_directory_at_path(child_path) && good;
+        }
+        else if (is_folder)
+        {
+            good = os_delete_directory_at_path(child_path) && good;
+        }
+        else
+        {
+            good = os_delete_file_at_path(child_path) && good;
+        }
+    }
+    os_file_iter_end(iter);
+    ScratchEnd(scratch);
     return good;
 }
 

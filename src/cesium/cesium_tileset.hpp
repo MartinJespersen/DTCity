@@ -14,6 +14,16 @@ struct TileInfo
     }
 };
 
+struct RasterTileInfo
+{
+    const CesiumGltf::ImageAsset& image;
+    const std::any& renderer_options;
+
+    RasterTileInfo(const CesiumGltf::ImageAsset& image, const std::any& renderer_options) : image(image), renderer_options(renderer_options)
+    {
+    }
+};
+
 struct TileRenderData
 {
     TileRenderData* next;
@@ -24,6 +34,20 @@ struct TileRenderData
     bool compute_scheduled;
 };
 
+struct TileRasterOverlayAttachment
+{
+    TileRasterOverlayAttachment* next;
+
+    const CesiumRasterOverlays::RasterOverlayTile* raster_tile;
+    void* raster_renderer_resources;
+
+    render::Handle texture_handle;
+
+    S32 overlay_texture_coordinate_id;
+    glm::dvec2 translation;
+    glm::dvec2 scale;
+};
+
 struct TileRenderDataList
 {
     TileRenderDataList* next;
@@ -32,12 +56,15 @@ struct TileRenderDataList
 
     TileRenderData* first;
     TileRenderData* last;
+
+    TileRasterOverlayAttachment* raster_overlay_first;
 };
 
 struct TilesetRenderer
 {
-    std::shared_ptr<Cesium3DTilesSelection::Tileset> tileset;
-    std::shared_ptr<CesiumAsync::ITaskProcessor> task_processor;
+    Cesium3DTilesSelection::Tileset* tileset;
+    CesiumAsync::ITaskProcessor* task_processor;
+    CesiumUtility::CreditSystem* credit_system;
     CesiumAsync::AsyncSystem async_system;
 
     glm::dmat4 ecef_to_local;
@@ -65,6 +92,8 @@ tileset_update_view(Arena* arena, TilesetRenderer* renderer, ui::Camera* camera,
 g_internal TileRenderDataList*
 tile_render_data_from_gltf(const CesiumGltf::Model& model, const glm::dmat4& ecef_to_local, const glm::dmat4& tile_transform, render::ThreadInput* thread_input);
 
+g_internal void*
+render_raster_tile_record(render::ThreadInput* thread_input, render::FuncData user_data);
 g_internal void*
 render_list_record(render::ThreadInput* thread_input, render::FuncData user_data);
 } // namespace cesium

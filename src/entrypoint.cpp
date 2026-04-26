@@ -179,15 +179,15 @@ dt_interpret_input(int argc, char** argv)
         INFO_LOG("Using default coordinates");
 
 #if OS_WINDOWS
-        // String8 tileset_url = S("file:///C:/ByModel/eskiltuna/Totalstad_2025_q3/tileset.json");
+        String8 tileset_url = S("file:///C:/ByModel/eskiltuna/Totalstad_2025_q3/tileset.json");
 
-        String8 tileset_url = S("file:///C:/ByModel/5km_6235_580/tileset.json");
+        // String8 tileset_url = S("file:///C:/ByModel/5km_6235_580/tileset.json");
 #else
         String8 tileset_url = S("file:///mnt/c/ByModel/5km_6235_580/tileset.json");
 #endif
 
         input.tileset_url = tileset_url;
-        input.btm_right_corner_wgs84 = vec_2f64(10.291206, 56.253108); // vec_2f64(16.49952138067, 59.36163877297);
+        input.btm_right_corner_wgs84 = vec_2f64(16.49952138067, 59.36163877297); // vec_2f64(10.291206, 56.253108);
     }
     else
     {
@@ -580,6 +580,7 @@ dt_main_loop(void* ptr)
         render::render_frame(framebuffer_dim, &io_ctx->framebuffer_resized, ctx->camera, io_ctx->mouse_pos_cur_s64);
 
         ImGui::EndFrame();
+        Debug_Frame_End();
     }
     while (thread_pool_has_pending_work(ctx->thread_pool))
     {

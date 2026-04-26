@@ -177,7 +177,7 @@ descriptor_set_update_bindless_texture(U32 array_index, VkImageView image_view, 
 
 // Clears a bindless descriptor slot by writing the null texture
 static void
-descriptor_set_clear_bindless_texture(U32 array_index);
+descriptor_set_clear_bindless_texture(U32 array_index, render::AssetItem<TextureHandle>* null_texture);
 
 // image helpers
 

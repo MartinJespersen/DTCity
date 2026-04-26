@@ -5,7 +5,8 @@ namespace render
 
 ////////////////////////////////
 //~ mgj: Handle Types
-enum class HandleType : U32
+
+enum class HandleType : S32
 {
     Undefined,
     Texture,
@@ -47,6 +48,7 @@ struct Handle
 struct HandleNode
 {
     HandleNode* next;
+    B32 work_on_gpu_done;
     render::Handle handle;
 };
 
@@ -211,8 +213,13 @@ struct Model3DPipelineData
     Handle vertex_buffer_handle;
     Handle index_buffer_handle;
     Handle texture_handle;
+    Handle overlay_texture_handle;
 
     Handle storage_buffer_handle;
+    Vec2F32 overlay_translation;
+    Vec2F32 overlay_scale;
+    S32 overlay_texture_coordinate_id;
+    B32 has_overlay_uv;
 
     U64 index_count;
     U32 index_offset;
@@ -243,6 +250,7 @@ struct Vertex3D
     Vec3F32 pos;
     F32 colormap_value;
     Vec2F32 uv;
+    Vec2F32 overlay_uv;
     Vec2U32 object_id;
 };
 

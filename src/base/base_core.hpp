@@ -810,6 +810,7 @@ typedef U32 FilePropertyFlags;
 enum
 {
     FilePropertyFlag_IsFolder = (1 << 0),
+    FilePropertyFlag_IsLink = (1 << 1),
 };
 
 typedef struct FileProperties FileProperties;

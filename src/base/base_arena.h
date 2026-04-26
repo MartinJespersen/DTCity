@@ -99,6 +99,7 @@ temp_end(Temp temp);
 #define PushArrayAligned(a, T, c, align) (T*)MemoryZero(PushArrayNoZeroAligned(a, T, c, align), sizeof(T) * (c)) // NOLINT(bugprone-sizeof-expression)
 #define PushArrayNoZero(a, T, c) PushArrayNoZeroAligned(a, T, c, Max(8, AlignOf(T)))
 #define PushArray(a, T, c) PushArrayAligned(a, T, c, Max(8, AlignOf(T)))
+#define PushStructNoZero(a, T) PushArrayNoZeroAligned(a, T, 1, Max(8, AlignOf(T)))
 #define PushStruct(a, T) PushArrayAligned(a, T, 1, Max(8, AlignOf(T)))
 
 #endif // BASE_ARENA_H
