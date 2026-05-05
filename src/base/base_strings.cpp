@@ -2728,7 +2728,7 @@ env_vars_from_env_file(Arena* arena)
     String8List current_path_parts = str8_split_path(scratch.arena, current_path);
 
     // create an array of path-part lists for each parent path candidate
-    Buffer<String8List> candidate_parent_paths = BufferAlloc<String8List>(scratch.arena, current_path_parts.node_count);
+    Buffer<String8List> candidate_parent_paths = buffer_alloc<String8List>(scratch.arena, current_path_parts.node_count);
 
     // find .env file by iterating parents
     String8Node* current_path_part = current_path_parts.first;

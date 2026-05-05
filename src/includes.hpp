@@ -18,6 +18,8 @@
 #define GLM_FORCE_RADIANS
 #define GLM_FORCE_DEPTH_ZERO_TO_ONE
 #define GLM_FORCE_DEFAULT_ALIGNED_GENTYPES
+#define GLM_FORCE_INTRINSICS
+#define GLM_FORCE_INLINE
 #include "glm/glm.hpp"
 #include "glm/gtc/matrix_transform.hpp"
 #define IM_ASSERT(x) Assert(x)
@@ -30,6 +32,7 @@
 #include "async/async_inc.hpp"
 #include "misc/misc_inc.hpp"
 #include "render/render_inc.hpp"
+#include "draw/draw.hpp"
 #include "lib_wrappers/lib_wrappers_inc.hpp"
 #include "gltfw/gltfw.hpp"
 #include "osm/osm.hpp"

@@ -191,7 +191,7 @@ bvh_create(Arena* arena, Buffer<RoadSegmentCorners> road_segment_buffer, U32 lea
 {
     ScratchScope scratch = ScratchScope(&arena, 1);
 
-    Buffer<BoundingBox> bb_buffer = BufferAlloc<BoundingBox>(scratch.arena, road_segment_buffer.size);
+    Buffer<BoundingBox> bb_buffer = buffer_alloc<BoundingBox>(scratch.arena, road_segment_buffer.size);
 
     // 1. for every element in the buffer, find the center point (used for segmentation)
     for (U32 i = 0; i < bb_buffer.size; i++)
@@ -233,7 +233,7 @@ bvh_create(Arena* arena, Buffer<RoadSegmentCorners> road_segment_buffer, U32 lea
 
     SLLStackPush(bvh->stack, root);
 
-    Buffer<RoadSegmentCorners> road_segment_buffer_sorted = BufferAlloc<RoadSegmentCorners>(arena, bvh->road_segment_buffer.size);
+    Buffer<RoadSegmentCorners> road_segment_buffer_sorted = buffer_alloc<RoadSegmentCorners>(arena, bvh->road_segment_buffer.size);
     while (bvh->stack)
     {
         bvh->road_segment_node_count += 1;
@@ -274,7 +274,7 @@ bvh_create(Arena* arena, Buffer<RoadSegmentCorners> road_segment_buffer, U32 lea
     }
 
     // create the final road segment node for storage buffer usage
-    Buffer<RoadSegmentNodeStorageBuffer> road_segment_node_buffer = BufferAlloc<RoadSegmentNodeStorageBuffer>(arena, bvh->road_segment_node_count);
+    Buffer<RoadSegmentNodeStorageBuffer> road_segment_node_buffer = buffer_alloc<RoadSegmentNodeStorageBuffer>(arena, bvh->road_segment_node_count);
     Assert(bvh->stack == 0);
     SLLStackPush(bvh->stack, bvh->root);
     U32 cur_node_idx = 0;
@@ -328,9 +328,9 @@ road_segment_build(Arena* arena, Buffer<osm::RoadEdge> edge_buffer, F32 default_
     prof_scope_marker;
     ScratchScope scratch = ScratchScope(0, 0);
 
-    Buffer<render::Vertex3DBlend> vertex_buffer = BufferAlloc<render::Vertex3DBlend>(arena, edge_buffer.size * 4);
-    Buffer<U32> index_buffer = BufferAlloc<U32>(arena, edge_buffer.size * 6);
-    Buffer<RoadSegmentCorners> corner_buffer = BufferAlloc<RoadSegmentCorners>(arena, edge_buffer.size);
+    Buffer<render::Vertex3DBlend> vertex_buffer = buffer_alloc<render::Vertex3DBlend>(arena, edge_buffer.size * 4);
+    Buffer<U32> index_buffer = buffer_alloc<U32>(arena, edge_buffer.size * 6);
+    Buffer<RoadSegmentCorners> corner_buffer = buffer_alloc<RoadSegmentCorners>(arena, edge_buffer.size);
 
     U32 cur_vertex_idx = 0;
     U32 cur_index_idx = 0;
@@ -520,7 +520,7 @@ cars_create(CarSim* car_sim, String8 asset_path, String8 texture_path, U32 car_c
     car_sim->index_handle = render::buffer_load_async(&car_sim->index_buffer);
 
     car_sim->car_center_offset = car_center_height_offset(parsed_result.vertex_buffer);
-    car_sim->cars = BufferAlloc<Car>(arena, car_count);
+    car_sim->cars = buffer_alloc<Car>(arena, car_count);
 
     for (U32 i = 0; i < car_count; ++i)
     {
@@ -551,7 +551,7 @@ g_internal Buffer<render::Model3DInstance>
 car_sim_update(Arena* arena, CarSim* car, F64 time_delta, glm::dmat4& ecef_to_local)
 {
     prof_scope_marker;
-    Buffer<render::Model3DInstance> instance_buffer = BufferAlloc<render::Model3DInstance>(arena, car->cars.size);
+    Buffer<render::Model3DInstance> instance_buffer = buffer_alloc<render::Model3DInstance>(arena, car->cars.size);
 
     render::Model3DInstance* instance;
     city::Car* car_info;
@@ -728,8 +728,8 @@ buildings_buffers_create(Arena* arena, F32 road_height, glm::dmat4& ecef_to_loca
         Assert(way->node_ids[0] == way->node_ids[way->node_count - 1]);
     }
 
-    Buffer<render::Vertex3D> vertex_buffer = BufferAlloc<render::Vertex3D>(scratch.arena, total_vertex_count);
-    Buffer<U32> index_buffer = BufferAlloc<U32>(scratch.arena, total_index_count);
+    Buffer<render::Vertex3D> vertex_buffer = buffer_alloc<render::Vertex3D>(scratch.arena, total_vertex_count);
+    Buffer<U32> index_buffer = buffer_alloc<U32>(scratch.arena, total_index_count);
 
     U32 base_index_idx = 0;
     U32 base_vertex_idx = 0;
@@ -779,14 +779,14 @@ buildings_buffers_create(Arena* arena, F32 road_height, glm::dmat4& ecef_to_loca
         for (U32 way_idx = 0; way_idx < ways.size; way_idx++)
         {
             osm::Way* way = &ways.data[way_idx];
-            Buffer<osm::EcefLocation> buildings_utm_node_buffer = BufferAlloc<osm::EcefLocation>(scratch.arena, way->node_count - 1);
+            Buffer<osm::EcefLocation> buildings_utm_node_buffer = buffer_alloc<osm::EcefLocation>(scratch.arena, way->node_count - 1);
             for (U32 idx = 0; idx < way->node_count - 1; idx += 1)
             {
                 buildings_utm_node_buffer.data[idx] = osm::location_get(way->node_ids[idx]);
             }
 
             // ~mgj: ignore collinear line segments
-            Buffer<osm::EcefLocation> final_utm_node_buffer = BufferAlloc<osm::EcefLocation>(scratch.arena, buildings_utm_node_buffer.size);
+            Buffer<osm::EcefLocation> final_utm_node_buffer = buffer_alloc<osm::EcefLocation>(scratch.arena, buildings_utm_node_buffer.size);
             {
                 U32 cur_idx = 0;
                 for (U32 idx = 0; idx < buildings_utm_node_buffer.size; idx += 1)
@@ -808,7 +808,7 @@ buildings_buffers_create(Arena* arena, F32 road_height, glm::dmat4& ecef_to_loca
             }
 
             // ~mgj: prepare for ear clipping algo
-            Buffer<Vec2F64> node_pos_buffer = BufferAlloc<Vec2F64>(scratch.arena, final_utm_node_buffer.size);
+            Buffer<Vec2F64> node_pos_buffer = buffer_alloc<Vec2F64>(scratch.arena, final_utm_node_buffer.size);
             for (U32 idx = 0; idx < final_utm_node_buffer.size; idx += 1)
             {
                 osm::EcefLocation node_utm = final_utm_node_buffer.data[idx];
@@ -845,8 +845,8 @@ buildings_buffers_create(Arena* arena, F32 road_height, glm::dmat4& ecef_to_loca
 
     {
         prof_scope_marker_named("buildings_buffers_create_buffer_copy");
-        Buffer<render::Vertex3D> vertex_buffer_final = BufferAlloc<render::Vertex3D>(arena, base_vertex_idx);
-        Buffer<U32> index_buffer_final = BufferAlloc<U32>(arena, base_index_idx);
+        Buffer<render::Vertex3D> vertex_buffer_final = buffer_alloc<render::Vertex3D>(arena, base_vertex_idx);
+        Buffer<U32> index_buffer_final = buffer_alloc<U32>(arena, base_index_idx);
         BufferCopy(vertex_buffer_final, vertex_buffer, base_vertex_idx);
         BufferCopy(index_buffer_final, index_buffer, base_index_idx);
         out_render_info->vertex_buffer = vertex_buffer_final;
@@ -912,7 +912,7 @@ ClockWiseTest(Buffer<Vec2F64> node_buffer)
 g_internal Buffer<U32>
 IndexBufferCreate(Arena* arena, U64 buffer_size, Direction direction)
 {
-    Buffer<U32> index_buffer = BufferAlloc<U32>(arena, buffer_size);
+    Buffer<U32> index_buffer = buffer_alloc<U32>(arena, buffer_size);
     if (direction == Direction_Clockwise)
     {
         for (U32 i = 0; i < index_buffer.size; i++)
@@ -981,7 +981,7 @@ EarClipping(Arena* arena, Buffer<Vec2F64> node_buffer)
         return {0, 0};
     }
     Buffer<U32> index_buffer = IndexBufferCreate(scratch.arena, node_buffer.size, direction);
-    Buffer<U32> out_vertex_index_buffer = BufferAlloc<U32>(arena, total_index_count);
+    Buffer<U32> out_vertex_index_buffer = buffer_alloc<U32>(arena, total_index_count);
     U32 cur_index_buffer_idx = 0;
     U32 idx = 0;
     for (; idx < index_buffer.size;)
@@ -1267,7 +1267,7 @@ edge_from_road_edge(osm::RoadEdge* road_edge, Map<osm::WayId, neta::EdgeList>* e
 g_internal Buffer<render::Vertex3D>
 vertex_3d_from_gltfw_vertex(Arena* arena, Buffer<gltfw_Vertex3D> in_vertex_buffer)
 {
-    Buffer<render::Vertex3D> out_vertex_buffer = BufferAlloc<render::Vertex3D>(arena, in_vertex_buffer.size);
+    Buffer<render::Vertex3D> out_vertex_buffer = buffer_alloc<render::Vertex3D>(arena, in_vertex_buffer.size);
     for (U32 i = 0; i < in_vertex_buffer.size; i++)
     {
         out_vertex_buffer.data[i].pos = in_vertex_buffer.data[i].pos;

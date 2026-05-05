@@ -2,18 +2,18 @@ namespace render
 {
 ////////////////////////////////////////////////////////
 // ~mgj: ThreadInput
-static render::ThreadInput*
+static render::ThreadWorkerCmdCtx*
 thread_input_create()
 {
     Arena* arena = arena_alloc();
     Assert(arena);
-    render::ThreadInput* thread_input = PushStruct(arena, render::ThreadInput);
+    render::ThreadWorkerCmdCtx* thread_input = PushStruct(arena, render::ThreadWorkerCmdCtx);
     thread_input->arena = arena;
     return thread_input;
 }
 
 static void
-thread_input_destroy(render::ThreadInput* thread_input)
+thread_input_destroy(render::ThreadWorkerCmdCtx* thread_input)
 {
     arena_release(thread_input->arena);
 }
@@ -53,7 +53,8 @@ handle_list_first_handle(render::HandleList* list)
 }
 
 // privates
-template <typename T> render::BufferInfo::BufferInfo(Buffer<T> buffer, U32 buffer_type)
+template <typename T>
+render::BufferInfo::BufferInfo(Buffer<T> buffer, U32 buffer_type)
 {
     U64 byte_count = buffer.size * sizeof(T);
     Buffer<U8> general_buffer = {.data = (U8*)buffer.data, .size = byte_count};
@@ -63,7 +64,8 @@ template <typename T> render::BufferInfo::BufferInfo(Buffer<T> buffer, U32 buffe
     this->elem_count = buffer.size;
 }
 
-template <typename T> render::BufferInfo::BufferInfo(Arena* arena, T* input, U32 buffer_type)
+template <typename T>
+render::BufferInfo::BufferInfo(Arena* arena, T* input, U32 buffer_type)
 {
     T* node = PushStruct(arena, T);
     *node = *input;

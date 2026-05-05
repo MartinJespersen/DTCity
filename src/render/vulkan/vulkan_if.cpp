@@ -84,7 +84,7 @@ render_ctx_create(String8 shader_path, io::IO* io_ctx, async::ThreadPool* thread
     vk_ctx->render_thread_id = os_tid();
 
     const char* validation_layers[] = {"VK_LAYER_KHRONOS_validation", "VK_LAYER_KHRONOS_synchronization2"};
-    vk_ctx->validation_layers = BufferAlloc<String8>(vk_ctx->arena, ArrayCount(validation_layers));
+    vk_ctx->validation_layers = buffer_alloc<String8>(vk_ctx->arena, ArrayCount(validation_layers));
     for (U32 i = 0; i < ArrayCount(validation_layers); i++)
     {
         vk_ctx->validation_layers.data[i] = {str8_c_string(validation_layers[i])};
@@ -92,7 +92,7 @@ render_ctx_create(String8 shader_path, io::IO* io_ctx, async::ThreadPool* thread
 
     const char* device_extensions[] = {VK_KHR_SWAPCHAIN_EXTENSION_NAME, VK_KHR_DYNAMIC_RENDERING_EXTENSION_NAME, VK_EXT_COLOR_WRITE_ENABLE_EXTENSION_NAME, VK_EXT_DESCRIPTOR_INDEXING_EXTENSION_NAME,
                                        VK_KHR_PUSH_DESCRIPTOR_EXTENSION_NAME};
-    vk_ctx->device_extensions = BufferAlloc<String8>(vk_ctx->arena, ArrayCount(device_extensions));
+    vk_ctx->device_extensions = buffer_alloc<String8>(vk_ctx->arena, ArrayCount(device_extensions));
     for (U32 i = 0; i < ArrayCount(device_extensions); i++)
     {
         vk_ctx->device_extensions.data[i] = {str8_c_string(device_extensions[i])};
@@ -152,12 +152,13 @@ render_ctx_create(String8 shader_path, io::IO* io_ctx, async::ThreadPool* thread
 
     null_texture_create(vk_ctx);
 
-    vk_ctx->draw_frame_arena = arena_alloc();
+    vk_ctx->render_frame_arena = arena_alloc();
     vk_ctx->model_3D_pipeline = vulkan::model_3d_pipeline_create(vk_ctx, shader_path);
     vk_ctx->car_instance_pipeline = vulkan::car_instance_pipeline_create(vk_ctx, shader_path);
     vk_ctx->blend_3d_pipeline = vulkan::blend_3d_pipeline_create(shader_path);
     vk_ctx->road_intersection_pipeline = vulkan::road_intersection_pipeline_create(shader_path);
     vk_ctx->car_height_calculate_pipeline = vulkan::car_instance_compute_pipeline_create(shader_path);
+    vk_ctx->bbox_pipeline = vulkan::bbox_pipeline(vk_ctx, shader_path);
 }
 
 static void
@@ -200,11 +201,13 @@ render_ctx_destroy()
     vulkan::pipeline_destroy(&vk_ctx->blend_3d_pipeline);
     vulkan::pipeline_destroy(&vk_ctx->road_intersection_pipeline);
     vulkan::pipeline_destroy(&vk_ctx->car_height_calculate_pipeline);
+    vulkan::pipeline_destroy(&vk_ctx->bbox_pipeline);
 
     vkDestroyDescriptorSetLayout(vk_ctx->device, vk_ctx->bindless_descriptor_set_layout, nullptr);
     vkDestroyDescriptorSetLayout(vk_ctx->device, vk_ctx->road_segment_descriptor_set_layout, nullptr);
     vkDestroyDescriptorSetLayout(vk_ctx->device, vk_ctx->storage_buffer_descriptor_set_layout, nullptr);
     vkDestroyDescriptorSetLayout(vk_ctx->device, vk_ctx->car_height_calculate_descriptor_set_layout, nullptr);
+    vkDestroyDescriptorSetLayout(vk_ctx->device, vk_ctx->bbox_patch_descriptor_set_layout, nullptr);
 
     vkDestroyDevice(vk_ctx->device, nullptr);
     if (vk_ctx->enable_validation_layers)
@@ -214,7 +217,7 @@ render_ctx_destroy()
     vkDestroyInstance(vk_ctx->instance, nullptr);
     vulkan::ctx_release();
 
-    arena_release(vk_ctx->draw_frame_arena);
+    arena_release(vk_ctx->render_frame_arena);
 
     arena_release(vk_ctx->arena);
 }
@@ -348,8 +351,8 @@ static void
 new_frame()
 {
     vulkan::Context* vk_ctx = vulkan::ctx_get();
-    arena_clear(vk_ctx->draw_frame_arena);
-    vk_ctx->draw_frame = PushStruct(vk_ctx->draw_frame_arena, vulkan::DrawFrame);
+    arena_clear(vk_ctx->render_frame_arena);
+    vk_ctx->render_frame = PushStruct(vk_ctx->render_frame_arena, vulkan::RenderFrame);
     ImGui_ImplVulkan_NewFrame();
 }
 
@@ -399,21 +402,21 @@ texture_load_async(render::SamplerInfo* sampler_info, String8 texture_path)
     ScratchScope scratch = ScratchScope(0, 0);
     vulkan::Context* vk_ctx = vulkan::ctx_get();
     vulkan::AssetManager* asset_manager = vk_ctx->asset_manager;
-    render::ThreadInput* thread_input = render::thread_input_create();
+    render::ThreadWorkerCmdCtx* thread_input = render::thread_input_create();
 
     // ~mgj: make input ready for texture loading on thread
     render::TextureLoadingInfo* texture_load_info = PushStruct(thread_input->arena, render::TextureLoadingInfo);
     texture_load_info->tex_path = push_str8_copy(thread_input->arena, texture_path);
     thread_input->user_data = texture_load_info;
-    render::handle_list_push(thread_input->arena, &thread_input->handles, render::texture_handle_create(sampler_info));
+    render::Handle handle = render::texture_handle_create(sampler_info);
+    render::handle_list_push(thread_input->arena, &thread_input->handles, handle);
 
     thread_input->loading_func = vulkan::texture_loading_from_path_thread;
     thread_input->done_loading_func = render::handle_done_loading;
 
-    async::WorkerTask queue_input = {.data = thread_input, .worker_func = vulkan::thread_main};
-    async::thread_pool_push(asset_manager->threads, &queue_input);
+    async::thread_pool_push(thread_input->arena, thread_input, vulkan::thread_main, asset_manager->threads);
 
-    return render::handle_list_first_handle(&thread_input->handles);
+    return handle;
 }
 
 g_internal Handle
@@ -451,7 +454,7 @@ texture_load_async(render::SamplerInfo* sampler_info, TextureUploadData* tex_upl
     ScratchScope scratch = ScratchScope(0, 0);
     vulkan::Context* vk_ctx = vulkan::ctx_get();
     vulkan::AssetManager* asset_manager = vk_ctx->asset_manager;
-    render::ThreadInput* thread_input = render::thread_input_create();
+    render::ThreadWorkerCmdCtx* thread_input = render::thread_input_create();
 
     // ~mgj: make input ready for texture loading on thread
     TextureUploadData* tex_upload_data = PushStruct(thread_input->arena, TextureUploadData);
@@ -466,8 +469,7 @@ texture_load_async(render::SamplerInfo* sampler_info, TextureUploadData* tex_upl
     thread_input->loading_func = vulkan::texture_loading_thread;
     thread_input->done_loading_func = render::handle_done_loading;
 
-    async::WorkerTask queue_input = {.data = thread_input, .worker_func = vulkan::thread_main};
-    async::thread_pool_push(asset_manager->threads, &queue_input);
+    async::thread_pool_push(thread_input->arena, thread_input, vulkan::thread_main, asset_manager->threads);
 
     return handle;
 }
@@ -477,22 +479,22 @@ colormap_load_async(render::SamplerInfo* sampler_info, const U8* colormap_data, 
 {
     vulkan::Context* vk_ctx = vulkan::ctx_get();
     vulkan::AssetManager* asset_manager = vk_ctx->asset_manager;
-    render::ThreadInput* thread_input = render::thread_input_create();
+    render::ThreadWorkerCmdCtx* thread_input = render::thread_input_create();
 
     // ~mgj: make input ready for colormap loading on thread
     render::ColorMapLoadingInfo* colormap_load_info = PushStruct(thread_input->arena, render::ColorMapLoadingInfo);
     colormap_load_info->colormap_data = colormap_data;
     colormap_load_info->colormap_size = colormap_size;
 
-    render::handle_list_push(thread_input->arena, &thread_input->handles, render::texture_handle_create(sampler_info));
+    render::Handle handle = render::texture_handle_create(sampler_info);
+    render::handle_list_push(thread_input->arena, &thread_input->handles, handle);
     thread_input->user_data = colormap_load_info;
     thread_input->loading_func = vulkan::colormap_loading_thread;
     thread_input->done_loading_func = render::handle_done_loading;
 
-    async::WorkerTask queue_input = {.data = thread_input, .worker_func = vulkan::thread_main};
-    async::thread_pool_push(asset_manager->threads, &queue_input);
+    async::thread_pool_push(thread_input->arena, thread_input, vulkan::thread_main, asset_manager->threads);
 
-    return render::handle_list_first_handle(&thread_input->handles);
+    return handle;
 }
 
 g_internal void
@@ -653,14 +655,13 @@ road_segment_descriptor_load_async(Arena* arena, Handle buffer_handle, Handle no
             desc_set_handle->desc_write_func = vulkan::descriptor_set_road_segment;
 
             // schedule thread
-            render::ThreadInput* thread_input = render::thread_input_create();
+            render::ThreadWorkerCmdCtx* thread_input = render::thread_input_create();
             render::handle_list_push(thread_input->arena, &thread_input->handles, desc_handle);
 
-            thread_input->loading_func = [](void*, render::ThreadInput*) {};
+            thread_input->loading_func = [](void*, render::ThreadWorkerCmdCtx*) {};
             thread_input->done_loading_func = render::handle_done_loading;
 
-            async::WorkerTask queue_input = {.data = thread_input, .worker_func = vulkan::thread_main};
-            async::thread_pool_push(asset_manager->threads, &queue_input);
+            async::thread_pool_push(thread_input->arena, thread_input, vulkan::thread_main, asset_manager->threads);
         }
     }
     Assert("road_segment_descriptor_load_async: zero handle passed");
@@ -710,21 +711,20 @@ buffer_load_async(render::BufferInfo* buffer_info)
     }
 
     // ~mgj: Preparing buffer loading for another thread
-    render::ThreadInput* thread_input = render::thread_input_create();
+    render::ThreadWorkerCmdCtx* thread_input = render::thread_input_create();
     render::handle_list_push(thread_input->arena, &thread_input->handles, asset_handle);
 
     // Copy buffer_info to thread_input arena to ensure it persists for async execution
     render::BufferInfo* buffer_info_copy = PushStruct(thread_input->arena, render::BufferInfo);
     *buffer_info_copy = *buffer_info;
-    buffer_info_copy->buffer = BufferAlloc<U8>(thread_input->arena, buffer_info->buffer.size);
+    buffer_info_copy->buffer = buffer_alloc<U8>(thread_input->arena, buffer_info->buffer.size);
     MemoryCopy(buffer_info_copy->buffer.data, buffer_info->buffer.data, buffer_info->buffer.size);
 
     thread_input->user_data = buffer_info_copy;
     thread_input->loading_func = vulkan::buffer_loading_thread;
     thread_input->done_loading_func = render::handle_done_loading;
 
-    async::WorkerTask queue_input = {.data = thread_input, .worker_func = vulkan::thread_main};
-    async::thread_pool_push(asset_manager->threads, &queue_input);
+    async::thread_pool_push(thread_input->arena, thread_input, vulkan::thread_main, asset_manager->threads);
 
     return asset_handle;
 }
@@ -762,27 +762,34 @@ texture_gpu_upload_sync(render::Handle tex_handle, Buffer<U8> tex_buf)
 g_internal void
 model_3d_draw(Model3DPipelineData pipeline_input, render::Handle colormap_handle)
 {
-    B32 vertex_loaded = render::is_resource_loaded(pipeline_input.vertex_buffer_handle);
-    B32 index_loaded = render::is_resource_loaded(pipeline_input.index_buffer_handle);
-    B32 base_texture_loaded = render::is_resource_loaded(pipeline_input.texture_handle);
-    B32 colormap_loaded = render::is_resource_loaded(colormap_handle);
+    render::AssetItem<vulkan::BufferHandle>* asset_vertex_buffer = 0;
+    render::AssetItem<vulkan::BufferHandle>* asset_index_buffer = 0;
+    render::AssetItem<vulkan::TextureHandle>* asset_base_texture = 0;
+    render::AssetItem<vulkan::TextureHandle>* asset_colormap = 0;
+
+    B32 vertex_loaded = render::is_resource_loaded(pipeline_input.vertex_buffer_handle, &asset_vertex_buffer);
+    B32 index_loaded = render::is_resource_loaded(pipeline_input.index_buffer_handle, &asset_index_buffer);
+    B32 base_texture_loaded = render::is_resource_loaded(pipeline_input.texture_handle, &asset_base_texture);
+    B32 colormap_loaded = render::is_resource_loaded(colormap_handle, &asset_colormap);
     if (vertex_loaded && index_loaded && base_texture_loaded && colormap_loaded)
     {
-        render::AssetItem<vulkan::BufferHandle>* asset_vertex_buffer = vulkan::asset_manager_buffer_item_get(pipeline_input.vertex_buffer_handle);
-        render::AssetItem<vulkan::BufferHandle>* asset_index_buffer = vulkan::asset_manager_buffer_item_get(pipeline_input.index_buffer_handle);
-        render::AssetItem<vulkan::TextureHandle>* asset_texture = vulkan::asset_manager_texture_item_get(colormap_handle);
         render::Handle overlay_texture_handle = render::texture_zero_handle_get();
         B32 overlay_enabled = false;
-        if (pipeline_input.has_overlay_uv && pipeline_input.overlay_texture_coordinate_id == 0 && render::is_handle_zero(pipeline_input.overlay_texture_handle) == false &&
-            render::is_resource_loaded(pipeline_input.overlay_texture_handle))
+        B32 overlay_loaded = false;
+        render::AssetItem<vulkan::TextureHandle>* asset_overlay_texture = 0;
+        if (pipeline_input.has_overlay_uv && pipeline_input.overlay_texture_coordinate_id == 0 && render::is_handle_zero(pipeline_input.overlay_texture_handle) == false)
         {
-            overlay_texture_handle = pipeline_input.overlay_texture_handle;
-            overlay_enabled = true;
+            overlay_loaded = render::is_resource_loaded(pipeline_input.overlay_texture_handle, &asset_overlay_texture);
+            if (overlay_loaded)
+            {
+                overlay_texture_handle = pipeline_input.overlay_texture_handle;
+                overlay_enabled = true;
+            }
         }
 
         vulkan::model_3d_bucket_add(&asset_vertex_buffer->item.buffer_alloc, &asset_index_buffer->item.buffer_alloc, pipeline_input.texture_handle, overlay_texture_handle, overlay_enabled,
                                     pipeline_input.overlay_translation, pipeline_input.overlay_scale, false, pipeline_input.index_offset, pipeline_input.index_count,
-                                    asset_texture->item.descriptor_set_idx);
+                                    asset_colormap->item.descriptor_set_idx);
     }
     else
     {
@@ -803,14 +810,14 @@ car_instance_compute_bucket_add(render::BufferInfo* instance_buffer_info, render
     }
 
     vulkan::Context* vk_ctx = vulkan::ctx_get();
-    vulkan::DrawFrame* draw_frame = vk_ctx->draw_frame;
-    vulkan::CarInstanceCompute* instance_draw = &draw_frame->car_instance_compute_list;
+    vulkan::RenderFrame* render_frame = vk_ctx->render_frame;
+    vulkan::CarInstanceCompute* instance_draw = &render_frame->car_instance_compute_list;
 
-    render::AssetItem<vulkan::BufferHandle>* asset_tile_vertex = vulkan::asset_manager_buffer_item_get(tile_vertex_buffer_handle);
-    render::AssetItem<vulkan::BufferHandle>* asset_tile_index = vulkan::asset_manager_buffer_item_get(tile_index_buffer_handle);
-    if (asset_tile_vertex && asset_tile_index && asset_tile_vertex->is_loaded && asset_tile_index->is_loaded)
+    render::AssetItem<vulkan::BufferHandle>* asset_tile_vertex = 0;
+    render::AssetItem<vulkan::BufferHandle>* asset_tile_index = 0;
+    if (render::is_resource_loaded(tile_vertex_buffer_handle, &asset_tile_vertex) && render::is_resource_loaded(tile_index_buffer_handle, &asset_tile_index))
     {
-        vulkan::CarInstanceComputeNode* node = PushStruct(vk_ctx->draw_frame_arena, vulkan::CarInstanceComputeNode);
+        vulkan::CarInstanceComputeNode* node = PushStruct(vk_ctx->render_frame_arena, vulkan::CarInstanceComputeNode);
 
         // compute ressources
         vulkan::CarHeightCalculatePushConstants compute_push_constants = {.car_count = instance_buffer_info->elem_count, .car_center_offset = car_center_to_road_offset};
@@ -834,19 +841,19 @@ car_instance_render_bucket_add(render::Handle vertex_buffer_handle, render::Hand
     }
 
     vulkan::Context* vk_ctx = vulkan::ctx_get();
-    vulkan::DrawFrame* draw_frame = vk_ctx->draw_frame;
-    vulkan::CarInstanceRender* instance_draw = &draw_frame->car_instance_render_list;
+    vulkan::RenderFrame* render_frame = vk_ctx->render_frame;
+    vulkan::CarInstanceRender* instance_draw = &render_frame->car_instance_render_list;
 
-    render::AssetItem<vulkan::TextureHandle>* asset_tex = vulkan::asset_manager_texture_item_get(tex_handle);
-    render::AssetItem<vulkan::BufferHandle>* asset_vertex = vulkan::asset_manager_buffer_item_get(vertex_buffer_handle);
-    render::AssetItem<vulkan::BufferHandle>* asset_index = vulkan::asset_manager_buffer_item_get(index_buffer_handle);
-    if (asset_tex && asset_vertex && asset_index && asset_tex->is_loaded && asset_vertex->is_loaded && asset_index->is_loaded)
+    render::AssetItem<vulkan::TextureHandle>* asset_tex = 0;
+    render::AssetItem<vulkan::BufferHandle>* asset_vertex = 0;
+    render::AssetItem<vulkan::BufferHandle>* asset_index = 0;
+    if (render::is_resource_loaded(tex_handle, &asset_tex) && render::is_resource_loaded(vertex_buffer_handle, &asset_vertex) && render::is_resource_loaded(index_buffer_handle, &asset_index))
     {
         vulkan::TextureHandle* tex = &asset_tex->item;
 
         // draw ressources
         vulkan::CarInstancePushConstants push_constants = {.tex_idx = tex->descriptor_set_idx};
-        vulkan::CarInstanceRenderNode* node = PushStruct(vk_ctx->draw_frame_arena, vulkan::CarInstanceRenderNode);
+        vulkan::CarInstanceRenderNode* node = PushStruct(vk_ctx->render_frame_arena, vulkan::CarInstanceRenderNode);
         node->vertex_handle = &asset_vertex->item;
         node->index_handle = &asset_index->item;
         node->draw_push_constants = push_constants;
@@ -867,23 +874,15 @@ road_intersection_compute_add(Handle storage_buffer_handle, Handle index_buffer_
                               U32 overlay_option)
 {
     bool compute_scheduled = false;
-    if (is_handle_zero(storage_buffer_handle) || is_handle_zero(index_buffer_handle) || is_handle_zero(road_segment_handle) || is_handle_zero(road_segment_buffer_handle) ||
-        is_handle_zero(road_segment_node_buffer_handle))
-        return compute_scheduled;
 
-    if (is_resource_loaded(road_segment_handle) && is_resource_loaded(road_segment_buffer_handle) && is_resource_loaded(storage_buffer_handle) && is_resource_loaded(index_buffer_handle) &&
-        is_resource_loaded(road_segment_node_buffer_handle))
+    render::AssetItem<vulkan::DescriptorSetHandle>* storage_set = 0;
+    render::AssetItem<vulkan::DescriptorSetHandle>* road_segment = 0;
+    render::AssetItem<vulkan::BufferHandle>* index_buffer = 0;
+    render::AssetItem<vulkan::BufferHandle>* road_segment_buffer = 0;
+    render::AssetItem<vulkan::BufferHandle>* road_segment_node_buffer = 0;
+    if (is_resource_loaded(storage_buffer_handle, &storage_set) && is_resource_loaded(index_buffer_handle, &index_buffer) && is_resource_loaded(road_segment_buffer_handle, &road_segment_buffer) &&
+        is_resource_loaded(road_segment_node_buffer_handle, &road_segment_node_buffer) && is_resource_loaded(road_segment_handle, &road_segment))
     {
-        render::AssetItem<vulkan::DescriptorSetHandle>* storage_set = vulkan::asset_manager_descriptor_set_item_get(storage_buffer_handle);
-        render::AssetItem<vulkan::DescriptorSetHandle>* road_segment = vulkan::asset_manager_descriptor_set_item_get(road_segment_handle);
-        render::AssetItem<vulkan::BufferHandle>* index_buffer = vulkan::asset_manager_buffer_item_get(index_buffer_handle);
-        render::AssetItem<vulkan::BufferHandle>* road_segment_buffer = vulkan::asset_manager_buffer_item_get(road_segment_buffer_handle);
-
-        if (!storage_set || !road_segment || !index_buffer || !road_segment_buffer)
-        {
-            return compute_scheduled;
-        }
-
         compute_scheduled = true;
         vulkan::road_intersection_bucket_add(storage_set->item.desc_set, road_segment->item.desc_set, &road_segment_buffer->item, &index_buffer->item, overlay_option);
     }
@@ -893,44 +892,84 @@ road_intersection_compute_add(Handle storage_buffer_handle, Handle index_buffer_
 g_internal void
 blend_3d_draw(render::Blend3DPipelineData pipeline_input)
 {
-    if (render::is_handle_zero(pipeline_input.index_buffer_handle) || render::is_handle_zero(pipeline_input.vertex_buffer_handle) || render::is_handle_zero(pipeline_input.texture_handle) ||
-        render::is_handle_zero(pipeline_input.colormap_handle))
-        return;
-    render::AssetItem<vulkan::BufferHandle>* asset_vertex_buffer = (render::AssetItem<vulkan::BufferHandle>*)(pipeline_input.vertex_buffer_handle.ptr);
-    render::AssetItem<vulkan::BufferHandle>* asset_index_buffer = (render::AssetItem<vulkan::BufferHandle>*)(pipeline_input.index_buffer_handle.ptr);
-    render::AssetItem<vulkan::TextureHandle>* asset_texture = (render::AssetItem<vulkan::TextureHandle>*)(pipeline_input.texture_handle.ptr);
-    render::AssetItem<vulkan::TextureHandle>* asset_colormap = (render::AssetItem<vulkan::TextureHandle>*)(pipeline_input.colormap_handle.ptr);
-
-    if (asset_vertex_buffer->is_loaded && asset_index_buffer->is_loaded && asset_texture->is_loaded && asset_colormap->is_loaded)
+    render::AssetItem<vulkan::BufferHandle>* asset_vertex_buffer = 0;
+    render::AssetItem<vulkan::BufferHandle>* asset_index_buffer = 0;
+    render::AssetItem<vulkan::TextureHandle>* asset_texture = 0;
+    render::AssetItem<vulkan::TextureHandle>* asset_colormap = 0;
+    if (render::is_resource_loaded(pipeline_input.index_buffer_handle, &asset_index_buffer) && render::is_resource_loaded(pipeline_input.vertex_buffer_handle, &asset_vertex_buffer) &&
+        render::is_resource_loaded(pipeline_input.texture_handle, &asset_texture) && render::is_resource_loaded(pipeline_input.colormap_handle, &asset_colormap))
     {
         vulkan::blend_3d_bucket_add(&asset_vertex_buffer->item.buffer_alloc, &asset_index_buffer->item.buffer_alloc, pipeline_input.texture_handle, pipeline_input.colormap_handle);
     }
 }
 
-g_internal bool
-is_resource_loaded(render::Handle handle)
+g_internal void
+render_bbox_3d(BBoxDraw* bbox_info)
 {
+    //
+}
+
+g_internal render::AssetItem<vulkan::BufferHandle>*
+_render_asset_item_get(render::Handle handle, vulkan::BufferHandle*)
+{
+    return handle.type == render::HandleType::Buffer ? vulkan::asset_manager_buffer_item_get(handle) : 0;
+}
+
+g_internal render::AssetItem<vulkan::TextureHandle>*
+_render_asset_item_get(render::Handle handle, vulkan::TextureHandle*)
+{
+    return handle.type == render::HandleType::Texture ? vulkan::asset_manager_texture_item_get(handle) : 0;
+}
+
+g_internal render::AssetItem<vulkan::DescriptorSetHandle>*
+_render_asset_item_get(render::Handle handle, vulkan::DescriptorSetHandle*)
+{
+    return handle.type == render::HandleType::DescriptorSet ? vulkan::asset_manager_descriptor_set_item_get(handle) : 0;
+}
+
+template <typename T>
+g_internal bool
+is_resource_loaded(render::Handle handle, render::AssetItem<T>** out_asset)
+{
+    if (out_asset)
+    {
+        *out_asset = 0;
+    }
+
     if (render::is_handle_zero(handle))
     {
         return false;
     }
 
+    T* type_marker = 0;
+    render::AssetItem<T>* asset = _render_asset_item_get(handle, type_marker);
+    if (out_asset)
+    {
+        *out_asset = asset;
+    }
+
+    return asset ? asset->is_loaded : false;
+}
+
+g_internal bool
+is_resource_loaded(render::Handle handle)
+{
     switch (handle.type)
     {
         case render::HandleType::Buffer:
         {
-            render::AssetItem<vulkan::BufferHandle>* asset = vulkan::asset_manager_buffer_item_get(handle);
-            return asset ? asset->is_loaded : false;
+            render::AssetItem<vulkan::BufferHandle>* asset = 0;
+            return is_resource_loaded(handle, &asset);
         }
         case render::HandleType::Texture:
         {
-            render::AssetItem<vulkan::TextureHandle>* asset = vulkan::asset_manager_texture_item_get(handle);
-            return asset ? asset->is_loaded : false;
+            render::AssetItem<vulkan::TextureHandle>* asset = 0;
+            return is_resource_loaded(handle, &asset);
         }
         case render::HandleType::DescriptorSet:
         {
-            render::AssetItem<vulkan::DescriptorSetHandle>* asset = vulkan::asset_manager_descriptor_set_item_get(handle);
-            return asset ? asset->is_loaded : false;
+            render::AssetItem<vulkan::DescriptorSetHandle>* asset = 0;
+            return is_resource_loaded(handle, &asset);
         }
         default: break;
     }
@@ -970,21 +1009,22 @@ Handle::descriptor_set_handle_create()
     return handle;
 }
 
-g_internal void*
-thread_cmd_buffer_record(render::ThreadInput* thread_input, ThreadSyncCallback callback)
+g_internal void
+thread_cmd_buffer_record(ThreadWorkerCmdCtx* thread_ctx)
 {
     vulkan::AssetManager* asset_manager = vulkan::asset_manager_get();
 
     U32 thread_local_id = async::t_cur_thread_id;
     // ~mgj: Record the command buffer
-    thread_input->cmd_buffer = begin_command(asset_manager->device, &asset_manager->threaded_cmd_pools.data[thread_local_id]);
+    thread_ctx->cmd_buffer = begin_command(asset_manager->device, &asset_manager->threaded_cmd_pools.data[thread_local_id]);
+}
 
-    void* result = callback.function(thread_input, callback.data);
-
-    VK_CHECK_RESULT(vkEndCommandBuffer((VkCommandBuffer)thread_input->cmd_buffer));
-    vulkan::asset_cmd_queue_item_enqueue(thread_local_id, thread_input);
-
-    return result;
+g_internal void
+thread_cmd_buffer_end(ThreadWorkerCmdCtx* cmd_ctx)
+{
+    U32 thread_local_id = async::t_cur_thread_id;
+    VK_CHECK_RESULT(vkEndCommandBuffer((VkCommandBuffer)cmd_ctx->cmd_buffer));
+    vulkan::asset_cmd_queue_item_enqueue(thread_local_id, cmd_ctx);
 }
 
 g_internal void

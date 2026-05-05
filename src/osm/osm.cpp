@@ -4,8 +4,8 @@ g_internal void
 structure_init(U64 node_hashmap_size, U64 way_hashmap_size)
 {
     Arena* arena = arena_alloc();
-    Buffer<NodeList> node_hashmap = BufferAlloc<NodeList>(arena, node_hashmap_size);
-    Buffer<WayList> way_hashmap = BufferAlloc<WayList>(arena, way_hashmap_size);
+    Buffer<NodeList> node_hashmap = buffer_alloc<NodeList>(arena, node_hashmap_size);
+    Buffer<WayList> way_hashmap = buffer_alloc<WayList>(arena, way_hashmap_size);
     Map<NodeId, EcefLocation>* ecef_location_map = map_create<NodeId, EcefLocation>(arena, node_hashmap_size);
     Map<NodeId, WgsLocation>* wgs_location_map = map_create<NodeId, WgsLocation>(arena, node_hashmap_size);
 
@@ -73,12 +73,12 @@ _osm_task_state_create(String8 file, String8 bbox_str)
     return osm_task_state;
 }
 
-g_internal void
-_parse_osm_data(async::ThreadInfo info, void* data)
+g_internal async::WorkerTaskResult
+_parse_osm_data(async::ThreadInfo info, async::WorkerData* data)
 {
     (void)info;
     ScratchScope scratch = ScratchScope(0, 0);
-    OsmTaskState* task_state = (OsmTaskState*)data;
+    OsmTaskState* task_state = (OsmTaskState*)data->user_data;
 
     RoadNodeParseResult node_result = wrapper::node_buffer_from_simd_json(g_network->arena, task_state->body, 1000);
     if (node_result.error)
@@ -135,6 +135,7 @@ _parse_osm_data(async::ThreadInfo info, void* data)
 
     _road_edge_structure_create();
     g_network->network_ready.store(true);
+    return {};
 }
 
 g_internal async::UserFuncResult<OsmTaskState>
@@ -145,8 +146,7 @@ _cache_and_parse_osm_json(Arena* arena, async::ThreadPool* thread_pool, String8 
     ScratchScope scratch = ScratchScope(&arena, 1);
     cache_write(task_state->file, response_body, task_state->bbox_str);
     task_state->body = response_body;
-    async::WorkerTask work_task = {.data = task_state, .worker_func = _parse_osm_data};
-    thread_pool_push(thread_pool, &work_task);
+    thread_pool_push(0, task_state, _parse_osm_data, thread_pool);
     // parse nodes
     // ~mgj: parse OSM way structures
     return async::UserFuncResult<OsmTaskState>().success();
@@ -182,19 +182,18 @@ async_structure_create(Rng2F64 bbox)
 
     String8 file = str8_path_from_str8_list(scratch.arena, {ctx->data_subdirs.data[dt_DataDirType::Cache], S("osm_data.json")});
     String8 path = S("http://overpass-api.de/api/interpreter");
-    String8 bbox_str = Str8(reinterpret_cast<U8*>(&bbox), sizeof(bbox));
-    std::shared_ptr<async::AsyncTaskState<OsmTaskState>> osm_task_state = _osm_task_state_create(file, bbox_str);
+    std::shared_ptr<async::AsyncTaskState<OsmTaskState>> osm_task_state = _osm_task_state_create(file, body);
     async::AsyncHttpTaskCreateResult<OsmTaskState> result = {.task_state = osm_task_state};
-    Result<String8> cache_result = cache_read(g_network->arena, file, bbox_str);
+    Result<String8> cache_result = cache_read(g_network->arena, file, body);
     if (cache_result.err)
     {
-        result.async_result = async::async_http_task_create(osm_task_state, ctx->thread_pool, HTTP_Method_Post, path, S("text/html"), body, {}, {}, _cache_and_parse_osm_json, 3, 1);
+        result.async_result = async::async_http_task_create(osm_task_state, ctx->thread_pool, HTTP_Method_Post, path, S("application/x-www-form-urlencoded"), body, {},
+                                                            {S("User-Agent: DTCity/0.1"), S("Accept: application/json")}, _cache_and_parse_osm_json, 3, 1);
     }
     else
     {
         osm_task_state->task_state.body = cache_result.v;
-        async::WorkerTask work_task = {.data = &osm_task_state->task_state, .worker_func = _parse_osm_data};
-        thread_pool_push(ctx->thread_pool, &work_task);
+        thread_pool_push(0, &osm_task_state->task_state, _parse_osm_data, ctx->thread_pool);
         osm_task_state->success.store(true);
         osm_task_state->done.store(true);
     }

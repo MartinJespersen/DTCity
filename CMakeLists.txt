@@ -112,6 +112,8 @@ file(GLOB_RECURSE GLSL_SOURCE_FILES
     "${SHADER_DIR}/*.vert"
     "${SHADER_DIR}/*.frag"
     "${SHADER_DIR}/*.comp"
+    "${SHADER_DIR}/*.tesc"
+    "${SHADER_DIR}/*.tese"
 )
 
 

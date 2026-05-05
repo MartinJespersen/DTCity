@@ -108,7 +108,7 @@ struct CmdQueueItem
 {
     CmdQueueItem* next;
     CmdQueueItem* prev;
-    render::ThreadInput* thread_input;
+    render::ThreadWorkerCmdCtx* thread_input;
     U32 thread_id;
     VkFence fence;
 };
@@ -331,7 +331,7 @@ static void
 asset_manager_descriptor_set_free(render::Handle handle);
 
 static void
-asset_cmd_queue_item_enqueue(U32 thread_id, render::ThreadInput* thread_input);
+asset_cmd_queue_item_enqueue(U32 thread_id, render::ThreadWorkerCmdCtx* thread_input);
 
 //~mgj: Texture Functions
 static void
@@ -347,16 +347,16 @@ colormap_texture_cmd_record(VkCommandBuffer cmd, TextureHandle* tex, Buffer<U8> 
 
 //~mgj: Loading Thread Functions
 static void
-buffer_loading_thread(void* data, render::ThreadInput* thread_input);
+buffer_loading_thread(void* data, render::ThreadWorkerCmdCtx* thread_input);
 static void
-colormap_loading_thread(void* data, render::ThreadInput* thread_input);
+colormap_loading_thread(void* data, render::ThreadWorkerCmdCtx* thread_input);
 g_internal void
-texture_loading_thread(void* data, render::ThreadInput* thread_input);
+texture_loading_thread(void* data, render::ThreadWorkerCmdCtx* thread_input);
 g_internal void
-texture_loading_from_path_thread(void* data, render::ThreadInput* thread_input);
+texture_loading_from_path_thread(void* data, render::ThreadWorkerCmdCtx* thread_input);
 
-static void
-thread_main(async::ThreadInfo thread_info, void* input);
+static async::WorkerTaskResult
+thread_main(async::ThreadInfo thread_info, async::WorkerData* input);
 
 } // namespace vulkan
 

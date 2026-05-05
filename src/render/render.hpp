@@ -60,10 +60,10 @@ struct HandleList
 };
 
 ////////////////////////////////
-struct ThreadInput;
-typedef void (*ThreadLoadingFunc)(void* data, ThreadInput* thread_input);
+struct ThreadWorkerCmdCtx;
+typedef void (*ThreadLoadingFunc)(void* data, ThreadWorkerCmdCtx* thread_input);
 typedef void (*ThreadDoneLoadingFunc)(HandleList handles);
-struct ThreadInput
+struct ThreadWorkerCmdCtx
 {
     Arena* arena;
     render::HandleList handles;
@@ -72,19 +72,6 @@ struct ThreadInput
     void* user_data;
     ThreadLoadingFunc loading_func;
     ThreadDoneLoadingFunc done_loading_func;
-};
-/////////////////////////////////
-
-typedef void* FuncData;
-typedef void* (*Func)(ThreadInput* thread_input, FuncData data);
-struct ThreadSyncCallback
-{
-    FuncData data;
-    Func function;
-
-    ThreadSyncCallback(FuncData data, Func func) : data(data), function(func)
-    {
-    }
 };
 /////////////////////////////////
 
@@ -270,6 +257,21 @@ struct Model3DInstance
     glm::vec4 w_basis;
 };
 
+struct Quad2F64
+{
+    glm::vec3 btm_lt_pos;
+    glm::vec2 size;
+    F64 height;
+};
+
+struct BBoxDraw
+{
+    Arena* arena;
+    Quad2F64 bbox;
+    Handle tex;
+    Handle patch_buffer;
+};
+
 struct TextureUploadData
 {
     U32 width;
@@ -306,10 +308,15 @@ struct TextureUploadData
     }
 };
 
-static ThreadInput*
+g_internal void
+thread_cmd_buffer_end(ThreadWorkerCmdCtx* cmd_ctx);
+g_internal void
+thread_cmd_buffer_record(ThreadWorkerCmdCtx* thread_ctx);
+
+static ThreadWorkerCmdCtx*
 thread_input_create();
 static void
-thread_input_destroy(ThreadInput* thread_input);
+thread_input_destroy(ThreadWorkerCmdCtx* thread_input);
 
 static Handle
 handle_zero();
@@ -366,6 +373,9 @@ model_3d_draw(Model3DPipelineData pipeline_input, render::Handle colormap_handle
 g_internal void
 blend_3d_draw(Blend3DPipelineData pipeline_input);
 
+g_internal void
+render_bbox_3d(BBoxDraw* bbox_info);
+
 g_internal bool
 car_instance_render_bucket_add(render::Handle vertex_buffer_handle, render::Handle index_buffer_handle, render::Handle tex_handle, render::BufferInfo* instance_buffer_info,
                                U32 instance_buffer_offset);
@@ -393,9 +403,10 @@ storage_buffer_load_sync(Arena* arena, Handle vertex_buffer_handle, Handle index
 g_internal Handle
 road_segment_descriptor_load_async(Arena* arena, Handle buffer_handle, Handle node_buffer_handle);
 
+template <typename T>
+g_internal bool
+is_resource_loaded(Handle handle, AssetItem<T>** out_asset);
 g_internal bool
 is_resource_loaded(Handle handle);
 
-g_internal void*
-thread_cmd_buffer_record(ThreadInput* thread_input, ThreadSyncCallback callback);
 } // namespace render

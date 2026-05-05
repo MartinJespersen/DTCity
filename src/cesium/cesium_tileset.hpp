@@ -24,6 +24,15 @@ struct RasterTileInfo
     }
 };
 
+struct RasterLoadThreadResult
+{
+    Arena* arena;
+    render::SamplerInfo sampler_info;
+    render::TextureUploadData texture_upload;
+    render::Handle texture_handle;
+    U32 width;
+    U32 height;
+};
 struct TileRenderData
 {
     TileRenderData* next;
@@ -90,10 +99,10 @@ tileset_update_view(Arena* arena, TilesetRenderer* renderer, ui::Camera* camera,
 
 // Helper to convert cesium glTF to render data
 g_internal TileRenderDataList*
-tile_render_data_from_gltf(const CesiumGltf::Model& model, const glm::dmat4& ecef_to_local, const glm::dmat4& tile_transform, render::ThreadInput* thread_input);
+tile_render_data_from_gltf(const CesiumGltf::Model& model, const glm::dmat4& ecef_to_local, const glm::dmat4& tile_transform, render::ThreadWorkerCmdCtx* thread_input);
 
-g_internal void*
-render_raster_tile_record(render::ThreadInput* thread_input, render::FuncData user_data);
-g_internal void*
-render_list_record(render::ThreadInput* thread_input, render::FuncData user_data);
+g_internal RasterLoadThreadResult*
+render_raster_tile_record(render::ThreadWorkerCmdCtx* thread_input, RasterTileInfo* tile_info);
+g_internal TileRenderDataList*
+render_list_record(render::ThreadWorkerCmdCtx* thread_input, TileInfo* tile_info);
 } // namespace cesium

@@ -84,7 +84,7 @@ _libcurl_callback(void* contents, size_t size, size_t nmemb, void* userp)
 
     AsyncTaskState<T>* async_ctx = (AsyncTaskState<T>*)userp;
     WriteChunk* chunk = PushStruct(async_ctx->arena, WriteChunk);
-    chunk->buffer = BufferAlloc<U8>(async_ctx->arena, total_size);
+    chunk->buffer = buffer_alloc<U8>(async_ctx->arena, total_size);
     MemoryCopy(chunk->buffer.data, contents, total_size);
 
     CurlContext* curl_ctx = &async_ctx->curl_ctx;
@@ -95,29 +95,46 @@ _libcurl_callback(void* contents, size_t size, size_t nmemb, void* userp)
 }
 
 template <typename T>
-g_internal void
-_write_data_complete(ThreadInfo thread_info, void* user_data);
+g_internal WorkerTaskResult
+_write_data_complete(ThreadInfo thread_info, WorkerData* user_data);
+
+template <typename T>
+g_internal WorkerTaskResult
+_async_worker_task_result(AsyncTaskState<T>* ctx, AsyncWorkFunc<T> func, HttpInfo<T>* http_info, S64 us_delay)
+{
+    AsyncCallbackArg<T> args = {};
+    args.ctx = ctx;
+    args.func = func;
+    args.http_info = http_info;
+
+    WorkerTaskResult result = {};
+    result.next_task = WorkerTask(&args, _write_data_complete<T>);
+    result.us_delay = us_delay;
+    return result;
+}
 
 template <typename T>
 g_internal void
 _async_thread_pool_push(ThreadPool* thread_pool, AsyncTaskState<T>* ctx, AsyncWorkFunc<T> func, HttpInfo<T>* http_info, S64 us_delay)
 {
-    AsyncCallbackArg<T>* args = PushStruct(ctx->arena, AsyncCallbackArg<T>);
-    args->ctx = ctx;
-    args->func = func;
-    args->http_info = http_info;
-    WorkerTask item = {.data = args, .worker_func = _write_data_complete<T>};
-    thread_pool_push(thread_pool, &item, us_delay);
+    WorkerTaskResult result = _async_worker_task_result<T>(ctx, func, http_info, us_delay);
+    B32 queued = thread_pool_push(thread_pool, &result.next_task, result.us_delay);
+    if (!queued)
+    {
+        worker_task_destroy(&result.next_task);
+    }
+    AssertAlways(queued);
 }
 
 template <typename T>
-void
-_main_thread_func(ThreadInfo thread_info, void* data)
+WorkerTaskResult
+_main_thread_func(ThreadInfo thread_info, WorkerData* data)
 {
     (void)thread_info;
-    MainThreadTaskState<T>* main_thread_task_state = (MainThreadTaskState<T>*)data;
+    MainThreadTaskState<T>* main_thread_task_state = (MainThreadTaskState<T>*)data->user_data;
 
     main_thread_task_state->main_thread_func(main_thread_task_state->task_state);
+    return {};
 }
 
 template <typename T>
@@ -128,28 +145,26 @@ _async_main_thread_queue_push(ThreadPool* thread_pool, AsyncTaskState<T>* task_s
     main_thread_task_state->main_thread_func = func;
     main_thread_task_state->task_state = task_state;
 
-    WorkerTask item = {.data = main_thread_task_state, .worker_func = _main_thread_func<T>};
+    WorkerTask item = WorkerTask(task_state->arena, main_thread_task_state, _main_thread_func<T>);
     B32 queued = thread_pool_main_thread_queue_push(thread_pool, &item);
     return queued;
 }
 
 template <typename T>
 g_internal void
-_error_set(AsyncResult error_code, const char* file, S32 line, AsyncTaskState<T>* ctx, String8 error_msg)
+_error_set(AsyncResult async_result, const char* file, S32 line, AsyncTaskState<T>* ctx, String8 error_msg)
 {
     ctx->err_file = file;
     ctx->err_line = line;
-    ctx->async_result = error_code;
-    ctx->error_str = error_msg;
+    ctx->http_result.async_result = async_result;
+    ctx->http_result.error_str = error_msg;
 }
 
 template <typename T>
 g_internal void
 _error_reset(AsyncTaskState<T>* ctx)
 {
-    ctx->async_result = AsyncResult::Success;
-    ctx->error_code = 0;
-    ctx->error_str = {};
+    ctx->http_result = {};
     ctx->err_line = 0;
     ctx->err_file = 0;
 }
@@ -159,7 +174,7 @@ g_internal void
 _curl_error_set(S32 curl_error_code, const char* file, S32 line, AsyncTaskState<T>* ctx)
 {
     _error_set(AsyncResult::CurlError, file, line, ctx);
-    ctx->error_code = curl_error_code;
+    ctx->http_result.error_code = (U32)curl_error_code;
 }
 
 g_internal void
@@ -279,7 +294,7 @@ _async_http_configure(AsyncTaskState<T>* async_ctx, HttpInfo<T>* http_info)
     CURLMcode multi_err = curl_multi_add_handle(curl_ctx->multi_handle, curl_ctx->session_handle);
     if (multi_err != CURLM_OK)
     {
-        async_ctx->error_code = (U32)multi_err;
+        async_ctx->http_result.error_code = (U32)multi_err;
         async_ctx->err_line = __LINE__;
         async_ctx->err_file = __FILE__;
         return AsyncResult::CurlError;
@@ -290,12 +305,12 @@ _async_http_configure(AsyncTaskState<T>* async_ctx, HttpInfo<T>* http_info)
 }
 
 template <typename T>
-g_internal void
-_write_data_complete(ThreadInfo thread_info, void* user_data)
+g_internal WorkerTaskResult
+_write_data_complete(ThreadInfo thread_info, WorkerData* user_data)
 {
     prof_scope_marker;
 
-    AsyncCallbackArg<T>* arg = (AsyncCallbackArg<T>*)user_data;
+    AsyncCallbackArg<T>* arg = (AsyncCallbackArg<T>*)user_data->user_data;
     HttpInfo<T>* http_info = arg->http_info;
     AsyncTaskState<T>* async_ctx = arg->ctx;
     CurlContext* curl_ctx = &async_ctx->curl_ctx;
@@ -304,8 +319,9 @@ _write_data_complete(ThreadInfo thread_info, void* user_data)
     if (async_ctx->timeout_us + async_ctx->task_start_us < os_now_microseconds())
     {
         _error_set(AsyncResult::TimeoutError, __FILE__, __LINE__, async_ctx);
+        Debug_Http_Push(async_ctx->http_result);
         async_ctx->done.store(true);
-        return;
+        return {};
     }
 
     int running = 1;
@@ -332,7 +348,7 @@ _write_data_complete(ThreadInfo thread_info, void* user_data)
             }
         }
         if (found_msg == false)
-            return;
+            return {};
 
         CURLcode result = msg->data.result;
         long http_code = 0;
@@ -345,7 +361,7 @@ _write_data_complete(ThreadInfo thread_info, void* user_data)
             AsyncResult error_type = result ? AsyncResult::CurlError : AsyncResult::HttpError;
             S32 error_code = result ? result : http_code;
             _error_set(error_type, __FILE__, __LINE__, async_ctx);
-            async_ctx->error_code = error_code;
+            async_ctx->http_result.error_code = (U32)error_code;
             retry = true;
         }
         else
@@ -364,7 +380,7 @@ _write_data_complete(ThreadInfo thread_info, void* user_data)
                 AsyncResult error_type = AsyncResult::HttpError;
                 S32 error_code = http_code;
                 _error_set(error_type, __FILE__, __LINE__, async_ctx, final_str_buffer);
-                async_ctx->error_code = error_code;
+                async_ctx->http_result.error_code = (U32)error_code;
                 http_error = true;
                 retry = true;
             }
@@ -398,8 +414,7 @@ _write_data_complete(ThreadInfo thread_info, void* user_data)
         {
             // task http call retry
             async_ctx->cur_http_retry_count += 1;
-            DEBUG_LOG("Task: %s: Retry Error Type: %d. Error Code: %d", async_ctx->task_name.str, async_ctx->async_result, async_ctx->error_code);
-            DEBUG_LOG("Task: %s: Rescheduling http retry %d/%d...", async_ctx->task_name.str, async_ctx->cur_http_retry_count, async_ctx->max_http_retries);
+            Debug_Http_Push(async_ctx->http_result);
             us_delay = 10'000'000; // 10 sec
             retry = true;
         }
@@ -409,8 +424,7 @@ _write_data_complete(ThreadInfo thread_info, void* user_data)
             async_ctx->cur_task_retry_count += 1;
             async_ctx->cur_http_retry_count = 0;
             task_retry = true;
-            DEBUG_LOG("Task: %s: Retry Error Type: %d. Error Code: %d", async_ctx->task_name.str, async_ctx->async_result, async_ctx->error_code);
-            DEBUG_LOG("Task: %s: Rescheduling task retry %d/%d...", async_ctx->task_name.str, async_ctx->cur_task_retry_count, async_ctx->max_task_retries);
+            Debug_Http_Push(async_ctx->http_result);
             us_delay = 10'000'000; // 10 sec
             retry = true;
         }
@@ -422,7 +436,6 @@ _write_data_complete(ThreadInfo thread_info, void* user_data)
             {
                 http_info = async_ctx->first_http_info;
                 next_func = async_ctx->first_func;
-                DEBUG_LOG("Full Task Retry...");
             }
             else
             {
@@ -434,21 +447,24 @@ _write_data_complete(ThreadInfo thread_info, void* user_data)
             AsyncResult configure_result = _async_http_configure(async_ctx, http_info);
             if (configure_result != AsyncResult::Success)
             {
-                async_ctx->async_result = configure_result;
+                async_ctx->http_result.async_result = configure_result;
+                Debug_Http_Push(async_ctx->http_result);
                 async_ctx->done.store(true);
-                return;
+                return {};
             }
-            _async_thread_pool_push(thread_info.thread_pool, async_ctx, next_func, http_info, us_delay);
-            return;
+
+            WorkerTaskResult worker_result = _async_worker_task_result(async_ctx, next_func, http_info, us_delay);
+            return worker_result;
         }
 
         // record user function error and end the session
         if (user_result.successful == false)
         {
-            async_ctx->error_str = push_str8_copy(async_ctx->arena, user_result.msg);
-            async_ctx->async_result = AsyncResult::UserFunctionError;
+            async_ctx->http_result.error_str = push_str8_copy(async_ctx->arena, user_result.msg);
+            async_ctx->http_result.async_result = AsyncResult::UserFunctionError;
+            Debug_Http_Push(async_ctx->http_result);
             async_ctx->done.store(true);
-            return;
+            return {};
         }
 
         HttpInfo<T>* next_http_info = user_result.http_info;
@@ -459,15 +475,18 @@ _write_data_complete(ThreadInfo thread_info, void* user_data)
             AsyncResult configure_result = _async_http_configure(async_ctx, next_http_info);
             if (configure_result != AsyncResult::Success)
             {
-                async_ctx->async_result = configure_result;
+                async_ctx->http_result.async_result = configure_result;
+                Debug_Http_Push(async_ctx->http_result);
                 async_ctx->done.store(true);
-                return;
+                return {};
             }
-            _async_thread_pool_push(thread_info.thread_pool, async_ctx, next_func, next_http_info);
+            WorkerTaskResult worker_result = _async_worker_task_result(async_ctx, next_func, next_http_info);
+            return worker_result;
         }
         else
         {
             async_ctx->success.store(true);
+            Debug_Http_Push(async_ctx->http_result);
             async_ctx->done.store(true);
             if (user_result.main_thread_func)
             {
@@ -477,8 +496,10 @@ _write_data_complete(ThreadInfo thread_info, void* user_data)
     }
     else
     {
-        _async_thread_pool_push(thread_info.thread_pool, async_ctx, arg->func, arg->http_info);
+        WorkerTaskResult worker_result = _async_worker_task_result(async_ctx, arg->func, arg->http_info);
+        return worker_result;
     }
+    return {};
 }
 
 template <typename T>
@@ -490,6 +511,33 @@ async_task_state_create(String8 name)
     async_ctx->arena = arena;
     async_ctx->task_name = push_str8_copy(arena, name);
     return std::shared_ptr<AsyncTaskState<T>>(async_ctx, AsyncCallCtxDeleter<T>{});
+}
+
+template <typename T>
+g_internal void
+async_task_result_done(const std::shared_ptr<AsyncTaskState<T>>& task, B32* has_executed)
+{
+    if (task->done.load(std::memory_order_acquire) && (*has_executed) == false)
+    {
+        const AsyncHttpResult& http_result = task->http_result;
+        if (http_result.async_result != AsyncResult::Success)
+        {
+            INFO_LOG("%.*s error: %u\n", str8_varg(task->task_name), (U32)http_result.async_result);
+            if (http_result.error_code)
+            {
+                INFO_LOG("%.*s error code: %u\n", str8_varg(task->task_name), http_result.error_code);
+            }
+            if (http_result.error_str.size > 0)
+            {
+                INFO_LOG("%.*s error msg: %.*s\n", str8_varg(task->task_name), str8_varg(http_result.error_str));
+            }
+        }
+        else
+        {
+            INFO_LOG("%.*s work successfully complete\n", str8_varg(task->task_name));
+        }
+        *has_executed = true;
+    }
 }
 
 template <typename T>

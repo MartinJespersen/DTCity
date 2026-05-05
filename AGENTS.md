@@ -17,6 +17,9 @@ In the src directory all sub-directories are layers that are all responsible for
 - Make sure to use the base layer or os_core functions as when needed.
 - When you make changes to one OS in the os_core layers always make sure the changes work for the other OS present.
 - Logs are produced in debug directory (located at build/<os>/<build_type>) that you should use for finding bugs.
+- function names should have there name prefixes with <namespace>_ if the function is local to a layer it should be preceded by _<namespace>_.
+- Be careful about using defensive programming and do not use it everywhere.
+- Do not call functions inline for using the output. Always call the functions on a separate line.
 
 # Third party libraries
 - Cesium Native library source code can be found at https://github.com/CesiumGS/cesium-native or C:/repos/cesium-native

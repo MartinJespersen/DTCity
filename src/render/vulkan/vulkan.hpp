@@ -11,12 +11,6 @@ struct CameraUniformBuffer
     glm::vec2 viewport_dim;
 };
 
-struct Pipeline
-{
-    VkPipeline pipeline;
-    VkPipelineLayout pipeline_layout;
-};
-
 struct Model3dPushConstants
 {
     U32 tex_idx;
@@ -150,7 +144,7 @@ struct RoadIntersectionList
     RoadIntersectionNode* last;
 };
 
-struct DrawFrame
+struct RenderFrame
 {
     Model3DNodeList model_3D_list;
     CarInstanceCompute car_instance_compute_list;
@@ -224,16 +218,18 @@ struct Context
     TracyVkCtx tracy_ctx[MAX_FRAMES_IN_FLIGHT];
 
     // ~mgj: Rendering
-    Arena* draw_frame_arena;
-    DrawFrame* draw_frame;
+    Arena* render_frame_arena;
+    RenderFrame* render_frame;
     Pipeline model_3D_pipeline;
     Pipeline car_instance_pipeline;
     Pipeline blend_3d_pipeline;
     Pipeline road_intersection_pipeline;
     Pipeline car_height_calculate_pipeline;
+    Pipeline bbox_pipeline;
     VkDescriptorSetLayout road_segment_descriptor_set_layout;
     VkDescriptorSetLayout storage_buffer_descriptor_set_layout;
     VkDescriptorSetLayout car_height_calculate_descriptor_set_layout;
+    VkDescriptorSetLayout bbox_patch_descriptor_set_layout;
     render::Handle model_3D_instance_buffer[MAX_FRAMES_IN_FLIGHT];
 };
 
@@ -292,16 +288,7 @@ model_3d_bucket_add(BufferAllocation* vertex_buffer_allocation, BufferAllocation
                     Vec2F32 overlay_translation, Vec2F32 overlay_scale, B32 depth_write_per_draw_call_only, U32 index_buffer_offset, U32 index_count, U32 colormap_idx);
 static void
 blend_3d_bucket_add(BufferAllocation* vertex_buffer_allocation, BufferAllocation* index_buffer_allocation, render::Handle texture_handle, render::Handle colormap_handle);
-static Pipeline
-car_instance_pipeline_create(Context* vk_ctx, String8 shader_path);
-static Pipeline
-model_3d_pipeline_create(Context* vk_ctx, String8 shader_path);
-static Pipeline
-blend_3d_pipeline_create(String8 shader_path);
-static Pipeline
-road_intersection_pipeline_create(String8 shader_path);
-static Pipeline
-car_instance_compute_pipeline_create(String8 shader_path);
+
 g_internal void
 road_intersection_compute();
 g_internal void

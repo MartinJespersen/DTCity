@@ -4,6 +4,8 @@
 #ifndef BASE_INC_H
 #define BASE_INC_H
 
+#include <memory>
+
 ////////////////////////////////
 //~ rjf: Base Includes
 #include "base_context_cracking.h"
@@ -12,7 +14,7 @@
 
 #include "base_core.hpp"
 #include "base_profile.hpp"
-#include "base_arena.h"
+#include "base_arena.hpp"
 #include "base_math.h"
 #include "base_random.hpp"
 #include "base_strings.hpp"

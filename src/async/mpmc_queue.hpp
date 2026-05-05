@@ -1,14 +1,8 @@
 #pragma once
 namespace async
 {
-struct ThreadInfo;
-typedef void (*WorkerFunc)(ThreadInfo, void*);
-struct QueueItem
-{
-    void* data;
-    WorkerFunc worker_func;
-};
-template <typename T> struct Queue
+template <typename T>
+struct Queue
 {
     volatile U32 next_index;
     volatile U32 fill_index;
@@ -17,14 +11,6 @@ template <typename T> struct Queue
     Arena* arena;
     T* items;
     OS_Handle mutex;
-};
-
-struct Threads
-{
-    B32 kill_switch;
-    std::atomic<U32> in_flight_count;
-    async::Queue<QueueItem>* msg_queue;
-    Buffer<OS_Handle> thread_handles;
 };
 
 ////////////////////////////////////////////////

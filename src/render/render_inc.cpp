@@ -13,3 +13,4 @@
 #include "vulkan/asset_manager.cpp"
 #include "vulkan/vulkan.cpp"
 #include "vulkan/vulkan_if.cpp"
+#include "vulkan/pipelines.cpp"

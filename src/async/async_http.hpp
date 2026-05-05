@@ -101,13 +101,20 @@ enum class AsyncResult : U32
 
 };
 
+struct AsyncHttpResult
+{
+    AsyncResult async_result;
+    U32 error_code;
+    String8 error_str;
+};
+
 #define OrReturnError(err, async_error, ctx, line, file)                                                                                                                                               \
     do                                                                                                                                                                                                 \
     {                                                                                                                                                                                                  \
         AsyncResult error = (AsyncResult)(async_error);                                                                                                                                                \
         if ((bool)(err))                                                                                                                                                                               \
         {                                                                                                                                                                                              \
-            (ctx)->error_code = (U32)(err);                                                                                                                                                            \
+            (ctx)->http_result.error_code = (U32)(err);                                                                                                                                                \
             (ctx)->err_line = (line);                                                                                                                                                                  \
             (ctx)->err_file = (file);                                                                                                                                                                  \
             return (error);                                                                                                                                                                            \
@@ -153,11 +160,9 @@ struct AsyncTaskState
     T task_state;
 
     // errors ////////////////////////
-    AsyncResult async_result;
+    AsyncHttpResult http_result;
     U32 err_line;
     const char* err_file;
-    U32 error_code;
-    String8 error_str;
 };
 
 template <typename T>
@@ -220,16 +225,20 @@ g_internal size_t
 _libcurl_callback(void* contents, size_t size, size_t nmemb, void* userp);
 
 template <typename T>
-g_internal void
-_write_data_complete(ThreadInfo thread_info, void* user_data);
+g_internal WorkerTaskResult
+_write_data_complete(ThreadInfo thread_info, WorkerData* user_data);
+
+template <typename T>
+g_internal WorkerTaskResult
+_async_worker_task_result(AsyncTaskState<T>* ctx, AsyncWorkFunc<T> func, HttpInfo<T>* http_info, S64 us_delay = 0);
 
 template <typename T>
 g_internal void
 _async_thread_pool_push(ThreadPool* thread_pool, AsyncTaskState<T>* ctx, AsyncWorkFunc<T> func, HttpInfo<T>* http_info, S64 us_delay = 0);
 
 template <typename T>
-void
-_main_thread_func(ThreadInfo thread_info, void* data);
+WorkerTaskResult
+_main_thread_func(ThreadInfo thread_info, WorkerData* data);
 
 template <typename T>
 g_internal B32
@@ -257,6 +266,10 @@ _async_http_configure(AsyncTaskState<T>* async_ctx, HttpInfo<T>* http_info);
 template <typename T>
 g_internal std::shared_ptr<AsyncTaskState<T>>
 async_task_state_create(String8 name);
+
+template <typename T>
+g_internal void
+async_task_result_done(const std::shared_ptr<AsyncTaskState<T>>& task, B32* has_executed);
 
 template <typename T>
 g_internal AsyncResult

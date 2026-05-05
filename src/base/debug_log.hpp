@@ -43,12 +43,21 @@ struct AllocationEvent
     U32 cmt_size;
 };
 
+// HTTP debugging /////////////////////
+struct DebugHttpEvent
+{
+    S32 async_result;
+    U32 error_code;
+    String8 error_str;
+};
+///////////////////////////////////////
 enum class DebugEventType : S32
 {
     Allocation,
     Cesium_TileLoad,
     Cesium_TileUnload,
-    Asset
+    Asset,
+    Http
 
 };
 
@@ -63,6 +72,7 @@ struct DebugEvent
     {
         AllocationEvent alloc_event;
         AssetEvent asset_event;
+        DebugHttpEvent http_event;
     };
 };
 
@@ -76,6 +86,7 @@ struct DebugTable
 
     U64 total_memory_use;
     ChunkList<DebugEvent> asset_events;
+    ChunkList<DebugEvent> http_events;
 };
 
 #define Debug_Name_(file, line, label) S(file ":" Stringify(line) "|" label)
@@ -156,6 +167,7 @@ debug_event_frame_end()
     }
     arena_clear(g_debug_table.arena);
     g_debug_table.asset_events = *chunk_list_create<DebugEvent>(g_debug_table.arena, 5000);
+    g_debug_table.http_events = *chunk_list_create<DebugEvent>(g_debug_table.arena, 5000);
 
     DebugEvent* event_arr = g_debug_table.events[arr_idx];
     for (U32 idx = 0; idx < event_count; ++idx)
@@ -174,6 +186,12 @@ debug_event_frame_end()
                 *chunk_list_asset_item = *event;
             }
             break;
+            case DebugEventType::Http:
+            {
+                DebugEvent* chunk_list_http_item = chunk_list_get_next(g_debug_table.arena, &g_debug_table.http_events);
+                *chunk_list_http_item = *event;
+            }
+            break;
             default:
             {
                 ERROR_LOG("Unknown error type encountered with type %d", (S32)event->type);
@@ -181,26 +199,50 @@ debug_event_frame_end()
         }
     }
 
-    String8List list = {};
+    String8List asset_list = {};
     for (DebugEvent& debug_asset_event : g_debug_table.asset_events)
     {
         AssetEvent* asset_event = &debug_asset_event.asset_event;
         String8 str = push_str8f(g_debug_table.arena, "%llu\t%d\t%llu\t%.*s\t%u\n", asset_event->handle_u64, asset_event->handle_type, asset_event->gen_id,
                                  str8_varg(g_asset_debug_type_strings[(U32)asset_event->state]), debug_asset_event.tid);
-        str8_list_push(g_debug_table.arena, &list, str);
+        str8_list_push(g_debug_table.arena, &asset_list, str);
     }
 
-    String8 asset_frame_log = str8_list_join(g_debug_table.arena, &list, 0);
+    String8 asset_frame_log = str8_list_join(g_debug_table.arena, &asset_list, 0);
     debug_dump_str(asset_frame_log, S("debug/asset_logs.log"));
+
+    String8List http_list = {};
+    for (DebugEvent& debug_http_event : g_debug_table.http_events)
+    {
+        DebugHttpEvent* http_event = &debug_http_event.http_event;
+        String8 str = push_str8f(g_debug_table.arena, "%d\t%u\t%.*s\t%u\n", http_event->async_result, http_event->error_code, str8_varg(http_event->error_str), debug_http_event.tid);
+        str8_list_push(g_debug_table.arena, &http_list, str);
+    }
+
+    String8 http_frame_log = str8_list_join(g_debug_table.arena, &http_list, 0);
+    debug_dump_str(http_frame_log, S("debug/http_logs.log"));
 }
 
 #define Debug_Frame_End() debug_event_frame_end()
+
+// Arena debugging macros
 #define Debug_Allocation_Push(arena, size)                                                                                                                                                             \
     {                                                                                                                                                                                                  \
         DebugEvent* event = debug_event_record(DebugEventType::Allocation, S("Arena Allocation Push"), S("Arena Allocation Push"));                                                                    \
         event->alloc_event.arena_handle = OS_HandleFromPtr(arena);                                                                                                                                     \
         event->alloc_event.cmt_size = (size);                                                                                                                                                          \
     }
+/////////////////////////////////////////
+// Http debugging macros
+#define Debug_Http_Push(http_result)                                                                                                                                                                   \
+    {                                                                                                                                                                                                  \
+        auto debug_http_result__ = (http_result);                                                                                                                                                      \
+        DebugEvent* event = debug_event_record(DebugEventType::Http, Debug_Name("Http Push"), S("Http Push"));                                                                                         \
+        event->http_event.async_result = (S32)debug_http_result__.async_result;                                                                                                                        \
+        event->http_event.error_code = debug_http_result__.error_code;                                                                                                                                 \
+        event->http_event.error_str = debug_http_result__.error_str;                                                                                                                                   \
+    }
+////////////////////////////////////////
 
 #define Debug_Asset_Push_Created(handle) Debug_Asset_Push_(Created, handle)
 #define Debug_Asset_Push_Queued(handle) Debug_Asset_Push_(Queued, handle)
@@ -215,6 +257,7 @@ debug_event_frame_end()
 #else
 #define Debug_Allocation_Push(...)
 #define Debug_Frame_End(...)
+#define Debug_Http_Push(...)
 #define Debug_Asset_Push_(...)
 #define Debug_Asset_Push_Created(...)
 #define Debug_Asset_Push_Queued(...)

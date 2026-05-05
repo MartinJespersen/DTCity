@@ -19,15 +19,14 @@ class DTCityTaskProcessor : public CesiumAsync::ITaskProcessor
         // Create a copy of the task on the heap
         auto* task_copy = new std::function<void()>(std::move(task));
 
-        async::WorkerTask item = {};
-        item.data = task_copy;
-        item.worker_func = [](async::ThreadInfo, void* data)
+        async::WorkerTask item = async::WorkerTask(0, task_copy, [](async::ThreadInfo, async::WorkerData* data) -> async::WorkerTaskResult
         {
             // ~mgj: Enqueue the command buffer
-            auto* func = static_cast<std::function<void()>*>(data);
+            auto* func = static_cast<std::function<void()>*>(data->user_data);
             (*func)();
             delete func;
-        };
+            return {};
+        });
 
         if (!async::thread_pool_push(thread_pool, &item))
         {
@@ -39,16 +38,6 @@ class DTCityTaskProcessor : public CesiumAsync::ITaskProcessor
 
   private:
     async::ThreadPool* thread_pool;
-};
-
-struct RasterLoadThreadResult
-{
-    Arena* arena;
-    render::SamplerInfo sampler_info;
-    render::TextureUploadData texture_upload;
-    render::Handle texture_handle;
-    U32 width;
-    U32 height;
 };
 
 g_internal render::SamplerInfo
@@ -342,10 +331,11 @@ class DTCityPrepareRendererResources : public Cesium3DTilesSelection::IPrepareRe
             return asyncSystem.createResolvedFuture(Cesium3DTilesSelection::TileLoadResultAndRenderResources{std::move(tileLoadResult), nullptr});
         }
 
-        render::ThreadInput* thread_input = render::thread_input_create();
         TileInfo tile_info = TileInfo(*pModel, ecef_to_local_transform, transform);
-        render::ThreadSyncCallback callback = render::ThreadSyncCallback(&tile_info, render_list_record);
-        void* render_data_list = render::thread_cmd_buffer_record(thread_input, callback);
+        render::ThreadWorkerCmdCtx* thread_ctx = render::thread_input_create();
+        render::thread_cmd_buffer_record(thread_ctx);
+        defer({ render::thread_cmd_buffer_end(thread_ctx); });
+        TileRenderDataList* render_data_list = render_list_record(thread_ctx, &tile_info);
 
         return asyncSystem.createResolvedFuture(Cesium3DTilesSelection::TileLoadResultAndRenderResources{std::move(tileLoadResult), render_data_list});
     }
@@ -383,11 +373,11 @@ class DTCityPrepareRendererResources : public Cesium3DTilesSelection::IPrepareRe
     {
         prof_scope_marker;
 
-        render::ThreadInput* thread_input = render::thread_input_create();
         RasterTileInfo tile_info(image, rendererOptions);
-        render::ThreadSyncCallback callback = render::ThreadSyncCallback(&tile_info, render_raster_tile_record);
-
-        void* raster_tile = render::thread_cmd_buffer_record(thread_input, callback);
+        render::ThreadWorkerCmdCtx* thread_ctx = render::thread_input_create();
+        render::thread_cmd_buffer_record(thread_ctx);
+        defer({ render::thread_cmd_buffer_end(thread_ctx); });
+        RasterLoadThreadResult* raster_tile = render_raster_tile_record(thread_ctx, &tile_info);
 
         return raster_tile;
     }
@@ -557,13 +547,12 @@ sampler_info_from_cesium_sampler(const CesiumGltf::Sampler& sampler)
 // Helper: Convert Cesium glTF to render data
 //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-g_internal void*
-render_list_record(render::ThreadInput* thread_input, render::FuncData user_data)
+g_internal TileRenderDataList*
+render_list_record(render::ThreadWorkerCmdCtx* thread_input, TileInfo* tile_info)
 {
-    TileInfo* tile_info = (TileInfo*)user_data;
     TileRenderDataList* render_data_list = tile_render_data_from_gltf(tile_info->model, tile_info->ecef_to_local, tile_info->tile_transform, thread_input);
     {
-        auto stub_func = [](void* data, render::ThreadInput* thread_input)
+        auto stub_func = [](void* data, render::ThreadWorkerCmdCtx* thread_input)
         {
             (void)data;
             (void)thread_input;
@@ -589,10 +578,9 @@ render_list_record(render::ThreadInput* thread_input, render::FuncData user_data
     return render_data_list;
 }
 
-g_internal void*
-render_raster_tile_record(render::ThreadInput* thread_input, render::FuncData user_data)
+g_internal RasterLoadThreadResult*
+render_raster_tile_record(render::ThreadWorkerCmdCtx* thread_input, RasterTileInfo* tile_info)
 {
-    RasterTileInfo* tile_info = (RasterTileInfo*)user_data;
     Arena* raster_arena = arena_alloc();
     RasterLoadThreadResult* result = PushStruct(raster_arena, RasterLoadThreadResult);
     result->arena = raster_arena;
@@ -606,7 +594,7 @@ render_raster_tile_record(render::ThreadInput* thread_input, render::FuncData us
     result->height = result->texture_upload.height;
     result->texture_handle = render::texture_load_sync(&result->sampler_info, &result->texture_upload, (VkCommandBuffer)thread_input->cmd_buffer);
     {
-        auto stub_func = [](void* data, render::ThreadInput* thread_input)
+        auto stub_func = [](void* data, render::ThreadWorkerCmdCtx* thread_input)
         {
             (void)data;
             (void)thread_input;
@@ -620,7 +608,7 @@ render_raster_tile_record(render::ThreadInput* thread_input, render::FuncData us
 }
 
 g_internal TileRenderDataList*
-tile_render_data_from_gltf(const CesiumGltf::Model& model, const glm::dmat4& ecef_to_local, const glm::dmat4& tile_transform, render::ThreadInput* thread_input)
+tile_render_data_from_gltf(const CesiumGltf::Model& model, const glm::dmat4& ecef_to_local, const glm::dmat4& tile_transform, render::ThreadWorkerCmdCtx* thread_input)
 {
     prof_scope_marker;
 
@@ -736,8 +724,8 @@ tile_render_data_from_gltf(const CesiumGltf::Model& model, const glm::dmat4& ece
                 const CesiumGltf::Accessor* index_accessor = CesiumGltf::Model::getSafe(&model.accessors, primitive.indices);
 
                 // Allocate buffers
-                Buffer<render::Vertex3D> vertices = BufferAlloc<render::Vertex3D>(scratch.arena, pos_accessor->count);
-                Buffer<U32> indices = BufferAlloc<U32>(scratch.arena, index_accessor->count);
+                Buffer<render::Vertex3D> vertices = buffer_alloc<render::Vertex3D>(scratch.arena, pos_accessor->count);
+                Buffer<U32> indices = buffer_alloc<U32>(scratch.arena, index_accessor->count);
 
                 // Copy vertices
                 for (U32 i = 0; i < (U32)pos_accessor->count; ++i)
@@ -815,7 +803,7 @@ tile_render_data_from_gltf(const CesiumGltf::Model& model, const glm::dmat4& ece
             }
         }
     }
-    U32 mat_count = model.materials.size();
+    U64 mat_count = model.materials.size();
     for (U32 mat_idx = 0; mat_idx < mat_count; ++mat_idx)
     {
         TileRenderData* render_data = PushStruct(tile_render_data_list->arena, TileRenderData);
@@ -844,8 +832,8 @@ tile_render_data_from_gltf(const CesiumGltf::Model& model, const glm::dmat4& ece
 
         Buffer<render::Vertex3D> vertices = {};
         Buffer<U32> indices = {};
-        vertices = BufferAlloc<render::Vertex3D>(tile_render_data_list->arena, vertex_count);
-        indices = BufferAlloc<U32>(tile_render_data_list->arena, index_count);
+        vertices = buffer_alloc<render::Vertex3D>(tile_render_data_list->arena, vertex_count);
+        indices = buffer_alloc<U32>(tile_render_data_list->arena, index_count);
         for (PrimitiveNode* prim_node = primitive_list.first; prim_node; prim_node = prim_node->next)
         {
             if (prim_node->material_idx == mat_idx)
@@ -987,7 +975,7 @@ tileset_renderer_create(Arena* arena, async::ThreadPool* threads, const char* ti
 
     // Create the tileset
     renderer->tileset = new Cesium3DTilesSelection::Tileset(externals, tileset_url, options);
-    _ion_raster_overlay_example_add_if_present(renderer);
+    // _ion_raster_overlay_example_add_if_present(renderer);
 
     return renderer;
 }

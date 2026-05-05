@@ -1,7 +1,7 @@
 static Buffer<String8>
 dt_dir_create(Arena* arena, String8 parent, dt_DataDirPair* dirs, U32 count)
 {
-    Buffer<String8> buffer = BufferAlloc<String8>(arena, count);
+    Buffer<String8> buffer = buffer_alloc<String8>(arena, count);
     for (U32 i = 0; i < count; i++)
     {
         String8 dir = str8_path_from_str8_list(arena, {parent, dirs[i].name});
@@ -179,15 +179,15 @@ dt_interpret_input(int argc, char** argv)
         INFO_LOG("Using default coordinates");
 
 #if OS_WINDOWS
-        String8 tileset_url = S("file:///C:/ByModel/eskiltuna/Totalstad_2025_q3/tileset.json");
+        // String8 tileset_url = S("file:///C:/ByModel/eskiltuna/Totalstad_2025_q3/tileset.json");
 
-        // String8 tileset_url = S("file:///C:/ByModel/5km_6235_580/tileset.json");
+        String8 tileset_url = S("file:///C:/ByModel/5km_6235_580/tileset.json");
 #else
         String8 tileset_url = S("file:///mnt/c/ByModel/5km_6235_580/tileset.json");
 #endif
 
         input.tileset_url = tileset_url;
-        input.btm_right_corner_wgs84 = vec_2f64(16.49952138067, 59.36163877297); // vec_2f64(10.291206, 56.253108);
+        input.btm_right_corner_wgs84 = vec_2f64(10.291206, 56.253108); // vec_2f64(16.49952138067, 59.36163877297); //  //  //
     }
     else
     {
@@ -226,14 +226,15 @@ imgui_debug_window(cesium::TilesetRenderer* renderer, async::AsyncHttpTaskCreate
     if (netascore_ready && !netascore_result.task_state->success)
     {
         ImGui::Text("Error");
-        const char* user_error_msg = netascore_result.task_state->error_str.size > 0 ? (const char*)netascore_result.task_state->error_str.str : "<missing error message>";
+        const async::AsyncHttpResult& http_result = netascore_result.task_state->http_result;
+        const char* user_error_msg = http_result.error_str.size > 0 ? (const char*)http_result.error_str.str : "<missing error message>";
         const char* err_file = netascore_result.task_state->err_file ? netascore_result.task_state->err_file : "<unknown file>";
-        ImGui::Text("NetaScore Error Code: %u", (U32)netascore_result.task_state->async_result);
+        ImGui::Text("NetaScore Error Code: %u", (U32)http_result.async_result);
         ImGui::TextWrapped("Message: %s", user_error_msg);
         ImGui::TextWrapped("Location: %s:%d", err_file, netascore_result.task_state->err_line);
-        if (netascore_result.task_state->error_code > 0)
+        if (http_result.error_code > 0)
         {
-            ImGui::Text("Http Error Code: %u", netascore_result.task_state->error_code);
+            ImGui::Text("Http Error Code: %u", http_result.error_code);
         }
     }
     else if (netascore_ready)
@@ -248,8 +249,8 @@ imgui_debug_window(cesium::TilesetRenderer* renderer, async::AsyncHttpTaskCreate
     ImGui::End();
 }
 
-g_internal void
-city_build(async::ThreadInfo info, void* data);
+g_internal async::WorkerTaskResult
+city_build(async::ThreadInfo info, async::WorkerData* data);
 
 struct CityBuildInput
 {
@@ -267,11 +268,11 @@ struct CarBuildInput
     U32 car_count;
 };
 
-g_internal void
-city_build(async::ThreadInfo info, void* data)
+g_internal async::WorkerTaskResult
+city_build(async::ThreadInfo info, async::WorkerData* data)
 {
     (void)info;
-    CityBuildInput* input = (CityBuildInput*)data;
+    CityBuildInput* input = (CityBuildInput*)data->user_data;
     city::Road* road = input->road_state;
 
     osm::edge_map_create(road->arena, input->file_path, input->bbox_wgs84);
@@ -302,16 +303,18 @@ city_build(async::ThreadInfo info, void* data)
     // city::buildings_build();
     // buildings_build(ctx->buildings, &sampler_info, ecef_to_local, ctx->road->road_height);
     road->data_ready.store(true);
+    return {};
 }
 
-g_internal void
-car_build(async::ThreadInfo info, void* data)
+g_internal async::WorkerTaskResult
+car_build(async::ThreadInfo info, async::WorkerData* data)
 {
     (void)info;
-    CarBuildInput* input = (CarBuildInput*)data;
+    CarBuildInput* input = (CarBuildInput*)data->user_data;
     city::cars_create(input->car_sim, input->asset_dir, input->texture_dir, input->car_count);
     input->car_sim->cars_created.store(true);
     arena_release(input->arena);
+    return {};
 }
 
 static void
@@ -340,6 +343,7 @@ dt_main_loop(void* ptr)
     F64 tileset_lon = input->btm_right_corner_wgs84.x;
     F64 tileset_lat = input->btm_right_corner_wgs84.y;
     render::render_ctx_create(ctx->data_subdirs.data[dt_DataDirType::Shaders], io_ctx, ctx->thread_pool);
+    draw::draw_init();
     vulkan::Context* vk_ctx = vulkan::ctx_get();
     dt_imgui_setup(vk_ctx, io_ctx);
 
@@ -385,47 +389,16 @@ dt_main_loop(void* ptr)
         arena_clear(dt_ctx_get()->arena_frame);
         io::new_frame();
         render::new_frame();
+        draw::draw_new_frame();
         ImGui::NewFrame();
         async::thread_pool_main_thread_queue_drain(ctx->thread_pool);
-        if (osm_task_result.task_state->done.load() && osm_task_done == false)
-        {
-            if (osm_task_result.task_state->async_result != async::AsyncResult::Success)
-            {
-                printf("osm error: %u\n", osm_task_result.task_state->async_result);
-                if (osm_task_result.task_state->error_code)
-                {
-                    printf("osm error code: %u\n", osm_task_result.task_state->error_code);
-                }
-                if (osm_task_result.task_state->error_str.size > 0)
-                {
-                    printf("osm error msg: %s\n", osm_task_result.task_state->error_str.str);
-                }
-            }
-            else
-            {
-                printf("osm work succesfully complete\n");
-            }
-            osm_task_done = true;
-        }
-        if (neta_result.task_state->done.load() && neta_task_done == false)
-        {
-            if (neta_result.task_state->async_result != async::AsyncResult::Success)
-            {
-                printf("neta error: %u\n", neta_result.task_state->async_result);
-                if (neta_result.task_state->error_code)
-                {
-                    printf("neta http error code: %u\n", neta_result.task_state->error_code);
-                }
-            }
-            else
-            {
-                printf("neta work succesfully complete\n");
-            }
-            neta_task_done = true;
-        }
-#if BUILD_DEBUG
+
+        async::async_task_result_done(osm_task_result.task_state, &osm_task_done);
+        async::async_task_result_done(neta_result.task_state, &neta_task_done);
+
+        // #if BUILD_DEBUG
         imgui_debug_window(ctx->cesium_tileset, neta_result, ctx->thread_pool);
-#endif
+        // #endif
 
         if (road_dependents_completed == false && osm::g_network->network_ready.load() && neta::g_neta_state->data_downloaded.load())
         {
@@ -435,8 +408,7 @@ dt_main_loop(void* ptr)
             city_build_input->file_path = push_str8_copy(ctx->road->arena, neta_result.task_state->task_state.file_path);
             city_build_input->bbox_wgs84 = neta_result.task_state->task_state.bbox_wgs84;
 
-            async::WorkerTask item = {.data = city_build_input, .worker_func = city_build};
-            thread_pool_push(ctx->thread_pool, &item);
+            thread_pool_push(ctx->road->arena, city_build_input, city_build, ctx->thread_pool);
             road_dependents_completed = true;
         }
 
@@ -501,9 +473,11 @@ dt_main_loop(void* ptr)
         }
         ImGui::End();
 
-        // render::blend_3d_draw(ctx->road->colormap_handle[ctx->road->current_handle_idx]);
-        // render::model_3d_draw(buildings->roof_model_handles);
-        // render::model_3d_draw(buildings->facade_model_handles);
+        // input:
+        // - Bounding box (in 3D to include height)
+        //  - Using local coordinates from cesium library?
+        // - texture handle of texture to use
+        //
 
         // Update and render Cesium 3D Tiles ////////////
         if (ctx->cesium_tileset)
@@ -523,13 +497,12 @@ dt_main_loop(void* ptr)
                 {
                     if (tile->compute_scheduled == false || overlay_option_changed)
                     {
-                        tile->compute_scheduled =
-                            render::road_intersection_compute_add(tile->render_data.storage_buffer_handle, tile->render_data.index_buffer_handle, ctx->road->segment_buffer_handle,
-                                                                  ctx->road->segment_node_buffer_handle, ctx->road->segment_handle, overlay_option_choice);
+                        tile->compute_scheduled = draw::draw_road_intersection_compute(tile->render_data.storage_buffer_handle, tile->render_data.index_buffer_handle, ctx->road->segment_buffer_handle,
+                                                                                       ctx->road->segment_node_buffer_handle, ctx->road->segment_handle, overlay_option_choice);
                     }
                 }
                 render::Handle colormap_handle = ctx->road->overlay_option_cur ? ctx->road->colormap_handle : ctx->road->zero_colormap_handle;
-                render::model_3d_draw(tile->render_data, colormap_handle);
+                draw::draw_model_3d(tile->render_data, colormap_handle);
             }
 
             if (cars_creation_scheduled == false && osm::g_network->network_ready.load())
@@ -542,8 +515,7 @@ dt_main_loop(void* ptr)
                 car_build_input->texture_dir = push_str8_copy(arena, texture_dir);
                 car_build_input->car_count = 100;
 
-                async::WorkerTask item = {.data = car_build_input, .worker_func = car_build};
-                thread_pool_push(ctx->thread_pool, &item);
+                thread_pool_push(arena, car_build_input, car_build, ctx->thread_pool);
                 cars_creation_scheduled = true;
             }
 
@@ -551,25 +523,19 @@ dt_main_loop(void* ptr)
             if (ctx->car_sim && ctx->car_sim->cars_created.load())
             {
                 render::gpu_work_done_wait();
-                Buffer<render::Model3DInstance> instance_buffer = car_sim_update(vk_ctx->draw_frame_arena, ctx->car_sim, ctx->time->delta_time_sec, ctx->cesium_tileset->ecef_to_local);
+                Buffer<render::Model3DInstance> instance_buffer = car_sim_update(draw::draw_frame_arena_get(), ctx->car_sim, ctx->time->delta_time_sec, ctx->cesium_tileset->ecef_to_local);
 
                 // instance buffer offset alignment and assignment
-                U32 align = 16;
                 render::BufferInfo instance_buffer_info = render::BufferInfo(instance_buffer, render::BufferType_Vertex | render::BufferType_StorageBuffer);
-                vulkan::DrawFrame* draw_frame = vk_ctx->draw_frame;
-                vulkan::CarInstanceRender* instance_draw = &draw_frame->car_instance_render_list;
-                U32 instance_buffer_offset = instance_draw->total_instance_buffer_byte_count + (align - 1);
-                instance_buffer_offset -= instance_buffer_offset % align;
+                draw::CarInstanceRenderAddResult car_render =
+                    draw::draw_car_instance_render(ctx->car_sim->vertex_handle, ctx->car_sim->index_handle, ctx->car_sim->texture_handle, &instance_buffer_info);
 
-                B32 car_render_queued =
-                    render::car_instance_render_bucket_add(ctx->car_sim->vertex_handle, ctx->car_sim->index_handle, ctx->car_sim->texture_handle, &instance_buffer_info, instance_buffer_offset);
-
-                if (car_render_queued)
+                if (car_render.queued)
                 {
                     for (cesium::TileRenderData* tile = renderer->tile_to_show.first; tile; tile = tile->render_next)
                     {
-                        render::car_instance_compute_bucket_add(&instance_buffer_info, tile->render_data.vertex_buffer_handle, tile->render_data.index_buffer_handle,
-                                                                -ctx->car_sim->car_center_offset.min, instance_buffer_offset);
+                        draw::draw_car_instance_compute(&instance_buffer_info, tile->render_data.vertex_buffer_handle, tile->render_data.index_buffer_handle, -ctx->car_sim->car_center_offset.min,
+                                                        car_render.instance_buffer_offset);
                     }
                 }
             }
@@ -577,6 +543,7 @@ dt_main_loop(void* ptr)
 
         /////////////////////////////////////
 
+        draw::draw_flush();
         render::render_frame(framebuffer_dim, &io_ctx->framebuffer_resized, ctx->camera, io_ctx->mouse_pos_cur_s64);
 
         ImGui::EndFrame();
@@ -594,5 +561,6 @@ dt_main_loop(void* ptr)
     }
     // city::building_destroy(ctx->buildings);
     cesium::tileset_renderer_destroy(ctx->cesium_tileset);
+    draw::draw_release();
     render::render_ctx_destroy();
 }

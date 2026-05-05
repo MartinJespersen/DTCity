@@ -7,6 +7,7 @@
 #include "lib_wrappers/lib_wrappers_inc.cpp"
 #include "gltfw/gltfw.cpp"
 #include "render/render_inc.cpp"
+#include "draw/draw.cpp"
 #include "misc/misc_inc.cpp"
 #include "osm/osm.cpp"
 #include "city/city_inc.cpp"

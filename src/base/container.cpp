@@ -3,7 +3,7 @@
 
 template <typename T>
 Buffer<T>
-BufferAlloc(Arena* arena, U64 count)
+buffer_alloc(Arena* arena, U64 count)
 {
     Buffer<T> buffer = {0};
     buffer.data = PushArray(arena, T, count);
@@ -41,7 +41,7 @@ template <typename T>
 static Buffer<T>
 buffer_arena_copy(Arena* arena, Buffer<T> buffer)
 {
-    Buffer<T> new_buffer = BufferAlloc<T>(arena, buffer.size);
+    Buffer<T> new_buffer = buffer_alloc<T>(arena, buffer.size);
     MemoryCopy(new_buffer.data, buffer.data, buffer.size * sizeof(T));
     return new_buffer;
 }
@@ -50,7 +50,7 @@ template <typename T>
 static Buffer<T>
 buffer_concat(Arena* arena, Buffer<T> a, Buffer<T> b)
 {
-    Buffer<T> result = BufferAlloc<T>(arena, a.size + b.size);
+    Buffer<T> result = buffer_alloc<T>(arena, a.size + b.size);
     MemoryCopy(result.data, a.data, a.size * sizeof(T));
     MemoryCopy(result.data + a.size, b.data, b.size * sizeof(T));
     return result;
@@ -60,7 +60,7 @@ buffer_concat(Arena* arena, Buffer<T> a, Buffer<T> b)
 static Buffer<String8>
 Str8BufferFromCString(Arena* arena, std::initializer_list<const char*> strings)
 {
-    Buffer<String8> buffer = BufferAlloc<String8>(arena, strings.size());
+    Buffer<String8> buffer = buffer_alloc<String8>(arena, strings.size());
     U32 index = 0;
     for (const char* const* str = strings.begin(); str != strings.end(); ++str)
     {
@@ -184,7 +184,7 @@ template <typename T>
 static Buffer<T>
 buffer_from_chunk_list(Arena* arena, ChunkList<T>* list)
 {
-    Buffer<T> buffer = BufferAlloc<T>(arena, list->total_count);
+    Buffer<T> buffer = buffer_alloc<T>(arena, list->total_count);
     U64 offset = 0;
     for (ChunkItem<T>* chunk = list->first; chunk; chunk = chunk->next)
     {

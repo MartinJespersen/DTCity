@@ -8,11 +8,39 @@ template <typename T>
 struct Queue;
 struct ThreadPool;
 struct ThreadInfo;
-typedef void (*WorkerFunc)(ThreadInfo, void*);
+
+struct WorkerTaskResult;
+struct WorkerData;
+typedef WorkerTaskResult (*WorkerFunc)(ThreadInfo, WorkerData*);
+
+struct WorkerData
+{
+    Arena* arena;
+    void* user_data;
+};
+
 struct WorkerTask
 {
-    void* data;
-    WorkerFunc worker_func;
+    WorkerData data;
+    WorkerFunc func;
+    B32 owns_arena;
+    WorkerTask() = default;
+    WorkerTask(Arena* arena, void* user_data, WorkerFunc func) : data{arena, user_data}, func(func), owns_arena(false)
+    {
+    }
+    template <typename T>
+    WorkerTask(T* user_data, WorkerFunc func) : data{arena_alloc(), 0}, func(func), owns_arena(true)
+    {
+        T* user_data_copy = PushStruct(data.arena, T);
+        *user_data_copy = *user_data;
+        data.user_data = user_data_copy;
+    }
+};
+
+struct WorkerTaskResult
+{
+    WorkerTask next_task;
+    S64 us_delay;
 };
 struct ThreadInfo
 {
@@ -58,11 +86,17 @@ _thread_pool_next_deadline(ThreadPool* thread_pool);
 static B32
 _thread_pool_try_get_work(ThreadPool* thread_pool, WorkerTask* item);
 static void
+_thread_pool_worker_task_execute(ThreadInfo thread_info, WorkerTask* item);
+static void
+worker_task_destroy(WorkerTask* task);
+static void
 _thread_pool_wake_workers(ThreadPool* thread_pool, B32 wake_all);
 static B32
 thread_pool_register_current_thread(ThreadPool* thread_pool);
 static B32
-thread_pool_push(ThreadPool* thread_pool, WorkerTask* item, S64 us_delay = 0);
+thread_pool_push(ThreadPool* thread_pool, WorkerTask* task, S64 us_delay = 0);
+static B32
+thread_pool_push(Arena* arena, void* user_data, WorkerFunc func, ThreadPool* thread_pool, S64 us_delay = 0);
 static B32
 thread_pool_has_pending_work(ThreadPool* thread_pool);
 static void

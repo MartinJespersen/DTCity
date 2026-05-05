@@ -67,7 +67,7 @@ cache_needs_update(String8 cache_data_file, String8 cache_meta_file)
 
                 Rng1U64 ttl_range = {U64(ttl_base - meta_data_str.str), U64(cur_byte - meta_data_str.str)};
                 file_timestamp = U64FromStr8(Str8Substr(meta_data_str, ttl_range), 10);
-                if (cur_time > file_timestamp + 3600) // hard coded ttl of 1 hour
+                if (cur_time > file_timestamp + 10000) // hard coded ttl of 10,000 seconds
                 {
                     update_needed = true;
                 }

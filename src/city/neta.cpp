@@ -56,7 +56,7 @@ _edge_in_osm_area(Arena* arena, simdjson::ondemand::document& doc, Rng2F64 bbox_
             break;
         }
         U64 size = geometry.count_elements();
-        Buffer<Vec2F64> coords_buf = BufferAlloc<Vec2F64>(arena, size);
+        Buffer<Vec2F64> coords_buf = buffer_alloc<Vec2F64>(arena, size);
         U64 coord_idx = 0;
         for (auto point : geometry)
         {
@@ -393,7 +393,7 @@ netascore_async_task_create(String8 cache_path, Rng2F64 bbox)
         String8 netascore_api = push_str8f(scratch.arena, "%.*snetascore", str8_varg(neta::mobilitylab_jobs_api_get()));
         result.async_result = async::async_http_task_create(result.task_state, ctx->thread_pool, HTTP_Method_Post, netascore_api, S("application/x-www-form-urlencoded"), {},
                                                             {push_str8f(scratch.arena, "target_srid=%d", target_srid), bbox_str, S("output_format=GeoJSON")},
-                                                            {result.task_state->task_state.mobility_api_key_header}, neta::netascore_job_create_complete, 5, 1);
+                                                            {result.task_state->task_state.mobility_api_key_header}, neta::netascore_job_create_complete, 5, 1, 6000);
     }
     else
     {

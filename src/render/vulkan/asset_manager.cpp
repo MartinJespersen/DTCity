@@ -48,7 +48,7 @@ texture_ktx_cmd_record(VkCommandBuffer cmd, TextureHandle* tex, Buffer<U8> tex_b
         U32 base_height = ktx_texture->baseHeight;
         U32 base_depth = ktx_texture->baseDepth;
 
-        Buffer<U32> mip_level_offsets = BufferAlloc<U32>(scratch.arena, mip_levels);
+        Buffer<U32> mip_level_offsets = buffer_alloc<U32>(scratch.arena, mip_levels);
         for (U32 i = 0; i < ktx_texture->numLevels; ++i)
         {
             ktx_size_t offset;
@@ -337,7 +337,7 @@ texture_gpu_upload_cmd_recording(VkCommandBuffer cmd, render::Handle tex_handle,
 }
 
 static void
-buffer_loading_thread(void* data, render::ThreadInput* thread_input)
+buffer_loading_thread(void* data, render::ThreadWorkerCmdCtx* thread_input)
 {
     Assert(thread_input->handles.count == 1);
     render::Handle handle = render::handle_list_first_handle(&thread_input->handles);
@@ -372,7 +372,7 @@ buffer_loading_thread(void* data, render::ThreadInput* thread_input)
 }
 
 g_internal void
-texture_loading_thread(void* data, render::ThreadInput* thread_input)
+texture_loading_thread(void* data, render::ThreadWorkerCmdCtx* thread_input)
 {
     Assert(thread_input->handles.count == 1);
     render::Handle handle = render::handle_list_first_handle(&thread_input->handles);
@@ -398,7 +398,7 @@ texture_loading_thread(void* data, render::ThreadInput* thread_input)
 }
 
 static void
-texture_loading_from_path_thread(void* data, render::ThreadInput* thread_input)
+texture_loading_from_path_thread(void* data, render::ThreadWorkerCmdCtx* thread_input)
 {
     Assert(thread_input->handles.count == 1);
     render::Handle handle = render::handle_list_first_handle(&thread_input->handles);
@@ -414,7 +414,7 @@ texture_loading_from_path_thread(void* data, render::ThreadInput* thread_input)
 }
 
 static void
-colormap_loading_thread(void* data, render::ThreadInput* thread_input)
+colormap_loading_thread(void* data, render::ThreadWorkerCmdCtx* thread_input)
 {
     Assert(thread_input->handles.count == 1);
     render::Handle handle = render::handle_list_first_handle(&thread_input->handles);
@@ -425,11 +425,11 @@ colormap_loading_thread(void* data, render::ThreadInput* thread_input)
     colormap_texture_cmd_record((VkCommandBuffer)thread_input->cmd_buffer, &asset->item, colormap_buf);
 }
 
-static void
-thread_main(async::ThreadInfo thread_info, void* input)
+static async::WorkerTaskResult
+thread_main(async::ThreadInfo thread_info, async::WorkerData* input)
 {
     ScratchScope scratch = ScratchScope(0, 0);
-    render::ThreadInput* thread_input = (render::ThreadInput*)input;
+    render::ThreadWorkerCmdCtx* thread_input = (render::ThreadWorkerCmdCtx*)input->user_data;
 
     AssetManager* asset_manager = asset_manager_get();
 
@@ -445,6 +445,7 @@ thread_main(async::ThreadInfo thread_info, void* input)
 
     // ~mgj: Enqueue the command buffer
     asset_cmd_queue_item_enqueue(thread_info.thread_id, thread_input);
+    return {};
 }
 
 // ~mgj: Descriptor Index Allocator
@@ -560,7 +561,7 @@ asset_manager_create(VkPhysicalDevice physical_device, VkDevice device, VkInstan
     asset_manager->arena = arena;
     asset_manager->total_size = total_size_in_bytes;
     asset_manager->threads = threads;
-    asset_manager->threaded_cmd_pools = BufferAlloc<AssetManagerCommandPool>(arena, threads->thread_handles.size);
+    asset_manager->threaded_cmd_pools = buffer_alloc<AssetManagerCommandPool>(arena, threads->thread_handles.size);
     asset_manager->descriptor_pool = desc_pool;
 
     // Store device references
@@ -670,7 +671,7 @@ asset_manager_destroy(AssetManager* asset_manager)
 }
 
 static void
-asset_cmd_queue_item_enqueue(U32 thread_id, render::ThreadInput* thread_input)
+asset_cmd_queue_item_enqueue(U32 thread_id, render::ThreadWorkerCmdCtx* thread_input)
 {
     AssetManager* asset_manager = asset_manager_get();
 
@@ -825,7 +826,7 @@ asset_manager_cmd_done_check()
         VkResult result = vkGetFenceStatus(asset_manager->device, cmd_queue_item->fence);
         if (result == VK_SUCCESS)
         {
-            render::ThreadInput* thread_input = cmd_queue_item->thread_input;
+            render::ThreadWorkerCmdCtx* thread_input = cmd_queue_item->thread_input;
             os_mutex_scope(asset_manager->threaded_cmd_pools.data[cmd_queue_item->thread_id].mutex)
             {
                 vkFreeCommandBuffers(asset_manager->device, asset_manager->threaded_cmd_pools.data[cmd_queue_item->thread_id].cmd_pool, 1, (VkCommandBuffer*)&thread_input->cmd_buffer);

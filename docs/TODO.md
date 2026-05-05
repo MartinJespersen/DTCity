@@ -1,5 +1,6 @@
 # Urgent changes
-* DEBUG_LOG macro is commented out
+* Some roads are not covered in NetAScore at certain LOD's.
+* Clean up OSM and NetAScore code in while loop
 * thread_input arena might not be deallocated everywhere (used in asset loading from cesium). Consider using some form of smart pointer.
 * Staged regression findings:
   * Raster overlay upload failure can enqueue a command buffer without handles or done_loading_func.
@@ -22,13 +23,12 @@
 * validation errors at null texture destruction as it is still used by some cmd buffers.
 
 # features
+* Show bikes or walking people instead of cars.
 * Osm data visualizer should not be affected by netascore not showing
 * It should be possible to switch between cities in the editor
 * Raster overlays should show for Eskilstuna
 * Use the OSM data for showing data about buildings
 * Logging should be improved to not always print to console 
-  * Look at handmade hero debugging for inspiration how to do this
-  * Per thread logging 
   * Create memory viewer
 <!--* 3D assets 
   * Bicycles -->

@@ -53,6 +53,44 @@ _thread_pool_try_get_work(ThreadPool* thread_pool, WorkerTask* item)
 }
 
 static void
+worker_task_destroy(WorkerTask* task)
+{
+    if (task->owns_arena && task->data.arena)
+    {
+        arena_release(task->data.arena);
+    }
+    task->data = {};
+    task->func = 0;
+    task->owns_arena = false;
+}
+
+static void
+_thread_pool_worker_task_execute(ThreadInfo thread_info, WorkerTask* item)
+{
+    Assert(item);
+    Assert(item->func);
+
+    WorkerTaskResult result = item->func(thread_info, &item->data);
+    if (result.next_task.func)
+    {
+        if (item->owns_arena && result.next_task.data.arena == item->data.arena)
+        {
+            result.next_task.owns_arena = true;
+            item->owns_arena = false;
+        }
+
+        B32 queued = thread_pool_push(thread_info.thread_pool, &result.next_task, result.us_delay);
+        if (!queued)
+        {
+            worker_task_destroy(&result.next_task);
+        }
+        AssertAlways(queued);
+    }
+
+    worker_task_destroy(item);
+}
+
+static void
 _thread_pool_wake_workers(ThreadPool* thread_pool, B32 wake_all)
 {
     os_mutex_scope(thread_pool->work_mutex)
@@ -85,11 +123,8 @@ thread_pool_register_current_thread(ThreadPool* thread_pool)
 }
 
 static B32
-thread_pool_push(ThreadPool* thread_pool, WorkerTask* item, S64 us_delay)
+thread_pool_push(ThreadPool* thread_pool, WorkerTask* task, S64 us_delay)
 {
-    AssertAlways(thread_pool);
-    AssertAlways(item);
-
     if (thread_pool->thread_count == 0 || thread_pool->kill_switch)
     {
         return false;
@@ -107,15 +142,25 @@ thread_pool_push(ThreadPool* thread_pool, WorkerTask* item, S64 us_delay)
         U64 now = os_now_microseconds();
         S64 now_s64 = now > (U64)max_S64 ? max_S64 : (S64)now;
         S64 cutoff_time = now_s64 + us_delay;
-        async::async_min_heap_push(thread_pool->timer_min_heap, *item, cutoff_time);
+        async::async_min_heap_push(thread_pool->timer_min_heap, *task, cutoff_time);
     }
     else
     {
-        queue_push(thread_pool->mpmc_queue, item);
+        queue_push(thread_pool->mpmc_queue, task);
     }
 
     _thread_pool_wake_workers(thread_pool, false);
     return true;
+}
+
+static B32
+thread_pool_push(Arena* arena, void* user_data, WorkerFunc func, ThreadPool* thread_pool, S64 us_delay)
+{
+    Assert(thread_pool);
+    async::WorkerTask task(arena, user_data, func);
+
+    B32 result = thread_pool_push(thread_pool, &task, us_delay);
+    return result;
 }
 
 static B32
@@ -186,7 +231,7 @@ thread_pool_main_thread_queue_drain(ThreadPool* thread_pool)
     WorkerTask item = {};
     while (thread_pool_main_thread_queue_try_pull(thread_pool, &item))
     {
-        item.worker_func(thread_info, item.data);
+        _thread_pool_worker_task_execute(thread_info, &item);
     }
 }
 
@@ -219,7 +264,7 @@ thread_worker(void* data)
         if (_thread_pool_try_get_work(thread_pool, &item))
         {
             thread_pool->in_flight_count.fetch_add(1);
-            item.worker_func(thread_info, item.data);
+            _thread_pool_worker_task_execute(thread_info, &item);
             thread_pool->in_flight_count.fetch_sub(1);
             continue;
         }
@@ -241,7 +286,7 @@ static ThreadPool*
 thread_pool_create(Arena* arena, U32 thread_count, U32 mpmc_queue_size, U32 main_thread_queue_size)
 {
     ThreadPool* thread_info = PushStruct(arena, ThreadPool);
-    thread_info->thread_handles = BufferAlloc<OS_Handle>(arena, thread_count);
+    thread_info->thread_handles = buffer_alloc<OS_Handle>(arena, thread_count);
     thread_info->thread_count = thread_count;
     thread_info->kill_switch = 0;
     thread_info->work_generation.store(0);

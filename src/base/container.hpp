@@ -4,7 +4,8 @@
 
 #include <initializer_list>
 
-template <typename T> struct Result
+template <typename T>
+struct Result
 {
     T v;
     B32 err;
@@ -31,7 +32,8 @@ result_not_ok(T v)
     return {v, true};
 };
 
-template <typename T> struct Buffer
+template <typename T>
+struct Buffer
 {
     T* data;
     U64 size;
@@ -57,7 +59,7 @@ template <typename T> struct Buffer
 
 template <typename T>
 Buffer<T>
-BufferAlloc(Arena* arena, U64 count);
+buffer_alloc(Arena* arena, U64 count);
 template <typename T>
 static void
 BufferCopy(Buffer<T> dst, Buffer<T> src, U64 element_count_to_copy);
@@ -91,14 +93,16 @@ static char**
 CStrArrFromStr8Buffer(Arena* arena, Buffer<String8> buffer);
 
 // ~mgj: ChunkList
-template <typename T> struct ChunkItem
+template <typename T>
+struct ChunkItem
 {
     ChunkItem<T>* next;
     T* values;
     U64 count;
 };
 
-template <typename T> struct ChunkList
+template <typename T>
+struct ChunkList
 {
     ChunkItem<T>* first;
     ChunkItem<T>* last;
@@ -188,7 +192,8 @@ static Buffer<T>
 buffer_from_chunk_list(Arena* arena, ChunkList<T>* list);
 
 // defer implementation
-template <typename F> struct privDefer
+template <typename F>
+struct privDefer
 {
     F f;
     privDefer(F f) : f(f)
@@ -213,14 +218,16 @@ defer_func(F f)
 #define defer(code) auto DEFER_3(_defer_) = defer_func([&]() { code; })
 
 // Linked List Map
-template <typename K, typename T> struct MapItem
+template <typename K, typename T>
+struct MapItem
 {
     K key;
     T value;
 };
 
 const U64 DEFAULT_MAP_CHUNK_SIZE = 14;
-template <typename K, typename V, U64 N = DEFAULT_MAP_CHUNK_SIZE> struct MapChunk
+template <typename K, typename V, U64 N = DEFAULT_MAP_CHUNK_SIZE>
+struct MapChunk
 {
     static_assert(sizeof(K) == sizeof(void*), "Key size must match pointer size");
     MapChunk<K, V, N>* next;
@@ -228,7 +235,8 @@ template <typename K, typename V, U64 N = DEFAULT_MAP_CHUNK_SIZE> struct MapChun
     MapItem<K, V> v[N];
 };
 
-template <typename K, typename T, U64 N = DEFAULT_MAP_CHUNK_SIZE> struct MapChunkList
+template <typename K, typename T, U64 N = DEFAULT_MAP_CHUNK_SIZE>
+struct MapChunkList
 {
     MapChunk<K, T, N>* first;
     MapChunk<K, T, N>* last;
@@ -236,7 +244,8 @@ template <typename K, typename T, U64 N = DEFAULT_MAP_CHUNK_SIZE> struct MapChun
     U64 total_count;
 };
 
-template <typename K, typename V> struct Map
+template <typename K, typename V>
+struct Map
 {
     Arena* arena;
     MapChunkList<K, V>* v;

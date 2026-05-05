@@ -18,7 +18,7 @@ node_buffer_from_simd_json(Arena* arena, String8 json, U64 node_hashmap_size)
         goto early_ret;
     }
 
-    nodes = BufferAlloc<osm::RoadNodeList>(arena, node_hashmap_size);
+    nodes = buffer_alloc<osm::RoadNodeList>(arena, node_hashmap_size);
     {
         simdjson::ondemand::array elements;
         error = doc["elements"].get(elements);
@@ -102,7 +102,7 @@ way_buffer_from_simd_json(Arena* arena, String8 json)
         }
     }
 
-    way_buffer = BufferAlloc<osm::Way>(arena, way_count);
+    way_buffer = buffer_alloc<osm::Way>(arena, way_count);
     for (auto elem : elements)
     {
         std::string_view elem_key;
@@ -141,7 +141,7 @@ way_buffer_from_simd_json(Arena* arena, String8 json)
 
             // Reset and iterate again to store the tags
             tags_object = elem["tags"].get_object();
-            way->tags = BufferAlloc<osm::Tag>(arena, tag_count);
+            way->tags = buffer_alloc<osm::Tag>(arena, tag_count);
             U64 tag_cur_index = 0;
             for (auto tag : tags_object)
             {
@@ -152,8 +152,7 @@ way_buffer_from_simd_json(Arena* arena, String8 json)
 
                 // Convert to String8
                 String8 temp_key = Str8((U8*)key_view.data(), key_view.size());
-                String8 temp_value =
-                    Str8((U8*)value_view.value().data(), value_view.value().size());
+                String8 temp_value = Str8((U8*)value_view.value().data(), value_view.value().size());
 
                 // Copy to arena
                 way->tags.data[tag_cur_index].key = push_str8_copy(arena, temp_key);

@@ -22,7 +22,7 @@ available_instance_extensions_get(Arena* arena)
     VkExtensionProperties* properties = PushArray(arena, VkExtensionProperties, property_count);
     VK_CHECK_RESULT(vkEnumerateInstanceExtensionProperties(nullptr, &property_count, properties));
 
-    Buffer<String8> result = BufferAlloc<String8>(arena, property_count);
+    Buffer<String8> result = buffer_alloc<String8>(arena, property_count);
     for (U32 i = 0; i < property_count; i++)
     {
         result.data[i] = push_str8_copy(arena, str8_c_string(properties[i].extensionName));
@@ -99,18 +99,24 @@ destroy_debug_utils_messenger_ext(VkInstance instance, VkDebugUtilsMessengerEXT 
 static VkFormat
 supported_format(VkPhysicalDevice physical_device, VkFormat* candidates, U32 candidate_count, VkImageTiling tiling, VkFormatFeatureFlags features)
 {
-    for (U32 i = 0; i < candidate_count; i++)
+    bool found = false;
+    VkFormat out_format = {};
+    for (U32 i = 0; i < candidate_count && !found; i++)
     {
         VkFormatProperties props;
         vkGetPhysicalDeviceFormatProperties(physical_device, candidates[i], &props);
 
         if (tiling == VK_IMAGE_TILING_LINEAR && ((props.linearTilingFeatures & features) == features) || ((props.optimalTilingFeatures & features) == features))
         {
-            return candidates[i];
+            found = true;
+            out_format = candidates[i];
         }
     }
-
-    exit_with_error("failed to find supported format!");
+    if (!found)
+    {
+        exit_with_error("failed to find supported format!");
+    }
+    return out_format;
 }
 
 static void
@@ -148,8 +154,8 @@ object_id_image_resource_create(SwapchainResources* swapchain_resources, U32 ima
 
     VmaAllocationCreateInfo vma_info = {.flags = VMA_ALLOCATION_CREATE_DEDICATED_MEMORY_BIT, .usage = VMA_MEMORY_USAGE_AUTO, .priority = 1.0f};
 
-    ::Buffer<ImageResource> object_id_image_resources = BufferAlloc<ImageResource>(swapchain_resources->arena, image_count);
-    ::Buffer<ImageResource> object_id_image_resolve_resources = BufferAlloc<ImageResource>(swapchain_resources->arena, image_count);
+    ::Buffer<ImageResource> object_id_image_resources = buffer_alloc<ImageResource>(swapchain_resources->arena, image_count);
+    ::Buffer<ImageResource> object_id_image_resolve_resources = buffer_alloc<ImageResource>(swapchain_resources->arena, image_count);
 
     U32 buffer_size = 0;
     for (U32 i = 0; i < image_count; i++)
@@ -486,7 +492,7 @@ required_extensions_get(Context* vk_ctx)
         extensionCount++;
     }
 
-    ::Buffer<String8> extensions = BufferAlloc<String8>(vk_ctx->arena, extensionCount);
+    ::Buffer<String8> extensions = buffer_alloc<String8>(vk_ctx->arena, extensionCount);
 
     for (U32 i = 0; i < glfwExtensionCount; i++)
     {
@@ -600,7 +606,7 @@ object_id_resources_cleanup()
 static void
 sync_objects_create(Context* vk_ctx)
 {
-    vk_ctx->in_flight_fences = BufferAlloc<VkFence>(vk_ctx->arena, MAX_FRAMES_IN_FLIGHT);
+    vk_ctx->in_flight_fences = buffer_alloc<VkFence>(vk_ctx->arena, MAX_FRAMES_IN_FLIGHT);
 
     VkFenceCreateInfo fenceInfo{};
     fenceInfo.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
@@ -618,7 +624,7 @@ sync_objects_create(Context* vk_ctx)
 static void
 command_buffers_create(Context* vk_ctx)
 {
-    vk_ctx->command_buffers = BufferAlloc<VkCommandBuffer>(vk_ctx->arena, MAX_FRAMES_IN_FLIGHT);
+    vk_ctx->command_buffers = buffer_alloc<VkCommandBuffer>(vk_ctx->arena, MAX_FRAMES_IN_FLIGHT);
     VkCommandBufferAllocateInfo allocInfo{};
     allocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
     allocInfo.commandPool = vk_ctx->command_pool;
@@ -759,7 +765,7 @@ query_swapchain_support(Arena* arena, VkPhysicalDevice device, VkSurfaceKHR surf
 
     if (formatCount != 0)
     {
-        details.formats = BufferAlloc<VkSurfaceFormatKHR>(arena, formatCount);
+        details.formats = buffer_alloc<VkSurfaceFormatKHR>(arena, formatCount);
         VK_CHECK_RESULT(vkGetPhysicalDeviceSurfaceFormatsKHR(device, surface, &formatCount, details.formats.data))
     }
 
@@ -768,7 +774,7 @@ query_swapchain_support(Arena* arena, VkPhysicalDevice device, VkSurfaceKHR surf
 
     if (presentModeCount != 0)
     {
-        details.presentModes = BufferAlloc<VkPresentModeKHR>(arena, presentModeCount);
+        details.presentModes = buffer_alloc<VkPresentModeKHR>(arena, presentModeCount);
         VK_CHECK_RESULT(vkGetPhysicalDeviceSurfacePresentModesKHR(device, surface, &presentModeCount, details.presentModes.data))
     }
 
@@ -895,7 +901,7 @@ swapchain_image_resource_create(VkDevice device, SwapchainResources* swapchain_r
 {
     ScratchScope scratch = ScratchScope(0, 0);
 
-    swapchain_resources->image_resources = BufferAlloc<ImageSwapchainResource>(swapchain_resources->arena, image_count);
+    swapchain_resources->image_resources = buffer_alloc<ImageSwapchainResource>(swapchain_resources->arena, image_count);
 
     VkImage* images = PushArray(scratch.arena, VkImage, image_count);
     if (vkGetSwapchainImagesKHR(device, swapchain_resources->swapchain, &image_count, images) != VK_SUCCESS)
@@ -1067,9 +1073,9 @@ swapchain_create(Context* vk_ctx, SwapChainSupportDetails* swapchain_info, VkExt
     depth_resources_create(vk_ctx, swapchain_resources);
     object_id_image_resource_create(swapchain_resources, image_count);
 
-    swapchain_resources->image_available_semaphores = BufferAlloc<VkSemaphore>(vk_ctx->arena, image_count);
-    swapchain_resources->render_finished_semaphores = BufferAlloc<VkSemaphore>(vk_ctx->arena, image_count);
-    swapchain_resources->image_in_flight_fences = BufferAlloc<VkFence>(vk_ctx->arena, image_count);
+    swapchain_resources->image_available_semaphores = buffer_alloc<VkSemaphore>(vk_ctx->arena, image_count);
+    swapchain_resources->render_finished_semaphores = buffer_alloc<VkSemaphore>(vk_ctx->arena, image_count);
+    swapchain_resources->image_in_flight_fences = buffer_alloc<VkFence>(vk_ctx->arena, image_count);
 
     VkSemaphoreCreateInfo semaphoreInfo{};
     semaphoreInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
