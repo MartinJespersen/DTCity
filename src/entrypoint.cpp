@@ -187,7 +187,7 @@ dt_interpret_input(int argc, char** argv)
 #endif
 
         input.tileset_url = tileset_url;
-        input.btm_right_corner_wgs84 = vec_2f64(10.291206, 56.253108); // vec_2f64(16.49952138067, 59.36163877297); //  //  //
+        input.btm_right_corner_wgs84 = vec_2f64(10.291206, 56.253108); // vec_2f64(16.49952138067, 59.36163877297);
     }
     else
     {
@@ -210,7 +210,6 @@ imgui_debug_window(cesium::TilesetRenderer* renderer, async::AsyncHttpTaskCreate
     ImGui::Text("FPS: %f", ImGui::GetIO().Framerate);
     ImGui::Text("Textures:       %d active, %d free", asset_manager->texture_list.count, asset_manager->texture_free_list.count);
     ImGui::Text("Buffers:        %d active, %d free", asset_manager->buffer_list.count, asset_manager->buffer_free_list.count);
-    ImGui::Text("Descriptor Sets: %d active, %d free", asset_manager->descriptor_set_list.count, asset_manager->descriptor_set_free_list.count);
     for (U32 i = 0; i < ArrayCount(asset_manager->deletion_queues); i++)
     {
         ImGui::Text("Deletion Queue %d: %d active", i, asset_manager->deletion_queues[i].list_count);
@@ -245,6 +244,8 @@ imgui_debug_window(cesium::TilesetRenderer* renderer, async::AsyncHttpTaskCreate
     {
         ImGui::Text("Waiting...");
     }
+    // camera location
+    ImGui::Text("Camera Position: %.2f, %.2f, %.2f", dt_ctx_get()->camera->position.x, dt_ctx_get()->camera->position.y, dt_ctx_get()->camera->position.z);
 
     ImGui::End();
 }
@@ -290,8 +291,6 @@ city_build(async::ThreadInfo info, async::WorkerData* data)
     road->segment_buffer_handle = render::buffer_load_async(&road_segment_buffer_info);
     render::BufferInfo road_segment_node_buffer_info = render::BufferInfo(road->road_build_result.bvh_result.node_buffer, render::BufferType_StorageBuffer);
     road->segment_node_buffer_handle = render::buffer_load_async(&road_segment_node_buffer_info);
-    road->segment_handle = render::road_segment_descriptor_load_async(road->arena, road->segment_buffer_handle, road->segment_node_buffer_handle);
-    ////////////////////////////////////////////////////////////////////////////
     //// build building buffers
     // render::SamplerInfo sampler_info = {
     //     .min_filter = render::Filter_Linear,
@@ -497,8 +496,8 @@ dt_main_loop(void* ptr)
                 {
                     if (tile->compute_scheduled == false || overlay_option_changed)
                     {
-                        tile->compute_scheduled = draw::draw_road_intersection_compute(tile->render_data.storage_buffer_handle, tile->render_data.index_buffer_handle, ctx->road->segment_buffer_handle,
-                                                                                       ctx->road->segment_node_buffer_handle, ctx->road->segment_handle, overlay_option_choice);
+                        tile->compute_scheduled = draw::draw_road_intersection_compute(tile->render_data.vertex_buffer_handle, tile->render_data.index_buffer_handle, ctx->road->segment_buffer_handle,
+                                                                                       ctx->road->segment_node_buffer_handle, overlay_option_choice);
                     }
                 }
                 render::Handle colormap_handle = ctx->road->overlay_option_cur ? ctx->road->colormap_handle : ctx->road->zero_colormap_handle;

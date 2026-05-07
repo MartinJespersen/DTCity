@@ -65,6 +65,7 @@ struct ImageAllocationResource
 
 struct BufferHandle
 {
+    render::BufferType type;
     BufferAllocation buffer_alloc;
     BufferAllocation staging_buffer;
     U32 elem_size_in_bytes;
@@ -87,15 +88,6 @@ struct DescriptorSetInfo
     DescriptorSetInfo(VkDescriptorSet set, VkDescriptorSetLayout layout) : set(set), layout(layout)
     {
     }
-};
-typedef DescriptorSetInfo (*DescriptorWriteFunc)(VkDevice, VkDescriptorPool, void*);
-struct DescriptorSetHandle
-{
-    void* desc_write_func_data;
-    DescriptorWriteFunc desc_write_func;
-
-    VkDescriptorSetLayout desc_layout;
-    VkDescriptorSet desc_set;
 };
 
 struct AssetManagerCommandPool
@@ -181,11 +173,6 @@ struct AssetManager
     OS_Handle buffer_mutex;
     render::AssetItemList<BufferHandle> buffer_list;
     render::AssetItemList<BufferHandle> buffer_free_list;
-
-    // ~mgj: Descriptor Sets
-    OS_Handle descriptor_set_mutex;
-    render::AssetItemList<DescriptorSetHandle> descriptor_set_list;
-    render::AssetItemList<DescriptorSetHandle> descriptor_set_free_list;
 
     // ~mgj: Threading Buffer Commands
     Buffer<AssetManagerCommandPool> threaded_cmd_pools;
@@ -283,8 +270,6 @@ asset_manager_buffer_item_get(render::Handle handle);
 static render::AssetItem<TextureHandle>*
 asset_manager_texture_item_get(render::Handle handle);
 
-static render::AssetItem<DescriptorSetHandle>*
-asset_manager_descriptor_set_item_get(render::Handle handle);
 template <typename T>
 static render::Handle
 asset_manager_item_create(render::AssetItemList<T>* list, render::AssetItemList<T>* free_list, render::HandleType handle_type);
@@ -327,8 +312,6 @@ static void
 asset_manager_buffer_free(render::Handle handle);
 static void
 asset_manager_texture_free(render::Handle handle);
-static void
-asset_manager_descriptor_set_free(render::Handle handle);
 
 static void
 asset_cmd_queue_item_enqueue(U32 thread_id, render::ThreadWorkerCmdCtx* thread_input);

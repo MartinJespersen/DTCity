@@ -1,10 +1,10 @@
 # Urgent changes
+* Running out of pool memory due to descriptor build up
+  * probably due to descriptor_sets being allocated for storage buffers and that are not deallocated
 * Some roads are not covered in NetAScore at certain LOD's.
 * Clean up OSM and NetAScore code in while loop
-* thread_input arena might not be deallocated everywhere (used in asset loading from cesium). Consider using some form of smart pointer.
 * Staged regression findings:
   * Raster overlay upload failure can enqueue a command buffer without handles or done_loading_func.
-  * Asset deletion logging emits ScheduleDeletion when the queued deletion is actually being executed.
 
 # Less urgent changes
 * vulkan descriptor layout specified twice some places (e.g. compute storage buffers descriptor)
@@ -23,10 +23,12 @@
 * validation errors at null texture destruction as it is still used by some cmd buffers.
 
 # features
+* record asset lifetimes similar to how debug events are done at the moment to be sure everything related to asset lifetimes are handled on the same thread.
 * Show bikes or walking people instead of cars.
+* Use a list of fences for draw and compute calls that waits for asynchrounously loaded assets
+* Make it possible to alloc and dealloc whole city
 * Osm data visualizer should not be affected by netascore not showing
 * It should be possible to switch between cities in the editor
-* Raster overlays should show for Eskilstuna
 * Use the OSM data for showing data about buildings
 * Logging should be improved to not always print to console 
   * Create memory viewer

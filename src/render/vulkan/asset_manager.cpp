@@ -595,7 +595,6 @@ asset_manager_create(VkPhysicalDevice physical_device, VkDevice device, VkInstan
     // ~mgj: Mutex for asset operations (Textures and Buffers)
     asset_manager->texture_mutex = os_rw_mutex_alloc();
     asset_manager->buffer_mutex = os_rw_mutex_alloc();
-    asset_manager->descriptor_set_mutex = os_rw_mutex_alloc();
     asset_manager->arena_mutex = OS_MutexAlloc();
 
     // Set global pointer
@@ -619,12 +618,6 @@ asset_manager_live_resources_destroy(AssetManager* asset_manager)
         DEBUG_LOG("Texture Not Destroyed: gen_id=%llu", (U64)item->gen_id);
         descriptor_index_free(&asset_manager->descriptor_index_allocator, item->item.descriptor_set_idx);
         texture_destroy(&item->item);
-    }
-
-    for (render::AssetItem<DescriptorSetHandle>* item = asset_manager->descriptor_set_list.first; item != NULL; item = item->next)
-    {
-        DEBUG_LOG("DescriptorSet Not Destroyed: gen_id=%llu", (U64)item->gen_id);
-        vkDestroyDescriptorSetLayout(asset_manager->device, item->item.desc_layout, nullptr);
     }
 }
 
@@ -661,7 +654,6 @@ asset_manager_destroy(AssetManager* asset_manager)
 
     OS_MutexRelease(asset_manager->texture_mutex);
     OS_MutexRelease(asset_manager->buffer_mutex);
-    OS_MutexRelease(asset_manager->descriptor_set_mutex);
     OS_MutexRelease(asset_manager->arena_mutex);
 
     vmaDestroyAllocator(asset_manager->allocator);
@@ -766,18 +758,6 @@ asset_manager_texture_item_get(render::Handle handle)
         asset_item_texture = asset_manager_item_get<TextureHandle>(handle);
     }
     return asset_item_texture;
-}
-
-static render::AssetItem<DescriptorSetHandle>*
-asset_manager_descriptor_set_item_get(render::Handle handle)
-{
-    AssetManager* asset_manager = asset_manager_get();
-    render::AssetItem<DescriptorSetHandle>* asset_item_descriptor_set = {};
-    OS_MutexScopeR(asset_manager->descriptor_set_mutex)
-    {
-        asset_item_descriptor_set = asset_manager_item_get<DescriptorSetHandle>(handle);
-    }
-    return asset_item_descriptor_set;
 }
 
 // ~mgj: Callers must hold their per-type mutex. Arena pushes are additionally protected by
@@ -1043,35 +1023,21 @@ asset_manager_buffer_free(render::Handle handle)
 static void
 asset_manager_texture_free(render::Handle handle)
 {
-    AssetManager* asset_manager = asset_manager_get();
+    vulkan::Context* vk_ctx = ctx_get();
+    AssetManager* asset_manager = vk_ctx->asset_manager;
     render::AssetItem<TextureHandle>* item = asset_manager_texture_item_get(handle);
+    render::AssetItem<TextureHandle>* null_tex = asset_manager_texture_item_get(handle);
     if (item)
     {
         OS_MutexScopeW(asset_manager->texture_mutex)
         {
             if (asset_manager->shutting_down == false)
             {
-                descriptor_set_clear_bindless_texture(item->item.descriptor_set_idx, item);
+                descriptor_set_clear_bindless_texture(item->item.descriptor_set_idx, null_tex);
             }
             descriptor_index_free(&asset_manager->descriptor_index_allocator, item->item.descriptor_set_idx);
             texture_destroy(&item->item);
             asset_manager_item_free(item, &asset_manager->texture_list, &asset_manager->texture_free_list);
-        }
-    }
-}
-
-static void
-asset_manager_descriptor_set_free(render::Handle handle)
-{
-    AssetManager* asset_manager = asset_manager_get();
-    render::AssetItem<DescriptorSetHandle>* item = asset_manager_descriptor_set_item_get(handle);
-    if (item)
-    {
-        OS_MutexScopeW(asset_manager->descriptor_set_mutex)
-        {
-            vkFreeDescriptorSets(asset_manager->device, asset_manager->descriptor_pool, 1, &item->item.desc_set);
-            vkDestroyDescriptorSetLayout(asset_manager->device, item->item.desc_layout, nullptr);
-            asset_manager_item_free(item, &asset_manager->descriptor_set_list, &asset_manager->descriptor_set_free_list);
         }
     }
 }
@@ -1092,11 +1058,6 @@ asset_manager_handle_free(render::Handle handle)
         case render::HandleType::Texture:
         {
             asset_manager_texture_free(handle);
-        }
-        break;
-        case render::HandleType::DescriptorSet:
-        {
-            asset_manager_descriptor_set_free(handle);
         }
         break;
         default: InvalidPath; break;
@@ -1181,10 +1142,11 @@ static render::Handle
 buffer_alloc_create_or_resize(U32 total_buffer_byte_count, render::Handle handle, VkBufferUsageFlags usage, const char* name)
 {
     // buffer alloc get
+    render::BufferType buffer_type = buffer_type_from_usage_flags(usage);
     render::Handle final_handle = handle;
     if (render::is_handle_zero(final_handle))
     {
-        final_handle = render::Handle::buffer_handle_create();
+        final_handle = render::Handle::buffer_handle_create(buffer_type);
     }
     render::AssetItem<BufferHandle>* asset_item_buffer = asset_manager_buffer_item_get(final_handle);
     Assert(asset_item_buffer);
@@ -1192,7 +1154,7 @@ buffer_alloc_create_or_resize(U32 total_buffer_byte_count, render::Handle handle
     if (total_buffer_byte_count > asset_item_buffer->item.buffer_alloc.size)
     {
         deletion_queue_push(final_handle);
-        final_handle = render::Handle::buffer_handle_create();
+        final_handle = render::Handle::buffer_handle_create(buffer_type);
         asset_item_buffer = asset_manager_buffer_item_get(final_handle);
         Assert(asset_item_buffer);
 

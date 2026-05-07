@@ -46,11 +46,11 @@ layout(std430, set = 0, binding = 1) readonly buffer RoadSegmentNodeBuffer {
     RoadSegmentNode data[];
 } road_node_segments;
 
-layout(std430, set = 1, binding = 0) buffer VertexBuffer {
+layout(std430, set = 0, binding = 2) buffer VertexBuffer {
     Vertex data[];
 } vertices;
 
-layout(std430, set = 1, binding = 1) readonly buffer IndexBuffer {
+layout(std430, set = 0, binding = 3) readonly buffer IndexBuffer {
     uint data[];
 } indices;
 

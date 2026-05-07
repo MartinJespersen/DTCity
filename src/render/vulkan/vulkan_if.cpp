@@ -158,7 +158,6 @@ render_ctx_create(String8 shader_path, io::IO* io_ctx, async::ThreadPool* thread
     vk_ctx->blend_3d_pipeline = vulkan::blend_3d_pipeline_create(shader_path);
     vk_ctx->road_intersection_pipeline = vulkan::road_intersection_pipeline_create(shader_path);
     vk_ctx->car_height_calculate_pipeline = vulkan::car_instance_compute_pipeline_create(shader_path);
-    vk_ctx->bbox_pipeline = vulkan::bbox_pipeline(vk_ctx, shader_path);
 }
 
 static void
@@ -207,7 +206,6 @@ render_ctx_destroy()
     vkDestroyDescriptorSetLayout(vk_ctx->device, vk_ctx->road_segment_descriptor_set_layout, nullptr);
     vkDestroyDescriptorSetLayout(vk_ctx->device, vk_ctx->storage_buffer_descriptor_set_layout, nullptr);
     vkDestroyDescriptorSetLayout(vk_ctx->device, vk_ctx->car_height_calculate_descriptor_set_layout, nullptr);
-    vkDestroyDescriptorSetLayout(vk_ctx->device, vk_ctx->bbox_patch_descriptor_set_layout, nullptr);
 
     vkDestroyDevice(vk_ctx->device, nullptr);
     if (vk_ctx->enable_validation_layers)
@@ -420,7 +418,7 @@ texture_load_async(render::SamplerInfo* sampler_info, String8 texture_path)
 }
 
 g_internal Handle
-texture_load_sync(render::SamplerInfo* sampler_info, TextureUploadData* tex_data, VkCommandBuffer cmd)
+texture_load_sync(render::SamplerInfo* sampler_info, TextureUploadData* tex_data, void* cmd)
 {
     prof_scope_marker;
     ScratchScope scratch = ScratchScope(0, 0);
@@ -430,7 +428,7 @@ texture_load_sync(render::SamplerInfo* sampler_info, TextureUploadData* tex_data
 
     {
         Assert(tex_data);
-        vulkan::ImageAllocationResource image_allocation_resource = vulkan::texture_upload_with_blitting(cmd, tex_data);
+        vulkan::ImageAllocationResource image_allocation_resource = vulkan::texture_upload_with_blitting((VkCommandBuffer)cmd, tex_data);
 
         render::AssetItem<vulkan::TextureHandle>* tex_asset = vulkan::asset_manager_item_get<vulkan::TextureHandle>(handle);
         if (tex_asset)
@@ -513,7 +511,7 @@ handle_destroy_deferred(render::Handle handle)
 }
 
 g_internal Handle
-buffer_load_sync(VkCommandBuffer cmd, render::BufferInfo* buffer_info)
+buffer_load_sync(void* cmd, render::BufferInfo* buffer_info)
 {
     prof_scope_marker;
     if (buffer_info->buffer.size == 0)
@@ -525,7 +523,8 @@ buffer_load_sync(VkCommandBuffer cmd, render::BufferInfo* buffer_info)
 
     vulkan::Context* vk_ctx = vulkan::ctx_get();
     vulkan::AssetManager* asset_manager = vk_ctx->asset_manager;
-    render::Handle asset_handle = render::Handle::buffer_handle_create();
+    render::BufferType buffer_type = (render::BufferType)buffer_info->buffer_type;
+    render::Handle asset_handle = render::Handle::buffer_handle_create(buffer_type);
 
     // ~mgj: Create buffer allocation
     VmaAllocationCreateInfo vma_info = {0};
@@ -560,7 +559,7 @@ buffer_load_sync(VkCommandBuffer cmd, render::BufferInfo* buffer_info)
         VK_CHECK_RESULT(vmaCopyMemoryToAllocation(asset_manager->allocator, buffer_info->buffer.data, staging_buffer_alloc.allocation, 0, buffer_info->buffer.size));
         VkBufferCopy copy_region = {0};
         copy_region.size = buffer_info->buffer.size;
-        vkCmdCopyBuffer(cmd, staging_buffer_alloc.buffer, asset_buffer->buffer_alloc.buffer, 1, &copy_region);
+        vkCmdCopyBuffer((VkCommandBuffer)cmd, staging_buffer_alloc.buffer, asset_buffer->buffer_alloc.buffer, 1, &copy_region);
 
         asset_buffer->staging_buffer = staging_buffer_alloc;
     }
@@ -573,34 +572,6 @@ buffer_load_sync(VkCommandBuffer cmd, render::BufferInfo* buffer_info)
 }
 
 g_internal Handle
-uniform_buffer_load_sync(Arena* arena, Handle handle)
-{
-    Handle desc_handle = Handle();
-    if (is_handle_zero(handle) == false)
-    {
-        AssetItem<vulkan::BufferHandle>* buffer_asset = vulkan::asset_manager_buffer_item_get(handle);
-        if (buffer_asset)
-        {
-            desc_handle = Handle::descriptor_set_handle_create();
-            AssetItem<vulkan::DescriptorSetHandle>* asset_item = (AssetItem<vulkan::DescriptorSetHandle>*)desc_handle.ptr;
-
-            vulkan::DescriptorSetHandle* desc_set_handle = &asset_item->item;
-            vulkan::UniformBufferDescriptor* uni_buffer_desc = PushStruct(arena, vulkan::UniformBufferDescriptor);
-            uni_buffer_desc->uniform_buffer = buffer_asset->item.buffer_alloc.buffer;
-
-            desc_set_handle->desc_write_func_data = uni_buffer_desc;
-            desc_set_handle->desc_write_func = vulkan::descriptor_set_uniform_buffer;
-        }
-    }
-    else
-    {
-        AssertStr("uniform_buffer_load_sync: zero handle passed");
-    }
-
-    return desc_handle;
-}
-
-g_internal Handle
 storage_buffer_load_sync(Arena* arena, Handle vertex_buffer_handle, Handle index_buffer_handle)
 {
     Handle desc_handle = Handle();
@@ -610,16 +581,9 @@ storage_buffer_load_sync(Arena* arena, Handle vertex_buffer_handle, Handle index
         AssetItem<vulkan::BufferHandle>* index_asset = vulkan::asset_manager_buffer_item_get(index_buffer_handle);
         if (vertex_asset && index_asset)
         {
-            desc_handle = Handle::descriptor_set_handle_create();
-            AssetItem<vulkan::DescriptorSetHandle>* asset_item = (AssetItem<vulkan::DescriptorSetHandle>*)desc_handle.ptr;
-
-            vulkan::DescriptorSetHandle* desc_set_handle = &asset_item->item;
             vulkan::StorageBufferDescriptor* storage_desc = PushStruct(arena, vulkan::StorageBufferDescriptor);
             storage_desc->vertex_buffer = vertex_asset->item.buffer_alloc.buffer;
             storage_desc->index_buffer = index_asset->item.buffer_alloc.buffer;
-
-            desc_set_handle->desc_write_func_data = storage_desc;
-            desc_set_handle->desc_write_func = vulkan::descriptor_set_storage_buffers;
         }
     }
     else
@@ -627,44 +591,6 @@ storage_buffer_load_sync(Arena* arena, Handle vertex_buffer_handle, Handle index
         AssertStr("storage_buffer_load_sync: zero handle passed");
     }
 
-    return desc_handle;
-}
-
-g_internal Handle
-road_segment_descriptor_load_async(Arena* arena, Handle buffer_handle, Handle node_buffer_handle)
-{
-    Handle desc_handle = Handle();
-    if (is_handle_zero(buffer_handle) == false && is_handle_zero(node_buffer_handle) == false)
-    {
-        AssetItem<vulkan::BufferHandle>* buffer_asset = vulkan::asset_manager_buffer_item_get(buffer_handle);
-        AssetItem<vulkan::BufferHandle>* node_buffer_asset = vulkan::asset_manager_buffer_item_get(node_buffer_handle);
-        Assert(buffer_asset && node_buffer_asset);
-        if (buffer_asset && node_buffer_asset)
-        {
-            vulkan::AssetManager* asset_manager = vulkan::asset_manager_get();
-
-            desc_handle = Handle::descriptor_set_handle_create();
-            AssetItem<vulkan::DescriptorSetHandle>* asset_item = (AssetItem<vulkan::DescriptorSetHandle>*)desc_handle.ptr;
-
-            vulkan::DescriptorSetHandle* desc_set_handle = &asset_item->item;
-            vulkan::RoadSegmentDescriptor* road_seg_desc = PushStruct(arena, vulkan::RoadSegmentDescriptor);
-            road_seg_desc->road_segment_buffer = buffer_asset->item.buffer_alloc.buffer;
-            road_seg_desc->road_segment_node_buffer = node_buffer_asset->item.buffer_alloc.buffer;
-
-            desc_set_handle->desc_write_func_data = road_seg_desc;
-            desc_set_handle->desc_write_func = vulkan::descriptor_set_road_segment;
-
-            // schedule thread
-            render::ThreadWorkerCmdCtx* thread_input = render::thread_input_create();
-            render::handle_list_push(thread_input->arena, &thread_input->handles, desc_handle);
-
-            thread_input->loading_func = [](void*, render::ThreadWorkerCmdCtx*) {};
-            thread_input->done_loading_func = render::handle_done_loading;
-
-            async::thread_pool_push(thread_input->arena, thread_input, vulkan::thread_main, asset_manager->threads);
-        }
-    }
-    Assert("road_segment_descriptor_load_async: zero handle passed");
     return desc_handle;
 }
 
@@ -681,7 +607,8 @@ buffer_load_async(render::BufferInfo* buffer_info)
 
     vulkan::Context* vk_ctx = vulkan::ctx_get();
     vulkan::AssetManager* asset_manager = vk_ctx->asset_manager;
-    render::Handle asset_handle = render::Handle::buffer_handle_create();
+    render::BufferType buffer_type = (render::BufferType)buffer_info->buffer_type;
+    render::Handle asset_handle = render::Handle::buffer_handle_create(buffer_type);
 
     // ~mgj: Create buffer allocation
     VmaAllocationCreateInfo vma_info = {0};
@@ -870,21 +797,19 @@ car_instance_render_bucket_add(render::Handle vertex_buffer_handle, render::Hand
 }
 
 g_internal bool
-road_intersection_compute_add(Handle storage_buffer_handle, Handle index_buffer_handle, Handle road_segment_buffer_handle, Handle road_segment_node_buffer_handle, Handle road_segment_handle,
-                              U32 overlay_option)
+road_intersection_compute_add(Handle vertex_buffer_handle, Handle index_buffer_handle, Handle road_segment_buffer_handle, Handle road_segment_node_buffer_handle, U32 overlay_option)
 {
     bool compute_scheduled = false;
 
-    render::AssetItem<vulkan::DescriptorSetHandle>* storage_set = 0;
-    render::AssetItem<vulkan::DescriptorSetHandle>* road_segment = 0;
+    render::AssetItem<vulkan::BufferHandle>* vertex_buffer = 0;
     render::AssetItem<vulkan::BufferHandle>* index_buffer = 0;
     render::AssetItem<vulkan::BufferHandle>* road_segment_buffer = 0;
     render::AssetItem<vulkan::BufferHandle>* road_segment_node_buffer = 0;
-    if (is_resource_loaded(storage_buffer_handle, &storage_set) && is_resource_loaded(index_buffer_handle, &index_buffer) && is_resource_loaded(road_segment_buffer_handle, &road_segment_buffer) &&
-        is_resource_loaded(road_segment_node_buffer_handle, &road_segment_node_buffer) && is_resource_loaded(road_segment_handle, &road_segment))
+    if (is_resource_loaded(vertex_buffer_handle, &vertex_buffer) && is_resource_loaded(index_buffer_handle, &index_buffer) && is_resource_loaded(road_segment_buffer_handle, &road_segment_buffer) &&
+        is_resource_loaded(road_segment_node_buffer_handle, &road_segment_node_buffer))
     {
         compute_scheduled = true;
-        vulkan::road_intersection_bucket_add(storage_set->item.desc_set, road_segment->item.desc_set, &road_segment_buffer->item, &index_buffer->item, overlay_option);
+        vulkan::road_intersection_bucket_add(&vertex_buffer->item, &index_buffer->item, &road_segment_buffer->item, &road_segment_node_buffer->item, overlay_option);
     }
     return compute_scheduled;
 }
@@ -903,12 +828,6 @@ blend_3d_draw(render::Blend3DPipelineData pipeline_input)
     }
 }
 
-g_internal void
-render_bbox_3d(BBoxDraw* bbox_info)
-{
-    //
-}
-
 g_internal render::AssetItem<vulkan::BufferHandle>*
 _render_asset_item_get(render::Handle handle, vulkan::BufferHandle*)
 {
@@ -919,12 +838,6 @@ g_internal render::AssetItem<vulkan::TextureHandle>*
 _render_asset_item_get(render::Handle handle, vulkan::TextureHandle*)
 {
     return handle.type == render::HandleType::Texture ? vulkan::asset_manager_texture_item_get(handle) : 0;
-}
-
-g_internal render::AssetItem<vulkan::DescriptorSetHandle>*
-_render_asset_item_get(render::Handle handle, vulkan::DescriptorSetHandle*)
-{
-    return handle.type == render::HandleType::DescriptorSet ? vulkan::asset_manager_descriptor_set_item_get(handle) : 0;
 }
 
 template <typename T>
@@ -966,11 +879,6 @@ is_resource_loaded(render::Handle handle)
             render::AssetItem<vulkan::TextureHandle>* asset = 0;
             return is_resource_loaded(handle, &asset);
         }
-        case render::HandleType::DescriptorSet:
-        {
-            render::AssetItem<vulkan::DescriptorSetHandle>* asset = 0;
-            return is_resource_loaded(handle, &asset);
-        }
         default: break;
     }
 
@@ -988,24 +896,15 @@ Handle::texture_handle_create()
 }
 
 Handle
-Handle::buffer_handle_create()
+Handle::buffer_handle_create(BufferType buffer_type)
 {
     vulkan::AssetManager* asset_manager = vulkan::asset_manager_get();
     OS_RWMutexTakeW(asset_manager->buffer_mutex);
     Handle handle = asset_manager_item_create(&asset_manager->buffer_list, &asset_manager->buffer_free_list, render::HandleType::Buffer);
+    render::AssetItem<vulkan::BufferHandle>* asset_item = (render::AssetItem<vulkan::BufferHandle>*)handle.ptr;
+    asset_item->item.type = buffer_type;
 
     OS_RWMutexDropW(asset_manager->buffer_mutex);
-    return handle;
-}
-
-Handle
-Handle::descriptor_set_handle_create()
-{
-    vulkan::AssetManager* asset_manager = vulkan::asset_manager_get();
-    OS_RWMutexTakeW(asset_manager->descriptor_set_mutex);
-    Handle handle = asset_manager_item_create(&asset_manager->descriptor_set_list, &asset_manager->descriptor_set_free_list, render::HandleType::DescriptorSet);
-
-    OS_RWMutexDropW(asset_manager->descriptor_set_mutex);
     return handle;
 }
 
@@ -1030,9 +929,6 @@ thread_cmd_buffer_end(ThreadWorkerCmdCtx* cmd_ctx)
 g_internal void
 handle_done_loading(render::HandleList handles)
 {
-    vulkan::Context* vk_ctx = vulkan::ctx_get();
-    vulkan::AssetManager* asset_manager = vulkan::asset_manager_get();
-
     for (render::HandleNode* node = handles.first; node; node = node->next)
     {
         render::Handle handle = node->handle;
@@ -1058,21 +954,6 @@ handle_done_loading(render::HandleList handles)
                     vulkan::TextureHandle* texture = &asset->item;
                     vulkan::descriptor_set_update_bindless_texture(texture->descriptor_set_idx, texture->image_resource.image_view_resource.image_view, texture->sampler);
                     buffer_destroy(&asset->item.staging_allocation);
-                    asset->is_loaded = 1;
-                    node->work_on_gpu_done = 1;
-                }
-            }
-            break;
-            case render::HandleType::DescriptorSet:
-            {
-                render::AssetItem<vulkan::DescriptorSetHandle>* asset = vulkan::asset_manager_descriptor_set_item_get(handle);
-                if (asset)
-                {
-                    vulkan::DescriptorSetHandle* descriptor_handle = &asset->item;
-                    vulkan::DescriptorSetInfo desc_info = descriptor_handle->desc_write_func(asset_manager->device, vk_ctx->descriptor_pool, descriptor_handle->desc_write_func_data);
-                    descriptor_handle->desc_layout = desc_info.layout;
-                    descriptor_handle->desc_set = desc_info.set;
-                    Assert(descriptor_handle->desc_layout);
                     asset->is_loaded = 1;
                     node->work_on_gpu_done = 1;
                 }

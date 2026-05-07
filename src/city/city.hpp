@@ -158,7 +158,6 @@ struct Road
     // render::Handle index_buffer_handle;
     render::Handle segment_buffer_handle;
     render::Handle segment_node_buffer_handle;
-    render::Handle segment_handle;
     /////////////////////////
 
     std::atomic<B32> data_ready;

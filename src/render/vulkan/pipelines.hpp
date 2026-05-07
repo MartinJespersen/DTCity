@@ -16,6 +16,4 @@ g_internal Pipeline
 road_intersection_pipeline_create(String8 shader_path);
 g_internal Pipeline
 car_instance_compute_pipeline_create(String8 shader_path);
-g_internal Pipeline
-bbox_pipeline(vulkan::Context* vk_ctx, String8 shader_path);
 } // namespace vulkan

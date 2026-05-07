@@ -3,6 +3,34 @@ namespace vulkan
 
 // TODO: check for blitting format beforehand
 
+static render::BufferType
+buffer_type_from_usage_flags(VkBufferUsageFlags usage)
+{
+    U32 result = render::BufferType_Invalid;
+
+    if (usage & VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT)
+    {
+        result |= render::BufferType_Uniform;
+    }
+
+    if (usage & VK_BUFFER_USAGE_STORAGE_BUFFER_BIT)
+    {
+        result |= render::BufferType_StorageBuffer;
+    }
+
+    if (usage & VK_BUFFER_USAGE_INDEX_BUFFER_BIT)
+    {
+        result |= render::BufferType_Index;
+    }
+
+    if (usage & VK_BUFFER_USAGE_VERTEX_BUFFER_BIT)
+    {
+        result |= render::BufferType_Vertex;
+    }
+
+    return (render::BufferType)result;
+}
+
 static void
 print_extension_list(const char* label, Buffer<String8> extensions)
 {

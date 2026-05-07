@@ -131,10 +131,10 @@ struct Blend3DList
 struct RoadIntersectionNode
 {
     RoadIntersectionNode* next;
-    VkDescriptorSet storage_buffer_set;
-    VkDescriptorSet vertex_and_index_set;
     BufferHandle vertex_buffer;
     BufferHandle index_buffer;
+    BufferHandle road_segment_buffer;
+    BufferHandle road_segment_node_buffer;
     U32 overlay_option_idx;
 };
 
@@ -229,7 +229,6 @@ struct Context
     VkDescriptorSetLayout road_segment_descriptor_set_layout;
     VkDescriptorSetLayout storage_buffer_descriptor_set_layout;
     VkDescriptorSetLayout car_height_calculate_descriptor_set_layout;
-    VkDescriptorSetLayout bbox_patch_descriptor_set_layout;
     render::Handle model_3D_instance_buffer[MAX_FRAMES_IN_FLIGHT];
 };
 
@@ -294,7 +293,7 @@ road_intersection_compute();
 g_internal void
 car_instance_compute();
 static void
-road_intersection_bucket_add(VkDescriptorSet storage_buffer_set, VkDescriptorSet road_segment, BufferHandle* vertex_buffer, BufferHandle* index_buffer, U32 overlay_option);
+road_intersection_bucket_add(BufferHandle* vertex_buffer, BufferHandle* index_buffer, BufferHandle* road_segment_buffer, BufferHandle* road_segment_node_buffer, U32 overlay_option);
 
 static void
 model_3d_rendering();

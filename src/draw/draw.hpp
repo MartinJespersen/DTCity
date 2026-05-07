@@ -31,11 +31,10 @@ struct Blend3DList
 struct RoadIntersectionNode
 {
     RoadIntersectionNode* next;
-    render::Handle storage_buffer_handle;
+    render::Handle vertex_buffer_handle;
     render::Handle index_buffer_handle;
     render::Handle road_segment_buffer_handle;
     render::Handle road_segment_node_buffer_handle;
-    render::Handle road_segment_handle;
     U32 overlay_option;
 };
 
@@ -101,13 +100,51 @@ struct DrawFrame
     CarInstanceRender car_instance_render_list;
     Blend3DList blend_3d_list;
     RoadIntersectionList road_intersection_list;
-    LinkedList<render::BBoxDraw> bbox_list;
+};
+
+// when a task is completed, the fence count is decremented
+enum class DrawType
+{
+    None,
+    BBox3d
+};
+
+struct AsyncDrawFence
+{
+    std::atomic<U32> count;
+    DrawType type;
+    union
+    {
+        render::BBoxDraw bbox_draw;
+    };
+};
+
+struct AsyncDrawFenceNode
+{
+    AsyncDrawFenceNode* next;
+    AsyncDrawFence v;
+};
+struct AsyncDrawFenceList
+{
+    AsyncDrawFenceNode* first;
+    AsyncDrawFenceNode* last;
+};
+
+struct AsyncFenceHandle
+{
+    AsyncDrawFence* ptr;
+    U64 gen_id;
 };
 
 struct Draw
 {
+    // reset every frame
     Arena* frame_arena;
     DrawFrame* frame;
+
+    // persisted across frames
+    AsyncDrawFenceList async_draw_list;
+    AsyncDrawFenceNode* async_draw_free_list;
 };
 
 g_internal void
@@ -128,15 +165,12 @@ draw_model_3d(render::Model3DPipelineData pipeline_input, render::Handle colorma
 g_internal void
 draw_blend_3d(render::Blend3DPipelineData pipeline_input);
 g_internal bool
-draw_road_intersection_compute(render::Handle storage_buffer_handle, render::Handle index_buffer_handle, render::Handle road_segment_buffer_handle, render::Handle road_segment_node_buffer_handle,
-                               render::Handle road_segment_handle, U32 overlay_option);
+draw_road_intersection_compute(render::Handle vertex_buffer_handle, render::Handle index_buffer_handle, render::Handle road_segment_buffer_handle, render::Handle road_segment_node_buffer_handle,
+                               U32 overlay_option);
 g_internal CarInstanceRenderAddResult
 draw_car_instance_render(render::Handle vertex_buffer_handle, render::Handle index_buffer_handle, render::Handle tex_handle, render::BufferInfo* instance_buffer_info);
 g_internal void
 draw_car_instance_compute(render::BufferInfo* instance_buffer_info, render::Handle tile_vertex_buffer_handle, render::Handle tile_index_buffer_handle, F32 car_center_to_road_offset,
                           U32 instance_buffer_offset);
-
-g_internal void
-draw_bbox_3d_draw(Rng2F64 bbox);
 
 } // namespace draw

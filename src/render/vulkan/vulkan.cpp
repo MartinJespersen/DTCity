@@ -70,14 +70,14 @@ descriptor_set_road_segment(VkDevice device, VkDescriptorPool desc_pool, void* d
 }
 
 static void
-road_intersection_bucket_add(VkDescriptorSet storage_buffer_set, VkDescriptorSet road_segment, BufferHandle* vertex_buffer, BufferHandle* index_buffer, U32 overlay_option)
+road_intersection_bucket_add(BufferHandle* vertex_buffer, BufferHandle* index_buffer, BufferHandle* road_segment_buffer, BufferHandle* road_segment_node_buffer, U32 overlay_option)
 {
     Context* vk_ctx = ctx_get();
     RoadIntersectionNode* node = PushStruct(vk_ctx->render_frame_arena, RoadIntersectionNode);
-    node->vertex_and_index_set = road_segment;
-    node->storage_buffer_set = storage_buffer_set;
     node->vertex_buffer = *vertex_buffer;
     node->index_buffer = *index_buffer;
+    node->road_segment_buffer = *road_segment_buffer;
+    node->road_segment_node_buffer = *road_segment_node_buffer;
     node->overlay_option_idx = overlay_option;
     SLLQueuePush(vk_ctx->render_frame->road_intersection_list.first, vk_ctx->render_frame->road_intersection_list.last, node);
 }
@@ -154,13 +154,43 @@ road_intersection_compute()
     {
         U32 triangle_count = node->index_buffer.elem_count / 3;
         RoadIntersectionPushConstants push_constants = {};
-        push_constants.road_segment_buffer_elem_count = node->vertex_buffer.elem_count;
+        push_constants.road_segment_buffer_elem_count = node->road_segment_buffer.elem_count;
         push_constants.overlay_option_idx = node->overlay_option_idx;
 
         vkCmdPushConstants(cmd_buffer, pipeline->pipeline_layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(RoadIntersectionPushConstants), &push_constants);
 
-        VkDescriptorSet desc_sets[] = {node->vertex_and_index_set, node->storage_buffer_set};
-        vkCmdBindDescriptorSets(cmd_buffer, VK_PIPELINE_BIND_POINT_COMPUTE, pipeline->pipeline_layout, 0, ArrayCount(desc_sets), desc_sets, 0, NULL);
+        VkDescriptorBufferInfo road_segment_buffer_info{};
+        road_segment_buffer_info.buffer = node->road_segment_buffer.buffer_alloc.buffer;
+        road_segment_buffer_info.offset = 0;
+        road_segment_buffer_info.range = VK_WHOLE_SIZE;
+
+        VkDescriptorBufferInfo road_segment_node_buffer_info{};
+        road_segment_node_buffer_info.buffer = node->road_segment_node_buffer.buffer_alloc.buffer;
+        road_segment_node_buffer_info.offset = 0;
+        road_segment_node_buffer_info.range = VK_WHOLE_SIZE;
+
+        VkDescriptorBufferInfo vertex_buffer_info{};
+        vertex_buffer_info.buffer = node->vertex_buffer.buffer_alloc.buffer;
+        vertex_buffer_info.offset = 0;
+        vertex_buffer_info.range = VK_WHOLE_SIZE;
+
+        VkDescriptorBufferInfo index_buffer_info{};
+        index_buffer_info.buffer = node->index_buffer.buffer_alloc.buffer;
+        index_buffer_info.offset = 0;
+        index_buffer_info.range = VK_WHOLE_SIZE;
+
+        VkWriteDescriptorSet push_writes[] = {
+            {.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, .dstBinding = 0, .descriptorCount = 1, .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, .pBufferInfo = &road_segment_buffer_info},
+            {.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+             .dstBinding = 1,
+             .descriptorCount = 1,
+             .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+             .pBufferInfo = &road_segment_node_buffer_info},
+            {.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, .dstBinding = 2, .descriptorCount = 1, .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, .pBufferInfo = &vertex_buffer_info},
+            {.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, .dstBinding = 3, .descriptorCount = 1, .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, .pBufferInfo = &index_buffer_info},
+        };
+
+        cmd_push_descriptor_set_khr(cmd_buffer, VK_PIPELINE_BIND_POINT_COMPUTE, pipeline->pipeline_layout, 0, ArrayCount(push_writes), push_writes);
 
         U32 workgroup_count = (triangle_count + 255) / 256; // 256 is the workgroup size specified in the shader
         vkCmdDispatch(cmd_buffer, workgroup_count, 1, 1);

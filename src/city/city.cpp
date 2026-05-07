@@ -10,7 +10,6 @@ road_destroy(Road* road)
     render::handle_destroy(road->zero_colormap_handle);
     render::handle_destroy_deferred(road->segment_buffer_handle);
     render::handle_destroy_deferred(road->segment_node_buffer_handle);
-    render::handle_destroy_deferred(road->segment_handle);
 
     arena_release(road->arena);
 }

@@ -51,8 +51,7 @@ draw_flush()
     DrawFrame* frame = draw_frame_get();
     for (RoadIntersectionNode* node = frame->road_intersection_list.first; node; node = node->next)
     {
-        render::road_intersection_compute_add(node->storage_buffer_handle, node->index_buffer_handle, node->road_segment_buffer_handle, node->road_segment_node_buffer_handle,
-                                              node->road_segment_handle, node->overlay_option);
+        render::road_intersection_compute_add(node->vertex_buffer_handle, node->index_buffer_handle, node->road_segment_buffer_handle, node->road_segment_node_buffer_handle, node->overlay_option);
     }
 
     for (Model3DNode* node = frame->model_3D_list.first; node; node = node->next)
@@ -82,11 +81,6 @@ draw_flush()
                                                     node->instance_buffer_offset);
         }
     }
-
-    for (LinkedListNode<render::BBoxDraw>* node = frame->bbox_list.first; node; node = node->next)
-    {
-        render::render_bbox_3d(&node->v);
-    }
 }
 
 g_internal void
@@ -109,28 +103,21 @@ draw_blend_3d(render::Blend3DPipelineData pipeline_input)
 }
 
 g_internal bool
-draw_road_intersection_compute(render::Handle storage_buffer_handle, render::Handle index_buffer_handle, render::Handle road_segment_buffer_handle, render::Handle road_segment_node_buffer_handle,
-                               render::Handle road_segment_handle, U32 overlay_option)
+draw_road_intersection_compute(render::Handle vertex_buffer_handle, render::Handle index_buffer_handle, render::Handle road_segment_buffer_handle, render::Handle road_segment_node_buffer_handle,
+                               U32 overlay_option)
 {
-    if (render::is_handle_zero(storage_buffer_handle) || render::is_handle_zero(index_buffer_handle) || render::is_handle_zero(road_segment_handle) ||
-        render::is_handle_zero(road_segment_buffer_handle) || render::is_handle_zero(road_segment_node_buffer_handle))
-    {
-        return false;
-    }
-
-    if (!render::is_resource_loaded(storage_buffer_handle) || !render::is_resource_loaded(index_buffer_handle) || !render::is_resource_loaded(road_segment_handle) ||
-        !render::is_resource_loaded(road_segment_buffer_handle) || !render::is_resource_loaded(road_segment_node_buffer_handle))
+    if (!render::is_resource_loaded(vertex_buffer_handle) || !render::is_resource_loaded(index_buffer_handle) || !render::is_resource_loaded(road_segment_buffer_handle) ||
+        !render::is_resource_loaded(road_segment_node_buffer_handle))
     {
         return false;
     }
 
     DrawFrame* frame = draw_frame_get();
     RoadIntersectionNode* node = PushStruct(g_draw_ctx.frame_arena, RoadIntersectionNode);
-    node->storage_buffer_handle = storage_buffer_handle;
+    node->vertex_buffer_handle = vertex_buffer_handle;
     node->index_buffer_handle = index_buffer_handle;
     node->road_segment_buffer_handle = road_segment_buffer_handle;
     node->road_segment_node_buffer_handle = road_segment_node_buffer_handle;
-    node->road_segment_handle = road_segment_handle;
     node->overlay_option = overlay_option;
     SLLQueuePush(frame->road_intersection_list.first, frame->road_intersection_list.last, node);
 
@@ -193,64 +180,6 @@ draw_car_instance_compute(render::BufferInfo* instance_buffer_info, render::Hand
     node->car_center_to_road_offset = car_center_to_road_offset;
     node->instance_buffer_offset = instance_buffer_offset;
     SLLQueuePush(frame->car_instance_compute_list.list.first, frame->car_instance_compute_list.list.last, node);
-}
-
-g_internal void
-_draw_bbox_3d_prepare(async::ThreadInfo thread_info, async::WorkerData* data)
-{
-    (void)thread_info;
-    render::BBoxDraw* bbox_draw = (render::BBoxDraw*)data;
-    render::ThreadWorkerCmdCtx* thread_ctx = render::thread_input_create();
-    render::thread_cmd_buffer_record(thread_ctx);
-    defer({ render::thread_cmd_buffer_end(thread_ctx); });
-    constexpr U32 meters_per_patch_side = 64;
-    constexpr U32 patch_coords_num = 4;
-
-    glm::uvec2 patch_dim = glm::uvec2(glm::ceil(bbox_draw->bbox.size * glm::vec2(meters_per_patch_side)));
-
-    // divided into sub primitives
-    U64 patch_num = (U64)patch_dim.x * (U64)patch_dim.y;
-
-    // Create smaller quads
-    Buffer<glm::vec2> patch_buffer = buffer_alloc<glm::vec2>(bbox_draw->arena, patch_num * patch_coords_num);
-    for (U32 i = 0; i < patch_dim.x; ++i)
-    {
-        U32 width_offset = i * meters_per_patch_side;
-        for (U32 j = 0; j < patch_dim.y; ++i)
-        {
-            U32 height_offset = j * meters_per_patch_side;
-
-            glm::vec2* btm_lt = patch_buffer[i * patch_dim.x + j * patch_coords_num];
-            glm::vec2* btm_rt = btm_lt + 1;
-            glm::vec2* top_lt = btm_lt + 2;
-            glm::vec2* top_rt = btm_lt + 3;
-
-            F32 width = Min(width_offset + meters_per_patch_side, bbox_draw->bbox.size.x);
-            F32 height = Min(height_offset + meters_per_patch_side, bbox_draw->bbox.size.y);
-            *btm_lt = glm::vec2(bbox_draw->bbox.btm_lt_pos) * glm::vec2(width_offset, height_offset);
-            *btm_rt = glm::vec2(bbox_draw->bbox.btm_lt_pos) * glm::vec2(width, height_offset);
-            *top_lt = glm::vec2(bbox_draw->bbox.btm_lt_pos) * glm::vec2(width_offset, height);
-            *top_rt = glm::vec2(bbox_draw->bbox.btm_lt_pos) * glm::vec2(width, height);
-        }
-    }
-    // Buffer render::buffer_load_sync(thread_ctx->cmd_buffer, );
-    // make buffer ref the async draw queue
-    // schedule task to draw queue
-    //
-}
-
-g_internal void
-draw_bbox_3d_schedule(Arena* arena, render::Quad2F64* bbox)
-{
-    // Draw* draw_ctx = &g_draw_ctx;
-    // LinkedList<render::BBoxDraw>* bbox_draw_list = &draw_ctx->frame->bbox_list;
-    // if (render::is_resource_loaded(tex))
-    // {
-    //     LinkedListNode<render::BBoxDraw>* node = PushStruct(draw_ctx->frame_arena, LinkedListNode<render::BBoxDraw>);
-    //     node->v.bbox = *bbox;
-    //     node->v.tex = tex;
-    //     SLLQueuePush(bbox_draw_list->first, bbox_draw_list->last, node);
-    // }
 }
 
 } // namespace draw

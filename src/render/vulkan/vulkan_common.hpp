@@ -137,6 +137,9 @@ query_swapchain_support(Arena* arena, VkPhysicalDevice device, VkSurfaceKHR surf
 static void
 frustum_planes_calculate(Frustum* out_frustum, const glm::mat4 matrix);
 
+static render::BufferType
+buffer_type_from_usage_flags(VkBufferUsageFlags usage);
+
 static void
 color_resources_create(Context* vk_ctx, SwapchainResources* swapchain_resources);
 

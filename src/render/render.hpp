@@ -10,8 +10,16 @@ enum class HandleType : S32
 {
     Undefined,
     Texture,
-    Buffer,
-    DescriptorSet
+    Buffer
+};
+
+enum BufferType : U32
+{
+    BufferType_Invalid = 0,
+    BufferType_Vertex = (1 << 0),
+    BufferType_Index = (1 << 2),
+    BufferType_Uniform = (1 << 3),
+    BufferType_StorageBuffer = (1 << 4)
 };
 
 struct Handle
@@ -39,10 +47,7 @@ struct Handle
     texture_handle_create();
 
     static Handle
-    buffer_handle_create();
-
-    static Handle
-    descriptor_set_handle_create();
+    buffer_handle_create(BufferType buffer_type);
 };
 
 struct HandleNode
@@ -128,15 +133,6 @@ struct SamplerInfo
     bool unnormalized_coordinates;
 };
 
-enum BufferType : U32
-{
-    BufferType_Invalid = 0,
-    BufferType_Vertex = (1 << 0),
-    BufferType_Index = (1 << 2),
-    BufferType_Uniform = (1 << 3),
-    BufferType_StorageBuffer = (1 << 4)
-};
-
 struct BufferInfo
 {
     Buffer<U8> buffer;
@@ -202,7 +198,6 @@ struct Model3DPipelineData
     Handle texture_handle;
     Handle overlay_texture_handle;
 
-    Handle storage_buffer_handle;
     Vec2F32 overlay_translation;
     Vec2F32 overlay_scale;
     S32 overlay_texture_coordinate_id;
@@ -267,9 +262,7 @@ struct Quad2F64
 struct BBoxDraw
 {
     Arena* arena;
-    Quad2F64 bbox;
     Handle tex;
-    Handle patch_buffer;
 };
 
 struct TextureUploadData
@@ -358,7 +351,7 @@ g_internal void
 texture_gpu_upload_sync(Handle tex_handle, Buffer<U8> tex_bufs);
 
 g_internal Handle
-texture_load_sync(render::SamplerInfo* sampler_info, TextureUploadData* tex_data, VkCommandBuffer cmd);
+texture_load_sync(render::SamplerInfo* sampler_info, TextureUploadData* tex_data, void* cmd);
 g_internal void
 handle_destroy(Handle handle);
 g_internal void
@@ -373,9 +366,6 @@ model_3d_draw(Model3DPipelineData pipeline_input, render::Handle colormap_handle
 g_internal void
 blend_3d_draw(Blend3DPipelineData pipeline_input);
 
-g_internal void
-render_bbox_3d(BBoxDraw* bbox_info);
-
 g_internal bool
 car_instance_render_bucket_add(render::Handle vertex_buffer_handle, render::Handle index_buffer_handle, render::Handle tex_handle, render::BufferInfo* instance_buffer_info,
                                U32 instance_buffer_offset);
@@ -385,23 +375,16 @@ car_instance_compute_bucket_add(render::BufferInfo* instance_buffer_info, render
                                 U32 instance_buffer_offset);
 
 g_internal bool
-road_intersection_compute_add(Handle storage_buffer_handle, Handle index_buffer_handle, Handle road_segment_buffer_handle, Handle road_segment_node_buffer_handle, Handle road_segment_handle,
-                              U32 overlay_option);
+road_intersection_compute_add(Handle vertex_buffer_handle, Handle index_buffer_handle, Handle road_segment_buffer_handle, Handle road_segment_node_buffer_handle, U32 overlay_option);
 
 g_internal Handle
 buffer_load_async(BufferInfo* buffer_info);
 
 g_internal Handle
-buffer_load_sync(VkCommandBuffer cmd, render::BufferInfo* buffer_info);
-
-g_internal Handle
-uniform_buffer_load_sync(Arena* arena, Handle handle);
+buffer_load_sync(void* cmd, render::BufferInfo* buffer_info);
 
 g_internal Handle
 storage_buffer_load_sync(Arena* arena, Handle vertex_buffer_handle, Handle index_buffer_handle);
-
-g_internal Handle
-road_segment_descriptor_load_async(Arena* arena, Handle buffer_handle, Handle node_buffer_handle);
 
 template <typename T>
 g_internal bool

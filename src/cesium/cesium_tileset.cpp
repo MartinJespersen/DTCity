@@ -19,14 +19,15 @@ class DTCityTaskProcessor : public CesiumAsync::ITaskProcessor
         // Create a copy of the task on the heap
         auto* task_copy = new std::function<void()>(std::move(task));
 
-        async::WorkerTask item = async::WorkerTask(0, task_copy, [](async::ThreadInfo, async::WorkerData* data) -> async::WorkerTaskResult
-        {
-            // ~mgj: Enqueue the command buffer
-            auto* func = static_cast<std::function<void()>*>(data->user_data);
-            (*func)();
-            delete func;
-            return {};
-        });
+        async::WorkerTask item = async::WorkerTask(0, task_copy,
+                                                   [](async::ThreadInfo, async::WorkerData* data) -> async::WorkerTaskResult
+                                                   {
+                                                       // ~mgj: Enqueue the command buffer
+                                                       auto* func = static_cast<std::function<void()>*>(data->user_data);
+                                                       (*func)();
+                                                       delete func;
+                                                       return {};
+                                                   });
 
         if (!async::thread_pool_push(thread_pool, &item))
         {
@@ -195,15 +196,18 @@ _tile_active_raster_attachment_get(TileRenderDataList* render_data_list)
         return nullptr;
     }
 
+    TileRasterOverlayAttachment* result = nullptr;
+
     for (TileRasterOverlayAttachment* attachment = render_data_list->raster_overlay_first; attachment; attachment = attachment->next)
     {
         if (attachment->overlay_texture_coordinate_id == 0 && render::is_handle_zero(attachment->texture_handle) == false)
         {
-            return attachment;
+            result = attachment;
+            break;
         }
     }
 
-    return nullptr;
+    return result;
 }
 
 g_internal void
@@ -222,9 +226,10 @@ _tile_render_data_overlay_apply(TileRenderDataList* render_data_list)
         {
             render_data->render_data.overlay_texture_handle = attachment->texture_handle;
             render_data->render_data.overlay_translation.x = (F32)attachment->translation.x;
-            render_data->render_data.overlay_translation.y = (F32)attachment->translation.y;
+            // Cesium overlay V is south-to-north. Uploaded raster rows are north-to-south.
+            render_data->render_data.overlay_translation.y = (F32)(1.0 - attachment->translation.y);
             render_data->render_data.overlay_scale.x = (F32)attachment->scale.x;
-            render_data->render_data.overlay_scale.y = (F32)attachment->scale.y;
+            render_data->render_data.overlay_scale.y = (F32)(-attachment->scale.y);
             render_data->render_data.overlay_texture_coordinate_id = attachment->overlay_texture_coordinate_id;
         }
     }
@@ -331,7 +336,7 @@ class DTCityPrepareRendererResources : public Cesium3DTilesSelection::IPrepareRe
             return asyncSystem.createResolvedFuture(Cesium3DTilesSelection::TileLoadResultAndRenderResources{std::move(tileLoadResult), nullptr});
         }
 
-        TileInfo tile_info = TileInfo(*pModel, ecef_to_local_transform, transform);
+        TileInfo tile_info = TileInfo(*pModel, ecef_to_local_transform, transform, tileLoadResult.glTFUpAxis);
         render::ThreadWorkerCmdCtx* thread_ctx = render::thread_input_create();
         render::thread_cmd_buffer_record(thread_ctx);
         defer({ render::thread_cmd_buffer_end(thread_ctx); });
@@ -377,7 +382,7 @@ class DTCityPrepareRendererResources : public Cesium3DTilesSelection::IPrepareRe
         render::ThreadWorkerCmdCtx* thread_ctx = render::thread_input_create();
         render::thread_cmd_buffer_record(thread_ctx);
         defer({ render::thread_cmd_buffer_end(thread_ctx); });
-        RasterLoadThreadResult* raster_tile = render_raster_tile_record(thread_ctx, &tile_info);
+        render::BBoxDraw* raster_tile = render_raster_tile_record(thread_ctx, &tile_info);
 
         return raster_tile;
     }
@@ -386,7 +391,7 @@ class DTCityPrepareRendererResources : public Cesium3DTilesSelection::IPrepareRe
     prepareRasterInMainThread(CesiumRasterOverlays::RasterOverlayTile& rasterTile, void* pLoadThreadResult) override
     {
         (void)rasterTile;
-        RasterLoadThreadResult* load_result = static_cast<RasterLoadThreadResult*>(pLoadThreadResult);
+        render::BBoxDraw* load_result = static_cast<render::BBoxDraw*>(pLoadThreadResult);
         if (!load_result)
         {
             return nullptr;
@@ -399,11 +404,11 @@ class DTCityPrepareRendererResources : public Cesium3DTilesSelection::IPrepareRe
     freeRaster(const CesiumRasterOverlays::RasterOverlayTile& rasterTile, void* pLoadThreadResult, void* pMainThreadResult) noexcept override
     {
         (void)rasterTile;
-        RasterLoadThreadResult* result = static_cast<RasterLoadThreadResult*>(pMainThreadResult ? pMainThreadResult : pLoadThreadResult);
+        render::BBoxDraw* result = static_cast<render::BBoxDraw*>(pMainThreadResult ? pMainThreadResult : pLoadThreadResult);
         if (result)
         {
-            Assert(render::is_handle_zero(result->texture_handle) == false);
-            render::handle_destroy_deferred(result->texture_handle);
+            Assert(render::is_handle_zero(result->tex) == false);
+            render::handle_destroy_deferred(result->tex);
             arena_release(result->arena);
         }
     }
@@ -413,7 +418,7 @@ class DTCityPrepareRendererResources : public Cesium3DTilesSelection::IPrepareRe
                              void* pMainThreadRendererResources, const glm::dvec2& translation, const glm::dvec2& scale) override
     {
         TileRenderDataList* render_data_list = _tile_render_data_list_get(tile);
-        RasterLoadThreadResult* raster_resources = static_cast<RasterLoadThreadResult*>(pMainThreadRendererResources);
+        render::BBoxDraw* raster_resources = static_cast<render::BBoxDraw*>(pMainThreadRendererResources);
         if (!render_data_list || !render_data_list->arena || !raster_resources)
         {
             return;
@@ -428,7 +433,7 @@ class DTCityPrepareRendererResources : public Cesium3DTilesSelection::IPrepareRe
 
         attachment->raster_tile = &rasterTile;
         attachment->raster_renderer_resources = pMainThreadRendererResources;
-        attachment->texture_handle = raster_resources->texture_handle;
+        attachment->texture_handle = raster_resources->tex;
         attachment->overlay_texture_coordinate_id = overlayTextureCoordinateID;
         attachment->translation = translation;
         attachment->scale = scale;
@@ -550,7 +555,7 @@ sampler_info_from_cesium_sampler(const CesiumGltf::Sampler& sampler)
 g_internal TileRenderDataList*
 render_list_record(render::ThreadWorkerCmdCtx* thread_input, TileInfo* tile_info)
 {
-    TileRenderDataList* render_data_list = tile_render_data_from_gltf(tile_info->model, tile_info->ecef_to_local, tile_info->tile_transform, thread_input);
+    TileRenderDataList* render_data_list = tile_render_data_from_gltf(tile_info->model, tile_info->ecef_to_local, tile_info->tile_transform, tile_info->gltf_up_axis, thread_input);
     {
         auto stub_func = [](void* data, render::ThreadWorkerCmdCtx* thread_input)
         {
@@ -569,8 +574,6 @@ render_list_record(render::ThreadWorkerCmdCtx* thread_input, TileInfo* tile_info
                 render::handle_list_push(thread_input->arena, &thread_input->handles, data->render_data.texture_handle);
             }
 
-            render::handle_list_push(thread_input->arena, &thread_input->handles, data->render_data.storage_buffer_handle);
-
             thread_input->done_loading_func = render::handle_done_loading;
             thread_input->loading_func = stub_func;
         }
@@ -578,21 +581,22 @@ render_list_record(render::ThreadWorkerCmdCtx* thread_input, TileInfo* tile_info
     return render_data_list;
 }
 
-g_internal RasterLoadThreadResult*
+g_internal render::BBoxDraw*
 render_raster_tile_record(render::ThreadWorkerCmdCtx* thread_input, RasterTileInfo* tile_info)
 {
+    ScratchScope scratch = ScratchScope(0, 0);
     Arena* raster_arena = arena_alloc();
-    RasterLoadThreadResult* result = PushStruct(raster_arena, RasterLoadThreadResult);
+    render::BBoxDraw* result = PushStruct(raster_arena, render::BBoxDraw);
     result->arena = raster_arena;
-    result->sampler_info = _raster_sampler_info_get(tile_info->renderer_options);
-    if (!_raster_texture_upload_data_prepare(raster_arena, tile_info->image, &result->texture_upload))
+
+    render::SamplerInfo sampler_info = _raster_sampler_info_get(tile_info->renderer_options);
+    render::TextureUploadData texture_upload = {};
+    if (!_raster_texture_upload_data_prepare(scratch.arena, tile_info->image, &texture_upload))
     {
         arena_release(raster_arena);
         return nullptr;
     }
-    result->width = result->texture_upload.width;
-    result->height = result->texture_upload.height;
-    result->texture_handle = render::texture_load_sync(&result->sampler_info, &result->texture_upload, (VkCommandBuffer)thread_input->cmd_buffer);
+    result->tex = render::texture_load_sync(&sampler_info, &texture_upload, thread_input->cmd_buffer);
     {
         auto stub_func = [](void* data, render::ThreadWorkerCmdCtx* thread_input)
         {
@@ -600,7 +604,7 @@ render_raster_tile_record(render::ThreadWorkerCmdCtx* thread_input, RasterTileIn
             (void)thread_input;
         };
 
-        render::handle_list_push(thread_input->arena, &thread_input->handles, result->texture_handle);
+        render::handle_list_push(thread_input->arena, &thread_input->handles, result->tex);
         thread_input->done_loading_func = render::handle_done_loading;
         thread_input->loading_func = stub_func;
     }
@@ -608,7 +612,8 @@ render_raster_tile_record(render::ThreadWorkerCmdCtx* thread_input, RasterTileIn
 }
 
 g_internal TileRenderDataList*
-tile_render_data_from_gltf(const CesiumGltf::Model& model, const glm::dmat4& ecef_to_local, const glm::dmat4& tile_transform, render::ThreadWorkerCmdCtx* thread_input)
+tile_render_data_from_gltf(const CesiumGltf::Model& model, const glm::dmat4& ecef_to_local, const glm::dmat4& tile_transform, CesiumGeometry::Axis gltf_up_axis,
+                           render::ThreadWorkerCmdCtx* thread_input)
 {
     prof_scope_marker;
 
@@ -616,6 +621,7 @@ tile_render_data_from_gltf(const CesiumGltf::Model& model, const glm::dmat4& ece
     Arena* tile_arena = arena_alloc();
     TileRenderDataList* tile_render_data_list = PushStruct(tile_arena, TileRenderDataList);
     tile_render_data_list->arena = tile_arena;
+    glm::dmat4 gltf_to_zup = CesiumGeometry::Transforms::getUpAxisTransform(gltf_up_axis, CesiumGeometry::Axis::Z);
 
     struct PrimitiveNode
     {
@@ -736,16 +742,12 @@ tile_render_data_from_gltf(const CesiumGltf::Model& model, const glm::dmat4& ece
                     vertex->overlay_uv = {};
                     vertex->object_id = {};
 
-                    // glTF uses right-handed Y-up, convert to right-handed Z-up: (x, y, z) -> (x, z,
-                    // -y) Then transform applies: tile_transform (to ECEF) -> ecef_to_local (to local
-                    // ENU)
                     const F32* pos = (const F32*)(pos_data + i * pos_stride);
                     glm::dmat4 node_matrix(glm::dvec4(node.matrix[0], node.matrix[1], node.matrix[2], node.matrix[3]), glm::dvec4(node.matrix[4], node.matrix[5], node.matrix[6], node.matrix[7]),
                                            glm::dvec4(node.matrix[8], node.matrix[9], node.matrix[10], node.matrix[11]),
                                            glm::dvec4(node.matrix[12], node.matrix[13], node.matrix[14], node.matrix[15]));
-                    glm::dvec4 pos_yup = node_matrix * glm::dvec4(pos[0], pos[1], pos[2], 1.0);
-                    glm::dvec4 pos_zup = ecef_to_local * tile_transform * glm::dvec4(pos_yup[0], -pos_yup[2], pos_yup[1], 1.0);
-                    // glm::dvec4 pos_zup = ecef_to_local * tile_transform * glm::dvec4(pos[1], -pos[2], pos[0], 1.0);
+                    glm::dvec4 pos_node = node_matrix * glm::dvec4(pos[0], pos[1], pos[2], 1.0);
+                    glm::dvec4 pos_zup = ecef_to_local * tile_transform * gltf_to_zup * pos_node;
 
                     vertex->pos.x = (F32)pos_zup.x;
                     vertex->pos.y = (F32)pos_zup.y;
@@ -854,10 +856,8 @@ tile_render_data_from_gltf(const CesiumGltf::Model& model, const glm::dmat4& ece
         glm::mat4 model_matrix = glm::identity<glm::mat4>();
         render::BufferInfo model_matrix_info = render::BufferInfo(tile_arena, &model_matrix, render::BufferType_Uniform);
 
-        render_data->render_data.vertex_buffer_handle = render::buffer_load_sync((VkCommandBuffer)thread_input->cmd_buffer, &vertex_info);
-        render_data->render_data.index_buffer_handle = render::buffer_load_sync((VkCommandBuffer)thread_input->cmd_buffer, &index_info);
-        render_data->render_data.storage_buffer_handle =
-            render::storage_buffer_load_sync(thread_input->arena, render_data->render_data.vertex_buffer_handle, render_data->render_data.index_buffer_handle);
+        render_data->render_data.vertex_buffer_handle = render::buffer_load_sync(thread_input->cmd_buffer, &vertex_info);
+        render_data->render_data.index_buffer_handle = render::buffer_load_sync(thread_input->cmd_buffer, &index_info);
 
         // Texture Loading
         S32 tex_idx = -1;
@@ -899,7 +899,7 @@ tile_render_data_from_gltf(const CesiumGltf::Model& model, const glm::dmat4& ece
             U32 bytes_per_channel = image.bytesPerChannel; // typically 1
 
             render::TextureUploadData tex_data = render::TextureUploadData::init(tex_buffer, (U32)width, (U32)height, channels, bytes_per_channel, byte_count);
-            render_data->render_data.texture_handle = render::texture_load_sync(&sampler_info, &tex_data, (VkCommandBuffer)thread_input->cmd_buffer);
+            render_data->render_data.texture_handle = render::texture_load_sync(&sampler_info, &tex_data, thread_input->cmd_buffer);
         }
     }
 
@@ -910,8 +910,15 @@ tile_render_data_from_gltf(const CesiumGltf::Model& model, const glm::dmat4& ece
 // Tileset Renderer Lifecycle
 //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-g_internal TilesetRenderer*
-tileset_renderer_create(Arena* arena, async::ThreadPool* threads, const char* tileset_url, F64 origin_longitude, F64 origin_latitude, F64 origin_height)
+struct TilesetRendererCreateContext
+{
+    TilesetRenderer* renderer;
+    Cesium3DTilesSelection::TilesetExternals externals;
+    Cesium3DTilesSelection::TilesetOptions options;
+};
+
+g_internal TilesetRendererCreateContext
+_tileset_renderer_create_context(Arena* arena, async::ThreadPool* threads, F64 origin_longitude, F64 origin_latitude, F64 origin_height)
 {
     // Register all tile content types
     Cesium3DTilesContent::registerAllTileContentTypes();
@@ -973,11 +980,22 @@ tileset_renderer_create(Arena* arena, async::ThreadPool* threads, const char* ti
         exit_with_error("Cesium load error: type=%s status=%u message=%s\n", load_type, (U32)details.statusCode, details.message.c_str());
     };
 
-    // Create the tileset
-    renderer->tileset = new Cesium3DTilesSelection::Tileset(externals, tileset_url, options);
-    // _ion_raster_overlay_example_add_if_present(renderer);
+    TilesetRendererCreateContext result = {renderer, externals, options};
+    return result;
+}
 
-    return renderer;
+g_internal TilesetRenderer*
+tileset_renderer_create(Arena* arena, async::ThreadPool* threads, const char* tileset_url, F64 origin_longitude, F64 origin_latitude, F64 origin_height)
+{
+    TilesetRendererCreateContext create_context = _tileset_renderer_create_context(arena, threads, origin_longitude, origin_latitude, origin_height);
+
+    // Create the tileset
+    create_context.renderer->tileset = new Cesium3DTilesSelection::Tileset(create_context.externals, tileset_url, create_context.options);
+    // std::unique_ptr<Cesium3DTilesSelection::Tileset> tileset = Cesium3DTilesSelection::EllipsoidTilesetLoader::createTileset(create_context.externals, create_context.options);
+    // create_context.renderer->tileset = tileset.release();
+    // _ion_raster_overlay_example_add_if_present(create_context.renderer);
+
+    return create_context.renderer;
 }
 
 g_internal void
@@ -1011,7 +1029,7 @@ tileset_renderer_free_tile_ressource(TilesetRenderer* renderer)
             {
                 render::handle_destroy_deferred(render_data->render_data.texture_handle);
             }
-            render::handle_destroy_deferred(render_data->render_data.storage_buffer_handle);
+            render::handle_destroy_deferred(render_data->render_data.overlay_texture_handle);
         }
         arena_release(tile_data->arena);
     }
