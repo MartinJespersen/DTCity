@@ -64,7 +64,7 @@ struct TileRenderDataList
 
 struct TilesetRenderer
 {
-    Cesium3DTilesSelection::Tileset* tileset;
+    Cesium3DTilesSelection::Tileset* tileset[2];
     CesiumAsync::ITaskProcessor* task_processor;
     CesiumUtility::CreditSystem* credit_system;
     CesiumAsync::AsyncSystem async_system;
