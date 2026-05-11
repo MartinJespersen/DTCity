@@ -80,6 +80,13 @@ struct TilesetRenderer
     U32 tiles_to_show_count;
 };
 
+struct TilesetRendererCreateContext
+{
+    TilesetRenderer* renderer;
+    Cesium3DTilesSelection::TilesetExternals externals;
+    Cesium3DTilesSelection::TilesetOptions options;
+};
+
 // Lifecycle
 g_internal TilesetRenderer*
 tileset_renderer_create(Arena* arena, async::ThreadPool* threads, const char* tileset_url, F64 origin_longitude, F64 origin_latitude, F64 origin_height);

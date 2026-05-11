@@ -501,6 +501,7 @@ dt_main_loop(void* ptr)
                     }
                 }
                 render::Handle colormap_handle = ctx->road->overlay_option_cur ? ctx->road->colormap_handle : ctx->road->zero_colormap_handle;
+
                 draw::draw_model_3d(tile->render_data, colormap_handle);
             }
 

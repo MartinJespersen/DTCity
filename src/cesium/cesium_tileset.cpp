@@ -611,7 +611,6 @@ tile_render_data_from_gltf(const CesiumGltf::Model& model, const glm::dmat4& ece
                            render::ThreadWorkerCmdCtx* thread_input)
 {
     prof_scope_marker;
-
     ScratchScope scratch = ScratchScope(0, 0);
     Arena* tile_arena = arena_alloc();
     TileRenderDataList* tile_render_data_list = PushStruct(tile_arena, TileRenderDataList);
@@ -905,13 +904,6 @@ tile_render_data_from_gltf(const CesiumGltf::Model& model, const glm::dmat4& ece
 // Tileset Renderer Lifecycle
 //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-struct TilesetRendererCreateContext
-{
-    TilesetRenderer* renderer;
-    Cesium3DTilesSelection::TilesetExternals externals;
-    Cesium3DTilesSelection::TilesetOptions options;
-};
-
 g_internal TilesetRendererCreateContext
 _tileset_renderer_create_context(Arena* arena, async::ThreadPool* threads, F64 origin_longitude, F64 origin_latitude, F64 origin_height)
 {
@@ -986,8 +978,25 @@ tileset_renderer_create(Arena* arena, async::ThreadPool* threads, const char* ti
 
     // Create the tileset
     create_context.renderer->tileset[0] = new Cesium3DTilesSelection::Tileset(create_context.externals, tileset_url, create_context.options);
-    std::unique_ptr<Cesium3DTilesSelection::Tileset> tileset = Cesium3DTilesSelection::EllipsoidTilesetLoader::createTileset(create_context.externals, create_context.options);
-    create_context.renderer->tileset[1] = tileset.release();
+    ScratchScope scratch = ScratchScope(0, 0);
+    String8 ion_access_token = {};
+    if (env_vars_value_get(scratch.arena, S("CESIUM_ION_ACCESS_TOKEN"), &ion_access_token, 1))
+    {
+        exit_with_error("CESIUM_ION_ACCESS_TOKEN must be set to load Cesium ion terrain");
+    }
+
+    S64 ion_terrain_asset_id = 1;
+    String8 ion_terrain_asset_id_str = {};
+    if (!env_vars_value_get(scratch.arena, S("CESIUM_ION_TERRAIN_ASSET_ID"), &ion_terrain_asset_id_str, 1))
+    {
+        ion_terrain_asset_id = s64_from_str8(ion_terrain_asset_id_str, 10);
+        if (ion_terrain_asset_id <= 0)
+        {
+            exit_with_error("Invalid CESIUM_ION_TERRAIN_ASSET_ID value: %.*s", str8_varg(ion_terrain_asset_id_str));
+        }
+    }
+
+    create_context.renderer->tileset[1] = new Cesium3DTilesSelection::Tileset(create_context.externals, ion_terrain_asset_id, _std_string_from_str8(ion_access_token), create_context.options);
     _ion_raster_overlay_example_add_if_present(create_context.renderer->tileset[1]);
 
     return create_context.renderer;
@@ -1067,7 +1076,7 @@ g_internal void
 tileset_update_view(Arena* arena, TilesetRenderer* renderer, ui::Camera* camera, Vec2U32 viewport_size, F64 delta_time)
 {
     prof_scope_marker;
-    if (!renderer || !renderer->tileset)
+    if (!renderer)
         return;
 
     // Get camera position in ECEF
