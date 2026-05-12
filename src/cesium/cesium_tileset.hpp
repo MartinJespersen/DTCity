@@ -3,19 +3,6 @@
 namespace cesium
 {
 
-struct TileInfo
-{
-    const CesiumGltf::Model& model;
-    const glm::dmat4 ecef_to_local;
-    const glm::dmat4 tile_transform;
-    CesiumGeometry::Axis gltf_up_axis;
-
-    TileInfo(const CesiumGltf::Model& model, const glm::dmat4& ecef_to_local, const glm::dmat4& transform, CesiumGeometry::Axis gltf_up_axis)
-        : model(model), ecef_to_local(ecef_to_local), tile_transform(transform), gltf_up_axis(gltf_up_axis)
-    {
-    }
-};
-
 struct RasterTileInfo
 {
     const CesiumGltf::ImageAsset& image;
@@ -105,6 +92,4 @@ tile_render_data_from_gltf(const CesiumGltf::Model& model, const glm::dmat4& ece
 g_internal render::BBoxDraw*
 render_raster_tile_record(render::ThreadWorkerCmdCtx* thread_input, RasterTileInfo* tile_info);
 
-g_internal TileRenderDataList*
-render_list_record(render::ThreadWorkerCmdCtx* thread_input, TileInfo* tile_info);
 } // namespace cesium

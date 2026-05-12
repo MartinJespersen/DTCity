@@ -714,9 +714,10 @@ model_3d_draw(Model3DPipelineData pipeline_input, render::Handle colormap_handle
             }
         }
 
+        Rng2F32 bbox = {pipeline_input.bbox_min, pipeline_input.bbox_max};
         vulkan::model_3d_bucket_add(&asset_vertex_buffer->item.buffer_alloc, &asset_index_buffer->item.buffer_alloc, pipeline_input.texture_handle, overlay_texture_handle, overlay_enabled,
                                     pipeline_input.overlay_translation, pipeline_input.overlay_scale, false, pipeline_input.index_offset, pipeline_input.index_count,
-                                    asset_colormap->item.descriptor_set_idx);
+                                    asset_colormap->item.descriptor_set_idx, bbox);
     }
     else
     {

@@ -205,6 +205,10 @@ struct Model3DPipelineData
 
     U64 index_count;
     U32 index_offset;
+
+    Vec2F32 bbox_min;
+    Vec2F32 bbox_max;
+    B32 bbox_exclude;
 };
 
 struct Model3DPipelineDataNode

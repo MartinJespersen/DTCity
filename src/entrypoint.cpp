@@ -187,7 +187,7 @@ dt_interpret_input(int argc, char** argv)
 #endif
 
         input.tileset_url = tileset_url;
-        input.btm_right_corner_wgs84 = vec_2f64(16.49952138067, 59.36163877297); // vec_2f64(10.291206, 56.253108); //
+        input.btm_right_corner_wgs84 = /*vec_2f64(10.291206, 56.253108); */ vec_2f64(16.49952138067, 59.36163877297); //  //
     }
     else
     {
@@ -373,6 +373,9 @@ dt_main_loop(void* ptr)
     {
         exit_with_error("Cesium tileset root file cannot be read: %s", tileset_url);
     }
+
+    Rng2F64 local_bbox = {};
+    local_bbox.max = bbox_size_meters;
     ctx->cesium_tileset = cesium::tileset_renderer_create(ctx->arena_main_permanent, ctx->thread_pool, tileset_url, tileset_lon, tileset_lat, 0.0);
     ctx->car_sim = city::car_sim_create();
 
@@ -502,6 +505,11 @@ dt_main_loop(void* ptr)
                 }
                 render::Handle colormap_handle = ctx->road->overlay_option_cur ? ctx->road->colormap_handle : ctx->road->zero_colormap_handle;
 
+                if (tile->render_data.bbox_exclude)
+                {
+                    tile->render_data.bbox_min = {.x = (F32)local_bbox.min.x, .y = (F32)local_bbox.min.y};
+                    tile->render_data.bbox_max = {.x = (F32)local_bbox.max.x, .y = (F32)local_bbox.max.y};
+                }
                 draw::draw_model_3d(tile->render_data, colormap_handle);
             }
 

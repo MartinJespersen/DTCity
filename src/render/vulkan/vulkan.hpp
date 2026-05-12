@@ -21,6 +21,10 @@ struct Model3dPushConstants
     F32 overlay_translation_y;
     F32 overlay_scale_x;
     F32 overlay_scale_y;
+    F32 bbox_min_x;
+    F32 bbox_min_y;
+    F32 bbox_max_x;
+    F32 bbox_max_y;
 };
 
 struct Model3DNode
@@ -284,7 +288,7 @@ descriptor_set_road_segment(VkDevice device, VkDescriptorPool desc_pool, void* d
 // ~mgj: Building
 static void
 model_3d_bucket_add(BufferAllocation* vertex_buffer_allocation, BufferAllocation* index_buffer_allocation, render::Handle tex_handle, render::Handle overlay_tex_handle, B32 overlay_enabled,
-                    Vec2F32 overlay_translation, Vec2F32 overlay_scale, B32 depth_write_per_draw_call_only, U32 index_buffer_offset, U32 index_count, U32 colormap_idx);
+                    Vec2F32 overlay_translation, Vec2F32 overlay_scale, B32 depth_write_per_draw_call_only, U32 index_buffer_offset, U32 index_count, U32 colormap_idx, Rng2F32 bbox);
 static void
 blend_3d_bucket_add(BufferAllocation* vertex_buffer_allocation, BufferAllocation* index_buffer_allocation, render::Handle texture_handle, render::Handle colormap_handle);
 
