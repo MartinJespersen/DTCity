@@ -76,7 +76,7 @@ struct TilesetRendererCreateContext
 
 // Lifecycle
 g_internal TilesetRenderer*
-tileset_renderer_create(Arena* arena, async::ThreadPool* threads, const char* tileset_url, F64 origin_longitude, F64 origin_latitude, F64 origin_height);
+tileset_renderer_create(Arena* arena, async::ThreadPool* threads, String8 url, F64 origin_longitude, F64 origin_latitude, F64 origin_height);
 g_internal void
 tileset_renderer_destroy(TilesetRenderer* renderer);
 

@@ -46,10 +46,10 @@ dt_time_update(dt_Time* time)
 }
 
 static OS_Handle
-dt_render_thread_start(Context* ctx, dt_Input* input)
+dt_render_thread_start(Context* ctx)
 {
     ctx->running = 1;
-    return OS_ThreadLaunch(dt_main_loop, input, NULL);
+    return OS_ThreadLaunch(dt_main_loop, NULL, NULL);
 }
 
 static void
@@ -67,14 +67,14 @@ CheckVkResult(VkResult result)
 }
 
 static B32
-dt_root_tileset_url_is_readable(const char* tileset_url)
+dt_root_tileset_url_is_readable(String8 url)
 {
-    if (!tileset_url)
+    if (url.size == 0)
     {
         return false;
     }
 
-    CesiumUtility::Uri uri(tileset_url);
+    CesiumUtility::Uri uri((const char*)url.str);
     if (uri.getScheme() != "file:")
     {
         return false;
@@ -155,46 +155,6 @@ dt_async_http_check_result(std::shared_ptr<async::AsyncTaskState<T>>& async_call
         break;
     }
     return false;
-}
-
-static dt_Input
-dt_interpret_input(int argc, char** argv)
-{
-    dt_Input input = {};
-
-    if (argc == 4)
-    {
-        input.tileset_url = str8_c_string(argv[1]);
-        input.btm_right_corner_wgs84.x = f64_from_str8(str8_c_string(argv[2]));
-        input.btm_right_corner_wgs84.y = f64_from_str8(str8_c_string(argv[3]));
-    }
-    else if (argc == 5)
-    {
-        printf("UTM coordinates provided: %s %s z=%s\n", argv[2], argv[3], argv[4]);
-        input.tileset_url = str8_c_string(argv[1]);
-        input.btm_right_corner_wgs84 = util::wgs84_from_utm({f64_from_str8(str8_c_string(argv[2])), f64_from_str8(str8_c_string(argv[3]))}, argv[4]);
-    }
-    else if (argc == 1)
-    {
-        INFO_LOG("Using default coordinates");
-
-#if OS_WINDOWS
-        String8 tileset_url = S("file:///C:/ByModel/eskiltuna/Totalstad_2025_q3/tileset.json");
-
-        // String8 tileset_url = S("file:///C:/ByModel/5km_6235_580/tileset.json");
-#else
-        String8 tileset_url = S("file:///mnt/c/ByModel/5km_6235_580/tileset.json");
-#endif
-
-        input.tileset_url = tileset_url;
-        input.btm_right_corner_wgs84 = /*vec_2f64(10.291206, 56.253108); */ vec_2f64(16.49952138067, 59.36163877297); //  //
-    }
-    else
-    {
-        exit_with_error("Wrong command line input! Format should be {tileset_url longitude_in_degrees latitude_in_degress} or {tileset_url utm_easting_in_meters utm_northing_in_meters utm_zone}");
-    }
-
-    return input;
 }
 
 g_internal void
@@ -320,7 +280,6 @@ static void
 dt_main_loop(void* ptr)
 {
     ScratchScope scratch = ScratchScope(0, 0);
-    dt_Input* input = (dt_Input*)ptr;
 
     Context* ctx = dt_ctx_get();
     io::IO* io_ctx = ctx->io;
@@ -328,7 +287,7 @@ dt_main_loop(void* ptr)
     AssertAlways(async::thread_pool_register_current_thread(ctx->thread_pool));
 
     Vec2F64 bbox_size_meters = util::default_bbox_size_meters_get();
-    Rng2F64 bbox = util::wgs84_bbox_from_btm_right_corner(input->btm_right_corner_wgs84, bbox_size_meters);
+    Rng2F64 bbox = util::wgs84_bbox_from_btm_right_corner(&ctx->cmdline, bbox_size_meters);
 
     neta::neta_init();
 
@@ -338,9 +297,6 @@ dt_main_loop(void* ptr)
         exit_with_error("failed to create netascore async task. Error Code: %u", neta_result.async_result);
     }
 
-    const char* tileset_url = (const char*)input->tileset_url.str;
-    F64 tileset_lon = input->btm_right_corner_wgs84.x;
-    F64 tileset_lat = input->btm_right_corner_wgs84.y;
     render::render_ctx_create(ctx->data_subdirs.data[dt_DataDirType::Shaders], io_ctx, ctx->thread_pool);
     draw::draw_init();
     vulkan::Context* vk_ctx = vulkan::ctx_get();
@@ -359,7 +315,7 @@ dt_main_loop(void* ptr)
 
     // ctx->buildings = city::buildings_create(cache_dir, texture_dir, bbox);
 
-    CesiumGeospatial::Cartographic origin_cartographic(glm::radians(tileset_lon), glm::radians(tileset_lat), 0);
+    CesiumGeospatial::Cartographic origin_cartographic(glm::radians(bbox.min.x), glm::radians(bbox.min.y), 0);
     CesiumGeospatial::LocalHorizontalCoordinateSystem* local_coord = new CesiumGeospatial::LocalHorizontalCoordinateSystem(
         origin_cartographic, CesiumGeospatial::LocalDirection::East, CesiumGeospatial::LocalDirection::North, CesiumGeospatial::LocalDirection::Up);
 
@@ -369,6 +325,7 @@ dt_main_loop(void* ptr)
     String8 texture_dir = ctx->data_subdirs.data[dt_DataDirType::Texture];
     String8 asset_dir = ctx->data_subdirs.data[dt_DataDirType::Assets];
 
+    String8 tileset_url = os_arg_from_cmdline(scratch.arena, &ctx->cmdline, S("url"));
     if (!dt_root_tileset_url_is_readable(tileset_url))
     {
         exit_with_error("Cesium tileset root file cannot be read: %s", tileset_url);
@@ -376,7 +333,7 @@ dt_main_loop(void* ptr)
 
     Rng2F64 local_bbox = {};
     local_bbox.max = bbox_size_meters;
-    ctx->cesium_tileset = cesium::tileset_renderer_create(ctx->arena_main_permanent, ctx->thread_pool, tileset_url, tileset_lon, tileset_lat, 0.0);
+    ctx->cesium_tileset = cesium::tileset_renderer_create(ctx->arena_main_permanent, ctx->thread_pool, tileset_url, bbox.min.x, bbox.min.y, 0.0);
     ctx->car_sim = city::car_sim_create();
 
     city::RoadOverlayOption overlay_option_choice = city::RoadOverlayOption_None;

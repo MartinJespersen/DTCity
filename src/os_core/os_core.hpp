@@ -177,11 +177,6 @@ os_string_from_file_range(Arena* arena, OS_Handle file, Rng1U64 range);
 ////////////////////////////////
 //~ rjf: Process Launcher Helpers
 
-static OS_Handle
-os_cmd_line_launch(String8 string);
-static OS_Handle
-os_cmd_line_launchf(char* fmt, ...);
-
 ////////////////////////////////
 //~ rjf: @os_hooks System/Process Info (Implemented Per-OS)
 
@@ -440,4 +435,12 @@ os_graphical_message(B32 error, String8 title, String8 message);
 int
 App(int argc, char** argv);
 
+// ~mgj: Cmdline
+g_internal String8List
+os_parse_cmd_line(Arena* arena, int argc, char** argv);
+
+g_internal String8
+os_arg_from_cmdline(Arena* arena, String8List* list, String8 arg_name);
+g_internal String8
+os_arg_from_cmdline(Arena* arena, String8List* list, String8 arg_name);
 #endif // OS_CORE_H

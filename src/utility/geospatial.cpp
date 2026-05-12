@@ -1,11 +1,14 @@
 namespace util
 {
 g_internal Vec2F64
-wgs84_from_utm(Vec2F64 utm_point, const char* utm_zone)
+wgs84_from_utm(Vec2F64 utm_point, String8 utm_zone)
 {
+    if (utm_zone.size == 0)
+        return {};
+
     F64 lon;
     F64 lat;
-    UTM::UTMtoLL(utm_point.y, utm_point.x, utm_zone, lat, lon);
+    UTM::UTMtoLL(utm_point.y, utm_point.x, (char*)utm_zone.str, lat, lon);
 
     return {lon, lat};
 }
@@ -26,10 +29,17 @@ utm_point_from_wgs84(Vec2F64 wgs84_point, char out_utm_zone[10])
 }
 
 g_internal Rng2F64
-wgs84_bbox_from_btm_right_corner(Vec2F64 btm_right_corner_wgs84, Vec2F64 bbox_size_meters)
+wgs84_bbox_from_btm_right_corner(String8List* cmdline, Vec2F64 bbox_size_meters)
 {
+    ScratchScope scratch = ScratchScope(0, 0);
+    // TODO: Debug log this
+    String8 lon = os_arg_from_cmdline(scratch.arena, cmdline, S("lon"));
+    String8 lat = os_arg_from_cmdline(scratch.arena, cmdline, S("lat"));
+    String8 zone = os_arg_from_cmdline(scratch.arena, cmdline, S("zone"));
+
+    Vec2F64 point = {f64_from_str8(lon), f64_from_str8(lat)};
     char utm_zone[10] = {};
-    Vec2F64 btm_right_utm = utm_point_from_wgs84(btm_right_corner_wgs84, utm_zone);
+    Vec2F64 btm_right_utm = utm_point_from_wgs84(point, utm_zone);
 
     Rng2F64 utm_bbox = {};
     utm_bbox.min.x = btm_right_utm.x;
@@ -38,8 +48,8 @@ wgs84_bbox_from_btm_right_corner(Vec2F64 btm_right_corner_wgs84, Vec2F64 bbox_si
     utm_bbox.max.y = btm_right_utm.y + bbox_size_meters.y;
 
     Rng2F64 wgs84_bbox = {};
-    wgs84_bbox.min = wgs84_from_utm(utm_bbox.min, utm_zone);
-    wgs84_bbox.max = wgs84_from_utm(utm_bbox.max, utm_zone);
+    wgs84_bbox.min = wgs84_from_utm(utm_bbox.min, zone);
+    wgs84_bbox.max = wgs84_from_utm(utm_bbox.max, zone);
     return wgs84_bbox;
 }
 

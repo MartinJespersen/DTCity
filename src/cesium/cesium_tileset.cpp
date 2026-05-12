@@ -968,12 +968,12 @@ _tileset_renderer_create_context(Arena* arena, async::ThreadPool* threads, F64 o
 }
 
 g_internal TilesetRenderer*
-tileset_renderer_create(Arena* arena, async::ThreadPool* threads, const char* tileset_url, F64 origin_longitude, F64 origin_latitude, F64 origin_height)
+tileset_renderer_create(Arena* arena, async::ThreadPool* threads, String8 url, F64 origin_longitude, F64 origin_latitude, F64 origin_height)
 {
     TilesetRendererCreateContext create_context = _tileset_renderer_create_context(arena, threads, origin_longitude, origin_latitude, origin_height);
 
     // Create the tileset for custom geometry
-    create_context.renderer->tileset[0] = new Cesium3DTilesSelection::Tileset(create_context.externals, tileset_url, create_context.options);
+    create_context.renderer->tileset[0] = new Cesium3DTilesSelection::Tileset(create_context.externals, (const char*)url.str, create_context.options);
 
     // create terrain from cesium ion for non custom geometry outside the specified bounding box
     ScratchScope scratch = ScratchScope(&arena, 1);

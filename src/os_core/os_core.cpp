@@ -203,89 +203,33 @@ os_cpu_timer_read()
     return __rdtsc();
 }
 
-////////////////////////////////
-//~ rjf: Process Launcher Helpers
+// ~mgj: Cmdline
 
-static OS_Handle
-os_cmd_line_launch(String8 string)
+g_internal String8List
+os_parse_cmd_line(Arena* arena, int argc, char** argv)
 {
-    Temp scratch = ScratchBegin(0, 0);
-    U8 split_chars[] = {' '};
-    String8List parts = str8_split(scratch.arena, string, split_chars, ArrayCount(split_chars), 0);
-    OS_Handle handle = {0};
-    if (parts.node_count != 0)
+    String8List str_list = {};
+    for (int i = 0; i < argc; ++i)
     {
-        // rjf: unpack exe part
-        String8 exe = parts.first->string;
-        String8 exe_folder = str8_chop_last_slash(exe);
-        if (exe_folder.size == 0)
-        {
-            exe_folder = os_current_path_get(scratch.arena);
-        }
-
-        // rjf: find stdout delimiter
-        String8Node* stdout_delimiter_n = 0;
-        for (String8Node* n = parts.first; n != 0; n = n->next)
-        {
-            if (str8_match(n->string, str8_lit(">"), 0))
-            {
-                stdout_delimiter_n = n;
-                break;
-            }
-        }
-
-        // rjf: read stdout path
-        String8 stdout_path = {0};
-        if (stdout_delimiter_n && stdout_delimiter_n->next)
-        {
-            stdout_path = stdout_delimiter_n->next->string;
-        }
-
-        // rjf: open stdout handle
-        OS_Handle stdout_handle = {0};
-        if (stdout_path.size != 0)
-        {
-            OS_Handle file = os_file_open(OS_AccessFlag_Write | OS_AccessFlag_Read, stdout_path);
-            os_file_close(file);
-            stdout_handle = os_file_open(OS_AccessFlag_Write | OS_AccessFlag_Append | OS_AccessFlag_ShareRead | OS_AccessFlag_ShareWrite | OS_AccessFlag_Inherited, stdout_path);
-        }
-
-        // rjf: form command line
-        String8List cmdline = {0};
-        for (String8Node* n = parts.first; n != stdout_delimiter_n && n != 0; n = n->next)
-        {
-            str8_list_push(scratch.arena, &cmdline, n->string);
-        }
-
-        // rjf: launch
-        OS_ProcessLaunchParams params = {0};
-        params.cmd_line = cmdline;
-        params.path = exe_folder;
-        params.inherit_env = 1;
-        params.stdout_file = stdout_handle;
-        handle = os_process_launch(&params);
-
-        // rjf: close stdout handle
-        {
-            if (stdout_path.size != 0)
-            {
-                os_file_close(stdout_handle);
-            }
-        }
+        String8 arg = str8_c_string(argv[i]);
+        str8_list_push(arena, &str_list, arg);
     }
-    ScratchEnd(scratch);
-    return handle;
+    return str_list;
 }
 
-static OS_Handle
-os_cmd_line_launchf(char* fmt, ...)
+g_internal String8
+os_arg_from_cmdline(Arena* arena, String8List* list, String8 arg_name)
 {
-    Temp scratch = ScratchBegin(0, 0);
-    va_list args;
-    va_start(args, fmt);
-    String8 string = push_str8fv(scratch.arena, fmt, args);
-    OS_Handle result = os_cmd_line_launch(string);
-    va_end(args);
-    ScratchEnd(scratch);
+    String8 result = {};
+    for (String8Node* n = list->first; n; n = n->next)
+    {
+        if (str8_match(arg_name, n->string, MatchFlag_CaseInsensitive | MatchFlag_RightSideSloppy))
+        {
+            U64 split_pos = str8_substr_find(n->string, str8_lit("="), 0, 0);
+            String8 value = split_pos < n->string.size ? str8_skip(n->string, split_pos + 1) : Str8Zero();
+            result = push_str8_copy(arena, value);
+            break;
+        }
+    }
     return result;
 }

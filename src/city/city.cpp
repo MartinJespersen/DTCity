@@ -2,6 +2,15 @@ namespace city
 {
 
 g_internal void
+city_build()
+{
+    // Input:
+    // - bounding box (to remove from 2D map - allowing custom geometry to show)
+    // - tileset url to custom tileset
+    //
+}
+
+g_internal void
 road_destroy(Road* road)
 {
     render::handle_destroy(road->road_build_result.vertex_buffer_handle);

@@ -6,12 +6,6 @@ struct dt_Time
     U64 last_time_ms;
 };
 
-struct dt_Input
-{
-    String8 tileset_url;
-    Vec2F64 btm_right_corner_wgs84;
-};
-
 enum dt_DataDirType
 {
     Cache,
@@ -29,6 +23,7 @@ struct dt_DataDirPair
 
 struct Context
 {
+    String8List cmdline;
     B32 running;
     String8 cwd;
     String8 data_dir;
@@ -59,8 +54,6 @@ dt_ctx_set(Context* ctx);
 static Context*
 dt_ctx_get();
 
-static dt_Input
-dt_interpret_input(int argc, char** argv);
 static OS_Handle
 dt_render_thread_start(void* ptr);
 static void
