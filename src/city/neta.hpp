@@ -2,6 +2,10 @@
 #define SIMDJSON_DEVELOPMENT_CHECKS 1
 #endif
 #include "simdjson/simdjson.h"
+namespace city
+{
+struct AsyncCityTask;
+};
 
 namespace neta
 {
@@ -29,14 +33,6 @@ struct EdgeList
     EdgeNode* last;
 };
 
-struct NetaState
-{
-    Arena* arena;
-
-    std::atomic<B32> data_downloaded;
-    String8 mobility_api_key;
-};
-
 struct NetascoreDownloadNode
 {
     NetascoreDownloadNode* next;
@@ -60,11 +56,22 @@ struct NetaTaskState
     String8 cache_hash_input;
 };
 
+struct NetaState
+{
+    Arena* arena;
+
+    std::atomic<B32> data_downloaded;
+    String8 mobility_api_key;
+    String8 netascore_file_path;
+
+    NetaTaskState task_state;
+};
+
 // Global State ////////////////////////////
 g_internal NetaState* g_neta_state = 0;
 /////////////////////////////////////////////
 g_internal void
-neta_init();
+neta_init(String8 cache_path);
 
 g_internal async::UserFuncResult<NetaTaskState>
 netascore_job_create_complete(Arena* arena, async::ThreadPool* thread_pool, String8 body, NetaTaskState* task_state);
@@ -75,8 +82,11 @@ mobilitylab_jobs_api_get();
 g_internal String8
 mobilitylab_api_key_header_get(Arena* arena, String8 api_key);
 
-g_internal async::AsyncHttpTaskCreateResult<NetaTaskState>
-netascore_async_task_create(String8 cache_path, Rng2F64 bbox);
+g_internal city::AsyncCityTask*
+netascore_async_task_create(Arena* arena, NetaState* neta, Rng2F64 bbox, String8 cache);
+
+g_internal Map<S64, EdgeList>*
+osm_way_to_edges_map_create(Arena* arena, String8 file_path, Rng2F64 bbox_wgs84);
 
 // private fields
 g_internal Result<Buffer<Edge>>
@@ -88,7 +98,7 @@ _netascore_download_enqueue(Arena* arena, NetaTaskState* task_state, String8 key
 g_internal async::UserFuncResult<NetaTaskState>
 _netascore_download_file_complete(Arena* arena, async::ThreadPool* thread_pool, String8 body, NetaTaskState* task_state);
 
-g_internal async::HttpInfo<NetaTaskState>*
+g_internal async::HttpInfo*
 _netascore_next_download_http_info(Arena* arena, NetaTaskState* task_state);
 
 g_internal async::UserFuncResult<NetaTaskState>

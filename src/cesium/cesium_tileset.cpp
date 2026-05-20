@@ -19,11 +19,11 @@ class DTCityTaskProcessor : public CesiumAsync::ITaskProcessor
         // Create a copy of the task on the heap
         auto* task_copy = new std::function<void()>(std::move(task));
 
-        async::WorkerTask item = async::WorkerTask(0, task_copy,
-                                                   [](async::ThreadInfo, async::WorkerData* data) -> async::WorkerTaskResult
+        async::WorkerItem item = async::WorkerItem(task_copy,
+                                                   [](async::ThreadInfo, async::WorkerData data) -> async::WorkerResult
                                                    {
                                                        // ~mgj: Enqueue the command buffer
-                                                       auto* func = static_cast<std::function<void()>*>(data->user_data);
+                                                       auto* func = static_cast<std::function<void()>*>(data);
                                                        (*func)();
                                                        delete func;
                                                        return {};
@@ -329,7 +329,7 @@ class DTCityPrepareRendererResources : public Cesium3DTilesSelection::IPrepareRe
             return asyncSystem.createResolvedFuture(Cesium3DTilesSelection::TileLoadResultAndRenderResources{std::move(tileLoadResult), nullptr});
         }
 
-        render::ThreadWorkerCmdCtx* thread_ctx = render::thread_input_create();
+        render::ThreadWorkerCmdCtx* thread_ctx = render::thread_ctx_create();
         render::thread_cmd_buffer_record(thread_ctx);
         defer({ render::thread_cmd_buffer_end(thread_ctx); });
 
@@ -349,16 +349,15 @@ class DTCityPrepareRendererResources : public Cesium3DTilesSelection::IPrepareRe
             for (TileRenderData* data = render_data_list->first; data; data = data->next)
             {
                 data->render_data.bbox_exclude = crop_out_bbox;
-                render::handle_list_push(thread_ctx->arena, &thread_ctx->handles, data->render_data.vertex_buffer_handle);
-                render::handle_list_push(thread_ctx->arena, &thread_ctx->handles, data->render_data.index_buffer_handle);
+                render::handle_list_push(thread_ctx, data->render_data.vertex_buffer_handle);
+                render::handle_list_push(thread_ctx, data->render_data.index_buffer_handle);
                 render::Handle null_texture_handle = render::texture_zero_handle_get();
                 if (data->render_data.texture_handle.u64 != null_texture_handle.u64 || data->render_data.texture_handle.gen_id != null_texture_handle.gen_id ||
                     data->render_data.texture_handle.type != null_texture_handle.type)
                 {
-                    render::handle_list_push(thread_ctx->arena, &thread_ctx->handles, data->render_data.texture_handle);
+                    render::handle_list_push(thread_ctx, data->render_data.texture_handle);
                 }
 
-                thread_ctx->done_loading_func = render::handle_done_loading;
                 thread_ctx->loading_func = stub_func;
             }
         }
@@ -399,7 +398,7 @@ class DTCityPrepareRendererResources : public Cesium3DTilesSelection::IPrepareRe
         prof_scope_marker;
 
         RasterTileInfo tile_info(image, rendererOptions);
-        render::ThreadWorkerCmdCtx* thread_ctx = render::thread_input_create();
+        render::ThreadWorkerCmdCtx* thread_ctx = render::thread_ctx_create();
         render::thread_cmd_buffer_record(thread_ctx);
         defer({ render::thread_cmd_buffer_end(thread_ctx); });
         render::BBoxDraw* raster_tile = render_raster_tile_record(thread_ctx, &tile_info);
@@ -595,8 +594,7 @@ render_raster_tile_record(render::ThreadWorkerCmdCtx* thread_input, RasterTileIn
             (void)thread_input;
         };
 
-        render::handle_list_push(thread_input->arena, &thread_input->handles, result->tex);
-        thread_input->done_loading_func = render::handle_done_loading;
+        render::handle_list_push(thread_input, result->tex);
         thread_input->loading_func = stub_func;
     }
     return result;
@@ -846,8 +844,8 @@ tile_render_data_from_gltf(const CesiumGltf::Model& model, const glm::dmat4& ece
         glm::mat4 model_matrix = glm::identity<glm::mat4>();
         render::BufferInfo model_matrix_info = render::BufferInfo(tile_arena, &model_matrix, render::BufferType_Uniform);
 
-        render_data->render_data.vertex_buffer_handle = render::buffer_load_sync(thread_input->cmd_buffer, &vertex_info);
-        render_data->render_data.index_buffer_handle = render::buffer_load_sync(thread_input->cmd_buffer, &index_info);
+        render_data->render_data.vertex_buffer_handle = render::buffer_load_sync(thread_input, &vertex_info);
+        render_data->render_data.index_buffer_handle = render::buffer_load_sync(thread_input, &index_info);
 
         // Texture Loading
         S32 tex_idx = -1;
@@ -901,12 +899,11 @@ tile_render_data_from_gltf(const CesiumGltf::Model& model, const glm::dmat4& ece
 //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 g_internal TilesetRendererCreateContext
-_tileset_renderer_create_context(Arena* arena, async::ThreadPool* threads, F64 origin_longitude, F64 origin_latitude, F64 origin_height)
+_tileset_renderer_create_context(Arena* arena, TilesetRenderer* renderer, async::ThreadPool* threads, F64 origin_longitude, F64 origin_latitude, F64 origin_height)
 {
     // Register all tile content types
     Cesium3DTilesContent::registerAllTileContentTypes();
 
-    TilesetRenderer* renderer = PushStruct(arena, TilesetRenderer);
     renderer->tiles_to_free_mutex = os_rw_mutex_alloc();
 
     // Create task processor
@@ -967,10 +964,10 @@ _tileset_renderer_create_context(Arena* arena, async::ThreadPool* threads, F64 o
     return result;
 }
 
-g_internal TilesetRenderer*
-tileset_renderer_create(Arena* arena, async::ThreadPool* threads, String8 url, F64 origin_longitude, F64 origin_latitude, F64 origin_height)
+g_internal void
+tileset_renderer_create(Arena* arena, TilesetRenderer* in_out_cesium, async::ThreadPool* threads, String8 url, F64 origin_longitude, F64 origin_latitude, F64 origin_height)
 {
-    TilesetRendererCreateContext create_context = _tileset_renderer_create_context(arena, threads, origin_longitude, origin_latitude, origin_height);
+    TilesetRendererCreateContext create_context = _tileset_renderer_create_context(arena, in_out_cesium, threads, origin_longitude, origin_latitude, origin_height);
 
     // Create the tileset for custom geometry
     create_context.renderer->tileset[0] = new Cesium3DTilesSelection::Tileset(create_context.externals, (const char*)url.str, create_context.options);
@@ -998,8 +995,6 @@ tileset_renderer_create(Arena* arena, async::ThreadPool* threads, String8 url, F
     create_context.options.rendererOptions = crop_out_bbox;
     create_context.renderer->tileset[1] = new Cesium3DTilesSelection::Tileset(create_context.externals, ion_terrain_asset_id, _std_string_from_str8(ion_access_token), create_context.options);
     _ion_raster_overlay_example_add_if_present(create_context.renderer->tileset[1]);
-
-    return create_context.renderer;
 }
 
 g_internal void
@@ -1073,7 +1068,7 @@ tileset_renderer_destroy(TilesetRenderer* renderer)
 //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 g_internal void
-tileset_update_view(Arena* arena, TilesetRenderer* renderer, ui::Camera* camera, Vec2U32 viewport_size, F64 delta_time)
+tileset_update_view(TilesetRenderer* renderer, ui::Camera* camera, Vec2U32 viewport_size, F64 delta_time)
 {
     prof_scope_marker;
     if (!renderer)
@@ -1156,4 +1151,21 @@ tileset_update_view(Arena* arena, TilesetRenderer* renderer, ui::Camera* camera,
     }
 }
 
+g_internal B32
+root_tileset_url_is_readable(String8 url)
+{
+    if (url.size == 0)
+    {
+        return false;
+    }
+
+    CesiumUtility::Uri uri((const char*)url.str);
+    if (uri.getScheme() != "file:")
+    {
+        return false;
+    }
+
+    std::string native_path = CesiumUtility::Uri::uriPathToNativePath(std::string(uri.getPath()));
+    return os_file_path_exists(Str8((U8*)native_path.data(), native_path.size()));
+}
 } // namespace cesium

@@ -398,23 +398,39 @@ static render::Handle
 texture_load_async(render::SamplerInfo* sampler_info, String8 texture_path)
 {
     ScratchScope scratch = ScratchScope(0, 0);
-    vulkan::Context* vk_ctx = vulkan::ctx_get();
-    vulkan::AssetManager* asset_manager = vk_ctx->asset_manager;
-    render::ThreadWorkerCmdCtx* thread_input = render::thread_input_create();
+    render::ThreadWorkerCmdCtx* thread_input = render::thread_ctx_create();
 
     // ~mgj: make input ready for texture loading on thread
     render::TextureLoadingInfo* texture_load_info = PushStruct(thread_input->arena, render::TextureLoadingInfo);
     texture_load_info->tex_path = push_str8_copy(thread_input->arena, texture_path);
     thread_input->user_data = texture_load_info;
     render::Handle handle = render::texture_handle_create(sampler_info);
-    render::handle_list_push(thread_input->arena, &thread_input->handles, handle);
+    render::handle_list_push(thread_input, handle);
 
     thread_input->loading_func = vulkan::texture_loading_from_path_thread;
-    thread_input->done_loading_func = render::handle_done_loading;
 
-    async::thread_pool_push(thread_input->arena, thread_input, vulkan::thread_main, asset_manager->threads);
+    async::WorkerItem item = async::WorkerItem(thread_input, vulkan::thread_main);
+    async::thread_pool_push(thread_input->thread_pool, &item);
 
     return handle;
+}
+
+g_internal Handle
+texture_load_sync(render::ThreadWorkerCmdCtx* thread_ctx, render::SamplerInfo* sampler_info, String8 texture_path)
+{
+    ScratchScope scratch = ScratchScope(0, 0);
+
+    Buffer<U8> tex_buf = io::file_read(scratch.arena, texture_path);
+    Assert(tex_buf.size > 0 && "Texture file not found");
+    render::Handle tex_handle = render::texture_handle_create(sampler_info);
+    B32 err = vulkan::texture_gpu_upload_cmd_recording((VkCommandBuffer)thread_ctx->cmd_buffer, tex_handle, tex_buf);
+    if (err)
+    {
+        ERROR_LOG("Error when uploading texture - Error id: %d\n", err);
+    }
+    render::handle_list_push(thread_ctx, tex_handle);
+
+    return tex_handle;
 }
 
 g_internal Handle
@@ -450,9 +466,7 @@ texture_load_async(render::SamplerInfo* sampler_info, TextureUploadData* tex_upl
 {
     prof_scope_marker;
     ScratchScope scratch = ScratchScope(0, 0);
-    vulkan::Context* vk_ctx = vulkan::ctx_get();
-    vulkan::AssetManager* asset_manager = vk_ctx->asset_manager;
-    render::ThreadWorkerCmdCtx* thread_input = render::thread_input_create();
+    render::ThreadWorkerCmdCtx* thread_input = render::thread_ctx_create();
 
     // ~mgj: make input ready for texture loading on thread
     TextureUploadData* tex_upload_data = PushStruct(thread_input->arena, TextureUploadData);
@@ -462,12 +476,12 @@ texture_load_async(render::SamplerInfo* sampler_info, TextureUploadData* tex_upl
 
     thread_input->user_data = tex_upload_data;
     render::Handle handle = render::texture_handle_create(sampler_info);
-    render::handle_list_push(thread_input->arena, &thread_input->handles, handle);
+    render::handle_list_push(thread_input, handle);
 
     thread_input->loading_func = vulkan::texture_loading_thread;
-    thread_input->done_loading_func = render::handle_done_loading;
 
-    async::thread_pool_push(thread_input->arena, thread_input, vulkan::thread_main, asset_manager->threads);
+    async::WorkerItem item = async::WorkerItem(thread_input, vulkan::thread_main);
+    async::thread_pool_push(thread_input->thread_pool, &item);
 
     return handle;
 }
@@ -475,22 +489,35 @@ texture_load_async(render::SamplerInfo* sampler_info, TextureUploadData* tex_upl
 static render::Handle
 colormap_load_async(render::SamplerInfo* sampler_info, const U8* colormap_data, U64 colormap_size)
 {
-    vulkan::Context* vk_ctx = vulkan::ctx_get();
-    vulkan::AssetManager* asset_manager = vk_ctx->asset_manager;
-    render::ThreadWorkerCmdCtx* thread_input = render::thread_input_create();
+    render::ThreadWorkerCmdCtx* thread_ctx = render::thread_ctx_create();
 
     // ~mgj: make input ready for colormap loading on thread
-    render::ColorMapLoadingInfo* colormap_load_info = PushStruct(thread_input->arena, render::ColorMapLoadingInfo);
+    render::ColorMapLoadingInfo* colormap_load_info = PushStruct(thread_ctx->arena, render::ColorMapLoadingInfo);
     colormap_load_info->colormap_data = colormap_data;
     colormap_load_info->colormap_size = colormap_size;
 
     render::Handle handle = render::texture_handle_create(sampler_info);
-    render::handle_list_push(thread_input->arena, &thread_input->handles, handle);
-    thread_input->user_data = colormap_load_info;
-    thread_input->loading_func = vulkan::colormap_loading_thread;
-    thread_input->done_loading_func = render::handle_done_loading;
+    render::handle_list_push(thread_ctx, handle);
+    thread_ctx->user_data = colormap_load_info;
+    thread_ctx->loading_func = vulkan::colormap_loading_thread;
 
-    async::thread_pool_push(thread_input->arena, thread_input, vulkan::thread_main, asset_manager->threads);
+    async::WorkerItem item = async::WorkerItem(thread_ctx, vulkan::thread_main);
+    async::thread_pool_push(thread_ctx->thread_pool, &item);
+
+    return handle;
+}
+
+g_internal render::Handle
+colormap_load_sync(render::ThreadWorkerCmdCtx* thread_ctx, render::SamplerInfo* sampler_info, const U8* colormap_data, U64 colormap_size)
+{
+    render::ColorMapLoadingInfo* colormap_load_info = PushStruct(thread_ctx->arena, render::ColorMapLoadingInfo);
+    colormap_load_info->colormap_data = colormap_data;
+    colormap_load_info->colormap_size = colormap_size;
+
+    render::Handle handle = render::texture_handle_create(sampler_info);
+    render::handle_list_push(thread_ctx, handle);
+
+    vulkan::colormap_loading_thread(handle, colormap_load_info, thread_ctx);
 
     return handle;
 }
@@ -511,7 +538,7 @@ handle_destroy_deferred(render::Handle handle)
 }
 
 g_internal Handle
-buffer_load_sync(void* cmd, render::BufferInfo* buffer_info)
+buffer_load_sync(render::ThreadWorkerCmdCtx* thread_ctx, render::BufferInfo* buffer_info)
 {
     prof_scope_marker;
     if (buffer_info->buffer.size == 0)
@@ -525,6 +552,7 @@ buffer_load_sync(void* cmd, render::BufferInfo* buffer_info)
     vulkan::AssetManager* asset_manager = vk_ctx->asset_manager;
     render::BufferType buffer_type = (render::BufferType)buffer_info->buffer_type;
     render::Handle asset_handle = render::Handle::buffer_handle_create(buffer_type);
+    render::handle_list_push(thread_ctx, asset_handle);
 
     // ~mgj: Create buffer allocation
     VmaAllocationCreateInfo vma_info = {0};
@@ -559,7 +587,7 @@ buffer_load_sync(void* cmd, render::BufferInfo* buffer_info)
         VK_CHECK_RESULT(vmaCopyMemoryToAllocation(asset_manager->allocator, buffer_info->buffer.data, staging_buffer_alloc.allocation, 0, buffer_info->buffer.size));
         VkBufferCopy copy_region = {0};
         copy_region.size = buffer_info->buffer.size;
-        vkCmdCopyBuffer((VkCommandBuffer)cmd, staging_buffer_alloc.buffer, asset_buffer->buffer_alloc.buffer, 1, &copy_region);
+        vkCmdCopyBuffer((VkCommandBuffer)thread_ctx->cmd_buffer, staging_buffer_alloc.buffer, asset_buffer->buffer_alloc.buffer, 1, &copy_region);
 
         asset_buffer->staging_buffer = staging_buffer_alloc;
     }
@@ -638,8 +666,8 @@ buffer_load_async(render::BufferInfo* buffer_info)
     }
 
     // ~mgj: Preparing buffer loading for another thread
-    render::ThreadWorkerCmdCtx* thread_input = render::thread_input_create();
-    render::handle_list_push(thread_input->arena, &thread_input->handles, asset_handle);
+    render::ThreadWorkerCmdCtx* thread_input = render::thread_ctx_create();
+    render::handle_list_push(thread_input, asset_handle);
 
     // Copy buffer_info to thread_input arena to ensure it persists for async execution
     render::BufferInfo* buffer_info_copy = PushStruct(thread_input->arena, render::BufferInfo);
@@ -649,41 +677,11 @@ buffer_load_async(render::BufferInfo* buffer_info)
 
     thread_input->user_data = buffer_info_copy;
     thread_input->loading_func = vulkan::buffer_loading_thread;
-    thread_input->done_loading_func = render::handle_done_loading;
 
-    async::thread_pool_push(thread_input->arena, thread_input, vulkan::thread_main, asset_manager->threads);
+    async::WorkerItem item = async::WorkerItem(thread_input, vulkan::thread_main);
+    async::thread_pool_push(thread_input->thread_pool, &item);
 
     return asset_handle;
-}
-
-g_internal void
-texture_gpu_upload_sync(render::Handle tex_handle, Buffer<U8> tex_buf)
-{
-    vulkan::Context* vk_ctx = vulkan::ctx_get();
-    VkResult result;
-
-    VkCommandBufferAllocateInfo cmd_buf_alloc_info = {
-        .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO, .commandPool = vk_ctx->command_pool, .level = VK_COMMAND_BUFFER_LEVEL_PRIMARY, .commandBufferCount = 1};
-    VkCommandBuffer cmd_buf;
-    result = vkAllocateCommandBuffers(vk_ctx->device, &cmd_buf_alloc_info, &cmd_buf);
-    VkCommandBufferBeginInfo begin_info = {.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO, .flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT};
-    result = vkBeginCommandBuffer(cmd_buf, &begin_info);
-    vulkan::texture_gpu_upload_cmd_recording(cmd_buf, tex_handle, tex_buf);
-
-    result = vkEndCommandBuffer(cmd_buf);
-
-    VkCommandBufferSubmitInfo cmd_buf_info{};
-    cmd_buf_info.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_SUBMIT_INFO;
-    cmd_buf_info.commandBuffer = cmd_buf;
-
-    VkSubmitInfo2 submit_info{};
-    submit_info.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO_2;
-    submit_info.commandBufferInfoCount = 1;
-    submit_info.pCommandBufferInfos = &cmd_buf_info;
-
-    render::AssetItem<vulkan::TextureHandle>* asset = (render::AssetItem<vulkan::TextureHandle>*)tex_handle.ptr;
-    asset->is_loaded = true;
-    result = vkQueueSubmit2(vk_ctx->graphics_queue, 1, &submit_info, NULL);
 }
 
 g_internal void

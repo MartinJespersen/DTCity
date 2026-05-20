@@ -4,6 +4,10 @@ namespace neta
 {
 struct EdgeList;
 }
+namespace city
+{
+struct City;
+};
 
 namespace osm
 {
@@ -104,13 +108,6 @@ struct WgsLocation
     F64 lon;
 };
 
-struct OsmTaskState
-{
-    String8 file;
-    String8 bbox_str;
-    String8 body;
-};
-
 struct RoadEdge
 {
     RoadEdge* prev;
@@ -170,7 +167,6 @@ struct Network
     Buffer<NodeId> node_id_arr[enum_idx(WayType::Count)];
     EdgeStructure edge_structure;
     Map<S64, neta::EdgeList>* neta_edge_map;
-    std::atomic<B32> network_ready;
 };
 
 ///////////////////////
@@ -184,10 +180,6 @@ g_internal void
 structure_init(U64 node_hashmap_size, U64 way_hashmap_size);
 g_internal void
 structure_cleanup();
-g_internal async::AsyncHttpTaskCreateResult<OsmTaskState>
-async_structure_create(Rng2F64 bbox);
-g_internal void
-edge_map_create(Arena* arena, String8 file_path, Rng2F64 bbox_wgs84);
 g_internal TagResult
 tag_find(Arena* arena, Buffer<Tag> tags, String8 tag_to_find);
 g_internal WayNode*
@@ -205,9 +197,9 @@ random_neighbour_node_get(U64 node_id);
 g_internal NodeId
 random_node_id_from_type_get(WayType type);
 
+g_internal async::UserFuncResult<city::City>
+parse_osm_data(Arena* arena, async::ThreadPool* thread_pool, String8 response_body, city::City* task_state);
 // Privates
-g_internal std::shared_ptr<async::AsyncTaskState<OsmTaskState>>
-_osm_task_state_create(String8 file, String8 bbox_str);
 g_internal void
 _road_edge_structure_create();
 g_internal WgsNode*

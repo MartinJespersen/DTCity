@@ -5,8 +5,7 @@ typedef void* AsyncHandle;
 
 // forward declarations
 template <typename T>
-struct AsyncTaskState;
-template <typename T>
+struct AsyncHttpTaskState;
 struct HttpInfo;
 template <typename T>
 struct UserFuncResult;
@@ -15,8 +14,8 @@ struct UserFuncResult;
 template <typename T>
 using AsyncWorkFunc = UserFuncResult<T> (*)(Arena* arena, async::ThreadPool*, String8 response_body, T* task_state);
 template <typename T>
-using MainThreadWorkFunc = void (*)(AsyncTaskState<T>* task_state);
-template <typename T>
+using MainThreadWorkFunc = void (*)(AsyncTaskStatus<T>* task_state);
+
 struct HttpInfo
 {
     String8List params;
@@ -35,7 +34,7 @@ struct UserFuncResult
     B32 to_reschedule;
     S64 us_delay;
     MainThreadWorkFunc<T> main_thread_func;
-    HttpInfo<T>* http_info;
+    HttpInfo* http_info;
     AsyncWorkFunc<T> next_func;
 
     static UserFuncResult<T>
@@ -58,7 +57,7 @@ struct UserFuncResult
     }
 
     static UserFuncResult<T>
-    success(HttpInfo<T>* http_info, AsyncWorkFunc<T> next_func)
+    success(HttpInfo* http_info, AsyncWorkFunc<T> next_func)
     {
         UserFuncResult<T> result = {.successful = true, .http_info = http_info, .next_func = next_func};
         return result;
@@ -131,33 +130,29 @@ struct CurlContext
 };
 
 template <typename T>
-struct AsyncTaskState
+struct AsyncHttpTaskState
 {
-    Arena* arena;
-
-    String8 task_name;
-
-    B32 started;
-    std::atomic<B32> done;
-    std::atomic<B32> success;
     U32 cur_task_retry_count;
     U32 max_task_retries;
     U32 cur_http_retry_count;
     U32 max_http_retries;
 
     // keep alive
+    U32 timeout_sec;
     U64 timeout_us;
     U64 task_start_us;
 
     // first scheduled work
+    ThreadPool* thread_pool;
+
     AsyncWorkFunc<T> first_func;
-    HttpInfo<T>* first_http_info;
+    AsyncWorkFunc<T> next_func;
+
+    HttpInfo* first_http_info;
+    HttpInfo* next_http_info;
 
     // curl
     CurlContext curl_ctx;
-
-    // task specific state
-    T task_state;
 
     // errors ////////////////////////
     AsyncHttpResult http_result;
@@ -166,49 +161,45 @@ struct AsyncTaskState
 };
 
 template <typename T>
-struct AsyncHttpTaskCreateResult
+struct AsyncHttpTaskStateConfig
 {
-    AsyncResult async_result;
-    std::shared_ptr<AsyncTaskState<T>> task_state;
+    AsyncWorkFunc<T> first_func;
+    T* user_data;
+    U32 max_http_retries;
+    U32 max_task_retries;
+    U32 timeout_sec;
+
+    AsyncHttpTaskStateConfig(AsyncWorkFunc<T> first_func, T* user_data, U32 max_http_retries, U32 max_task_retries, U32 timeout_sec = 0)
+        : first_func(first_func), max_http_retries(max_http_retries), max_task_retries(max_task_retries), timeout_sec(timeout_sec), user_data(user_data)
+    {
+    }
 };
 
 template <typename T>
-struct AsyncCallbackArg
+struct AsyncHttpTaskCreateResult
 {
-    AsyncTaskState<T>* ctx;
-    AsyncWorkFunc<T> func;
-    HttpInfo<T>* http_info;
+    AsyncResult async_result;
+    AsyncTaskStatus<T>* task_state;
 };
 
 template <typename T>
 struct MainThreadTaskState
 {
-    AsyncTaskState<T>* task_state;
     MainThreadWorkFunc<T> main_thread_func;
+    AsyncTaskStatus<T>* task_state;
 };
 
 template <typename T>
-struct AsyncCallCtxDeleter
+struct LibCurlCallbackData
 {
-    void
-    operator()(AsyncTaskState<T>* ctx) const
-    {
-        // Either wait here, or assert that the caller already waited.
-        AssertAlways(ctx->done.load(std::memory_order_acquire));
-
-        _curl_context_cleanup(&ctx->curl_ctx);
-
-        Arena* arena = ctx->arena;
-        arena_release(arena);
-    }
+    Arena* arena;
+    AsyncHttpTaskState<T>* http_ctx;
 };
 
-template <typename T>
-g_internal HttpInfo<T>*
+g_internal HttpInfo*
 http_info_create(Arena* arena, HTTP_Method http_method, String8 http_path, String8 content_type, std::initializer_list<String8> additional_headers, std::initializer_list<String8> params_list);
 
-template <typename T>
-g_internal HttpInfo<T>*
+g_internal HttpInfo*
 http_info_create_get(Arena* arena, String8 http_path, std::initializer_list<String8> additional_headers = {}, std::initializer_list<String8> params_list = {}, String8 content_type = {});
 
 g_internal String8
@@ -225,56 +216,54 @@ g_internal size_t
 _libcurl_callback(void* contents, size_t size, size_t nmemb, void* userp);
 
 template <typename T>
-g_internal WorkerTaskResult
-_write_data_complete(ThreadInfo thread_info, WorkerData* user_data);
+g_internal AsyncTaskContinuation<T>
+_write_data_complete(ThreadInfo thread_info, AsyncTaskStatus<T>* task_status);
 
 template <typename T>
-g_internal WorkerTaskResult
-_async_worker_task_result(AsyncTaskState<T>* ctx, AsyncWorkFunc<T> func, HttpInfo<T>* http_info, S64 us_delay = 0);
+g_internal AsyncTaskContinuation<T>
+_async_http_task_continuation(AsyncHttpTaskState<T>* http_ctx, AsyncWorkFunc<T> func, HttpInfo* http_info, S64 us_delay = 0);
 
 template <typename T>
 g_internal void
-_async_thread_pool_push(ThreadPool* thread_pool, AsyncTaskState<T>* ctx, AsyncWorkFunc<T> func, HttpInfo<T>* http_info, S64 us_delay = 0);
+_async_thread_pool_push(ThreadPool* thread_pool, AsyncTaskStatus<T>* task, AsyncWorkFunc<T> func, HttpInfo* http_info, S64 us_delay = 0);
 
 template <typename T>
-WorkerTaskResult
-_main_thread_func(ThreadInfo thread_info, WorkerData* data);
+WorkerResult
+_main_thread_func(ThreadInfo thread_info, WorkerData data);
 
 template <typename T>
 g_internal B32
-_async_main_thread_queue_push(ThreadPool* thread_pool, AsyncTaskState<T>* task_state, MainThreadWorkFunc<T> func);
+_async_main_thread_queue_push(ThreadPool* thread_pool, AsyncTaskStatus<T>* task_state, MainThreadWorkFunc<T> func);
 
 template <typename T>
 g_internal void
-_error_set(AsyncResult error_code, const char* file, S32 line, AsyncTaskState<T>* ctx, String8 error_msg = {});
+_error_set(AsyncResult error_code, const char* file, S32 line, AsyncHttpTaskState<T>* ctx, String8 error_msg = {});
 
 template <typename T>
 g_internal void
-_error_reset(AsyncTaskState<T>* ctx);
+_error_reset(AsyncHttpTaskState<T>* ctx);
 
 template <typename T>
 g_internal void
-_curl_error_set(S32 curl_error_code, const char* file, S32 line, AsyncTaskState<T>* ctx);
+_curl_error_set(S32 curl_error_code, const char* file, S32 line, AsyncHttpTaskState<T>* ctx);
 
 g_internal void
 _curl_reset(CurlContext* curl_ctx);
 
 template <typename T>
 g_internal AsyncResult
-_async_http_configure(AsyncTaskState<T>* async_ctx, HttpInfo<T>* http_info);
-
-template <typename T>
-g_internal std::shared_ptr<AsyncTaskState<T>>
-async_task_state_create(String8 name);
+_async_http_configure(Arena* arena, AsyncTaskStatus<AsyncHttpTaskState<T>>* task, HttpInfo* http_info);
 
 template <typename T>
 g_internal void
-async_task_result_done(const std::shared_ptr<AsyncTaskState<T>>& task, B32* has_executed);
+async_task_state_destroy(AsyncTaskStatus<T>* task);
 
 template <typename T>
-g_internal AsyncResult
-async_http_task_create(const std::shared_ptr<AsyncTaskState<T>>& async_ctx, ThreadPool* thread_pool, HTTP_Method http_method, String8 http_path, String8 content_type, String8 body,
-                       std::initializer_list<String8> params, std::initializer_list<String8> additional_headers_list, AsyncWorkFunc<T> func, U32 max_http_retry_count = 0, U32 task_retry_count = 0,
-                       U32 timeout_sec = 300);
+g_internal AsyncHttpTaskCreateResult<T>
+async_http_task_run(Arena* arena, ThreadPool* thread_pool, HttpInfo* http_info, AsyncHttpTaskStateConfig<T>* config, String8 task_name);
+
+template <typename T>
+g_internal AsyncHttpTaskCreateResult<T>
+async_http_task_run(ThreadPool* thread_pool, HttpInfo* http_info, AsyncHttpTaskStateConfig<T>* config, String8 task_name);
 
 } // namespace async

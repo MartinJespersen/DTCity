@@ -36,10 +36,6 @@ struct Context
     io::IO* io;
     ui::Camera* camera;
     dt_Time* time;
-    city::Road* road;
-    city::CarSim* car_sim;
-    city::Buildings* buildings;
-    cesium::TilesetRenderer* cesium_tileset;
 
     async::ThreadPool* thread_pool;
 };

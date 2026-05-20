@@ -3,12 +3,15 @@ namespace render
 ////////////////////////////////////////////////////////
 // ~mgj: ThreadInput
 static render::ThreadWorkerCmdCtx*
-thread_input_create()
+thread_ctx_create()
 {
+    Context* ctx = dt_ctx_get();
     Arena* arena = arena_alloc();
     Assert(arena);
     render::ThreadWorkerCmdCtx* thread_input = PushStruct(arena, render::ThreadWorkerCmdCtx);
     thread_input->arena = arena;
+    thread_input->thread_pool = ctx->thread_pool;
+
     return thread_input;
 }
 
@@ -36,13 +39,13 @@ is_handle_zero(render::Handle handle)
 }
 
 static void
-handle_list_push(Arena* arena, render::HandleList* list, render::Handle handle)
+handle_list_push(ThreadWorkerCmdCtx* thread_ctx, render::Handle handle)
 {
     Assert(handle.u64);
-    render::HandleNode* node = PushStruct(arena, render::HandleNode);
+    render::HandleNode* node = PushStruct(thread_ctx->arena, render::HandleNode);
     node->handle = handle;
-    SLLQueuePush(list->first, list->last, node);
-    list->count++;
+    SLLQueuePush(thread_ctx->handles.first, thread_ctx->handles.last, node);
+    thread_ctx->handles.count++;
 }
 
 static render::Handle

@@ -71,12 +71,12 @@ typedef void (*ThreadDoneLoadingFunc)(HandleList handles);
 struct ThreadWorkerCmdCtx
 {
     Arena* arena;
+    async::ThreadPool* thread_pool;
     render::HandleList handles;
 
     void* cmd_buffer;
     void* user_data;
     ThreadLoadingFunc loading_func;
-    ThreadDoneLoadingFunc done_loading_func;
 };
 /////////////////////////////////
 
@@ -311,7 +311,7 @@ g_internal void
 thread_cmd_buffer_record(ThreadWorkerCmdCtx* thread_ctx);
 
 static ThreadWorkerCmdCtx*
-thread_input_create();
+thread_ctx_create();
 static void
 thread_input_destroy(ThreadWorkerCmdCtx* thread_input);
 
@@ -320,7 +320,7 @@ handle_zero();
 static bool
 is_handle_zero(Handle handle);
 static void
-handle_list_push(Arena* arena, HandleList* list, Handle handle);
+handle_list_push(ThreadWorkerCmdCtx* thread_ctx, render::Handle handle);
 static Handle
 handle_list_first_handle(HandleList* list);
 
@@ -351,9 +351,11 @@ g_internal render::Handle
 texture_load_async(render::SamplerInfo* sampler_info, TextureUploadData* tex_upload_info);
 static render::Handle
 colormap_load_async(render::SamplerInfo* sampler_info, const U8* colormap_data, U64 colormap_size);
-g_internal void
-texture_gpu_upload_sync(Handle tex_handle, Buffer<U8> tex_bufs);
+g_internal render::Handle
+colormap_load_sync(render::ThreadWorkerCmdCtx* thread_ctx, render::SamplerInfo* sampler_info, const U8* colormap_data, U64 colormap_size);
 
+g_internal Handle
+texture_load_sync(render::ThreadWorkerCmdCtx* thread_ctx, render::SamplerInfo* sampler_info, String8 texture_path);
 g_internal Handle
 texture_load_sync(render::SamplerInfo* sampler_info, TextureUploadData* tex_data, void* cmd);
 g_internal void
@@ -385,7 +387,7 @@ g_internal Handle
 buffer_load_async(BufferInfo* buffer_info);
 
 g_internal Handle
-buffer_load_sync(void* cmd, render::BufferInfo* buffer_info);
+buffer_load_sync(render::ThreadWorkerCmdCtx* thread_ctx, render::BufferInfo* buffer_info);
 
 g_internal Handle
 storage_buffer_load_sync(Arena* arena, Handle vertex_buffer_handle, Handle index_buffer_handle);

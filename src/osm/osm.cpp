@@ -23,69 +23,20 @@ structure_cleanup()
     arena_release(g_network->arena);
 }
 
-g_internal void
-_road_edge_structure_create()
+g_internal async::UserFuncResult<city::City>
+parse_osm_data(Arena* arena, async::ThreadPool* thread_pool, String8 response_body, city::City* task_state)
 {
-    prof_scope_marker;
-    Buffer<osm::Way> way_buf = g_network->ways_arr[enum_idx(osm::WayType::Highway)];
-
-    ChunkList<RoadEdge>* chunk_list = chunk_list_create<RoadEdge>(g_network->arena, 1024);
-    for (const osm::Way& way : way_buf)
-    {
-        RoadEdge* prev_edge = 0;
-        for (U32 node_idx = 1; node_idx < way.node_count; node_idx++)
-        {
-            U64 prev_node_id = way.node_ids[node_idx - 1];
-            U64 node_id = way.node_ids[node_idx];
-
-            RoadEdge* road_edge = chunk_list_get_next(g_network->arena, chunk_list);
-            road_edge->id = random_u64();
-            road_edge->way_id = way.id;
-            road_edge->node_id_from = prev_node_id;
-            road_edge->node_id_to = node_id;
-            road_edge->prev = prev_edge;
-
-            if (prev_edge)
-            {
-                prev_edge->next = road_edge;
-            }
-            prev_edge = road_edge;
-        }
-    }
-
-    Buffer<RoadEdge> road_edge_buf = buffer_from_chunk_list(g_network->arena, chunk_list);
-    Map<S64, RoadEdge*>* road_edge_map = map_create<S64, RoadEdge*>(g_network->arena, 1024);
-    for (RoadEdge* edge = road_edge_buf.begin(); edge < road_edge_buf.end(); edge++)
-    {
-        map_insert(road_edge_map, edge->id, edge);
-    }
-
-    g_network->edge_structure = {.edges = road_edge_buf, .edge_map = *road_edge_map};
-}
-
-g_internal std::shared_ptr<async::AsyncTaskState<OsmTaskState>>
-_osm_task_state_create(String8 file, String8 bbox_str)
-{
-    std::shared_ptr<async::AsyncTaskState<OsmTaskState>> osm_task_state = async::async_task_state_create<OsmTaskState>(S("osm task"));
-    osm_task_state->task_state.file = push_str8_copy(osm_task_state->arena, file);
-    osm_task_state->task_state.bbox_str = push_str8_copy(osm_task_state->arena, bbox_str);
-
-    return osm_task_state;
-}
-
-g_internal async::WorkerTaskResult
-_parse_osm_data(async::ThreadInfo info, async::WorkerData* data)
-{
-    (void)info;
+    (void)arena;
+    (void)thread_pool;
+    (void)task_state;
     ScratchScope scratch = ScratchScope(0, 0);
-    OsmTaskState* task_state = (OsmTaskState*)data->user_data;
 
-    RoadNodeParseResult node_result = wrapper::node_buffer_from_simd_json(g_network->arena, task_state->body, 1000);
+    RoadNodeParseResult node_result = wrapper::node_buffer_from_simd_json(g_network->arena, response_body, 1000);
     if (node_result.error)
     {
         DEBUG_LOG("Error happend when parsing nodes from json");
     }
-    WayParseResult osm_way_parse_result = wrapper::way_buffer_from_simd_json(g_network->arena, task_state->body);
+    WayParseResult osm_way_parse_result = wrapper::way_buffer_from_simd_json(g_network->arena, response_body);
     if (osm_way_parse_result.error)
     {
         DEBUG_LOG("Error happend when parsing ways from json");
@@ -134,71 +85,46 @@ _parse_osm_data(async::ThreadInfo info, async::WorkerData* data)
     }
 
     _road_edge_structure_create();
-    g_network->network_ready.store(true);
-    return {};
+    return async::UserFuncResult<city::City>::success();
 }
-
-g_internal async::UserFuncResult<OsmTaskState>
-_cache_and_parse_osm_json(Arena* arena, async::ThreadPool* thread_pool, String8 response_body, OsmTaskState* task_state)
-{
-    (void)task_state;
-    (void)thread_pool;
-    ScratchScope scratch = ScratchScope(&arena, 1);
-    cache_write(task_state->file, response_body, task_state->bbox_str);
-    task_state->body = response_body;
-    thread_pool_push(0, task_state, _parse_osm_data, thread_pool);
-    // parse nodes
-    // ~mgj: parse OSM way structures
-    return async::UserFuncResult<OsmTaskState>().success();
-}
-
-g_internal async::AsyncHttpTaskCreateResult<OsmTaskState>
-async_structure_create(Rng2F64 bbox)
+g_internal void
+_road_edge_structure_create()
 {
     prof_scope_marker;
-    ScratchScope scratch = ScratchScope(0, 0);
+    Buffer<osm::Way> way_buf = g_network->ways_arr[enum_idx(osm::WayType::Highway)];
 
-    Context* ctx = dt_ctx_get();
-
-    String8List query_list = {};
-    for (U32 way_type_idx = 0; way_type_idx < enum_idx(WayType::Count); ++way_type_idx)
+    ChunkList<RoadEdge>* chunk_list = chunk_list_create<RoadEdge>(g_network->arena, 1024);
+    for (const osm::Way& way : way_buf)
     {
-        String8 str = PushStr8F(scratch.arena, "way[\"%s\"](%f, %f, %f, %f);\n", g_waytype_osm_tag[way_type_idx], bbox.min.y, bbox.min.x, bbox.max.y, bbox.max.x);
-        str8_list_push(scratch.arena, &query_list, str);
+        RoadEdge* prev_edge = 0;
+        for (U32 node_idx = 1; node_idx < way.node_count; node_idx++)
+        {
+            U64 prev_node_id = way.node_ids[node_idx - 1];
+            U64 node_id = way.node_ids[node_idx];
+
+            RoadEdge* road_edge = chunk_list_get_next(g_network->arena, chunk_list);
+            road_edge->id = random_u64();
+            road_edge->way_id = way.id;
+            road_edge->node_id_from = prev_node_id;
+            road_edge->node_id_to = node_id;
+            road_edge->prev = prev_edge;
+
+            if (prev_edge)
+            {
+                prev_edge->next = road_edge;
+            }
+            prev_edge = road_edge;
+        }
     }
 
-    String8 dyn_query_str = str8_list_join(scratch.arena, &query_list, 0);
-    // fetch osm data from overpass api
-    String8 body = push_str8f(scratch.arena, R"(data=
-            [out:json] [timeout:25];
-            (
-                %.*s
-            );
-            out body;
-            >;
-            out skel qt;
-        )",
-                              str8_varg(dyn_query_str));
-
-    String8 file = str8_path_from_str8_list(scratch.arena, {ctx->data_subdirs.data[dt_DataDirType::Cache], S("osm_data.json")});
-    String8 path = S("http://overpass-api.de/api/interpreter");
-    std::shared_ptr<async::AsyncTaskState<OsmTaskState>> osm_task_state = _osm_task_state_create(file, body);
-    async::AsyncHttpTaskCreateResult<OsmTaskState> result = {.task_state = osm_task_state};
-    Result<String8> cache_result = cache_read(g_network->arena, file, body);
-    if (cache_result.err)
+    Buffer<RoadEdge> road_edge_buf = buffer_from_chunk_list(g_network->arena, chunk_list);
+    Map<S64, RoadEdge*>* road_edge_map = map_create<S64, RoadEdge*>(g_network->arena, 1024);
+    for (RoadEdge* edge = road_edge_buf.begin(); edge < road_edge_buf.end(); edge++)
     {
-        result.async_result = async::async_http_task_create(osm_task_state, ctx->thread_pool, HTTP_Method_Post, path, S("application/x-www-form-urlencoded"), body, {},
-                                                            {S("User-Agent: DTCity/0.1"), S("Accept: application/json")}, _cache_and_parse_osm_json, 3, 1);
-    }
-    else
-    {
-        osm_task_state->task_state.body = cache_result.v;
-        thread_pool_push(0, &osm_task_state->task_state, _parse_osm_data, ctx->thread_pool);
-        osm_task_state->success.store(true);
-        osm_task_state->done.store(true);
+        map_insert(road_edge_map, edge->id, edge);
     }
 
-    return result;
+    g_network->edge_structure = {.edges = road_edge_buf, .edge_map = *road_edge_map};
 }
 
 g_internal WgsNode*

@@ -1,8 +1,7 @@
 # Urgent changes
-* Running out of pool memory due to descriptor build up
-  * probably due to descriptor_sets being allocated for storage buffers and that are not deallocated
+* Release and reset of city needs to be cleaned to enabling area switching
+* All vulkan load function should take in thread_ctx 
 * Some roads are not covered in NetAScore at certain LOD's.
-* Clean up OSM and NetAScore code in while loop
 * Staged regression findings:
   * Raster overlay upload failure can enqueue a command buffer without handles or done_loading_func.
 
@@ -34,6 +33,7 @@
   * Create memory viewer
 <!--* 3D assets 
   * Bicycles -->
+* 
 * 3D geometry
   <!--* include LOD2 geometry-->
   * Improve tile queue to avoid too many glitches

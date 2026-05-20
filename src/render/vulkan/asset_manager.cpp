@@ -318,7 +318,7 @@ texture_cmd_record_with_stb(VkCommandBuffer cmd, TextureHandle* tex, Buffer<U8> 
 g_internal B32
 texture_gpu_upload_cmd_recording(VkCommandBuffer cmd, render::Handle tex_handle, Buffer<U8> tex_buf)
 {
-    render::AssetItem<TextureHandle>* tex_asset = (render::AssetItem<TextureHandle>*)tex_handle.ptr;
+    render::AssetItem<TextureHandle>* tex_asset = vulkan::asset_manager_texture_item_get(tex_handle);
     TextureHandle* tex = &tex_asset->item;
     B32 err = false;
 
@@ -414,37 +414,42 @@ texture_loading_from_path_thread(void* data, render::ThreadWorkerCmdCtx* thread_
 }
 
 static void
-colormap_loading_thread(void* data, render::ThreadWorkerCmdCtx* thread_input)
+colormap_loading_thread(void* data, render::ThreadWorkerCmdCtx* thread_ctx)
 {
-    Assert(thread_input->handles.count == 1);
-    render::Handle handle = render::handle_list_first_handle(&thread_input->handles);
+    Assert(thread_ctx->handles.count == 1);
+    render::Handle handle = render::handle_list_first_handle(&thread_ctx->handles);
     render::ColorMapLoadingInfo* colormap_info = (render::ColorMapLoadingInfo*)data;
+    colormap_loading_thread(handle, colormap_info, thread_ctx);
+}
+
+g_internal void
+colormap_loading_thread(render::Handle handle, render::ColorMapLoadingInfo* colormap_info, render::ThreadWorkerCmdCtx* thread_input)
+{
     Buffer<U8> colormap_buf = {.data = (U8*)colormap_info->colormap_data, .size = colormap_info->colormap_size};
     render::AssetItem<TextureHandle>* asset = (render::AssetItem<TextureHandle>*)handle.ptr;
     Assert(asset);
     colormap_texture_cmd_record((VkCommandBuffer)thread_input->cmd_buffer, &asset->item, colormap_buf);
 }
 
-static async::WorkerTaskResult
-thread_main(async::ThreadInfo thread_info, async::WorkerData* input)
+static async::WorkerResult
+thread_main(async::ThreadInfo thread_info, async::WorkerData input)
 {
     ScratchScope scratch = ScratchScope(0, 0);
-    render::ThreadWorkerCmdCtx* thread_input = (render::ThreadWorkerCmdCtx*)input->user_data;
+    render::ThreadWorkerCmdCtx* thread_cmd_ctx = (render::ThreadWorkerCmdCtx*)input;
 
     AssetManager* asset_manager = asset_manager_get();
 
     // ~mgj: Record the command buffer
-    thread_input->cmd_buffer = begin_command(asset_manager->device, &asset_manager->threaded_cmd_pools.data[thread_info.thread_id]);
+    thread_cmd_ctx->cmd_buffer = begin_command(asset_manager->device, &asset_manager->threaded_cmd_pools.data[thread_info.thread_id]);
 
-    Assert(thread_input->handles.count > 0);
-    Assert(thread_input->loading_func || thread_input->user_data);
-    Assert(thread_input->done_loading_func != nullptr);
-    thread_input->loading_func(thread_input->user_data, thread_input);
+    Assert(thread_cmd_ctx->handles.count > 0);
+    Assert(thread_cmd_ctx->loading_func || thread_cmd_ctx->user_data);
+    thread_cmd_ctx->loading_func(thread_cmd_ctx->user_data, thread_cmd_ctx);
 
-    VK_CHECK_RESULT(vkEndCommandBuffer((VkCommandBuffer)thread_input->cmd_buffer));
+    VK_CHECK_RESULT(vkEndCommandBuffer((VkCommandBuffer)thread_cmd_ctx->cmd_buffer));
 
     // ~mgj: Enqueue the command buffer
-    asset_cmd_queue_item_enqueue(thread_info.thread_id, thread_input);
+    asset_cmd_queue_item_enqueue(thread_info.thread_id, thread_cmd_ctx);
     return {};
 }
 
@@ -704,7 +709,6 @@ asset_manager_execute_cmds()
         {
             Debug_Asset_Push_GpuSubmitted(node->handle);
         }
-        Assert(item.thread_input->done_loading_func);
         asset_manager_cmd_list_add(asset_manager->cmd_wait_list, item);
     }
 }
@@ -813,9 +817,7 @@ asset_manager_cmd_done_check()
             }
 
             Assert(thread_input->handles.count > 0);
-            Assert(thread_input->loading_func != nullptr);
-            Assert(thread_input->done_loading_func != nullptr);
-            thread_input->done_loading_func(thread_input->handles);
+            render::handle_done_loading(thread_input->handles);
 
             for (render::HandleNode* node = thread_input->handles.first; node; node = node->next)
             {
@@ -980,7 +982,6 @@ asset_manager_cmd_list_add(AssetManagerCmdList* cmd_list, CmdQueueItem item)
         item_copy = PushStruct(cmd_list->arena, CmdQueueItem);
     }
     *item_copy = item;
-    Assert(item.thread_input->done_loading_func);
     DLLPushBack(cmd_list->list_first, cmd_list->list_last, item_copy);
 }
 

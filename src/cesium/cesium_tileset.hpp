@@ -75,14 +75,14 @@ struct TilesetRendererCreateContext
 };
 
 // Lifecycle
-g_internal TilesetRenderer*
-tileset_renderer_create(Arena* arena, async::ThreadPool* threads, String8 url, F64 origin_longitude, F64 origin_latitude, F64 origin_height);
+g_internal void
+tileset_renderer_create(Arena* arena, TilesetRenderer* on_out_cesium, async::ThreadPool* threads, String8 url, F64 origin_longitude, F64 origin_latitude, F64 origin_height);
 g_internal void
 tileset_renderer_destroy(TilesetRenderer* renderer);
 
 // Update and rendering
 g_internal void
-tileset_update_view(Arena* arena, TilesetRenderer* renderer, ui::Camera* camera, Vec2U32 viewport_size, F64 delta_time);
+tileset_update_view(TilesetRenderer* renderer, ui::Camera* camera, Vec2U32 viewport_size, F64 delta_time);
 
 // Helper to convert cesium glTF to render data
 g_internal TileRenderDataList*
@@ -92,4 +92,6 @@ tile_render_data_from_gltf(const CesiumGltf::Model& model, const glm::dmat4& ece
 g_internal render::BBoxDraw*
 render_raster_tile_record(render::ThreadWorkerCmdCtx* thread_input, RasterTileInfo* tile_info);
 
+g_internal B32
+root_tileset_url_is_readable(String8 url);
 } // namespace cesium

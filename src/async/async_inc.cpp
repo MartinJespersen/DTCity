@@ -4,4 +4,5 @@
 #include "segment_buffer.cpp"
 #include "async_heap.cpp"
 #include "async_http.cpp"
+#include "async_task.cpp"
 #include "mpmc_queue.cpp"

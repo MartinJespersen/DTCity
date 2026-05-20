@@ -9,4 +9,5 @@
 #include "thread_pool.hpp"
 #include "spmc_queue.hpp"
 #include "async_arena.hpp"
+#include "async_task.hpp"
 #include "async_http.hpp"

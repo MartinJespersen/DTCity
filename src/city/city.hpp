@@ -136,6 +136,10 @@ struct Road
 {
     Arena* arena;
 
+    // Input
+    Rng2F64 bbox;
+    String8 netascore_file_path;
+
     /////////////////////////////
     // raw data OpenAPI data
     F32 road_height;
@@ -159,8 +163,6 @@ struct Road
     render::Handle segment_buffer_handle;
     render::Handle segment_node_buffer_handle;
     /////////////////////////
-
-    std::atomic<B32> data_ready;
 };
 
 struct RoadCrossSection
@@ -189,6 +191,10 @@ struct CarSim
 {
     Arena* arena;
 
+    String8 asset_dir;
+    String8 texture_dir;
+    U32 car_count;
+
     Buffer<Car> cars;
     Buffer<F32> car_height;
 
@@ -203,7 +209,6 @@ struct CarSim
     render::Handle index_handle;
 
     String8 texture_path;
-    std::atomic<B32> cars_created;
 };
 
 struct BuildingRenderInfo
@@ -219,7 +224,6 @@ struct BuildingRenderInfo
 
 struct Buildings
 {
-    Arena* arena;
     String8 cache_file_name;
 
     String8 roof_texture_path;
@@ -229,29 +233,85 @@ struct Buildings
     render::Model3DPipelineData facade_model_handles;
 };
 
+enum class AsyncTaskType : U32
+{
+    None,
+    Neta,
+    Osm,
+    Road,
+    CarSim,
+    Cached,
+
+};
+
+struct AsyncCityTask
+{
+    AsyncCityTask* next;
+    AsyncCityTask* prev;
+
+    AsyncTaskType type;
+    union
+    {
+        async::AsyncTaskStatus<neta::NetaTaskState>* neta;
+        async::AsyncTaskStatus<City>* osm;
+        async::AsyncTaskStatus<Road>* road;
+        async::AsyncTaskStatus<CarSim>* car_sim;
+        AsyncTaskType cached_type;
+    };
+};
+
+struct AsyncCityTaskList
+{
+    AsyncCityTask* first;
+    AsyncCityTask* last;
+};
+
+struct City
+{
+    Arena* arena;
+
+    String8 tileset_url;
+    Rng2F64 bbox;
+    String8 cache_path;
+    bool neta_task_done;
+    bool osm_task_done;
+    bool road_building_started;
+    bool road_building_done;
+    bool cars_creation_started;
+    bool cars_creation_done;
+
+    Road road;
+    CarSim car_sim;
+    Buildings buildings;
+    cesium::TilesetRenderer cesium;
+
+    // async
+    AsyncCityTaskList task_list;
+};
+
 g_internal void
 road_destroy(Road* road);
 g_internal city::RoadBuildResult
 road_segment_build(Arena* arena, Buffer<osm::RoadEdge> edge_buffer, F32 default_road_width, F32 road_height, glm::dmat4& ecef_to_local, Map<osm::EdgeId, RoadInfo>* road_info_map);
 
+g_internal AsyncCityTask*
+_cache_and_parse_osm_json(async::ThreadPool* thread_pool, City* city);
 g_internal void
 quad_to_buffer_add(RoadSegmentCorners* road_segment, Buffer<render::Vertex3DBlend> buffer, Buffer<U32> indices, U64 edge_id, F32 road_height, U32* cur_vertex_idx, U32* cur_index_idx);
 // ~mgj: Buildings
 g_internal Buildings*
 buildings_create(String8 cache_path, String8 texture_path, Rng2F64 bbox);
 g_internal void
-buildings_build(Buildings* buildings, render::SamplerInfo* sampler_info, glm::dmat4& ecef_to_local, F32 road_height);
+buildings_build(City* city, render::SamplerInfo* sampler_info, glm::dmat4& ecef_to_local, F32 road_height);
 g_internal void
-building_destroy(Buildings* building);
+building_destroy(City* city);
 g_internal void
 buildings_buffers_create(Arena* arena, F32 road_height, glm::dmat4& ecef_to_local, BuildingRenderInfo* out_render_info);
 g_internal Buffer<U32>
 EarClipping(Arena* arena, Buffer<Vec2F64> node_buffer);
 // ~mgj: Cars
-g_internal CarSim*
-car_sim_create();
 g_internal void
-cars_create(CarSim* car_sim, String8 asset_path, String8 texture_path, U32 car_count);
+cars_create(CarSim* car_sim);
 g_internal void
 car_sim_destroy(CarSim* car_sim);
 g_internal Buffer<render::Model3DInstance>
@@ -261,18 +321,32 @@ g_internal String8
 str8_from_bbox(Arena* arena, Rng2F64 bbox);
 g_internal render::SamplerInfo
 sampler_from_cgltf_sampler(gltfw_Sampler sampler);
-g_internal Road*
-road_create(glm::dmat4& ecef_to_local);
+g_internal async::AsyncTaskContinuation<Road>
+road_build(async::ThreadInfo info, async::AsyncTaskStatus<Road>* status);
+g_internal async::AsyncTaskContinuation<CarSim>
+car_sim_build(async::ThreadInfo info, async::AsyncTaskStatus<CarSim>* status);
+g_internal void
+road_create(City* city, glm::dmat4& ecef_to_local, Road* in_out_road);
 g_internal Map<osm::EdgeId, RoadInfo>*
 road_info_from_edge_id(Arena* arena, Buffer<osm::RoadEdge> road_edge_buf, Map<S64, neta::EdgeList>* neta_edge_map);
+g_internal void
+city_build(City* city, Rng2F64 bbox, String8 tileset_url, String8 netascore_file_path);
+g_internal void
+city_update(City* city, async::ThreadPool* thread_pool, RoadOverlayOption neta_overlay_option, Vec2U32 framebuffer_dim);
+g_internal City*
+city_init(String8 cache_path);
+g_internal void
+city_setup(City* city, String8List* cmdline, String8 mobility_api_url);
+g_internal void
+city_reset(City* city, Rng2F64 bbox, String8 tileset_url, String8 mobility_api_url);
+g_internal void
+city_release(City* city);
 
 g_internal neta::Edge*
 edge_from_road_edge(osm::RoadEdge* road_edge, Map<S64, neta::EdgeList>* edge_list_map);
 
 g_internal Buffer<render::Vertex3D>
 vertex_3d_from_gltfw_vertex(Arena* arena, Buffer<gltfw_Vertex3D> in_vertex_buffer);
-
-// privates ///////////////////////////////////////////////////
 
 g_internal void
 road_segment_from_road_nodes(RoadSegment* out_road_segment, osm::EcefLocation node_0, osm::EcefLocation node_1, F32 road_width);

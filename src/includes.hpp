@@ -36,6 +36,6 @@
 #include "lib_wrappers/lib_wrappers_inc.hpp"
 #include "gltfw/gltfw.hpp"
 #include "osm/osm.hpp"
-#include "city/city_inc.hpp"
 #include "cesium/cesium_tileset.hpp"
+#include "city/city_inc.hpp"
 #include "entrypoint.hpp"
