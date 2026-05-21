@@ -197,6 +197,7 @@ struct Model3DPipelineData
     Handle index_buffer_handle;
     Handle texture_handle;
     Handle overlay_texture_handle;
+    Handle colormap_handle;
 
     Vec2F32 overlay_translation;
     Vec2F32 overlay_scale;
@@ -208,7 +209,10 @@ struct Model3DPipelineData
 
     Vec2F32 bbox_min;
     Vec2F32 bbox_max;
-    B32 bbox_exclude;
+
+    B32 is_map_tile;
+    F32 height_offset;
+    F32 depth_bias;
 };
 
 struct Model3DPipelineDataNode
@@ -367,7 +371,7 @@ g_internal void
 handle_done_loading(render::HandleList handles);
 
 g_internal void
-model_3d_draw(Model3DPipelineData pipeline_input, render::Handle colormap_handle);
+model_3d_draw(Model3DPipelineData* pipeline_input, render::Handle colormap_handle);
 
 g_internal void
 blend_3d_draw(Blend3DPipelineData pipeline_input);

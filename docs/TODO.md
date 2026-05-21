@@ -23,7 +23,7 @@
 
 # features
 * record asset lifetimes similar to how debug events are done at the moment to be sure everything related to asset lifetimes are handled on the same thread.
-* Show bikes or walking people instead of cars.
+* Show bikes or pedestrians instead of cars.
 * Use a list of fences for draw and compute calls that waits for asynchrounously loaded assets
 * Make it possible to alloc and dealloc whole city
 * Osm data visualizer should not be affected by netascore not showing

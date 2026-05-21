@@ -142,7 +142,7 @@ dt_async_http_check_result(async::AsyncTaskStatus<async::AsyncHttpTaskState<T>>*
 }
 
 g_internal void
-imgui_debug_window(cesium::TilesetRenderer* renderer, async::AsyncHttpTaskCreateResult<neta::NetaTaskState> netascore_result, async::ThreadPool* thread_pool)
+imgui_debug_window(city::City* city, cesium::TilesetRenderer* renderer, async::ThreadPool* thread_pool)
 {
     vulkan::AssetManager* asset_manager = vulkan::asset_manager_get();
     const ImGuiViewport* viewport = ImGui::GetMainViewport();
@@ -165,27 +165,7 @@ imgui_debug_window(cesium::TilesetRenderer* renderer, async::AsyncHttpTaskCreate
 
     // netascore status
     ImGui::Text("Netascore Status: ");
-    bool netascore_ready = netascore_result.task_state->done.load(std::memory_order_acquire);
-    if (netascore_ready && netascore_result.task_state->error)
-    {
-        ImGui::Text("Error");
-        async::AsyncTaskStatus<neta::NetaTaskState>* netascore_task_state = netascore_result.task_state;
-        if (netascore_task_state->ext_type == async::ExtensionType::Http)
-        {
-            async::AsyncHttpTaskState<neta::NetaTaskState>* http_ext = netascore_task_state->http_ext;
-            const async::AsyncHttpResult& http_result = http_ext->http_result;
-            const char* user_error_msg = http_result.error_str.size > 0 ? (const char*)http_result.error_str.str : "<missing error message>";
-            const char* err_file = http_ext->err_file ? http_ext->err_file : "<unknown file>";
-            ImGui::Text("NetaScore Error Code: %u", (U32)http_result.async_result);
-            ImGui::TextWrapped("Message: %s", user_error_msg);
-            ImGui::TextWrapped("Location: %s:%d", err_file, http_ext->err_line);
-            if (http_result.error_code > 0)
-            {
-                ImGui::Text("Http Error Code: %u", http_result.error_code);
-            }
-        }
-    }
-    else if (netascore_ready)
+    if (city->neta_task_done)
     {
         ImGui::Text("Ready");
     }
@@ -193,6 +173,18 @@ imgui_debug_window(cesium::TilesetRenderer* renderer, async::AsyncHttpTaskCreate
     {
         ImGui::Text("Waiting...");
     }
+
+    // osm status
+    ImGui::Text("Osm Status: ");
+    if (city->osm_task_done)
+    {
+        ImGui::Text("Ready");
+    }
+    else
+    {
+        ImGui::Text("Waiting...");
+    }
+
     // camera location
     ImGui::Text("Camera Position: %.2f, %.2f, %.2f", dt_ctx_get()->camera->position.x, dt_ctx_get()->camera->position.y, dt_ctx_get()->camera->position.z);
 
@@ -249,146 +241,9 @@ dt_main_loop(void* ptr)
         // async::async_task_result_done(osm_task_result.task_state, &osm_task_done);
         // async::async_task_result_done(neta_result.task_state, &neta_task_done);
 
-        // // #if BUILD_DEBUG
-        // imgui_debug_window(&city->cesium, neta_result, ctx->thread_pool);
-        // // #endif
-
-        // if (road_dependents_completed == false && osm::g_network->network_ready.load() && neta::g_neta_state->data_downloaded.load())
-        // {
-        //     DEBUG_LOG("City building work has been schedule");
-        //     CityBuildInput* city_build_input = PushStruct(city->arena, CityBuildInput);
-        //     city_build_input->road_state = &city->road;
-        //     city_build_input->file_path = push_str8_copy(city->arena, neta_result.task_state->task_state.file_path);
-        //     city_build_input->bbox_wgs84 = neta_result.task_state->task_state.bbox_wgs84;
-
-        //     thread_pool_push(city->arena, city_build_input, city_build, ctx->thread_pool);
-        //     road_dependents_completed = true;
-        // }
-
-        // if (city->road.data_ready.load())
-        // {
-        //     U64 hovered_object_id = render::latest_hovered_object_id_get();
-        //     osm::RoadEdge** edge_ptr = map_get(&osm::g_network->edge_structure.edge_map, (S64)hovered_object_id);
-        //     if (edge_ptr)
-        //     {
-        //         osm::RoadEdge* edge = *edge_ptr;
-        //         osm::WayNode* way_node = osm::way_find(edge->way_id);
-        //         osm::Way* way = &way_node->way;
-
-        //         bool open = true;
-        //         ImGui::Begin("Object Info", &open, ImGuiWindowFlags_AlwaysAutoResize);
-        //         for (osm::Tag& tag : way->tags)
-        //         {
-        //             ImGui::Text("%s: %s", (char*)tag.key.str, (char*)tag.value.str);
-        //         }
-
-        //         city::RoadInfo* chosen_edge = map_get(city->road.road_info_map, edge->id);
-        //         if (chosen_edge)
-        //         {
-        //             for (U32 i = 1; i < ArrayCount(chosen_edge->options); i++)
-        //             {
-        //                 ImGui::Text("%s: %lf", city::road_overlay_option_strs[i], chosen_edge->options[i]);
-        //             }
-        //         }
-        //         ImVec2 window_size = ImGui::GetWindowSize();
-        //         ImVec2 window_pos = ImVec2((F32)framebuffer_dim.x - window_size.x, 0);
-        //         ImGui::SetWindowPos(window_pos, ImGuiCond_Always);
-
-        //         ImGui::End();
-        //     }
-        //     osm::WayNode* way_node = osm::way_find(hovered_object_id);
-        //     if (way_node)
-        //     {
-        //         osm::Way* way = &way_node->way;
-        //         bool open = true;
-        //         ImGui::Begin("Object Info", &open, ImGuiWindowFlags_AlwaysAutoResize);
-        //         for (U32 tag_idx = 0; tag_idx < way->tags.size; tag_idx += 1)
-        //         {
-        //             osm::Tag* tag = &way->tags.data[tag_idx];
-        //             ImGui::Text("%s: %s", (char*)tag->key.str, (char*)tag->value.str);
-        //         }
-        //         ImVec2 window_size = ImGui::GetWindowSize();
-        //         ImVec2 window_pos = ImVec2((F32)framebuffer_dim.x - window_size.x, 0);
-        //         ImGui::SetWindowPos(window_pos, ImGuiCond_Always);
-
-        //         ImGui::End();
-        //     }
-        // }
-
-        // // input:
-        // // - Bounding box (in 3D to include height)
-        // //  - Using local coordinates from cesium library?
-        // // - texture handle of texture to use
-        // //
-
-        // // Update and render Cesium 3D Tiles ////////////
-        // if (city->cesium)
-        // {
-        //     cesium::TilesetRenderer* renderer = city->cesium;
-        //     cesium::tileset_update_view(dt_ctx_get()->arena_frame, city->cesium, ctx->camera, framebuffer_dim, ctx->time->delta_time_sec);
-
-        //     bool overlay_option_changed = overlay_option_choice != city->road.overlay_option_cur;
-        //     B32 road_ready = city->road.data_ready.load();
-        //     if (road_ready)
-        //     {
-        //         city->road.overlay_option_cur = overlay_option_choice;
-        //     }
-        //     for (cesium::TileRenderData* tile = renderer->tile_to_show.first; tile; tile = tile->render_next)
-        //     {
-        //         if (road_ready)
-        //         {
-        //             if (tile->compute_scheduled == false || overlay_option_changed)
-        //             {
-        //                 tile->compute_scheduled = draw::draw_road_intersection_compute(tile->render_data.vertex_buffer_handle, tile->render_data.index_buffer_handle,
-        //                 city->road.segment_buffer_handle,
-        //                                                                                city->road.segment_node_buffer_handle, overlay_option_choice);
-        //             }
-        //         }
-        //         render::Handle colormap_handle = city->road.overlay_option_cur ? city->road.colormap_handle : city->road.zero_colormap_handle;
-
-        //         if (tile->render_data.bbox_exclude)
-        //         {
-        //             tile->render_data.bbox_min = {.x = (F32)city->bbox.min.x, .y = (F32)city->bbox.min.y};
-        //             tile->render_data.bbox_max = {.x = (F32)city->bbox.max.x, .y = (F32)city->bbox.max.y};
-        //         }
-        //         draw::draw_model_3d(tile->render_data, colormap_handle);
-        //     }
-
-        //     if (cars_creation_scheduled == false && osm::g_network->network_ready.load())
-        //     {
-        //         Arena* arena = arena_alloc();
-        //         CarBuildInput* car_build_input = PushStruct(arena, CarBuildInput);
-        //         car_build_input->arena = arena;
-        //         car_build_input->city = city;
-        //         car_build_input->asset_dir = push_str8_copy(arena, asset_dir);
-        //         car_build_input->texture_dir = push_str8_copy(arena, texture_dir);
-        //         car_build_input->car_count = 100;
-
-        //         thread_pool_push(arena, car_build_input, car_build, ctx->thread_pool);
-        //         cars_creation_scheduled = true;
-        //     }
-
-        //     /// car simulation rendering
-        //     if (city->car_sim.cars_created.load())
-        //     {
-        //         render::gpu_work_done_wait();
-        //         Buffer<render::Model3DInstance> instance_buffer = car_sim_update(draw::draw_frame_arena_get(), &city->car_sim, ctx->time->delta_time_sec, city->cesium.ecef_to_local);
-
-        //         // instance buffer offset alignment and assignment
-        //         render::BufferInfo instance_buffer_info = render::BufferInfo(instance_buffer, render::BufferType_Vertex | render::BufferType_StorageBuffer);
-        //         draw::CarInstanceRenderAddResult car_render =
-        //             draw::draw_car_instance_render(city->car_sim.vertex_handle, city->car_sim.index_handle, city->car_sim.texture_handle, &instance_buffer_info);
-
-        //         if (car_render.queued)
-        //         {
-        //             for (cesium::TileRenderData* tile = renderer->tile_to_show.first; tile; tile = tile->render_next)
-        //             {
-        //                 draw::draw_car_instance_compute(&instance_buffer_info, tile->render_data.vertex_buffer_handle, tile->render_data.index_buffer_handle, -city->car_sim.car_center_offset.min,
-        //                                                 car_render.instance_buffer_offset);
-        //             }
-        //         }
-        //     }
-        // }
+        // #if BUILD_DEBUG
+        imgui_debug_window(city, &city->cesium, ctx->thread_pool);
+        // #endif
 
         /////////////////////////////////////
 
@@ -402,14 +257,6 @@ dt_main_loop(void* ptr)
     {
     }
     render::gpu_work_done_wait();
-
-    // city::road_destroy(&ctx->road);
-    // if (&city->car_sim)
-    // {
-    //     city::car_sim_destroy(ctx->car_sim);
-    // }
-    // // city::building_destroy(ctx->buildings);
-    // cesium::tileset_renderer_destroy(ctx->cesium_tileset);
     draw::draw_release();
     render::render_ctx_destroy();
 }

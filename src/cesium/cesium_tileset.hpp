@@ -59,6 +59,12 @@ struct TilesetRenderer
     glm::dmat4 ecef_to_local;
     glm::dmat4 local_to_ecef;
 
+    // height delta at the bounding box center between the custom geometry tileset[0]
+    // surface and the cesium ion terrain tileset[1] surface (tileset[0] height - terrain height)
+    F64 height_offset;
+    // set by tileset_renderer_destroy to end the recurring height_offset sampling loop
+    B32 height_sample_stop;
+
     // tiles to render list
     OS_Handle tiles_to_free_mutex;
     TileRenderDataList* tiles_to_free_stack;

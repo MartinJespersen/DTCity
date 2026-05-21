@@ -37,7 +37,11 @@ unused(T&&...)
 
 #define ERROR_LOG(message, ...) fprintf(stderr, message __VA_OPT__(, __VA_ARGS__))
 
-#define INFO_LOG(message, ...) fprintf(stdout, message __VA_OPT__(, __VA_ARGS__))
+#define INFO_LOG(message, ...)                                                                                                                                                                         \
+    {                                                                                                                                                                                                  \
+        fprintf(stdout, message __VA_OPT__(, __VA_ARGS__));                                                                                                                                            \
+        printf("\n");                                                                                                                                                                                  \
+    }
 
 // Push: disable all warnings
 #if COMPILER_MSVC

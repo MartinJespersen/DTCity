@@ -16,6 +16,7 @@
 #include <Cesium3DTilesSelection/Tile.h>
 #include <Cesium3DTilesSelection/TileContent.h>
 #include <Cesium3DTilesSelection/EllipsoidTilesetLoader.h>
+#include <Cesium3DTilesSelection/SampleHeightResult.h>
 #include <Cesium3DTilesSelection/ViewState.h>
 #include <Cesium3DTilesSelection/ViewUpdateResult.h>
 #include <Cesium3DTilesSelection/TilesetExternals.h>

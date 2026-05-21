@@ -685,45 +685,10 @@ buffer_load_async(render::BufferInfo* buffer_info)
 }
 
 g_internal void
-model_3d_draw(Model3DPipelineData pipeline_input, render::Handle colormap_handle)
+model_3d_draw(Model3DPipelineData* pipeline_input, render::Handle colormap_handle)
 {
-    render::AssetItem<vulkan::BufferHandle>* asset_vertex_buffer = 0;
-    render::AssetItem<vulkan::BufferHandle>* asset_index_buffer = 0;
-    render::AssetItem<vulkan::TextureHandle>* asset_base_texture = 0;
-    render::AssetItem<vulkan::TextureHandle>* asset_colormap = 0;
-
-    B32 vertex_loaded = render::is_resource_loaded(pipeline_input.vertex_buffer_handle, &asset_vertex_buffer);
-    B32 index_loaded = render::is_resource_loaded(pipeline_input.index_buffer_handle, &asset_index_buffer);
-    B32 base_texture_loaded = render::is_resource_loaded(pipeline_input.texture_handle, &asset_base_texture);
-    B32 colormap_loaded = render::is_resource_loaded(colormap_handle, &asset_colormap);
-    if (vertex_loaded && index_loaded && base_texture_loaded && colormap_loaded)
-    {
-        render::Handle overlay_texture_handle = render::texture_zero_handle_get();
-        B32 overlay_enabled = false;
-        B32 overlay_loaded = false;
-        render::AssetItem<vulkan::TextureHandle>* asset_overlay_texture = 0;
-        if (pipeline_input.has_overlay_uv && pipeline_input.overlay_texture_coordinate_id == 0 && render::is_handle_zero(pipeline_input.overlay_texture_handle) == false)
-        {
-            overlay_loaded = render::is_resource_loaded(pipeline_input.overlay_texture_handle, &asset_overlay_texture);
-            if (overlay_loaded)
-            {
-                overlay_texture_handle = pipeline_input.overlay_texture_handle;
-                overlay_enabled = true;
-            }
-        }
-
-        Rng2F32 bbox = {pipeline_input.bbox_min, pipeline_input.bbox_max};
-        vulkan::model_3d_bucket_add(&asset_vertex_buffer->item.buffer_alloc, &asset_index_buffer->item.buffer_alloc, pipeline_input.texture_handle, overlay_texture_handle, overlay_enabled,
-                                    pipeline_input.overlay_translation, pipeline_input.overlay_scale, false, pipeline_input.index_offset, pipeline_input.index_count,
-                                    asset_colormap->item.descriptor_set_idx, bbox);
-    }
-    else
-    {
-        DEBUG_LOG("\x1b[31mmodel_3d_draw skipped: vertex=%d(%llu) index=%d(%llu) base_tex=%d(%llu) colormap=%d(%llu) has_overlay_uv=%d overlay_coord=%d overlay_handle=%llu overlay_loaded=%d\x1b[0m",
-                  vertex_loaded, pipeline_input.vertex_buffer_handle.u64, index_loaded, pipeline_input.index_buffer_handle.u64, base_texture_loaded, pipeline_input.texture_handle.u64, colormap_loaded,
-                  colormap_handle.u64, pipeline_input.has_overlay_uv, pipeline_input.overlay_texture_coordinate_id, pipeline_input.overlay_texture_handle.u64,
-                  render::is_handle_zero(pipeline_input.overlay_texture_handle) ? 0 : render::is_resource_loaded(pipeline_input.overlay_texture_handle));
-    }
+    pipeline_input->colormap_handle = colormap_handle;
+    vulkan::model_3d_bucket_add(pipeline_input);
 }
 
 g_internal void

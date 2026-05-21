@@ -34,15 +34,15 @@ city_setup(City* city, String8List* cmdline, String8 netascore_file_path)
 g_internal void
 city_build(City* city, Rng2F64 bbox, String8 tileset_url, String8 netascore_file_path)
 {
-    ScratchScope scratch = ScratchScope(0, 0);
     Context* ctx = dt_ctx_get();
 
     city->bbox = bbox;
     city->tileset_url = push_str8_copy(city->arena, tileset_url);
 
-    cesium::tileset_renderer_create(city->arena, &city->cesium, ctx->thread_pool, tileset_url, bbox.min.x, bbox.min.y, 0.0);
+    Vec2F64 bbox_center = {.x = (bbox.min.x + bbox.max.x) * 0.5, .y = (bbox.min.y + bbox.max.y) * 0.5};
+    cesium::tileset_renderer_create(city->arena, &city->cesium, ctx->thread_pool, tileset_url, bbox_center.x, bbox_center.y, 0.0);
 
-    CesiumGeospatial::Cartographic origin_cartographic(glm::radians(bbox.min.x), glm::radians(bbox.min.y), 0);
+    CesiumGeospatial::Cartographic origin_cartographic(glm::radians(bbox_center.x), glm::radians(bbox_center.y), 0);
     CesiumGeospatial::LocalHorizontalCoordinateSystem* local_coord = new CesiumGeospatial::LocalHorizontalCoordinateSystem(
         origin_cartographic, CesiumGeospatial::LocalDirection::East, CesiumGeospatial::LocalDirection::North, CesiumGeospatial::LocalDirection::Up);
     glm::dmat4 ecef_to_local = local_coord->getEcefToLocalTransformation();
@@ -161,7 +161,7 @@ city_update(City* city, async::ThreadPool* thread_pool, RoadOverlayOption neta_o
             case AsyncTaskType::Neta:
             {
                 task_done = async::async_task_is_done(task->neta, &neta_state);
-                city->osm_task_done = task_done;
+                city->neta_task_done = task_done;
             }
             break;
             case AsyncTaskType::Road:
@@ -186,12 +186,14 @@ city_update(City* city, async::ThreadPool* thread_pool, RoadOverlayOption neta_o
                     {
                         task_done = true;
                         city->osm_task_done = true;
+                        INFO_LOG("Osm cached state loaded");
                     };
                     break;
                     case AsyncTaskType::Neta:
                     {
                         task_done = true;
                         city->neta_task_done = true;
+                        INFO_LOG("Neta cached state loaded");
                     };
                     break;
                     default: InvalidPath; break;
@@ -208,9 +210,6 @@ city_update(City* city, async::ThreadPool* thread_pool, RoadOverlayOption neta_o
     }
 
     U64 hovered_object_id = render::latest_hovered_object_id_get();
-    // #if BUILD_DEBUG
-    // imgui_debug_window(&city->cesium, neta_result, ctx->thread_pool);
-    // #endif
 
     if (city->neta_task_done && city->osm_task_done && !city->road_building_started)
     {
@@ -302,8 +301,10 @@ city_update(City* city, async::ThreadPool* thread_pool, RoadOverlayOption neta_o
             }
             render::Handle colormap_handle = city->road.overlay_option_cur ? city->road.colormap_handle : city->road.zero_colormap_handle;
 
-            if (tile->render_data.bbox_exclude)
+            if (tile->render_data.is_map_tile)
             {
+                F32 border_offset_lon_m = 50;
+                F32 border_offset_lat_m = 50;
                 CesiumGeospatial::Cartographic bbox_min_cartographic(glm::radians(city->bbox.min.x), glm::radians(city->bbox.min.y), 0);
                 CesiumGeospatial::Cartographic bbox_max_cartographic(glm::radians(city->bbox.max.x), glm::radians(city->bbox.max.y), 0);
 
@@ -313,8 +314,12 @@ city_update(City* city, async::ThreadPool* thread_pool, RoadOverlayOption neta_o
                 glm::dvec4 bbox_min_local = city->cesium.ecef_to_local * glm::dvec4(bbox_min_ecef, 1.0);
                 glm::dvec4 bbox_max_local = city->cesium.ecef_to_local * glm::dvec4(bbox_max_ecef, 1.0);
 
-                tile->render_data.bbox_min = {.x = (F32)bbox_min_local.x, .y = (F32)bbox_min_local.y};
-                tile->render_data.bbox_max = {.x = (F32)bbox_max_local.x, .y = (F32)bbox_max_local.y};
+                border_offset_lon_m = Min((bbox_max_local.x - bbox_min_local.x) * 0.5, border_offset_lon_m);
+                border_offset_lat_m = Min((bbox_max_local.y - bbox_min_local.y) * 0.5, border_offset_lat_m);
+                tile->render_data.bbox_min = {.x = (F32)bbox_min_local.x + border_offset_lon_m, .y = (F32)bbox_min_local.y + border_offset_lat_m};
+                tile->render_data.bbox_max = {.x = (F32)bbox_max_local.x - border_offset_lon_m, .y = (F32)bbox_max_local.y - border_offset_lat_m};
+                tile->render_data.depth_bias = 100;
+                tile->render_data.height_offset = -renderer->height_offset;
             }
             draw::draw_model_3d(tile->render_data, colormap_handle);
         }
@@ -351,7 +356,7 @@ city_update(City* city, async::ThreadPool* thread_pool, RoadOverlayOption neta_o
             {
                 for (cesium::TileRenderData* tile = renderer->tile_to_show.first; tile; tile = tile->render_next)
                 {
-                    if (!tile->render_data.bbox_exclude)
+                    if (!tile->render_data.is_map_tile)
                     {
                         draw::draw_car_instance_compute(&instance_buffer_info, tile->render_data.vertex_buffer_handle, tile->render_data.index_buffer_handle, -city->car_sim.car_center_offset.min,
                                                         car_render.instance_buffer_offset);

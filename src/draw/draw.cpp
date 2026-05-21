@@ -56,7 +56,7 @@ draw_flush()
 
     for (Model3DNode* node = frame->model_3D_list.first; node; node = node->next)
     {
-        render::model_3d_draw(node->pipeline_input, node->colormap_handle);
+        render::model_3d_draw(&node->pipeline_input, node->colormap_handle);
     }
 
     for (Blend3DNode* node = frame->blend_3d_list.first; node; node = node->next)

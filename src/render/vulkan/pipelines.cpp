@@ -160,7 +160,7 @@ model_3d_pipeline_create(Context* vk_ctx, String8 shader_path)
 
     VkPipelineShaderStageCreateInfo shader_stages[] = {vert_shader_stage_info.info, frag_shader_stage_info.info};
 
-    VkDynamicState dynamicStates[] = {VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR, VK_DYNAMIC_STATE_DEPTH_WRITE_ENABLE, VK_DYNAMIC_STATE_COLOR_WRITE_ENABLE_EXT};
+    VkDynamicState dynamicStates[] = {VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR, VK_DYNAMIC_STATE_DEPTH_WRITE_ENABLE, VK_DYNAMIC_STATE_COLOR_WRITE_ENABLE_EXT, VK_DYNAMIC_STATE_DEPTH_BIAS};
 
     VkPipelineDynamicStateCreateInfo dynamic_state{};
     dynamic_state.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
@@ -218,6 +218,7 @@ model_3d_pipeline_create(Context* vk_ctx, String8 shader_path)
     rasterizer.cullMode = VK_CULL_MODE_BACK_BIT;
     rasterizer.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
     rasterizer.lineWidth = 1.0f;
+    rasterizer.depthBiasEnable = VK_TRUE;
 
     VkPipelineMultisampleStateCreateInfo multisampling{};
     multisampling.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
@@ -236,7 +237,7 @@ model_3d_pipeline_create(Context* vk_ctx, String8 shader_path)
     VkDescriptorSetLayout descriptor_set_layouts[] = {vk_ctx->camera_descriptor_set_layout, vk_ctx->bindless_descriptor_set_layout};
 
     VkPushConstantRange push_constant_range{};
-    push_constant_range.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+    push_constant_range.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT | VK_SHADER_STAGE_VERTEX_BIT;
     push_constant_range.offset = 0;
     push_constant_range.size = sizeof(Model3dPushConstants);
 

@@ -464,39 +464,62 @@ pipeline_destroy(Pipeline* pipeline)
 }
 
 static void
-model_3d_bucket_add(BufferAllocation* vertex_buffer_allocation, BufferAllocation* index_buffer_allocation, render::Handle tex_handle, render::Handle overlay_tex_handle, B32 overlay_enabled,
-                    Vec2F32 overlay_translation, Vec2F32 overlay_scale, B32 depth_write_per_draw_call_only, U32 index_buffer_offset, U32 index_count, U32 colormap_idx, Rng2F32 bbox)
+model_3d_bucket_add(render::Model3DPipelineData* pipeline_input)
 {
     Context* vk_ctx = ctx_get();
     RenderFrame* render_frame = vk_ctx->render_frame;
 
-    render::AssetItem<TextureHandle>* base_tex = asset_manager_texture_item_get(tex_handle);
-    render::AssetItem<TextureHandle>* overlay_tex = asset_manager_texture_item_get(overlay_tex_handle);
-    if (base_tex && overlay_tex)
+    render::AssetItem<vulkan::BufferHandle>* asset_vertex_buffer = 0;
+    render::AssetItem<vulkan::BufferHandle>* asset_index_buffer = 0;
+    render::AssetItem<vulkan::TextureHandle>* asset_base_texture = 0;
+    render::AssetItem<vulkan::TextureHandle>* asset_colormap = 0;
+    render::AssetItem<vulkan::TextureHandle>* overlay_tex = 0;
+
+    B32 overlay_tex_loaded = render::is_resource_loaded(pipeline_input->overlay_texture_handle, &overlay_tex);
+    B32 vertex_loaded = render::is_resource_loaded(pipeline_input->vertex_buffer_handle, &asset_vertex_buffer);
+    B32 index_loaded = render::is_resource_loaded(pipeline_input->index_buffer_handle, &asset_index_buffer);
+    B32 base_texture_loaded = render::is_resource_loaded(pipeline_input->texture_handle, &asset_base_texture);
+    B32 colormap_loaded = render::is_resource_loaded(pipeline_input->colormap_handle, &asset_colormap);
+
+    B32 overlay_enabled = false;
+    if (vertex_loaded && index_loaded && base_texture_loaded && colormap_loaded)
     {
+        if (pipeline_input->has_overlay_uv && pipeline_input->overlay_texture_coordinate_id == 0 && render::is_handle_zero(pipeline_input->overlay_texture_handle) == false)
+        {
+            overlay_enabled = overlay_tex_loaded;
+        }
+
+        Rng2F32 bbox = {pipeline_input->bbox_min, pipeline_input->bbox_max};
         Model3dPushConstants push_constants = {};
-        push_constants.tex_idx = base_tex->item.descriptor_set_idx;
-        push_constants.colormap_idx = colormap_idx;
-        push_constants.overlay_tex_idx = overlay_tex->item.descriptor_set_idx;
+        push_constants.tex_idx = asset_base_texture->item.descriptor_set_idx;
+        push_constants.colormap_idx = asset_colormap->item.descriptor_set_idx;
+        push_constants.overlay_tex_idx = overlay_tex_loaded ? overlay_tex->item.descriptor_set_idx : 0;
         push_constants.overlay_enabled = overlay_enabled;
-        push_constants.overlay_translation_x = overlay_translation.x;
-        push_constants.overlay_translation_y = overlay_translation.y;
-        push_constants.overlay_scale_x = overlay_scale.x;
-        push_constants.overlay_scale_y = overlay_scale.y;
+        push_constants.overlay_translation_x = pipeline_input->overlay_translation.x;
+        push_constants.overlay_translation_y = pipeline_input->overlay_translation.y;
+        push_constants.overlay_scale_x = pipeline_input->overlay_scale.x;
+        push_constants.overlay_scale_y = pipeline_input->overlay_scale.y;
         push_constants.bbox_min_x = bbox.min.x;
         push_constants.bbox_min_y = bbox.min.y;
         push_constants.bbox_max_x = bbox.max.x;
         push_constants.bbox_max_y = bbox.max.y;
+        push_constants.height_offset = pipeline_input->height_offset;
 
         Model3DNode* node = PushStruct(vk_ctx->render_frame_arena, Model3DNode);
-        node->vertex_alloc = *vertex_buffer_allocation;
-        node->index_alloc = *index_buffer_allocation;
+        node->vertex_alloc = asset_vertex_buffer->item.buffer_alloc;
+        node->index_alloc = asset_index_buffer->item.buffer_alloc;
         node->push_constants = push_constants;
-        node->index_count = index_count;
-        node->index_buffer_offset = index_buffer_offset;
-        node->depth_write_per_draw_enabled = depth_write_per_draw_call_only;
+        node->index_count = pipeline_input->index_count;
+        node->index_buffer_offset = pipeline_input->index_offset;
+        node->depth_write_per_draw_enabled = false;
+        node->depth_bias = pipeline_input->depth_bias;
 
         SLLQueuePush(render_frame->model_3D_list.first, render_frame->model_3D_list.last, node);
+    }
+    else
+    {
+        DEBUG_LOG("overlay texture: %d, vertex buffer: %d, index buffer: %d, base texture: %d, colormap texture: %d", overlay_tex_loaded, vertex_loaded, index_loaded, base_texture_loaded,
+                  colormap_loaded);
     }
 }
 
@@ -587,7 +610,8 @@ model_3d_rendering()
     VkDeviceSize offsets[] = {0};
     for (Model3DNode* node = render_frame->model_3D_list.first; node; node = node->next)
     {
-        vkCmdPushConstants(cmd_buffer, model_3D_pipeline->pipeline_layout, VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(Model3dPushConstants), &node->push_constants);
+        vkCmdSetDepthBias(cmd_buffer, node->depth_bias, 0, 0);
+        vkCmdPushConstants(cmd_buffer, model_3D_pipeline->pipeline_layout, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(Model3dPushConstants), &node->push_constants);
         vkCmdBindDescriptorSets(cmd_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, model_3D_pipeline->pipeline_layout, 0, ArrayCount(descriptor_sets), descriptor_sets, 0, NULL);
         vkCmdBindVertexBuffers(cmd_buffer, 0, 1, &node->vertex_alloc.buffer, offsets);
         vkCmdBindIndexBuffer(cmd_buffer, node->index_alloc.buffer, 0, VK_INDEX_TYPE_UINT32);

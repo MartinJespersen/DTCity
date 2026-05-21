@@ -255,7 +255,7 @@ _ion_raster_overlay_example_add_if_present(Cesium3DTilesSelection::Tileset* tile
     String8 ion_raster_asset_id_str = {};
     if (env_vars_value_get(scratch.arena, S("CESIUM_ION_RASTER_OVERLAY_ASSET_ID"), &ion_raster_asset_id_str, 1))
     {
-        INFO_LOG("Cesium Ion raster overlay example disabled. Set CESIUM_ION_RASTER_OVERLAY_ASSET_ID to enable it.\n");
+        INFO_LOG("Cesium Ion raster overlay example disabled. Set CESIUM_ION_RASTER_OVERLAY_ASSET_ID to enable it.");
         return;
     }
 
@@ -305,7 +305,7 @@ _ion_raster_overlay_example_add_if_present(Cesium3DTilesSelection::Tileset* tile
         new CesiumRasterOverlays::IonRasterOverlay(overlay_name, ion_raster_asset_id, _std_string_from_str8(ion_access_token), overlay_options);
 
     tileset->getOverlays().add(ion_overlay);
-    INFO_LOG("Added Cesium ion raster overlay example: %s (asset_id=%lld)\n", overlay_name.c_str(), ion_raster_asset_id);
+    INFO_LOG("Added Cesium ion raster overlay example: %s (asset_id=%lld)", overlay_name.c_str(), ion_raster_asset_id);
 }
 
 //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -340,15 +340,15 @@ class DTCityPrepareRendererResources : public Cesium3DTilesSelection::IPrepareRe
                 (void)data;
                 (void)thread_input;
             };
-            B32 crop_out_bbox = false;
-            const bool* crop_out_bbox_ptr = std::any_cast<bool>(&rendererOptions);
-            if (crop_out_bbox_ptr)
+            B32 is_map_tile = false;
+            const bool* is_map_tile_ptr = std::any_cast<bool>(&rendererOptions);
+            if (is_map_tile_ptr)
             {
-                crop_out_bbox = *crop_out_bbox_ptr;
+                is_map_tile = *is_map_tile_ptr;
             }
             for (TileRenderData* data = render_data_list->first; data; data = data->next)
             {
-                data->render_data.bbox_exclude = crop_out_bbox;
+                data->render_data.is_map_tile = is_map_tile;
                 render::handle_list_push(thread_ctx, data->render_data.vertex_buffer_handle);
                 render::handle_list_push(thread_ctx, data->render_data.index_buffer_handle);
                 render::Handle null_texture_handle = render::texture_zero_handle_get();
@@ -964,6 +964,59 @@ _tileset_renderer_create_context(Arena* arena, TilesetRenderer* renderer, async:
     return result;
 }
 
+g_internal F64
+_sample_height_from_result(const Cesium3DTilesSelection::SampleHeightResult& result, const char* label)
+{
+    B32 sampled = result.sampleSuccess.size() > 0 && result.sampleSuccess[0];
+    F64 sampled_height = 0.0;
+    if (result.positions.size() > 0)
+    {
+        sampled_height = result.positions[0].height;
+    }
+
+    DEBUG_LOG("Tileset height sample [%s]: success=%d height=%f\n", label, (S32)sampled, sampled_height);
+    for (const std::string& warning : result.warnings)
+    {
+        DEBUG_LOG("Tileset height sample [%s] warning: %s\n", label, warning.c_str());
+    }
+    return sampled_height;
+}
+
+// samples the custom-geometry and terrain surface heights at the city center and
+// writes their delta into renderer->height_offset. both queries are driven to
+// completion by the per-frame tileset_update_view; the continuation reschedules
+// itself so height_offset keeps refining as more detailed tiles stream in.
+// tileset_renderer_destroy sets height_sample_stop to end the loop.
+g_internal void
+_height_offset_sample_async(TilesetRenderer* renderer, CesiumGeospatial::Cartographic center_position)
+{
+    std::vector<CesiumAsync::Future<Cesium3DTilesSelection::SampleHeightResult>> height_futures;
+    height_futures.emplace_back(renderer->tileset[0]->sampleHeightMostDetailed({center_position}));
+    height_futures.emplace_back(renderer->tileset[1]->sampleHeightMostDetailed({center_position}));
+
+    renderer->async_system.all(std::move(height_futures))
+        .thenInMainThread(
+            [renderer, center_position](std::vector<Cesium3DTilesSelection::SampleHeightResult>&& results)
+            {
+                F64 geometry_height = _sample_height_from_result(results[0], "geometry");
+                F64 terrain_height = _sample_height_from_result(results[1], "terrain");
+
+                B32 geometry_ok = results[0].sampleSuccess.size() > 0 && results[0].sampleSuccess[0];
+                B32 terrain_ok = results[1].sampleSuccess.size() > 0 && results[1].sampleSuccess[0];
+                if (geometry_ok && terrain_ok)
+                {
+                    renderer->height_offset = geometry_height - terrain_height;
+                }
+                DEBUG_LOG("Height offset: geometry=%f terrain=%f offset=%f\n", geometry_height, terrain_height, renderer->height_offset);
+
+                if (!renderer->height_sample_stop)
+                {
+                    _height_offset_sample_async(renderer, center_position);
+                }
+            })
+        .catchInMainThread([](std::exception&& e) { DEBUG_LOG("Height offset sampling failed: %s\n", e.what()); });
+}
+
 g_internal void
 tileset_renderer_create(Arena* arena, TilesetRenderer* in_out_cesium, async::ThreadPool* threads, String8 url, F64 origin_longitude, F64 origin_latitude, F64 origin_height)
 {
@@ -991,10 +1044,16 @@ tileset_renderer_create(Arena* arena, TilesetRenderer* in_out_cesium, async::Thr
         }
     }
 
-    bool crop_out_bbox = true;
-    create_context.options.rendererOptions = crop_out_bbox;
+    bool is_map_tile = true;
+    create_context.options.rendererOptions = is_map_tile;
     create_context.renderer->tileset[1] = new Cesium3DTilesSelection::Tileset(create_context.externals, ion_terrain_asset_id, _std_string_from_str8(ion_access_token), create_context.options);
     _ion_raster_overlay_example_add_if_present(create_context.renderer->tileset[1]);
+
+    // sample the height_offset between the custom geometry tileset[0] surface and
+    // the cesium ion terrain tileset[1] surface at the city center. height_offset
+    // stays zero (ZII, no shift) until the first successful sample resolves.
+    CesiumGeospatial::Cartographic center_position(glm::radians(origin_longitude), glm::radians(origin_latitude), 0.0);
+    _height_offset_sample_async(create_context.renderer, center_position);
 }
 
 g_internal void
@@ -1039,6 +1098,9 @@ tileset_renderer_destroy(TilesetRenderer* renderer)
 {
     if (renderer)
     {
+        // stop the recurring height sampler before tearing down the tilesets
+        renderer->height_sample_stop = true;
+
         for (U32 i = 0; i < ArrayCount(renderer->tileset); ++i)
         {
             if (renderer->tileset[i]->waitForAllLoadsToComplete(max_f32) == false)

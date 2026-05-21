@@ -20,8 +20,25 @@ layout(set = 0, binding = 0) uniform UBO_Camera
     vec2 viewport_dim;
 } camera_ubo;
 
+layout(push_constant) uniform constants
+{
+    uint base_tex;
+    uint colormap_tex_idx;
+    uint overlay_tex_idx;
+    uint overlay_enabled;
+    float overlay_translation_x;
+    float overlay_translation_y;
+    float overlay_scale_x;
+    float overlay_scale_y;
+    vec2 bbox_min;
+    vec2 bbox_max;
+    float height_offset;
+} PushConstants;
+
 void main() {
-    gl_Position = camera_ubo.projection * camera_ubo.view * vec4(in_position, 1.0);
+    vec3 pos = in_position;
+    pos.z -= PushConstants.height_offset;
+    gl_Position = camera_ubo.projection * camera_ubo.view * vec4(pos, 1.0);
     out_uv = in_uv;
     out_overlay_uv = in_overlay_uv;
     out_object_id = in_object_id;

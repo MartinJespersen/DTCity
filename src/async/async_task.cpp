@@ -18,12 +18,16 @@ _worker_task_func(ThreadInfo thread_info, WorkerData data)
 
     if (task->error || !work->func)
     {
-        task->done.store(true, std::memory_order_release);
+        // curl cleanup must finish before publishing `done`: once `done` is
+        // observed, the consumer (async_task_is_done) is free to release the
+        // arena backing both `task` and the http extension, which would turn
+        // the cleanup below into a use-after-free.
         if (task->ext_type == ExtensionType::Http)
         {
             AsyncHttpTaskState<T>* http_ctx = task->http_ext;
             _curl_context_cleanup(&http_ctx->curl_ctx);
         }
+        task->done.store(true, std::memory_order_release);
     }
     return worker_result;
 }
@@ -64,6 +68,10 @@ async_task_is_done(AsyncTaskStatus<T>* task, T** out_result)
     B32 task_done = task->done.load(std::memory_order_acquire);
     if (task_done)
     {
+        if (task->error)
+        {
+            ERROR_LOG("Error in task: %.*s", str8_varg(task->task_name));
+        }
         switch (task->ext_type)
         {
             case ExtensionType::Http:
@@ -72,20 +80,20 @@ async_task_is_done(AsyncTaskStatus<T>* task, T** out_result)
                 const AsyncHttpResult& http_result = async_ctx->http_result;
                 if (http_result.async_result != AsyncResult::Success)
                 {
-                    INFO_LOG("%.*s error: %u\n", str8_varg(task->task_name), (U32)http_result.async_result);
+                    INFO_LOG("%.*s error: %u", str8_varg(task->task_name), (U32)http_result.async_result);
                     if (http_result.error_code)
                     {
-                        INFO_LOG("%.*s error code: %u\n", str8_varg(task->task_name), http_result.error_code);
+                        INFO_LOG("%.*s error code: %u", str8_varg(task->task_name), http_result.error_code);
                     }
                     if (http_result.error_str.size > 0)
                     {
-                        INFO_LOG("%.*s error msg: %.*s\n", str8_varg(task->task_name), str8_varg(http_result.error_str));
+                        INFO_LOG("%.*s error msg: %.*s", str8_varg(task->task_name), str8_varg(http_result.error_str));
                     }
                 }
             }
             break;
         }
-        INFO_LOG("%.*s work successfully complete\n", str8_varg(task->task_name));
+        INFO_LOG("%.*s work successfully complete", str8_varg(task->task_name));
         *out_result = task->user_data;
         arena_release(task->arena);
         task_done = true;
