@@ -111,6 +111,18 @@ os_write_data_list_to_file_path(String8 path, String8List list)
 }
 
 static B32
+os_make_parent_directory_if_missing(String8 file_path)
+{
+    String8 dir = str8_chop_last_slash(file_path);
+    B32 good = 1;
+    if (dir.size > 0 && !os_folder_path_exists(dir))
+    {
+        good = os_make_directory(dir);
+    }
+    return good;
+}
+
+static B32
 os_append_data_to_file_path(String8 path, String8 data, OS_AccessFlags additional_flags)
 {
     B32 good = 0;

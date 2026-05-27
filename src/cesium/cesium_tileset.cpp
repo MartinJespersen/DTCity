@@ -974,7 +974,6 @@ _sample_height_from_result(const Cesium3DTilesSelection::SampleHeightResult& res
         sampled_height = result.positions[0].height;
     }
 
-    DEBUG_LOG("Tileset height sample [%s]: success=%d height=%f\n", label, (S32)sampled, sampled_height);
     for (const std::string& warning : result.warnings)
     {
         DEBUG_LOG("Tileset height sample [%s] warning: %s\n", label, warning.c_str());
@@ -1007,7 +1006,6 @@ _height_offset_sample_async(TilesetRenderer* renderer, CesiumGeospatial::Cartogr
                 {
                     renderer->height_offset = geometry_height - terrain_height;
                 }
-                DEBUG_LOG("Height offset: geometry=%f terrain=%f offset=%f\n", geometry_height, terrain_height, renderer->height_offset);
 
                 if (!renderer->height_sample_stop)
                 {

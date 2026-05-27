@@ -52,26 +52,23 @@ struct NetaTaskState
     String8 mobility_api_key_header;
     NetascoreDownloadQueue download_queue;
     Rng2F64 bbox_wgs84;
-    String8 file_path;
-    String8 cache_hash_input;
+    String8 cache_file_location;
+    String8 cache_bbox_str;
+    std::atomic<B32> data_downloaded;
 };
 
 struct NetaState
 {
     Arena* arena;
 
-    std::atomic<B32> data_downloaded;
     String8 mobility_api_key;
-    String8 netascore_file_path;
+    String8 cache_file_location;
 
     NetaTaskState task_state;
 };
 
-// Global State ////////////////////////////
-g_internal NetaState* g_neta_state = 0;
-/////////////////////////////////////////////
 g_internal void
-neta_init(String8 cache_path);
+neta_init(NetaState* neta_state, String8 cache_path, String8 cache_type, Rng2F64 bbox, String8 bbox_cache_str);
 
 g_internal async::UserFuncResult<NetaTaskState>
 netascore_job_create_complete(Arena* arena, async::ThreadPool* thread_pool, String8 body, NetaTaskState* task_state);
@@ -83,14 +80,14 @@ g_internal String8
 mobilitylab_api_key_header_get(Arena* arena, String8 api_key);
 
 g_internal city::AsyncCityTask*
-netascore_async_task_create(Arena* arena, NetaState* neta, Rng2F64 bbox, String8 cache);
+netascore_async_task_create(Arena* arena, NetaState* neta, Rng2F64 bbox);
 
 g_internal Map<S64, EdgeList>*
-osm_way_to_edges_map_create(Arena* arena, String8 file_path, Rng2F64 bbox_wgs84);
+osm_way_to_edges_map_create(Arena* arena, osm::Network* network, String8 file_path, Rng2F64 bbox_wgs84);
 
 // private fields
 g_internal Result<Buffer<Edge>>
-_edge_in_osm_area(Arena* arena, simdjson::ondemand::document& doc, Rng2F64 bbox_wgs84);
+_edge_in_osm_area(Arena* arena, osm::Network* network, simdjson::ondemand::document& doc, Rng2F64 bbox_wgs84);
 
 g_internal void
 _netascore_download_enqueue(Arena* arena, NetaTaskState* task_state, String8 key, String8 file_name);

@@ -1,7 +1,7 @@
 namespace osm
 {
-g_internal void
-structure_init(U64 node_hashmap_size, U64 way_hashmap_size)
+g_internal Network*
+osm_init(U64 node_hashmap_size, U64 way_hashmap_size, String8 cache_path, String8 area, String8 bbox_cache_str)
 {
     Arena* arena = arena_alloc();
     Buffer<NodeList> node_hashmap = buffer_alloc<NodeList>(arena, node_hashmap_size);
@@ -9,37 +9,66 @@ structure_init(U64 node_hashmap_size, U64 way_hashmap_size)
     Map<NodeId, EcefLocation>* ecef_location_map = map_create<NodeId, EcefLocation>(arena, node_hashmap_size);
     Map<NodeId, WgsLocation>* wgs_location_map = map_create<NodeId, WgsLocation>(arena, node_hashmap_size);
 
-    g_network = PushStruct(arena, Network);
-    g_network->arena = arena;
-    g_network->node_hashmap = node_hashmap;
-    g_network->ecef_location_map = ecef_location_map;
-    g_network->wgs_location_map = wgs_location_map;
-    g_network->way_hashmap = way_hashmap;
+    Network* network = PushStruct(arena, Network);
+    network->cache_file_location = str8_path_from_str8_list(arena, {cache_path, area, S("osm_data.json")});
+    network->bbox_cache_str = push_str8_copy(arena, bbox_cache_str);
+    network->arena = arena;
+    network->node_hashmap = node_hashmap;
+    network->ecef_location_map = ecef_location_map;
+    network->wgs_location_map = wgs_location_map;
+    network->way_hashmap = way_hashmap;
+    return network;
 }
 
 g_internal void
-structure_cleanup()
+osm_release(Network* osm_network)
 {
-    arena_release(g_network->arena);
+    arena_release(osm_network->arena);
 }
 
-g_internal async::UserFuncResult<city::City>
-parse_osm_data(Arena* arena, async::ThreadPool* thread_pool, String8 response_body, city::City* task_state)
+g_internal void
+structure_cleanup(Network* network)
+{
+    arena_release(network->arena);
+}
+
+g_internal async::UserFuncResult<osm::Network>
+fetch_osm_data_and_parse(Arena* arena, async::ThreadPool* thread_pool, String8 response_body, osm::Network* osm_network)
 {
     (void)arena;
     (void)thread_pool;
-    (void)task_state;
+    cache_write(osm_network->cache_file_location, response_body, osm_network->bbox_cache_str);
+
+    async::AsyncTaskContinuation<osm::Network> task_continuation = {.func = parse_osm_data};
+    return async::UserFuncResult<osm::Network>::success(task_continuation);
+}
+
+g_internal async::AsyncTaskContinuation<osm::Network>
+parse_osm_data(async::ThreadInfo thread_info, async::AsyncTaskStatus<osm::Network>* task)
+{
+    (void)thread_info;
+    B32 error = _parse_osm_data(task->user_data);
+    task->error.store(error);
+    return {};
+}
+
+g_internal Error
+_parse_osm_data(osm::Network* osm_network)
+{
     ScratchScope scratch = ScratchScope(0, 0);
 
-    RoadNodeParseResult node_result = wrapper::node_buffer_from_simd_json(g_network->arena, response_body, 1000);
+    String8 file_content = os_data_from_file_path(scratch.arena, osm_network->cache_file_location);
+    RoadNodeParseResult node_result = wrapper::node_buffer_from_simd_json(osm_network->arena, file_content, 1000);
     if (node_result.error)
     {
         DEBUG_LOG("Error happend when parsing nodes from json");
+        return true;
     }
-    WayParseResult osm_way_parse_result = wrapper::way_buffer_from_simd_json(g_network->arena, response_body);
+    WayParseResult osm_way_parse_result = wrapper::way_buffer_from_simd_json(osm_network->arena, file_content);
     if (osm_way_parse_result.error)
     {
         DEBUG_LOG("Error happend when parsing ways from json");
+        return true;
     }
 
     Buffer<Way> ways = osm_way_parse_result.ways;
@@ -61,7 +90,7 @@ parse_osm_data(Arena* arena, async::ThreadPool* thread_pool, String8 response_bo
             {
                 U64 node_id = way->node_ids[node_index];
                 Node* node_utm;
-                B8 inserted = _node_hashmap_insert(node_id, way, &node_utm);
+                B8 inserted = _node_hashmap_insert(osm_network, node_id, way, &node_utm);
                 if (inserted)
                 {
                     WgsNode* node_coord = _wgs_node_find(node_result.road_nodes, node_id);
@@ -72,28 +101,28 @@ parse_osm_data(Arena* arena, async::ThreadPool* thread_pool, String8 response_bo
                     EcefLocation loc = ecef_location_create(node_id, vec_3f64(coord_ecef.x, coord_ecef.y, coord_ecef.z));
                     WgsLocation wgs_loc = {.id = node_id, .lat = node_coord->lat, .lon = node_coord->lon};
 
-                    map_insert(g_network->ecef_location_map, node_id, loc);
-                    map_insert(g_network->wgs_location_map, node_id, wgs_loc);
+                    map_insert(osm_network->ecef_location_map, node_id, loc);
+                    map_insert(osm_network->wgs_location_map, node_id, wgs_loc);
 
                     chunk_list_insert(scratch.arena, node_id_chunk_list, node_id);
                 }
             }
         }
 
-        g_network->node_id_arr[way_type_idx] = buffer_from_chunk_list(g_network->arena, node_id_chunk_list);
-        g_network->ways_arr[way_type_idx] = buffer_from_chunk_list(g_network->arena, way_chunk_list);
+        osm_network->node_id_arr[way_type_idx] = buffer_from_chunk_list(osm_network->arena, node_id_chunk_list);
+        osm_network->ways_arr[way_type_idx] = buffer_from_chunk_list(osm_network->arena, way_chunk_list);
     }
 
-    _road_edge_structure_create();
-    return async::UserFuncResult<city::City>::success();
+    _road_edge_structure_create(osm_network);
+    return false;
 }
 g_internal void
-_road_edge_structure_create()
+_road_edge_structure_create(Network* network)
 {
     prof_scope_marker;
-    Buffer<osm::Way> way_buf = g_network->ways_arr[enum_idx(osm::WayType::Highway)];
+    Buffer<osm::Way> way_buf = network->ways_arr[enum_idx(osm::WayType::Highway)];
 
-    ChunkList<RoadEdge>* chunk_list = chunk_list_create<RoadEdge>(g_network->arena, 1024);
+    ChunkList<RoadEdge>* chunk_list = chunk_list_create<RoadEdge>(network->arena, 1024);
     for (const osm::Way& way : way_buf)
     {
         RoadEdge* prev_edge = 0;
@@ -102,7 +131,7 @@ _road_edge_structure_create()
             U64 prev_node_id = way.node_ids[node_idx - 1];
             U64 node_id = way.node_ids[node_idx];
 
-            RoadEdge* road_edge = chunk_list_get_next(g_network->arena, chunk_list);
+            RoadEdge* road_edge = chunk_list_get_next(network->arena, chunk_list);
             road_edge->id = random_u64();
             road_edge->way_id = way.id;
             road_edge->node_id_from = prev_node_id;
@@ -117,14 +146,14 @@ _road_edge_structure_create()
         }
     }
 
-    Buffer<RoadEdge> road_edge_buf = buffer_from_chunk_list(g_network->arena, chunk_list);
-    Map<S64, RoadEdge*>* road_edge_map = map_create<S64, RoadEdge*>(g_network->arena, 1024);
+    Buffer<RoadEdge> road_edge_buf = buffer_from_chunk_list(network->arena, chunk_list);
+    Map<S64, RoadEdge*>* road_edge_map = map_create<S64, RoadEdge*>(network->arena, 1024);
     for (RoadEdge* edge = road_edge_buf.begin(); edge < road_edge_buf.end(); edge++)
     {
         map_insert(road_edge_map, edge->id, edge);
     }
 
-    g_network->edge_structure = {.edges = road_edge_buf, .edge_map = *road_edge_map};
+    network->edge_structure = {.edges = road_edge_buf, .edge_map = *road_edge_map};
 }
 
 g_internal WgsNode*
@@ -144,9 +173,8 @@ _wgs_node_find(Buffer<RoadNodeList> node_hashmap, U64 node_id)
 }
 
 g_internal WayNode*
-way_find(WayId way_id)
+way_find(Network* network, WayId way_id)
 {
-    Network* network = g_network;
     WayList* way_list = &network->way_hashmap.data[way_id % network->way_hashmap.size];
 
     WayNode* node = way_list->first;
@@ -179,10 +207,10 @@ tag_find(Arena* arena, Buffer<Tag> tags, String8 tag_to_find)
 }
 
 g_internal EcefLocation
-location_get(NodeId node_id)
+location_get(Network* network, NodeId node_id)
 {
     prof_scope_marker;
-    EcefLocation* loc = map_get(g_network->ecef_location_map, node_id);
+    EcefLocation* loc = map_get(network->ecef_location_map, node_id);
     if (loc)
     {
         return *loc;
@@ -192,10 +220,10 @@ location_get(NodeId node_id)
 }
 
 g_internal WgsLocation
-wgs_location_get(NodeId node_id)
+wgs_location_get(Network* network, NodeId node_id)
 {
     prof_scope_marker;
-    WgsLocation* loc = map_get(g_network->wgs_location_map, node_id);
+    WgsLocation* loc = map_get(network->wgs_location_map, node_id);
     if (loc)
     {
         return *loc;
@@ -205,9 +233,9 @@ wgs_location_get(NodeId node_id)
 }
 
 g_internal Node*
-node_get(NodeId node_id)
+node_get(Network* network, NodeId node_id)
 {
-    Buffer<NodeList> utm_node_hashmap = g_network->node_hashmap;
+    Buffer<NodeList> utm_node_hashmap = network->node_hashmap;
     U32 slot_index = node_id % utm_node_hashmap.size;
     NodeList* slot = &utm_node_hashmap.data[slot_index];
     for (Node* node = slot->first; node; node = node->next)
@@ -222,10 +250,8 @@ node_get(NodeId node_id)
 }
 
 g_internal B32
-_node_hashmap_insert(NodeId node_id, Way* way, Node** out)
+_node_hashmap_insert(Network* network, NodeId node_id, Way* way, Node** out)
 {
-    Network* network = g_network;
-
     // ~mgj: Insert Node into hash if not already inserted
     U64 node_slot = node_id % network->node_hashmap.size;
     NodeList* slot = &network->node_hashmap.data[node_slot];
@@ -264,10 +290,8 @@ _node_hashmap_insert(NodeId node_id, Way* way, Node** out)
 }
 
 g_internal NodeId
-random_node_id_from_type_get(WayType type)
+random_node_id_from_type_get(Network* network, WayType type)
 {
-    Network* network = g_network;
-
     Buffer<NodeId> node_ids = network->node_id_arr[enum_idx(type)];
     Assert(node_ids.size);
     NodeId node_id = node_ids.data[random_u64() % node_ids.size];
@@ -276,15 +300,15 @@ random_node_id_from_type_get(WayType type)
 }
 
 g_internal Node*
-random_neighbour_node_get(U64 node_id)
+random_neighbour_node_get(Network* network, U64 node_id)
 {
-    Node* node = node_get(node_id);
-    Node* neighbour = random_neighbour_node_get(node);
+    Node* node = node_get(network, node_id);
+    Node* neighbour = random_neighbour_node_get(network, node);
     return neighbour;
 }
 
 g_internal Node*
-random_neighbour_node_get(Node* node)
+random_neighbour_node_get(Network* network, Node* node)
 {
     // Calculate roadway count for the node
     U32 roadway_count = 0;
@@ -326,7 +350,7 @@ random_neighbour_node_get(Node* node)
         next_node_idx = Max(0, (S32)node_idx - 1);
     }
     U64 next_node_id = way->node_ids[next_node_idx];
-    Node* next_node = node_get(next_node_id);
+    Node* next_node = node_get(network, next_node_id);
     return next_node;
 }
 

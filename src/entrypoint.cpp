@@ -201,7 +201,6 @@ dt_main_loop(void* ptr)
     os_set_thread_name(str8_c_string("Entrypoint thread"));
     AssertAlways(async::thread_pool_register_current_thread(ctx->thread_pool));
 
-    neta::neta_init(ctx->data_subdirs.data[dt_DataDirType::Cache]);
     draw::draw_init();
     render::render_ctx_create(ctx->data_subdirs.data[dt_DataDirType::Shaders], io_ctx, ctx->thread_pool);
     ui::camera_init(ctx->camera);
@@ -210,11 +209,41 @@ dt_main_loop(void* ptr)
     dt_imgui_setup(vk_ctx, io_ctx);
 
     // city building ////////////////////////////////////////////
-    city::City* city = city::city_init(ctx->data_subdirs.data[dt_DataDirType::Cache]);
-    city::city_setup(city, &ctx->cmdline, neta::g_neta_state->netascore_file_path);
-    ////////////////////////////////////////////////////////
+    const city::CityInfo cities_info_arr[] = {{.name = S("Aarhus"),
+                                               .lon = 10.291206,
+                                               .lat = 56.253108,
+                                               .bbox_width_meters = 5000,
+                                               .bbox_height_meters = 5000,
+                                               .tileset_path = S("file:///C:/ByModel/5km_6235_580/tileset.json"),
+                                               .bbox_clipping_enabled = true,
+                                               .custom_geometry_enabled = true},
+                                              {.name = S("Eskiltuna"),
+                                               .lon = 16.49952138067,
+                                               .lat = 59.36163877297,
+                                               .bbox_width_meters = 5000,
+                                               .bbox_height_meters = 5000,
+                                               .tileset_path = S("file:///C:/ByModel/eskiltuna/Totalstad_2025_q3/tileset.json")}};
+
+    Buffer<city::City> city_buf = buffer_alloc<city::City>(ctx->arena_main_permanent, ArrayCount(cities_info_arr));
+    for (U32 i = 0; i < city_buf.size; ++i)
+    {
+        const city::CityInfo* area = &cities_info_arr[i];
+        city::City* city = city_buf[i];
+
+        Rng2F64 bbox = util::wgs84_bbox_from_btm_right_corner(area->lon, area->lat, area->bbox_width_meters, area->bbox_height_meters);
+        city::city_init(city, ctx->data_subdirs.data[dt_DataDirType::Cache]);
+        city->bbox = bbox;
+        city->tileset_url = area->tileset_path;
+        city::city_build(city, bbox, area->tileset_path, area->name);
+        ////////////////////////////////////////////////////////
+    }
 
     city::RoadOverlayOption neta_overlay_option = city::RoadOverlayOption_None;
+    S32 cur_area_option = 1;
+    S32 area_option = cur_area_option;
+
+    const city::CityInfo* city_info = &cities_info_arr[cur_area_option];
+    city::City* city = city_buf[cur_area_option];
     while (ctx->running)
     {
         dt_time_update(ctx->time);
@@ -228,18 +257,31 @@ dt_main_loop(void* ptr)
         Vec2U32 framebuffer_dim = {(U32)io_ctx->framebuffer_width, (U32)io_ctx->framebuffer_height};
         ui::camera_update(ctx->camera, ctx->io, ctx->time->delta_time_sec, framebuffer_dim);
 
-        ImGui::Begin("Road Overlays", nullptr);
+        ImGui::Begin("Interaction", nullptr);
+
+        ImGui::SeparatorText("Area");
+        for (U32 i = 0; i < ArrayCount(cities_info_arr); i++)
+        {
+            ImGui::RadioButton((const char*)cities_info_arr[i].name.str, (int*)&area_option, (int)i);
+        }
+
+        ImGui::SeparatorText("Netascore");
         ImGui::SetWindowPos(ImVec2(0, 0));
 
         for (U32 i = 0; i < city::RoadOverlayOption_Count; i++)
         {
             ImGui::RadioButton(city::road_overlay_option_strs[i], (int*)&neta_overlay_option, (int)i);
         }
+
         ImGui::End();
 
-        city::city_update(city, ctx->thread_pool, neta_overlay_option, framebuffer_dim);
-        // async::async_task_result_done(osm_task_result.task_state, &osm_task_done);
-        // async::async_task_result_done(neta_result.task_state, &neta_task_done);
+        if (cur_area_option != area_option)
+        {
+            cur_area_option = area_option;
+            city = city_buf[cur_area_option];
+            city_info = &cities_info_arr[cur_area_option];
+        }
+        city::city_update(city, ctx->thread_pool, neta_overlay_option, framebuffer_dim, city_info);
 
         // #if BUILD_DEBUG
         imgui_debug_window(city, &city->cesium, ctx->thread_pool);

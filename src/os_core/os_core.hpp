@@ -283,6 +283,8 @@ os_file_iter_end(OS_FileIter* iter);
 //- rjf: directory creation
 static B32
 os_make_directory(String8 path);
+static B32
+os_make_parent_directory_if_missing(String8 file_path);
 
 ////////////////////////////////
 //~ rjf: @os_hooks Shared Memory (Implemented Per-OS)

@@ -84,16 +84,20 @@ cache_write(String8 cache_file, String8 content, String8 hash_content)
     prof_scope_marker;
     ScratchScope scratch = ScratchScope(0, 0);
 
+    B32 cache_file_created = os_make_parent_directory_if_missing(cache_file);
+    if (!cache_file_created)
+    {
+        ERROR_LOG("cache_write: Cache file dir could not be created\n");
+    }
+
     // create name of meta file
     String8 cache_meta_file = str8_concat(scratch.arena, cache_file, S(".meta"));
 
     // ~mgj: write to cache file
-    OS_Handle file_write_handle = os_file_open(OS_AccessFlag_Write, cache_file);
-    defer(os_file_close(file_write_handle));
-    U64 bytes_written = os_file_write(file_write_handle, r1u64(0, content.size), content.str);
-    if (bytes_written != content.size)
+    U64 is_file_written = os_write_data_to_file_path(cache_file, content);
+    if (!is_file_written)
     {
-        DEBUG_LOG("DataFetch: Was not able to write OSM data to cache\n");
+        ERROR_LOG("cache_write: Was not able to write OSM data to cache\n");
     }
 
     // ~mgj: write to cache meta file
@@ -103,12 +107,10 @@ cache_write(String8 cache_file, String8 content, String8 hash_content)
         U64 timestamp = os_now_unix();
         String8 meta_str = PushStr8F(scratch.arena, "%llu\t%llu", new_hash, timestamp);
 
-        OS_Handle file_write_handle_meta = os_file_open(OS_AccessFlag_Write, cache_meta_file);
-        defer(os_file_close(file_write_handle_meta));
-        U64 bytes_written_meta = os_file_write(file_write_handle_meta, r1u64(0, meta_str.size), meta_str.str);
-        if (bytes_written_meta != meta_str.size)
+        B32 is_meta_written = os_write_data_to_file_path(cache_meta_file, meta_str);
+        if (!is_meta_written)
         {
-            DEBUG_LOG("DataFetch: Was not able to write meta data to cache\n");
+            DEBUG_LOG("cache_write: Was not able to write meta data to cache\n");
         }
     }
 }

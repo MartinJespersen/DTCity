@@ -36,6 +36,7 @@ struct UserFuncResult
     MainThreadWorkFunc<T> main_thread_func;
     HttpInfo* http_info;
     AsyncWorkFunc<T> next_func;
+    AsyncTaskContinuation<T> next_task;
 
     static UserFuncResult<T>
     reschedule(S64 us_delay = 0)
@@ -73,6 +74,13 @@ struct UserFuncResult
     success(MainThreadWorkFunc<T> main_thread_func)
     {
         UserFuncResult<T> result = {.successful = true, .main_thread_func = main_thread_func};
+        return result;
+    }
+
+    static UserFuncResult<T>
+    success(AsyncTaskContinuation<T> next_task)
+    {
+        UserFuncResult<T> result = {.successful = true, .next_task = next_task};
         return result;
     }
 };

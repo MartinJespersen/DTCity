@@ -157,6 +157,8 @@ read_only g_internal const char* g_waytype_osm_tag[] = {
 struct Network
 {
     Arena* arena;
+    String8 cache_file_location;
+    String8 bbox_cache_str;
 
     Buffer<NodeList> node_hashmap; // key is the node id
     Map<NodeId, EcefLocation>* ecef_location_map;
@@ -166,44 +168,45 @@ struct Network
     Buffer<Way> ways_arr[enum_idx(WayType::Count)]; // buffer storage
     Buffer<NodeId> node_id_arr[enum_idx(WayType::Count)];
     EdgeStructure edge_structure;
-    Map<S64, neta::EdgeList>* neta_edge_map;
 };
 
-///////////////////////
-// ~mgj: Globals
-g_internal Network* g_network = {};
 read_only g_internal Node g_road_node_utm = {nullptr, 0, {}, {}};
-///////////////////////
 
 // Public
+g_internal Network*
+osm_init(U64 node_hashmap_size, U64 way_hashmap_size, String8 cache_path, String8 area, String8 bbox_cache_str);
 g_internal void
-structure_init(U64 node_hashmap_size, U64 way_hashmap_size);
+osm_release(Network* osm_network);
 g_internal void
-structure_cleanup();
+structure_cleanup(Network* network);
 g_internal TagResult
 tag_find(Arena* arena, Buffer<Tag> tags, String8 tag_to_find);
 g_internal WayNode*
-way_find(WayId way_id);
+way_find(Network* network, WayId way_id);
 g_internal EcefLocation
-location_get(U64 node_id);
+location_get(Network* network, U64 node_id);
 g_internal WgsLocation
-wgs_location_get(U64 node_id);
+wgs_location_get(Network* network, U64 node_id);
 g_internal Node*
-node_get(U64 node_id);
+node_get(Network* network, U64 node_id);
 g_internal Node*
-random_neighbour_node_get(Node* node);
+random_neighbour_node_get(Network* network, Node* node);
 g_internal Node*
-random_neighbour_node_get(U64 node_id);
+random_neighbour_node_get(Network* network, U64 node_id);
 g_internal NodeId
-random_node_id_from_type_get(WayType type);
+random_node_id_from_type_get(Network* network, WayType type);
 
-g_internal async::UserFuncResult<city::City>
-parse_osm_data(Arena* arena, async::ThreadPool* thread_pool, String8 response_body, city::City* task_state);
+g_internal async::UserFuncResult<osm::Network>
+fetch_osm_data_and_parse(Arena* arena, async::ThreadPool* thread_pool, String8 response_body, osm::Network* osm_network);
+g_internal async::AsyncTaskContinuation<osm::Network>
+parse_osm_data(async::ThreadInfo thread_info, async::AsyncTaskStatus<osm::Network>* task);
+g_internal Error
+_parse_osm_data(osm::Network* osm_network);
 // Privates
 g_internal void
-_road_edge_structure_create();
+_road_edge_structure_create(Network* network);
 g_internal WgsNode*
 _wgs_node_find(Buffer<RoadNodeList> node_hashmap, U64 node_id);
 g_internal B32
-_node_hashmap_insert(U64 node_id, Way* way, Node** out);
+_node_hashmap_insert(Network* network, U64 node_id, Way* way, Node** out);
 } // namespace osm

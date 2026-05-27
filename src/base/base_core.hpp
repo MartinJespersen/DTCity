@@ -802,6 +802,7 @@ struct DateTime
 };
 
 typedef U64 DenseTime;
+typedef B32 Error;
 
 ////////////////////////////////
 //~ allen: Files

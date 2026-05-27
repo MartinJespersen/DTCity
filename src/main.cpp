@@ -69,19 +69,6 @@ App(int argc, char** argv)
     ctx->cmdline = os_parse_cmd_line(ctx->arena_main_permanent, argc, argv);
     dt_time_init(ctx->time);
 
-#if OS_WINDOWS
-    // String8 tileset_url = S("url=file:///C:/ByModel/eskiltuna/Totalstad_2025_q3/tileset.json");
-
-    String8 tileset_url = S("url=file:///C:/ByModel/5km_6235_580/tileset.json");
-#else
-    String8 tileset_url = S("url=file:///mnt/c/ByModel/5km_6235_580/tileset.json");
-#endif
-    //        input.btm_right_corner_wgs84 = /*vec_2f64(10.291206, 56.253108); */ vec_2f64(16.49952138067, 59.36163877297);
-    str8_list_push(ctx->arena_main_permanent, &ctx->cmdline, tileset_url);
-    str8_list_push(ctx->arena_main_permanent, &ctx->cmdline, S("lon=10.291206"));
-    str8_list_push(ctx->arena_main_permanent, &ctx->cmdline, S("lat=56.253108"));
-    str8_list_push(ctx->arena_main_permanent, &ctx->cmdline, S("zone=32V"));
-
     OS_Handle thread_handle = dt_render_thread_start(ctx);
     while (!glfwWindowShouldClose(ctx->io->window))
     {

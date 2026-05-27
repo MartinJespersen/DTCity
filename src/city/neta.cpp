@@ -8,23 +8,24 @@ namespace neta
 {
 
 g_internal void
-neta_init(String8 cache_path)
+neta_init(NetaState* neta_state, String8 cache_path, String8 cache_type, Rng2F64 bbox, String8 bbox_cache_str)
 {
-    Arena* arena = arena_alloc();
-    g_neta_state = PushStruct(arena, NetaState);
-    g_neta_state->arena = arena;
-    g_neta_state->netascore_file_path = str8_path_from_str8_list(arena, {cache_path, S("netascore_edges.geojson")});
-    AssertAlways(g_neta_state);
+    neta_state->cache_file_location = str8_path_from_str8_list(neta_state->arena, {cache_path, cache_type, S("netascore_edges.geojson")});
+    neta_state->task_state.bbox_wgs84 = bbox;
+    neta_state->task_state.cache_file_location = neta_state->cache_file_location;
+    neta_state->task_state.cache_bbox_str = push_str8_copy(neta_state->arena, bbox_cache_str);
+    AssertAlways(neta_state);
 
-    B32 error = env_vars_value_get(arena, S("NETASCORE_API_KEY"), &g_neta_state->mobility_api_key, 1);
+    B32 error = env_vars_value_get(neta_state->arena, S("NETASCORE_API_KEY"), &neta_state->mobility_api_key, 1);
     if (error)
     {
         ERROR_LOG("NETASCORE_API_KEY environment variable could not be found");
     }
+    neta_state->task_state.mobility_api_key_header = neta::mobilitylab_api_key_header_get(neta_state->arena, neta_state->mobility_api_key);
 }
 
 static Result<Buffer<Edge>>
-_edge_in_osm_area(Arena* arena, simdjson::ondemand::document& doc, Rng2F64 bbox_wgs84)
+_edge_in_osm_area(Arena* arena, osm::Network* network, simdjson::ondemand::document& doc, Rng2F64 bbox_wgs84)
 {
     prof_scope_marker;
     using namespace simdjson;
@@ -40,7 +41,7 @@ _edge_in_osm_area(Arena* arena, simdjson::ondemand::document& doc, Rng2F64 bbox_
         S64 osm_id = 0;
         err |= props["osm_id"].get_int64().get(osm_id);
 
-        osm::WayNode* osm_way = osm::way_find(osm_id);
+        osm::WayNode* osm_way = osm::way_find(network, osm_id);
         if (!osm_way) // do not save road ways not in the osm database
             continue;
 
@@ -101,7 +102,7 @@ _edge_in_osm_area(Arena* arena, simdjson::ondemand::document& doc, Rng2F64 bbox_
 }
 
 static Map<S64, EdgeList>*
-osm_way_to_edges_map_create(Arena* arena, String8 file_path, Rng2F64 bbox_wgs84)
+osm_way_to_edges_map_create(Arena* arena, osm::Network* network, String8 file_path, Rng2F64 bbox_wgs84)
 {
     prof_scope_marker;
     using namespace simdjson;
@@ -116,7 +117,7 @@ osm_way_to_edges_map_create(Arena* arena, String8 file_path, Rng2F64 bbox_wgs84)
     Buffer<Edge> edge_buf = {};
     if (simd_error == simdjson::error_code::SUCCESS)
     {
-        Result<Buffer<Edge>> res_edges = _edge_in_osm_area(arena, doc, bbox_wgs84);
+        Result<Buffer<Edge>> res_edges = _edge_in_osm_area(arena, network, doc, bbox_wgs84);
         if (!res_edges.err)
         {
             edge_buf = res_edges.v;
@@ -201,8 +202,8 @@ _netascore_download_file_complete(Arena* arena, async::ThreadPool* thread_pool, 
     }
     SLLQueuePop(download_queue->first, download_queue->last);
 
-    cache_write(task_state->file_path, body, task_state->cache_hash_input);
-    g_neta_state->data_downloaded.store(true);
+    cache_write(task_state->cache_file_location, body, task_state->cache_bbox_str);
+    task_state->data_downloaded.store(true);
 
     return async::UserFuncResult<NetaTaskState>::success();
 }
@@ -360,7 +361,7 @@ netascore_job_create_complete(Arena* arena, async::ThreadPool* thread_pool, Stri
 }
 
 g_internal city::AsyncCityTask*
-netascore_async_task_create(Arena* arena, NetaState* neta, Rng2F64 bbox, String8 cache_path)
+netascore_async_task_create(Arena* arena, NetaState* neta, Rng2F64 bbox)
 {
     Context* ctx = dt_ctx_get();
 
@@ -370,20 +371,7 @@ netascore_async_task_create(Arena* arena, NetaState* neta, Rng2F64 bbox, String8
         exit_with_error("Failed to derive a valid UTM SRID from the provided WGS84 coordinates");
     }
 
-    String8List bbox_param_list = {};
-    str8_list_push(neta->arena, &bbox_param_list, push_str8f(neta->arena, "%.6f", bbox.min.y));
-    str8_list_push(neta->arena, &bbox_param_list, push_str8f(neta->arena, "%.6f", bbox.min.x));
-    str8_list_push(neta->arena, &bbox_param_list, push_str8f(neta->arena, "%.6f", bbox.max.y));
-    str8_list_push(neta->arena, &bbox_param_list, push_str8f(neta->arena, "%.6f", bbox.max.x));
-    StringJoin sep = {.pre = S("bbox_str="), .sep = S(","), .post = S("")};
-    String8 bbox_str = str8_list_join(neta->arena, &bbox_param_list, &sep);
-    String8 neta_file_path = str8_path_from_str8_list(neta->arena, {cache_path, S("netascore_edges.geojson")});
-    neta->task_state.mobility_api_key_header = neta::mobilitylab_api_key_header_get(neta->arena, neta->mobility_api_key);
-    neta->task_state.bbox_wgs84 = bbox;
-    neta->task_state.cache_hash_input = bbox_str;
-    neta->task_state.file_path = neta_file_path;
-
-    Result<String8> netascore_result = cache_read(g_neta_state->arena, neta_file_path, bbox_str);
+    Result<String8> netascore_result = cache_read(neta->arena, neta->cache_file_location, neta->task_state.cache_bbox_str);
     city::AsyncCityTask* neta_task = PushStruct(arena, city::AsyncCityTask);
     if (netascore_result.err)
     {
@@ -393,7 +381,7 @@ netascore_async_task_create(Arena* arena, NetaState* neta, Rng2F64 bbox, String8
 
         Arena* task_arena = arena_alloc();
         async::HttpInfo* http_info = async::http_info_create(task_arena, HTTP_Method_Post, netascore_api, S("application/x-www-form-urlencoded"), {neta->task_state.mobility_api_key_header},
-                                                             {target_srid_param, bbox_str, S("output_format=GeoJSON")});
+                                                             {target_srid_param, neta->task_state.cache_bbox_str, S("output_format=GeoJSON")});
         async::AsyncHttpTaskStateConfig<NetaTaskState> config = async::AsyncHttpTaskStateConfig<NetaTaskState>(neta::netascore_job_create_complete, &neta->task_state, 5, 1);
         async::AsyncHttpTaskCreateResult<NetaTaskState> result = async::async_http_task_run(task_arena, ctx->thread_pool, http_info, &config, S("Neta Task"));
         AssertAlways(result.async_result == async::AsyncResult::Success);

@@ -1,78 +1,74 @@
 namespace city
 {
 
-g_internal City*
-city_init(String8 cache_path)
+g_internal void
+city_init(City* city, String8 cache_path)
 {
     ScratchScope scratch = ScratchScope(0, 0);
 
     Arena* arena = arena_alloc();
-    City* city = PushStruct(arena, City);
     city->cache_path = push_str8_copy(arena, cache_path);
     city->arena = arena;
-
-    return city;
 }
 
 g_internal void
-city_setup(City* city, String8List* cmdline, String8 netascore_file_path)
+city_build(City* city, Rng2F64 bbox, String8 tileset_url, String8 area)
 {
     ScratchScope scratch = ScratchScope(0, 0);
-    // set vars from cmdline args
-    String8 tileset_url = os_arg_from_cmdline(scratch.arena, cmdline, S("url"));
-    if (!cesium::root_tileset_url_is_readable(tileset_url))
-    {
-        exit_with_error("Cesium tileset root file cannot be read: %s", tileset_url);
-    }
-    Vec2F64 bbox_size_meters = util::default_bbox_size_meters_get();
-    Rng2F64 bbox = util::wgs84_bbox_from_btm_right_corner(cmdline, bbox_size_meters);
-
-    // build city from cmdline args
-    city_build(city, bbox, tileset_url, netascore_file_path); // TODO: consider whether this shoudl be here
-}
-
-g_internal void
-city_build(City* city, Rng2F64 bbox, String8 tileset_url, String8 netascore_file_path)
-{
     Context* ctx = dt_ctx_get();
 
     city->bbox = bbox;
     city->tileset_url = push_str8_copy(city->arena, tileset_url);
 
+    // cache str create
+    String8List bbox_param_list = {};
+    str8_list_push(scratch.arena, &bbox_param_list, push_str8f(scratch.arena, "%.6f", bbox.min.y));
+    str8_list_push(scratch.arena, &bbox_param_list, push_str8f(scratch.arena, "%.6f", bbox.min.x));
+    str8_list_push(scratch.arena, &bbox_param_list, push_str8f(scratch.arena, "%.6f", bbox.max.y));
+    str8_list_push(scratch.arena, &bbox_param_list, push_str8f(scratch.arena, "%.6f", bbox.max.x));
+    StringJoin sep = {.pre = S("bbox_str="), .sep = S(","), .post = S("")};
+    String8 bbox_cache_str = str8_list_join(city->arena, &bbox_param_list, &sep);
+
+    // cesium init
     Vec2F64 bbox_center = {.x = (bbox.min.x + bbox.max.x) * 0.5, .y = (bbox.min.y + bbox.max.y) * 0.5};
     cesium::tileset_renderer_create(city->arena, &city->cesium, ctx->thread_pool, tileset_url, bbox_center.x, bbox_center.y, 0.0);
-
     CesiumGeospatial::Cartographic origin_cartographic(glm::radians(bbox_center.x), glm::radians(bbox_center.y), 0);
     CesiumGeospatial::LocalHorizontalCoordinateSystem* local_coord = new CesiumGeospatial::LocalHorizontalCoordinateSystem(
         origin_cartographic, CesiumGeospatial::LocalDirection::East, CesiumGeospatial::LocalDirection::North, CesiumGeospatial::LocalDirection::Up);
     glm::dmat4 ecef_to_local = local_coord->getEcefToLocalTransformation();
 
+    // road init
     Road* road = &city->road;
-    city::road_create(city, ecef_to_local, road);
+    city::road_create(city, road, ecef_to_local, area, bbox_cache_str);
     road->bbox = bbox;
-    road->netascore_file_path = push_str8_copy(road->arena, netascore_file_path);
+
+    // init neta layer
+    Arena* arena = arena_alloc();
+    city->neta_state = PushStruct(arena, neta::NetaState);
+    neta::NetaState* neta_state = city->neta_state;
+    neta_state->arena = arena;
+    neta::neta_init(neta_state, ctx->data_subdirs.data[dt_DataDirType::Cache], area, bbox, bbox_cache_str);
+    road->netascore_file_path = push_str8_copy(road->arena, neta_state->cache_file_location);
 
     // start async tasks
-    city::AsyncCityTask* neta_task = neta::netascore_async_task_create(city->arena, neta::g_neta_state, bbox, ctx->data_subdirs.data[dt_DataDirType::Cache]);
+    city::AsyncCityTask* neta_task = neta::netascore_async_task_create(city->arena, neta_state, bbox);
     DLLPushBack(city->task_list.first, city->task_list.last, neta_task);
 
-    U64 node_hashmap_size = 1000;
-    U64 way_hashmap_size = 100;
-    osm::structure_init(node_hashmap_size, way_hashmap_size);
-
     async::ThreadPool* thread_pool = dt_ctx_get()->thread_pool;
-    AsyncCityTask* osm_task_status = _cache_and_parse_osm_json(thread_pool, city);
+    AsyncCityTask* osm_task_status = _cache_and_parse_osm_json(thread_pool, road, ctx->data_subdirs.data[dt_DataDirType::Cache], area);
     DLLPushBack(city->task_list.first, city->task_list.last, osm_task_status);
 }
 
 g_internal AsyncCityTask*
-_cache_and_parse_osm_json(async::ThreadPool* thread_pool, City* city)
+_cache_and_parse_osm_json(async::ThreadPool* thread_pool, Road* road, String8 cache_path, String8 cache_type)
 {
     ScratchScope scratch = ScratchScope(0, 0);
+    osm::Network* osm_network = road->osm_network;
+
     String8List query_list = {};
     for (U32 way_type_idx = 0; way_type_idx < enum_idx(osm::WayType::Count); ++way_type_idx)
     {
-        String8 str = PushStr8F(scratch.arena, "way[\"%s\"](%f, %f, %f, %f);\n", osm::g_waytype_osm_tag[way_type_idx], city->bbox.min.y, city->bbox.min.x, city->bbox.max.y, city->bbox.max.x);
+        String8 str = PushStr8F(scratch.arena, "way[\"%s\"](%f, %f, %f, %f);\n", osm::g_waytype_osm_tag[way_type_idx], road->bbox.min.y, road->bbox.min.x, road->bbox.max.y, road->bbox.max.x);
         str8_list_push(scratch.arena, &query_list, str);
     }
 
@@ -89,27 +85,26 @@ _cache_and_parse_osm_json(async::ThreadPool* thread_pool, City* city)
         )",
                               str8_varg(dyn_query_str));
 
-    String8 file = str8_path_from_str8_list(scratch.arena, {city->cache_path, S("osm_data.json")});
     String8 path = S("http://overpass-api.de/api/interpreter");
-    Result<String8> cache_result = cache_read(osm::g_network->arena, file, body);
+    Result<String8> cache_result = cache_read(road->osm_network->arena, osm_network->cache_file_location, osm_network->bbox_cache_str);
 
-    AsyncCityTask* osm_task = PushStruct(city->arena, AsyncCityTask);
+    AsyncCityTask* osm_task = PushStruct(road->arena, AsyncCityTask);
+    osm_task->type = city::AsyncTaskType::Osm;
     if (cache_result.err)
     {
         async::HttpInfo* http_info =
-            async::http_info_create(osm::g_network->arena, HTTP_Method_Post, path, S("application/x-www-form-urlencoded"), {S("User-Agent: DTCity/0.1"), S("Accept: application/json")}, {});
-        http_info->body = push_str8_copy(osm::g_network->arena, body);
-        async::AsyncHttpTaskStateConfig<City> config = async::AsyncHttpTaskStateConfig<City>(osm::parse_osm_data, city, 3, 1);
-        async::AsyncHttpTaskCreateResult<City> http_task_result = async::async_http_task_run(thread_pool, http_info, &config, S("Osm Task"));
+            async::http_info_create(osm_network->arena, HTTP_Method_Post, path, S("application/x-www-form-urlencoded"), {S("User-Agent: DTCity/0.1"), S("Accept: application/json")}, {});
+        http_info->body = push_str8_copy(osm_network->arena, body);
+        async::AsyncHttpTaskStateConfig<osm::Network> config = async::AsyncHttpTaskStateConfig<osm::Network>(osm::fetch_osm_data_and_parse, osm_network, 3, 1);
+        async::AsyncHttpTaskCreateResult<osm::Network> http_task_result = async::async_http_task_run(thread_pool, http_info, &config, S("Osm Task"));
         AssertAlways(http_task_result.async_result == async::AsyncResult::Success);
 
-        osm_task->type = city::AsyncTaskType::Osm;
         osm_task->osm = http_task_result.task_state;
     }
     else
     {
-        osm_task->type = city::AsyncTaskType::Cached;
-        osm_task->cached_type = city::AsyncTaskType::Osm;
+        async::AsyncTaskStatus<osm::Network>* osm_task_cached = async::async_task_run(thread_pool, osm::parse_osm_data, osm_network, S("Osm Task Http Cached"));
+        osm_task->osm = osm_task_cached;
     }
 
     // parse nodes
@@ -118,33 +113,10 @@ _cache_and_parse_osm_json(async::ThreadPool* thread_pool, City* city)
 }
 
 g_internal void
-_city_release_handles(City* city)
-{
-    road_destroy(&city->road);
-    cesium::tileset_renderer_destroy(&city->cesium);
-}
-
-g_internal void
-city_reset(City* city, Rng2F64 bbox, String8 tileset_url, String8 netascore_file_path)
-{
-    _city_release_handles(city);
-
-    // reset arena
-    Arena* arena = city->arena;
-    arena_clear(arena);
-    MemoryZeroStruct(city);
-    city->arena = arena;
-
-    // build
-    city_build(city, bbox, tileset_url, netascore_file_path);
-}
-
-g_internal void
-city_update(City* city, async::ThreadPool* thread_pool, RoadOverlayOption neta_overlay_option, Vec2U32 framebuffer_dim)
+city_update(City* city, async::ThreadPool* thread_pool, RoadOverlayOption neta_overlay_option, Vec2U32 framebuffer_dim, const CityInfo* city_config)
 {
     Context* ctx = dt_ctx_get();
 
-    neta::NetaTaskState* neta_state = 0;
     for (AsyncCityTask* task = city->task_list.first; task;)
     {
         AsyncCityTask* next_task = task->next;
@@ -153,42 +125,52 @@ city_update(City* city, async::ThreadPool* thread_pool, RoadOverlayOption neta_o
         {
             case AsyncTaskType::Osm:
             {
-                City* city_stub = 0;
-                task_done = async::async_task_is_done(task->osm, &city_stub);
-                city->osm_task_done = task_done;
+                osm::Network* osm_network_stub = 0;
+                B32 success = false;
+                task_done = async::async_task_is_done(task->osm, &osm_network_stub, &success);
+                if (success)
+                {
+                    city->osm_task_done = true;
+                }
             };
             break;
             case AsyncTaskType::Neta:
             {
-                task_done = async::async_task_is_done(task->neta, &neta_state);
-                city->neta_task_done = task_done;
+                neta::NetaTaskState* neta_state_stub = 0;
+                B32 success = false;
+                task_done = async::async_task_is_done(task->neta, &neta_state_stub, &success);
+                if (success)
+                {
+                    city->neta_task_done = true;
+                }
             }
             break;
             case AsyncTaskType::Road:
             {
                 Road* road_stub = 0;
-                task_done = async::async_task_is_done(task->road, &road_stub);
-                city->road_building_done = task_done;
+                B32 success = false;
+                task_done = async::async_task_is_done(task->road, &road_stub, &success);
+                if (success)
+                {
+                    city->road_building_done = true;
+                }
             }
             break;
             case AsyncTaskType::CarSim:
             {
                 CarSim* car_sim_stub = 0;
-                task_done = async::async_task_is_done(task->car_sim, &car_sim_stub);
-                city->cars_creation_done = task_done;
+                B32 success = false;
+                task_done = async::async_task_is_done(task->car_sim, &car_sim_stub, &success);
+                if (success)
+                {
+                    city->cars_creation_done = true;
+                }
             }
             break;
             case city::AsyncTaskType::Cached:
             {
                 switch (task->cached_type)
                 {
-                    case AsyncTaskType::Osm:
-                    {
-                        task_done = true;
-                        city->osm_task_done = true;
-                        INFO_LOG("Osm cached state loaded");
-                    };
-                    break;
                     case AsyncTaskType::Neta:
                     {
                         task_done = true;
@@ -215,7 +197,6 @@ city_update(City* city, async::ThreadPool* thread_pool, RoadOverlayOption neta_o
     {
         city->road_building_started = true;
         DEBUG_LOG("City building work has been schedule");
-
         async::AsyncTaskStatus<Road>* road_building_task = async::async_task_run(thread_pool, road_build, &city->road, S("Road Building Task"));
         AsyncCityTask* road_task_list_elem = PushStruct(city->arena, AsyncCityTask);
         road_task_list_elem->type = AsyncTaskType::Road;
@@ -223,13 +204,13 @@ city_update(City* city, async::ThreadPool* thread_pool, RoadOverlayOption neta_o
         DLLPushBack(city->task_list.first, city->task_list.last, road_task_list_elem);
     }
 
-    if (city->osm_task_done && city->neta_task_done)
+    if (city->osm_task_done)
     {
-        osm::RoadEdge** edge_ptr = map_get(&osm::g_network->edge_structure.edge_map, (S64)hovered_object_id);
+        osm::RoadEdge** edge_ptr = map_get(&city->road.osm_network->edge_structure.edge_map, (S64)hovered_object_id);
         if (edge_ptr)
         {
             osm::RoadEdge* edge = *edge_ptr;
-            osm::WayNode* way_node = osm::way_find(edge->way_id);
+            osm::WayNode* way_node = osm::way_find(city->road.osm_network, edge->way_id);
             osm::Way* way = &way_node->way;
 
             bool open = true;
@@ -253,7 +234,10 @@ city_update(City* city, async::ThreadPool* thread_pool, RoadOverlayOption neta_o
 
             ImGui::End();
         }
-        osm::WayNode* way_node = osm::way_find(hovered_object_id);
+    }
+    if (city->osm_task_done)
+    {
+        osm::WayNode* way_node = osm::way_find(city->road.osm_network, hovered_object_id);
         if (way_node)
         {
             osm::Way* way = &way_node->way;
@@ -279,88 +263,88 @@ city_update(City* city, async::ThreadPool* thread_pool, RoadOverlayOption neta_o
     //
 
     // Update and render Cesium 3D Tiles ////////////
-    if (city->osm_task_done && city->neta_task_done)
-    {
-        cesium::TilesetRenderer* renderer = &city->cesium;
-        cesium::tileset_update_view(renderer, ctx->camera, framebuffer_dim, ctx->time->delta_time_sec);
+    cesium::TilesetRenderer* renderer = &city->cesium;
+    cesium::tileset_update_view(renderer, ctx->camera, framebuffer_dim, ctx->time->delta_time_sec);
 
-        bool overlay_option_changed = neta_overlay_option != city->road.overlay_option_cur;
+    bool overlay_option_changed = neta_overlay_option != city->road.overlay_option_cur;
+    if (city->road_building_done)
+    {
+        city->road.overlay_option_cur = neta_overlay_option;
+    }
+    for (cesium::TileRenderData* tile = renderer->tile_to_show.first; tile; tile = tile->render_next)
+    {
         if (city->road_building_done)
         {
-            city->road.overlay_option_cur = neta_overlay_option;
-        }
-        for (cesium::TileRenderData* tile = renderer->tile_to_show.first; tile; tile = tile->render_next)
-        {
-            if (city->road_building_done)
+            if (tile->compute_scheduled == false || overlay_option_changed)
             {
-                if (tile->compute_scheduled == false || overlay_option_changed)
-                {
-                    tile->compute_scheduled = draw::draw_road_intersection_compute(tile->render_data.vertex_buffer_handle, tile->render_data.index_buffer_handle, city->road.segment_buffer_handle,
-                                                                                   city->road.segment_node_buffer_handle, neta_overlay_option);
-                }
+                tile->compute_scheduled = draw::draw_road_intersection_compute(tile->render_data.vertex_buffer_handle, tile->render_data.index_buffer_handle, city->road.segment_buffer_handle,
+                                                                               city->road.segment_node_buffer_handle, neta_overlay_option);
             }
-            render::Handle colormap_handle = city->road.overlay_option_cur ? city->road.colormap_handle : city->road.zero_colormap_handle;
-
-            if (tile->render_data.is_map_tile)
-            {
-                F32 border_offset_lon_m = 50;
-                F32 border_offset_lat_m = 50;
-                CesiumGeospatial::Cartographic bbox_min_cartographic(glm::radians(city->bbox.min.x), glm::radians(city->bbox.min.y), 0);
-                CesiumGeospatial::Cartographic bbox_max_cartographic(glm::radians(city->bbox.max.x), glm::radians(city->bbox.max.y), 0);
-
-                glm::dvec3 bbox_min_ecef = CesiumGeospatial::Ellipsoid::WGS84.cartographicToCartesian(bbox_min_cartographic);
-                glm::dvec3 bbox_max_ecef = CesiumGeospatial::Ellipsoid::WGS84.cartographicToCartesian(bbox_max_cartographic);
-
-                glm::dvec4 bbox_min_local = city->cesium.ecef_to_local * glm::dvec4(bbox_min_ecef, 1.0);
-                glm::dvec4 bbox_max_local = city->cesium.ecef_to_local * glm::dvec4(bbox_max_ecef, 1.0);
-
-                border_offset_lon_m = Min((bbox_max_local.x - bbox_min_local.x) * 0.5, border_offset_lon_m);
-                border_offset_lat_m = Min((bbox_max_local.y - bbox_min_local.y) * 0.5, border_offset_lat_m);
-                tile->render_data.bbox_min = {.x = (F32)bbox_min_local.x + border_offset_lon_m, .y = (F32)bbox_min_local.y + border_offset_lat_m};
-                tile->render_data.bbox_max = {.x = (F32)bbox_max_local.x - border_offset_lon_m, .y = (F32)bbox_max_local.y - border_offset_lat_m};
-                tile->render_data.depth_bias = 100;
-                tile->render_data.height_offset = -renderer->height_offset;
-            }
-            draw::draw_model_3d(tile->render_data, colormap_handle);
         }
+        render::Handle colormap_handle = city->road.overlay_option_cur ? city->road.colormap_handle : city->road.zero_colormap_handle;
 
-        if (city->cars_creation_started == false && city->osm_task_done)
+        if (tile->render_data.is_map_tile && city_config->bbox_clipping_enabled)
         {
-            Arena* arena = arena_alloc();
-            CarSim* car_sim = &city->car_sim;
-            car_sim->arena = arena;
-            car_sim->asset_dir = push_str8_copy(arena, ctx->data_subdirs.data[dt_DataDirType::Assets]);
-            car_sim->texture_dir = push_str8_copy(arena, ctx->data_subdirs.data[dt_DataDirType::Texture]);
-            car_sim->texture_path = str8_path_from_str8_list(car_sim->arena, {car_sim->texture_dir, S("car_collection.ktx2")});
-            car_sim->car_count = 100;
-            async::AsyncTaskStatus<CarSim>* car_sim_task = async::async_task_run(ctx->thread_pool, car_sim_build, car_sim, S("Car Sim Task"));
+            F32 border_offset_lon_m = 50;
+            F32 border_offset_lat_m = 50;
+            CesiumGeospatial::Cartographic bbox_min_cartographic(glm::radians(city->bbox.min.x), glm::radians(city->bbox.min.y), 0);
+            CesiumGeospatial::Cartographic bbox_max_cartographic(glm::radians(city->bbox.max.x), glm::radians(city->bbox.max.y), 0);
 
-            AsyncCityTask* car_sim_task_list_elem = PushStruct(arena, AsyncCityTask);
-            car_sim_task_list_elem->type = AsyncTaskType::CarSim;
-            car_sim_task_list_elem->car_sim = car_sim_task;
-            DLLPushBack(city->task_list.first, city->task_list.last, car_sim_task_list_elem);
+            glm::dvec3 bbox_min_ecef = CesiumGeospatial::Ellipsoid::WGS84.cartographicToCartesian(bbox_min_cartographic);
+            glm::dvec3 bbox_max_ecef = CesiumGeospatial::Ellipsoid::WGS84.cartographicToCartesian(bbox_max_cartographic);
 
-            city->cars_creation_started = true;
+            glm::dvec4 bbox_min_local = city->cesium.ecef_to_local * glm::dvec4(bbox_min_ecef, 1.0);
+            glm::dvec4 bbox_max_local = city->cesium.ecef_to_local * glm::dvec4(bbox_max_ecef, 1.0);
+
+            border_offset_lon_m = Min((bbox_max_local.x - bbox_min_local.x) * 0.5, border_offset_lon_m);
+            border_offset_lat_m = Min((bbox_max_local.y - bbox_min_local.y) * 0.5, border_offset_lat_m);
+            tile->render_data.bbox_min = {.x = (F32)bbox_min_local.x + border_offset_lon_m, .y = (F32)bbox_min_local.y + border_offset_lat_m};
+            tile->render_data.bbox_max = {.x = (F32)bbox_max_local.x - border_offset_lon_m, .y = (F32)bbox_max_local.y - border_offset_lat_m};
+            tile->render_data.depth_bias = 100;
+            tile->render_data.height_offset = -renderer->height_offset;
         }
+        draw::draw_model_3d(tile->render_data, colormap_handle);
+    }
 
-        /// car simulation rendering
-        if (city->cars_creation_done)
+    if (city->cars_creation_started == false && city->osm_task_done)
+    {
+        Arena* arena = arena_alloc();
+        CarSim* car_sim = &city->car_sim;
+        car_sim->arena = arena;
+        car_sim->network = city->road.osm_network;
+        car_sim->asset_dir = push_str8_copy(arena, ctx->data_subdirs.data[dt_DataDirType::Assets]);
+        car_sim->texture_dir = push_str8_copy(arena, ctx->data_subdirs.data[dt_DataDirType::Texture]);
+        car_sim->texture_path = str8_path_from_str8_list(car_sim->arena, {car_sim->texture_dir, S("car_collection.ktx2")});
+        car_sim->car_count = 100;
+        async::AsyncTaskStatus<CarSim>* car_sim_task = async::async_task_run(ctx->thread_pool, car_sim_build, car_sim, S("Car Sim Task"));
+
+        AsyncCityTask* car_sim_task_list_elem = PushStruct(arena, AsyncCityTask);
+        car_sim_task_list_elem->type = AsyncTaskType::CarSim;
+        car_sim_task_list_elem->car_sim = car_sim_task;
+        DLLPushBack(city->task_list.first, city->task_list.last, car_sim_task_list_elem);
+
+        city->cars_creation_started = true;
+    }
+
+    /// car simulation rendering
+    if (city->cars_creation_done)
+    {
+        Buffer<render::Model3DInstance> instance_buffer = car_sim_update(draw::draw_frame_arena_get(), &city->car_sim, ctx->time->delta_time_sec, city->cesium.ecef_to_local);
+
+        // instance buffer offset alignment and assignment
+        render::BufferInfo instance_buffer_info = render::BufferInfo(instance_buffer, render::BufferType_Vertex | render::BufferType_StorageBuffer);
+        draw::CarInstanceRenderAddResult car_render = draw::draw_car_instance_render(city->car_sim.vertex_handle, city->car_sim.index_handle, city->car_sim.texture_handle, &instance_buffer_info);
+
+        if (car_render.queued)
         {
-            Buffer<render::Model3DInstance> instance_buffer = car_sim_update(draw::draw_frame_arena_get(), &city->car_sim, ctx->time->delta_time_sec, city->cesium.ecef_to_local);
-
-            // instance buffer offset alignment and assignment
-            render::BufferInfo instance_buffer_info = render::BufferInfo(instance_buffer, render::BufferType_Vertex | render::BufferType_StorageBuffer);
-            draw::CarInstanceRenderAddResult car_render = draw::draw_car_instance_render(city->car_sim.vertex_handle, city->car_sim.index_handle, city->car_sim.texture_handle, &instance_buffer_info);
-
-            if (car_render.queued)
+            for (cesium::TileRenderData* tile = renderer->tile_to_show.first; tile; tile = tile->render_next)
             {
-                for (cesium::TileRenderData* tile = renderer->tile_to_show.first; tile; tile = tile->render_next)
+                bool map_tile_reference = tile->render_data.is_map_tile && (city_config->custom_geometry_enabled == false);
+                bool custom_geometry_reference = (tile->render_data.is_map_tile == false) && city_config->custom_geometry_enabled;
+                if (map_tile_reference || custom_geometry_reference)
                 {
-                    if (!tile->render_data.is_map_tile)
-                    {
-                        draw::draw_car_instance_compute(&instance_buffer_info, tile->render_data.vertex_buffer_handle, tile->render_data.index_buffer_handle, -city->car_sim.car_center_offset.min,
-                                                        car_render.instance_buffer_offset);
-                    }
+                    draw::draw_car_instance_compute(&instance_buffer_info, tile->render_data.vertex_buffer_handle, tile->render_data.index_buffer_handle, -city->car_sim.car_center_offset.min,
+                                                    car_render.instance_buffer_offset);
                 }
             }
         }
@@ -370,9 +354,11 @@ city_update(City* city, async::ThreadPool* thread_pool, RoadOverlayOption neta_o
 g_internal void
 city_release(City* city)
 {
-    _city_release_handles(city);
-    arena_release(city->road.arena);
-    arena_release(city->car_sim.arena);
+    road_destroy(&city->road);
+    cesium::tileset_renderer_destroy(&city->cesium);
+    car_sim_destroy(&city->car_sim);
+
+    arena_release(city->neta_state->arena);
     arena_release(city->arena);
 }
 
@@ -387,17 +373,15 @@ road_build(async::ThreadInfo info, async::AsyncTaskStatus<Road>* status)
     render::thread_cmd_buffer_record(thread_ctx);
     defer({ render::thread_cmd_buffer_end(thread_ctx); });
 
-    osm::g_network->neta_edge_map = neta::osm_way_to_edges_map_create(road->arena, road->netascore_file_path, road->bbox);
-    if (!osm::g_network->neta_edge_map)
-    {
-        exit_with_error("Failed to initialize neta");
-    }
-    road->road_info_map = city::road_info_from_edge_id(road->arena, osm::g_network->edge_structure.edges, osm::g_network->neta_edge_map);
+    Map<S64, neta::EdgeList>* neta_edge_map = neta::osm_way_to_edges_map_create(road->arena, road->osm_network, road->netascore_file_path, road->bbox);
+
+    road->road_info_map = city::road_info_from_edge_id(road->arena, road->osm_network, road->osm_network->edge_structure.edges, neta_edge_map);
 
     road->colormap_handle = render::colormap_load_sync(thread_ctx, &road->colormap_sampler, g_colormap_inferno, sizeof(g_colormap_inferno));
     ////////////////////////////////////////
     // build road buffers
-    road->road_build_result = city::road_segment_build(road->arena, osm::g_network->edge_structure.edges, road->default_road_width, road->road_height, road->ecef_to_local, road->road_info_map);
+    road->road_build_result =
+        city::road_segment_build(road->arena, road->osm_network, road->osm_network->edge_structure.edges, road->default_road_width, road->road_height, road->ecef_to_local, road->road_info_map);
     render::BufferInfo road_segment_buffer_info = render::BufferInfo(road->road_build_result.bvh_result.road_segment_buffer_sorted, render::BufferType_StorageBuffer);
     road->segment_buffer_handle = render::buffer_load_sync(thread_ctx, &road_segment_buffer_info);
     render::BufferInfo road_segment_node_buffer_info = render::BufferInfo(road->road_build_result.bvh_result.node_buffer, render::BufferType_StorageBuffer);
@@ -432,6 +416,9 @@ road_destroy(Road* road)
     render::handle_destroy(road->zero_colormap_handle);
     render::handle_destroy_deferred(road->segment_buffer_handle);
     render::handle_destroy_deferred(road->segment_node_buffer_handle);
+
+    osm::osm_release(road->osm_network);
+    arena_release(road->arena);
 }
 
 g_internal void
@@ -742,7 +729,8 @@ bvh_create(Arena* arena, Buffer<RoadSegmentCorners> road_segment_buffer, U32 lea
 }
 
 g_internal city::RoadBuildResult
-road_segment_build(Arena* arena, Buffer<osm::RoadEdge> edge_buffer, F32 default_road_width, F32 road_height, glm::dmat4& ecef_to_local, Map<osm::EdgeId, RoadInfo>* road_info_map)
+road_segment_build(Arena* arena, osm::Network* network, Buffer<osm::RoadEdge> edge_buffer, F32 default_road_width, F32 road_height, glm::dmat4& ecef_to_local,
+                   Map<osm::EdgeId, RoadInfo>* road_info_map)
 {
     prof_scope_marker;
     ScratchScope scratch = ScratchScope(0, 0);
@@ -757,9 +745,9 @@ road_segment_build(Arena* arena, Buffer<osm::RoadEdge> edge_buffer, F32 default_
     {
         osm::RoadEdge* edge = edge_buffer[i];
 
-        osm::EcefLocation start_node = osm::location_get(edge->node_id_from);
-        osm::EcefLocation end_node = osm::location_get(edge->node_id_to);
-        osm::WayNode* way_node = osm::way_find(edge->way_id);
+        osm::EcefLocation start_node = osm::location_get(network, edge->node_id_from);
+        osm::EcefLocation end_node = osm::location_get(network, edge->node_id_to);
+        osm::WayNode* way_node = osm::way_find(network, edge->way_id);
         osm::Way* way = &way_node->way;
 
         F32 road_width = tag_value_get(scratch.arena, S("width"), default_road_width, way->tags);
@@ -770,8 +758,8 @@ road_segment_build(Arena* arena, Buffer<osm::RoadEdge> edge_buffer, F32 default_
         osm::RoadEdge* prev_edge = edge->prev;
         if (prev_edge)
         {
-            osm::EcefLocation start_node_prev = osm::location_get(prev_edge->node_id_from);
-            osm::EcefLocation end_node_prev = osm::location_get(prev_edge->node_id_to);
+            osm::EcefLocation start_node_prev = osm::location_get(network, prev_edge->node_id_from);
+            osm::EcefLocation end_node_prev = osm::location_get(network, prev_edge->node_id_to);
             RoadSegment road_segment_prev;
             road_segment_from_road_nodes(&road_segment_prev, start_node_prev, end_node_prev, road_width);
             road_segments_coalesce(&road_segment_prev, &road_segment, road_width);
@@ -780,8 +768,8 @@ road_segment_build(Arena* arena, Buffer<osm::RoadEdge> edge_buffer, F32 default_
         osm::RoadEdge* next_edge = edge->next;
         if (next_edge)
         {
-            osm::EcefLocation start_node_next = osm::location_get(next_edge->node_id_from);
-            osm::EcefLocation end_node_next = osm::location_get(next_edge->node_id_to);
+            osm::EcefLocation start_node_next = osm::location_get(network, next_edge->node_id_from);
+            osm::EcefLocation end_node_next = osm::location_get(network, next_edge->node_id_to);
             RoadSegment road_segment_next;
             road_segment_from_road_nodes(&road_segment_next, start_node_next, end_node_next, road_width);
             road_segments_coalesce(&road_segment, &road_segment_next, road_width);
@@ -899,11 +887,11 @@ car_center_height_offset(Buffer<gltfw_Vertex3D> vertices)
 }
 
 g_internal osm::EcefLocation
-random_ecef_road_node_get()
+random_ecef_road_node_get(osm::Network* network)
 {
-    osm::NodeId node_id = osm::random_node_id_from_type_get(osm::WayType::Highway);
+    osm::NodeId node_id = osm::random_node_id_from_type_get(network, osm::WayType::Highway);
     Assert(node_id != 0);
-    osm::EcefLocation node_loc = osm::location_get(node_id);
+    osm::EcefLocation node_loc = osm::location_get(network, node_id);
     return node_loc;
 }
 
@@ -935,10 +923,10 @@ cars_create(CarSim* car_sim)
 
     for (U32 i = 0; i < car_sim->car_count; ++i)
     {
-        osm::EcefLocation source_loc = city::random_ecef_road_node_get();
-        osm::Node* source_node = osm::node_get(source_loc.id);
-        osm::Node* target_node = osm::random_neighbour_node_get(source_node);
-        osm::EcefLocation target_loc = osm::location_get(target_node->id);
+        osm::EcefLocation source_loc = city::random_ecef_road_node_get(car_sim->network);
+        osm::Node* source_node = osm::node_get(car_sim->network, source_loc.id);
+        osm::Node* target_node = osm::random_neighbour_node_get(car_sim->network, source_node);
+        osm::EcefLocation target_loc = osm::location_get(car_sim->network, target_node->id);
         city::Car* car = &car_sim->cars.data[i];
         car->source_loc = source_loc;
         car->target_loc = target_loc;
@@ -955,6 +943,8 @@ car_sim_destroy(CarSim* car_sim)
     render::handle_destroy(car_sim->vertex_handle);
     render::handle_destroy(car_sim->index_handle);
     render::handle_destroy(car_sim->texture_handle);
+
+    arena_release(car_sim->arena);
 }
 
 g_internal Buffer<render::Model3DInstance>
@@ -990,8 +980,8 @@ car_sim_update(Arena* arena, CarSim* car, F64 time_delta, glm::dmat4& ecef_to_lo
         // direction.
         if (dist_src_to_new_pos > dist_src_to_target)
         {
-            osm::Node* node = osm::random_neighbour_node_get(car_info->target_loc.id);
-            osm::EcefLocation new_target_loc = osm::location_get(node->id);
+            osm::Node* node = osm::random_neighbour_node_get(car->network, car_info->target_loc.id);
+            osm::EcefLocation new_target_loc = osm::location_get(car->network, node->id);
             Vec3F64 new_dir = normalize_3f64(sub_3f64(new_target_loc.pos, new_pos_3d));
             car_info->dir = new_dir;
             car_info->source_loc = car_info->target_loc;
@@ -1109,10 +1099,9 @@ AreTwoConnectedLineSegmentsCollinear(Vec2F64 prev, Vec2F64 cur, Vec2F64 next)
 }
 
 g_internal void
-buildings_buffers_create(Arena* arena, F32 road_height, glm::dmat4& ecef_to_local, BuildingRenderInfo* out_render_info)
+buildings_buffers_create(Arena* arena, osm::Network* osm_network, F32 road_height, glm::dmat4& ecef_to_local, BuildingRenderInfo* out_render_info)
 {
     prof_scope_marker;
-    osm::Network* osm_network = osm::g_network;
     ScratchScope scratch = ScratchScope(&arena, 1);
     Buffer<osm::Way> ways = osm_network->ways_arr[enum_idx(osm::WayType::Building)];
     F32 building_height = 3;
@@ -1151,8 +1140,8 @@ buildings_buffers_create(Arena* arena, F32 road_height, glm::dmat4& ecef_to_loca
             // ~mgj: Add Vertices and Indices for the sides of building
             for (U32 node_idx = 0, vert_idx = base_vertex_idx, index_idx = base_index_idx; node_idx < way->node_count - 1; node_idx++, vert_idx += 4, index_idx += 6)
             {
-                osm::EcefLocation node_loc = osm::location_get(way->node_ids[node_idx]);
-                osm::EcefLocation next_node_loc = osm::location_get(way->node_ids[node_idx + 1]);
+                osm::EcefLocation node_loc = osm::location_get(osm_network, way->node_ids[node_idx]);
+                osm::EcefLocation next_node_loc = osm::location_get(osm_network, way->node_ids[node_idx + 1]);
 
                 glm::vec3 local_pos = glm::vec3(ecef_to_local * glm::dvec4(node_loc.pos.x, node_loc.pos.y, node_loc.pos.z, 1.0));
                 glm::vec3 local_next_pos = glm::vec3(ecef_to_local * glm::dvec4(next_node_loc.pos.x, next_node_loc.pos.y, next_node_loc.pos.z, 1.0));
@@ -1190,7 +1179,7 @@ buildings_buffers_create(Arena* arena, F32 road_height, glm::dmat4& ecef_to_loca
             Buffer<osm::EcefLocation> buildings_utm_node_buffer = buffer_alloc<osm::EcefLocation>(scratch.arena, way->node_count - 1);
             for (U32 idx = 0; idx < way->node_count - 1; idx += 1)
             {
-                buildings_utm_node_buffer.data[idx] = osm::location_get(way->node_ids[idx]);
+                buildings_utm_node_buffer.data[idx] = osm::location_get(osm_network, way->node_ids[idx]);
             }
 
             // ~mgj: ignore collinear line segments
@@ -1268,7 +1257,7 @@ buildings_buffers_create(Arena* arena, F32 road_height, glm::dmat4& ecef_to_loca
 }
 
 g_internal void
-buildings_build(City* city, render::SamplerInfo* sampler_info, glm::dmat4& ecef_to_local, F32 road_height)
+buildings_build(City* city, osm::Network* osm_network, render::SamplerInfo* sampler_info, glm::dmat4& ecef_to_local, F32 road_height)
 {
     Buildings* buildings = &city->buildings;
 
@@ -1276,7 +1265,7 @@ buildings_build(City* city, render::SamplerInfo* sampler_info, glm::dmat4& ecef_
     render::Handle roof_texture_handle = render::texture_load_async(sampler_info, buildings->roof_texture_path);
 
     city::BuildingRenderInfo render_info;
-    city::buildings_buffers_create(city->arena, road_height, ecef_to_local, &render_info);
+    city::buildings_buffers_create(city->arena, osm_network, road_height, ecef_to_local, &render_info);
     render::BufferInfo vertex_buffer_info = render::BufferInfo(render_info.vertex_buffer, render::BufferType_Vertex);
     render::BufferInfo index_buffer_info = render::BufferInfo(render_info.index_buffer, render::BufferType_Index);
 
@@ -1587,10 +1576,12 @@ str8_from_bbox(Arena* arena, Rng2F64 bbox)
 }
 
 g_internal void
-road_create(City* city, glm::dmat4& ecef_to_local, Road* in_out_road)
+road_create(City* city, Road* in_out_road, glm::dmat4& ecef_to_local, String8 area, String8 bbox_cache_str)
 {
     prof_scope_marker;
     ScratchScope scratch = ScratchScope(0, 0);
+
+    Context* ctx = dt_ctx_get();
 
     in_out_road->arena = arena_alloc();
     in_out_road->ecef_to_local = ecef_to_local;
@@ -1607,18 +1598,22 @@ road_create(City* city, glm::dmat4& ecef_to_local, Road* in_out_road)
         .address_mode_u = render::SamplerAddressMode_MirroredRepeat,
         .address_mode_v = render::SamplerAddressMode_ClampToEdge,
     };
+    U64 node_hashmap_size = 1000;
+    U64 way_hashmap_size = 100;
+    in_out_road->osm_network = osm::osm_init(node_hashmap_size, way_hashmap_size, ctx->data_subdirs.data[dt_DataDirType::Cache], area, bbox_cache_str);
+
     in_out_road->zero_colormap_handle = render::colormap_load_async(&in_out_road->colormap_sampler, zero_arr, colormap_byte_size);
 }
 
 g_internal Map<osm::EdgeId, RoadInfo>*
-road_info_from_edge_id(Arena* arena, Buffer<osm::RoadEdge> road_edge_buf, Map<S64, neta::EdgeList>* neta_edge_map)
+road_info_from_edge_id(Arena* arena, osm::Network* network, Buffer<osm::RoadEdge> road_edge_buf, Map<S64, neta::EdgeList>* neta_edge_map)
 {
     prof_scope_marker;
     Map<osm::EdgeId, RoadInfo>* road_info_map = map_create<osm::EdgeId, RoadInfo>(arena, 1024);
 
     for (osm::RoadEdge& edge : road_edge_buf)
     {
-        neta::Edge* neta_edge = edge_from_road_edge(&edge, neta_edge_map);
+        neta::Edge* neta_edge = edge_from_road_edge(network, &edge, neta_edge_map);
         if (neta_edge)
         {
             RoadInfo info = {};
@@ -1634,13 +1629,13 @@ road_info_from_edge_id(Arena* arena, Buffer<osm::RoadEdge> road_edge_buf, Map<S6
 }
 
 g_internal neta::Edge*
-edge_from_road_edge(osm::RoadEdge* road_edge, Map<osm::WayId, neta::EdgeList>* edge_list_map)
+edge_from_road_edge(osm::Network* network, osm::RoadEdge* road_edge, Map<osm::WayId, neta::EdgeList>* edge_list_map)
 {
     S64 from_id = road_edge->node_id_from;
     S64 to_id = road_edge->node_id_to;
 
-    osm::WgsLocation from_node_loc = osm::wgs_location_get(from_id);
-    osm::WgsLocation to_node_loc = osm::wgs_location_get(to_id);
+    osm::WgsLocation from_node_loc = osm::wgs_location_get(network, from_id);
+    osm::WgsLocation to_node_loc = osm::wgs_location_get(network, to_id);
     Vec2F64 from_node_coord = vec_2f64(from_node_loc.lon, from_node_loc.lat);
     Vec2F64 to_node_coord = vec_2f64(to_node_loc.lon, to_node_loc.lat);
 

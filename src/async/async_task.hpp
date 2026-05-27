@@ -60,7 +60,7 @@ _async_task_status_create(String8 name);
 
 template <typename T>
 g_internal bool
-async_task_is_done(AsyncTaskStatus<T>* task, T** out_result);
+async_task_is_done(AsyncTaskStatus<T>* task, T** out_result, B32* out_success = nullptr);
 
 template <typename T>
 g_internal AsyncTaskStatus<T>*

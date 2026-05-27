@@ -452,6 +452,12 @@ _write_data_complete(ThreadInfo thread_info, AsyncTaskStatus<T>* task_status)
             return {};
         }
 
+        if (user_result.successful && user_result.next_task.func)
+        {
+            AsyncTaskContinuation<T> continuation = {.func = user_result.next_task.func, .us_delay = user_result.next_task.us_delay};
+            return continuation;
+        }
+
         next_http_info = user_result.http_info;
         if (next_http_info != 0)
         {
