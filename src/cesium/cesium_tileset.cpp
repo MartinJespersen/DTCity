@@ -990,15 +990,17 @@ g_internal void
 _height_offset_sample_async(TilesetRenderer* renderer, CesiumGeospatial::Cartographic center_position)
 {
     std::vector<CesiumAsync::Future<Cesium3DTilesSelection::SampleHeightResult>> height_futures;
-    height_futures.emplace_back(renderer->tileset[0]->sampleHeightMostDetailed({center_position}));
-    height_futures.emplace_back(renderer->tileset[1]->sampleHeightMostDetailed({center_position}));
+    for (U64 i = 0; i < renderer->tilesets.size; ++i)
+    {
+        height_futures.emplace_back(renderer->tilesets.data[i]->sampleHeightMostDetailed({center_position}));
+    }
 
     renderer->async_system.all(std::move(height_futures))
         .thenInMainThread(
             [renderer, center_position](std::vector<Cesium3DTilesSelection::SampleHeightResult>&& results)
             {
-                F64 geometry_height = _sample_height_from_result(results[0], "geometry");
-                F64 terrain_height = _sample_height_from_result(results[1], "terrain");
+                F64 terrain_height = _sample_height_from_result(results[0], "terrain");
+                F64 geometry_height = _sample_height_from_result(results[1], "geometry");
 
                 B32 geometry_ok = results[0].sampleSuccess.size() > 0 && results[0].sampleSuccess[0];
                 B32 terrain_ok = results[1].sampleSuccess.size() > 0 && results[1].sampleSuccess[0];
@@ -1016,13 +1018,9 @@ _height_offset_sample_async(TilesetRenderer* renderer, CesiumGeospatial::Cartogr
 }
 
 g_internal void
-tileset_renderer_create(Arena* arena, TilesetRenderer* in_out_cesium, async::ThreadPool* threads, String8 url, F64 origin_longitude, F64 origin_latitude, F64 origin_height)
+tileset_renderer_create(Arena* arena, TilesetRenderer* in_out_cesium, async::ThreadPool* threads, String8 url, F64 origin_longitude, F64 origin_latitude, F64 origin_height,
+                        bool custom_geometry_enabled)
 {
-    TilesetRendererCreateContext create_context = _tileset_renderer_create_context(arena, in_out_cesium, threads, origin_longitude, origin_latitude, origin_height);
-
-    // Create the tileset for custom geometry
-    create_context.renderer->tileset[0] = new Cesium3DTilesSelection::Tileset(create_context.externals, (const char*)url.str, create_context.options);
-
     // create terrain from cesium ion for non custom geometry outside the specified bounding box
     ScratchScope scratch = ScratchScope(&arena, 1);
     String8 ion_access_token = {};
@@ -1042,16 +1040,30 @@ tileset_renderer_create(Arena* arena, TilesetRenderer* in_out_cesium, async::Thr
         }
     }
 
+    // setup tilesets
+    TilesetRendererCreateContext create_context = _tileset_renderer_create_context(arena, in_out_cesium, threads, origin_longitude, origin_latitude, origin_height);
+
+    U32 tileset_count = 1;
+    if (custom_geometry_enabled)
+    {
+        tileset_count = 2;
+    }
+    create_context.renderer->tilesets = buffer_alloc<Cesium3DTilesSelection::Tileset*>(arena, tileset_count);
+
     bool is_map_tile = true;
     create_context.options.rendererOptions = is_map_tile;
-    create_context.renderer->tileset[1] = new Cesium3DTilesSelection::Tileset(create_context.externals, ion_terrain_asset_id, _std_string_from_str8(ion_access_token), create_context.options);
-    _ion_raster_overlay_example_add_if_present(create_context.renderer->tileset[1]);
+    create_context.renderer->tilesets.data[0] = new Cesium3DTilesSelection::Tileset(create_context.externals, ion_terrain_asset_id, _std_string_from_str8(ion_access_token), create_context.options);
+    _ion_raster_overlay_example_add_if_present(create_context.renderer->tilesets.data[0]);
 
-    // sample the height_offset between the custom geometry tileset[0] surface and
-    // the cesium ion terrain tileset[1] surface at the city center. height_offset
-    // stays zero (ZII, no shift) until the first successful sample resolves.
-    CesiumGeospatial::Cartographic center_position(glm::radians(origin_longitude), glm::radians(origin_latitude), 0.0);
-    _height_offset_sample_async(create_context.renderer, center_position);
+    // Create the tileset for custom geometry
+    if (create_context.renderer->tilesets.size > 1)
+    {
+        is_map_tile = false;
+        create_context.options.rendererOptions = is_map_tile;
+        create_context.renderer->tilesets.data[1] = new Cesium3DTilesSelection::Tileset(create_context.externals, (const char*)url.str, create_context.options);
+        CesiumGeospatial::Cartographic center_position(glm::radians(origin_longitude), glm::radians(origin_latitude), 0.0);
+        _height_offset_sample_async(create_context.renderer, center_position);
+    }
 }
 
 g_internal void
@@ -1099,15 +1111,15 @@ tileset_renderer_destroy(TilesetRenderer* renderer)
         // stop the recurring height sampler before tearing down the tilesets
         renderer->height_sample_stop = true;
 
-        for (U32 i = 0; i < ArrayCount(renderer->tileset); ++i)
+        for (U32 i = 0; i < renderer->tilesets.size; ++i)
         {
-            if (renderer->tileset[i]->waitForAllLoadsToComplete(max_f32) == false)
+            if (renderer->tilesets.data[i]->waitForAllLoadsToComplete(max_f32) == false)
             {
                 DEBUG_LOG("Failed to wait for all tile loads to complete");
             }
 
-            delete renderer->tileset[i];
-            renderer->tileset[i] = nullptr;
+            delete renderer->tilesets.data[i];
+            renderer->tilesets.data[i] = nullptr;
         }
 
         renderer->async_system.~AsyncSystem();
@@ -1126,6 +1138,24 @@ tileset_renderer_destroy(TilesetRenderer* renderer)
 //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 // Update and Rendering
 //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+// advances a renderer's async work without touching the view. used to keep
+// renderers that are not currently displayed making progress, so their raster
+// overlay tile providers and height-sample continuations finish creating in the
+// background. without this an inactive renderer is frozen until it becomes the
+// active one, which leaves overlays unmapped until the view is updated.
+g_internal void
+tileset_pump_async(TilesetRenderer* renderer)
+{
+    if (!renderer)
+        return;
+
+    renderer->async_system.dispatchMainThreadTasks();
+    for (U32 i = 0; i < renderer->tilesets.size; ++i)
+    {
+        renderer->tilesets.data[i]->loadTiles();
+    }
+}
 
 g_internal void
 tileset_update_view(TilesetRenderer* renderer, ui::Camera* camera, Vec2U32 viewport_size, F64 delta_time)
@@ -1158,7 +1188,6 @@ tileset_update_view(TilesetRenderer* renderer, ui::Camera* camera, Vec2U32 viewp
 
     // IMPORTANT: Dispatch main thread tasks to process completed async work
     // This calls prepareInMainThread for tiles that finished loading
-    renderer->async_system.dispatchMainThreadTasks();
 
     // Clear and rebuild the loaded tiles list
     renderer->tile_to_show = {};
@@ -1166,11 +1195,9 @@ tileset_update_view(TilesetRenderer* renderer, ui::Camera* camera, Vec2U32 viewp
     // Update the tileset view
     std::vector<Cesium3DTilesSelection::ViewState> views = {view_state};
     tileset_renderer_free_tile_ressource(renderer);
-    for (U32 i = 0; i < ArrayCount(renderer->tileset); ++i)
+    for (U32 i = 0; i < renderer->tilesets.size; ++i)
     {
-        const Cesium3DTilesSelection::ViewUpdateResult& result = renderer->tileset[i]->updateViewGroup(renderer->tileset[i]->getDefaultViewGroup(), views, (F32)delta_time);
-
-        renderer->tileset[i]->loadTiles();
+        const Cesium3DTilesSelection::ViewUpdateResult& result = renderer->tilesets.data[i]->updateViewGroup(renderer->tilesets.data[i]->getDefaultViewGroup(), views, (F32)delta_time);
 
         for (const Cesium3DTilesSelection::Tile* tile : result.tilesToRenderThisFrame)
         {

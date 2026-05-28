@@ -1,5 +1,5 @@
 # Urgent changes
-* Release and reset of city needs to be cleaned to enabling area switching
+* descriptor set idx run out when application is used for too long.
 * All vulkan load function should take in thread_ctx 
 * Some roads are not covered in NetAScore at certain LOD's.
 * Staged regression findings:

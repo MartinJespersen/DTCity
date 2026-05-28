@@ -12,7 +12,7 @@ city_init(City* city, String8 cache_path)
 }
 
 g_internal void
-city_build(City* city, Rng2F64 bbox, String8 tileset_url, String8 area)
+city_build(City* city, const CityInfo* city_config, Rng2F64 bbox, String8 tileset_url, String8 area)
 {
     ScratchScope scratch = ScratchScope(0, 0);
     Context* ctx = dt_ctx_get();
@@ -31,7 +31,7 @@ city_build(City* city, Rng2F64 bbox, String8 tileset_url, String8 area)
 
     // cesium init
     Vec2F64 bbox_center = {.x = (bbox.min.x + bbox.max.x) * 0.5, .y = (bbox.min.y + bbox.max.y) * 0.5};
-    cesium::tileset_renderer_create(city->arena, &city->cesium, ctx->thread_pool, tileset_url, bbox_center.x, bbox_center.y, 0.0);
+    cesium::tileset_renderer_create(city->arena, &city->cesium, ctx->thread_pool, tileset_url, bbox_center.x, bbox_center.y, 0.0, city_config->custom_geometry_enabled);
     CesiumGeospatial::Cartographic origin_cartographic(glm::radians(bbox_center.x), glm::radians(bbox_center.y), 0);
     CesiumGeospatial::LocalHorizontalCoordinateSystem* local_coord = new CesiumGeospatial::LocalHorizontalCoordinateSystem(
         origin_cartographic, CesiumGeospatial::LocalDirection::East, CesiumGeospatial::LocalDirection::North, CesiumGeospatial::LocalDirection::Up);
@@ -55,12 +55,12 @@ city_build(City* city, Rng2F64 bbox, String8 tileset_url, String8 area)
     DLLPushBack(city->task_list.first, city->task_list.last, neta_task);
 
     async::ThreadPool* thread_pool = dt_ctx_get()->thread_pool;
-    AsyncCityTask* osm_task_status = _cache_and_parse_osm_json(thread_pool, road, ctx->data_subdirs.data[dt_DataDirType::Cache], area);
+    AsyncCityTask* osm_task_status = _cache_and_parse_osm_json(thread_pool, road);
     DLLPushBack(city->task_list.first, city->task_list.last, osm_task_status);
 }
 
 g_internal AsyncCityTask*
-_cache_and_parse_osm_json(async::ThreadPool* thread_pool, Road* road, String8 cache_path, String8 cache_type)
+_cache_and_parse_osm_json(async::ThreadPool* thread_pool, Road* road)
 {
     ScratchScope scratch = ScratchScope(0, 0);
     osm::Network* osm_network = road->osm_network;

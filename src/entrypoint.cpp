@@ -227,19 +227,19 @@ dt_main_loop(void* ptr)
     Buffer<city::City> city_buf = buffer_alloc<city::City>(ctx->arena_main_permanent, ArrayCount(cities_info_arr));
     for (U32 i = 0; i < city_buf.size; ++i)
     {
-        const city::CityInfo* area = &cities_info_arr[i];
+        const city::CityInfo* city_config = &cities_info_arr[i];
         city::City* city = city_buf[i];
 
-        Rng2F64 bbox = util::wgs84_bbox_from_btm_right_corner(area->lon, area->lat, area->bbox_width_meters, area->bbox_height_meters);
+        Rng2F64 bbox = util::wgs84_bbox_from_btm_right_corner(city_config->lon, city_config->lat, city_config->bbox_width_meters, city_config->bbox_height_meters);
         city::city_init(city, ctx->data_subdirs.data[dt_DataDirType::Cache]);
         city->bbox = bbox;
-        city->tileset_url = area->tileset_path;
-        city::city_build(city, bbox, area->tileset_path, area->name);
+        city->tileset_url = city_config->tileset_path;
+        city::city_build(city, city_config, bbox, city_config->tileset_path, city_config->name);
         ////////////////////////////////////////////////////////
     }
 
     city::RoadOverlayOption neta_overlay_option = city::RoadOverlayOption_None;
-    S32 cur_area_option = 1;
+    S32 cur_area_option = 0;
     S32 area_option = cur_area_option;
 
     const city::CityInfo* city_info = &cities_info_arr[cur_area_option];
@@ -280,6 +280,14 @@ dt_main_loop(void* ptr)
             cur_area_option = area_option;
             city = city_buf[cur_area_option];
             city_info = &cities_info_arr[cur_area_option];
+        }
+
+        // keep inactive cities' tilesets making progress so their raster overlay
+        // tile providers finish creating in the background; the active city is
+        // pumped by city_update -> tileset_update_view
+        for (U32 i = 0; i < city_buf.size; ++i)
+        {
+            cesium::tileset_pump_async(&city_buf[i]->cesium);
         }
         city::city_update(city, ctx->thread_pool, neta_overlay_option, framebuffer_dim, city_info);
 

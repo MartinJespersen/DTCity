@@ -313,7 +313,7 @@ road_segment_build(Arena* arena, osm::Network* network, Buffer<osm::RoadEdge> ed
                    Map<osm::EdgeId, RoadInfo>* road_info_map);
 
 g_internal AsyncCityTask*
-_cache_and_parse_osm_json(async::ThreadPool* thread_pool, Road* road, String8 cache_path, String8 cache_type);
+_cache_and_parse_osm_json(async::ThreadPool* thread_pool, Road* road);
 g_internal void
 quad_to_buffer_add(RoadSegmentCorners* road_segment, Buffer<render::Vertex3DBlend> buffer, Buffer<U32> indices, U64 edge_id, F32 road_height, U32* cur_vertex_idx, U32* cur_index_idx);
 // ~mgj: Buildings
@@ -348,7 +348,7 @@ road_create(City* city, Road* in_out_road, glm::dmat4& ecef_to_local, String8 ar
 g_internal Map<osm::EdgeId, RoadInfo>*
 road_info_from_edge_id(Arena* arena, osm::Network* network, Buffer<osm::RoadEdge> road_edge_buf, Map<S64, neta::EdgeList>* neta_edge_map);
 g_internal void
-city_build(City* city, Rng2F64 bbox, String8 tileset_url, String8 area);
+city_build(City* city, const CityInfo* city_config, Rng2F64 bbox, String8 tileset_url, String8 area);
 g_internal void
 city_update(City* city, async::ThreadPool* thread_pool, RoadOverlayOption neta_overlay_option, Vec2U32 framebuffer_dim, const CityInfo* city_config);
 g_internal void
