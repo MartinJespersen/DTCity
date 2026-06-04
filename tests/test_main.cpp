@@ -18,6 +18,7 @@
 // test files
 #include "async/test_heap.cpp"
 #include "base/test_strings.cpp"
+#include "base/test_container.cpp"
 
 int
 App(int argc, char** argv)

@@ -20,6 +20,7 @@
 #include "base_strings.hpp"
 #include "base_thread_context.h"
 #include "container.hpp"
+#include "base_container.hpp"
 #include "cache.hpp"
 #include "base_lists.hpp"
 #include "debug_log.hpp"
