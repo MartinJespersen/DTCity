@@ -361,7 +361,7 @@ buffer_loading_thread(void* data, render::ThreadWorkerCmdCtx* thread_input)
             vkCmdCopyBuffer((VkCommandBuffer)thread_input->cmd_buffer, staging_buffer_alloc.buffer, asset_buffer->buffer_alloc.buffer, 1, &copy_region);
 
             asset_buffer->staging_buffer = staging_buffer_alloc;
-            asset_buffer->elem_size_in_bytes = buffer_info->type_size;
+            asset_buffer->item_byte_size = buffer_info->type_size;
             asset_buffer->elem_count = buffer_info->elem_count;
         }
         else
@@ -440,13 +440,14 @@ thread_main(async::ThreadInfo thread_info, async::WorkerData input)
     AssetManager* asset_manager = asset_manager_get();
 
     // ~mgj: Record the command buffer
-    thread_cmd_ctx->cmd_buffer = begin_command(asset_manager->device, &asset_manager->threaded_cmd_pools.data[thread_info.thread_id]);
+    AssetManagerCommandPool thread_cmd_pool = asset_manager_cmd_pool_get(asset_manager, thread_info.thread_id);
+    thread_cmd_ctx->cmd_buffer = begin_command(asset_manager->device, &thread_cmd_pool);
 
     Assert(thread_cmd_ctx->handles.count > 0);
     Assert(thread_cmd_ctx->loading_func || thread_cmd_ctx->user_data);
     thread_cmd_ctx->loading_func(thread_cmd_ctx->user_data, thread_cmd_ctx);
 
-    VK_CHECK_RESULT(vkEndCommandBuffer((VkCommandBuffer)thread_cmd_ctx->cmd_buffer));
+    end_command(&thread_cmd_pool, (VkCommandBuffer)thread_cmd_ctx->cmd_buffer);
 
     // ~mgj: Enqueue the command buffer
     asset_cmd_queue_item_enqueue(thread_info.thread_id, thread_cmd_ctx);
@@ -591,6 +592,7 @@ asset_manager_create(VkPhysicalDevice physical_device, VkDevice device, VkInstan
         asset_manager->threaded_cmd_pools.data[i].cmd_pool = command_pool_create(device, &cmd_pool_info);
         asset_manager->threaded_cmd_pools.data[i].mutex = OS_MutexAlloc();
     }
+    asset_manager->main_thread_cmd_pool = command_pool_create(device, &cmd_pool_info);
 
     asset_manager->cmd_wait_list = asset_manager_cmd_list_create();
     asset_manager->cmd_queue = asset_manager_cmd_queue_create();
@@ -656,6 +658,7 @@ asset_manager_destroy(AssetManager* asset_manager)
         vkDestroyCommandPool(asset_manager->device, asset_manager->threaded_cmd_pools.data[i].cmd_pool, 0);
         OS_MutexRelease(asset_manager->threaded_cmd_pools.data[i].mutex);
     }
+    vkDestroyCommandPool(asset_manager->device, asset_manager->main_thread_cmd_pool, 0);
 
     OS_MutexRelease(asset_manager->texture_mutex);
     OS_MutexRelease(asset_manager->buffer_mutex);
@@ -800,6 +803,46 @@ asset_manager_item_create(render::AssetItemList<T>* list, render::AssetItemList<
     return handle;
 }
 
+g_internal render::Handle
+asset_manager_buffer_allocation_create(render::ThreadWorkerCmdCtx* thread_ctx, render::BufferInfo* buffer_info, VmaAllocationCreateInfo vma_info)
+{
+    render::Handle handle = render::Handle::buffer_handle_create((render::BufferType)buffer_info->buffer_type);
+    render::handle_list_push(thread_ctx, handle);
+
+    VkBufferUsageFlags usage_flags = {};
+    U32 buffer_type = buffer_info->buffer_type;
+    if (buffer_type & render::BufferType_Vertex)
+        usage_flags |= VK_BUFFER_USAGE_VERTEX_BUFFER_BIT;
+    if (buffer_type & render::BufferType_Index)
+        usage_flags |= VK_BUFFER_USAGE_INDEX_BUFFER_BIT;
+    if (buffer_type & render::BufferType_Uniform)
+        usage_flags |= VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT;
+    if (buffer_type & render::BufferType_StorageBuffer)
+        usage_flags |= VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
+    Assert(usage_flags != 0);
+    vulkan::BufferAllocation buffer_alloc = _buffer_allocation_create(buffer_info->buffer.size, usage_flags | VK_BUFFER_USAGE_TRANSFER_DST_BIT, vma_info, "buffer_load_sync");
+
+    render::AssetItem<vulkan::BufferHandle>* asset_item = vulkan::asset_manager_buffer_item_get(handle);
+    vulkan::BufferHandle* asset_buffer = (vulkan::BufferHandle*)&asset_item->item;
+    asset_buffer->buffer_alloc = buffer_alloc;
+    asset_buffer->item_byte_size = buffer_info->type_size;
+    asset_buffer->elem_count = buffer_info->elem_count;
+
+    return handle;
+}
+
+g_internal vulkan::BufferAllocation
+asset_manager_buffer_from_staging(VkCommandBuffer cmd_buffer, render::BufferInfo* buffer_info, VkBuffer dest_buffer)
+{
+    vulkan::BufferAllocation staging_alloc = vulkan::staging_buffer_create(buffer_info->buffer.size);
+    vulkan::AssetManager* asset_manager = vulkan::asset_manager_get();
+    VK_CHECK_RESULT(vmaCopyMemoryToAllocation(asset_manager->allocator, buffer_info->buffer.data, staging_alloc.allocation, 0, buffer_info->buffer.size));
+    VkBufferCopy copy_region = {0};
+    copy_region.size = buffer_info->buffer.size;
+    vkCmdCopyBuffer(cmd_buffer, staging_alloc.buffer, dest_buffer, 1, &copy_region);
+    return staging_alloc;
+}
+
 static void
 asset_manager_cmd_done_check()
 {
@@ -811,9 +854,17 @@ asset_manager_cmd_done_check()
         if (result == VK_SUCCESS)
         {
             render::ThreadWorkerCmdCtx* thread_input = cmd_queue_item->thread_input;
-            os_mutex_scope(asset_manager->threaded_cmd_pools.data[cmd_queue_item->thread_id].mutex)
+            AssetManagerCommandPool cmd_pool = asset_manager_cmd_pool_get(asset_manager, cmd_queue_item->thread_id);
+            if (OS_HandleMatch(cmd_pool.mutex, OS_HandleIsZero()))
             {
-                vkFreeCommandBuffers(asset_manager->device, asset_manager->threaded_cmd_pools.data[cmd_queue_item->thread_id].cmd_pool, 1, (VkCommandBuffer*)&thread_input->cmd_buffer);
+                vkFreeCommandBuffers(asset_manager->device, cmd_pool.cmd_pool, 1, (VkCommandBuffer*)&thread_input->cmd_buffer);
+            }
+            else
+            {
+                os_mutex_scope(cmd_pool.mutex)
+                {
+                    vkFreeCommandBuffers(asset_manager->device, cmd_pool.cmd_pool, 1, (VkCommandBuffer*)&thread_input->cmd_buffer);
+                }
             }
 
             Assert(thread_input->handles.count > 0);
@@ -838,28 +889,67 @@ asset_manager_cmd_done_check()
     }
 }
 
+static AssetManagerCommandPool
+asset_manager_cmd_pool_get(AssetManager* asset_manager, U32 thread_id)
+{
+    AssetManagerCommandPool result = {};
+    if (thread_id == max_U32)
+    {
+        result.cmd_pool = asset_manager->main_thread_cmd_pool;
+    }
+    else
+    {
+        result = asset_manager->threaded_cmd_pools.data[thread_id];
+    }
+    return result;
+}
+
 static VkCommandBuffer
 begin_command(VkDevice device, AssetManagerCommandPool* threaded_cmd_pool)
 {
+    AssertAlways(threaded_cmd_pool->cmd_pool);
     VkCommandBufferAllocateInfo allocInfo{};
     allocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
     allocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
     allocInfo.commandPool = threaded_cmd_pool->cmd_pool;
     allocInfo.commandBufferCount = 1;
 
-    VkCommandBuffer commandBuffer;
-    os_mutex_scope(threaded_cmd_pool->mutex)
-    {
-        VK_CHECK_RESULT(vkAllocateCommandBuffers(device, &allocInfo, &commandBuffer));
-    }
-
     VkCommandBufferBeginInfo beginInfo{};
     beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
     beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
 
-    vkBeginCommandBuffer(commandBuffer, &beginInfo);
+    VkCommandBuffer commandBuffer;
+    if (OS_HandleMatch(threaded_cmd_pool->mutex, OS_HandleIsZero()))
+    {
+        VK_CHECK_RESULT(vkAllocateCommandBuffers(device, &allocInfo, &commandBuffer));
+        VK_CHECK_RESULT(vkBeginCommandBuffer(commandBuffer, &beginInfo));
+    }
+    else
+    {
+        os_mutex_scope(threaded_cmd_pool->mutex)
+        {
+            VK_CHECK_RESULT(vkAllocateCommandBuffers(device, &allocInfo, &commandBuffer));
+            VK_CHECK_RESULT(vkBeginCommandBuffer(commandBuffer, &beginInfo));
+        }
+    }
 
     return commandBuffer;
+}
+
+static void
+end_command(AssetManagerCommandPool* threaded_cmd_pool, VkCommandBuffer command_buffer)
+{
+    if (OS_HandleMatch(threaded_cmd_pool->mutex, OS_HandleIsZero()))
+    {
+        VK_CHECK_RESULT(vkEndCommandBuffer(command_buffer));
+    }
+    else
+    {
+        os_mutex_scope(threaded_cmd_pool->mutex)
+        {
+            VK_CHECK_RESULT(vkEndCommandBuffer(command_buffer));
+        }
+    }
 }
 
 static AssetManagerCmdQueue*
@@ -1068,7 +1158,7 @@ asset_manager_handle_free(render::Handle handle)
 
 //~mgj: Buffer Allocation Functions (VMA)
 static BufferAllocation
-buffer_allocation_create(VkDeviceSize size, VkBufferUsageFlags buffer_usage, VmaAllocationCreateInfo vma_info, const char* name)
+_buffer_allocation_create(VkDeviceSize size, VkBufferUsageFlags buffer_usage, VmaAllocationCreateInfo vma_info, const char* name)
 {
     AssetManager* asset_manager = asset_manager_get();
     BufferAllocation buffer = {};
@@ -1100,14 +1190,6 @@ buffer_destroy(BufferAllocation* buffer_allocation)
     }
 }
 
-static void
-buffer_mapped_destroy(BufferAllocationMapped* mapped_buffer)
-{
-    buffer_destroy(&mapped_buffer->buffer_alloc);
-    buffer_destroy(&mapped_buffer->staging_buffer_alloc);
-    arena_release(mapped_buffer->arena);
-}
-
 static BufferAllocation
 staging_buffer_create(VkDeviceSize size)
 {
@@ -1115,7 +1197,7 @@ staging_buffer_create(VkDeviceSize size)
     vma_staging_info.usage = VMA_MEMORY_USAGE_AUTO;
     vma_staging_info.flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT;
     vma_staging_info.requiredFlags = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT;
-    BufferAllocation staging_buffer = buffer_allocation_create(size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, vma_staging_info, "staging buffer");
+    BufferAllocation staging_buffer = _buffer_allocation_create(size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, vma_staging_info, "staging buffer");
     return staging_buffer;
 }
 
@@ -1164,110 +1246,11 @@ buffer_alloc_create_or_resize(U32 total_buffer_byte_count, render::Handle handle
         vma_info.flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT | VMA_ALLOCATION_CREATE_MAPPED_BIT;
         vma_info.requiredFlags = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT;
 
-        asset_item_buffer->item.buffer_alloc = buffer_allocation_create(total_buffer_byte_count, usage, vma_info, name);
-        asset_item_buffer->item.elem_size_in_bytes = 1;
+        asset_item_buffer->item.buffer_alloc = _buffer_allocation_create(total_buffer_byte_count, usage, vma_info, name);
+        asset_item_buffer->item.item_byte_size = 1;
         asset_item_buffer->item.elem_count = total_buffer_byte_count;
     }
     return final_handle;
-}
-
-// inspiration:
-// https://gpuopen-librariesandsdks.github.io/VulkanMemoryAllocator/html/usage_patterns.html
-static BufferAllocationMapped
-buffer_mapped_create(VkDeviceSize size, VkBufferUsageFlags buffer_usage, const char* name)
-{
-    AssetManager* asset_manager = asset_manager_get();
-    Arena* arena = arena_alloc();
-
-    VmaAllocationCreateInfo vma_info = {0};
-    vma_info.usage = VMA_MEMORY_USAGE_AUTO;
-    vma_info.flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT | VMA_ALLOCATION_CREATE_HOST_ACCESS_ALLOW_TRANSFER_INSTEAD_BIT | VMA_ALLOCATION_CREATE_MAPPED_BIT;
-
-    BufferAllocation buffer = buffer_allocation_create(size, buffer_usage | VK_BUFFER_USAGE_TRANSFER_DST_BIT, vma_info, name);
-
-    VkMemoryPropertyFlags mem_prop_flags;
-    vmaGetAllocationMemoryProperties(asset_manager->allocator, buffer.allocation, &mem_prop_flags);
-
-    VmaAllocationInfo alloc_info;
-    vmaGetAllocationInfo(asset_manager->allocator, buffer.allocation, &alloc_info);
-
-    BufferAllocationMapped mapped_buffer = {.buffer_alloc = buffer, .mapped_ptr = alloc_info.pMappedData, .mem_prop_flags = mem_prop_flags, .arena = arena};
-
-    if (!mapped_buffer.mapped_ptr)
-    {
-        mapped_buffer.mapped_ptr = (void*)PushArray(mapped_buffer.arena, U8, size);
-
-        vma_info = {0};
-        vma_info.usage = VMA_MEMORY_USAGE_CPU_ONLY;
-        vma_info.flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT | VMA_ALLOCATION_CREATE_MAPPED_BIT;
-
-        mapped_buffer.staging_buffer_alloc = buffer_allocation_create(size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, vma_info, "buffer_mapped staging");
-    }
-
-    return mapped_buffer;
-}
-
-static void
-buffer_mapped_update(VkCommandBuffer cmd_buffer, BufferAllocationMapped mapped_buffer)
-{
-    AssetManager* asset_manager = asset_manager_get();
-    U32 mapped_buffer_size = mapped_buffer.buffer_alloc.size;
-
-    if (mapped_buffer.mem_prop_flags & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT)
-    {
-        if ((mapped_buffer.mem_prop_flags & VK_MEMORY_PROPERTY_HOST_COHERENT_BIT) == 0)
-        {
-            vmaFlushAllocation(asset_manager->allocator, mapped_buffer.buffer_alloc.allocation, 0, mapped_buffer_size);
-        }
-
-        VkBufferMemoryBarrier buf_mem_barrier = {VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER};
-        buf_mem_barrier.srcAccessMask = VK_ACCESS_HOST_WRITE_BIT;
-        buf_mem_barrier.dstAccessMask = VK_ACCESS_UNIFORM_READ_BIT;
-        buf_mem_barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-        buf_mem_barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-        buf_mem_barrier.buffer = mapped_buffer.buffer_alloc.buffer;
-        buf_mem_barrier.offset = 0;
-        buf_mem_barrier.size = VK_WHOLE_SIZE;
-
-        vkCmdPipelineBarrier(cmd_buffer, VK_PIPELINE_STAGE_HOST_BIT, VK_PIPELINE_STAGE_VERTEX_SHADER_BIT, 0, 0, nullptr, 1, &buf_mem_barrier, 0, nullptr);
-    }
-    else
-    {
-        if (vmaCopyMemoryToAllocation(asset_manager->allocator, mapped_buffer.mapped_ptr, mapped_buffer.staging_buffer_alloc.allocation, 0, mapped_buffer_size))
-        {
-            exit_with_error("BufferMappedUpdate: Could not copy data to staging buffer");
-        }
-
-        VkBufferMemoryBarrier bufMemBarrier = {VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER};
-        bufMemBarrier.srcAccessMask = VK_ACCESS_HOST_WRITE_BIT;
-        bufMemBarrier.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
-        bufMemBarrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-        bufMemBarrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-        bufMemBarrier.buffer = mapped_buffer.staging_buffer_alloc.buffer;
-        bufMemBarrier.offset = 0;
-        bufMemBarrier.size = VK_WHOLE_SIZE;
-
-        vkCmdPipelineBarrier(cmd_buffer, VK_PIPELINE_STAGE_HOST_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0, nullptr, 1, &bufMemBarrier, 0, nullptr);
-
-        VkBufferCopy bufCopy = {
-            0,
-            0,
-            mapped_buffer_size,
-        };
-
-        vkCmdCopyBuffer(cmd_buffer, mapped_buffer.staging_buffer_alloc.buffer, mapped_buffer.buffer_alloc.buffer, 1, &bufCopy);
-
-        VkBufferMemoryBarrier bufMemBarrier2 = {VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER};
-        bufMemBarrier2.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
-        bufMemBarrier2.dstAccessMask = VK_ACCESS_UNIFORM_READ_BIT;
-        bufMemBarrier2.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-        bufMemBarrier2.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-        bufMemBarrier2.buffer = mapped_buffer.buffer_alloc.buffer;
-        bufMemBarrier2.offset = 0;
-        bufMemBarrier2.size = VK_WHOLE_SIZE;
-
-        vkCmdPipelineBarrier(cmd_buffer, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_VERTEX_SHADER_BIT, 0, 0, nullptr, 1, &bufMemBarrier2, 0, nullptr);
-    }
 }
 
 static void

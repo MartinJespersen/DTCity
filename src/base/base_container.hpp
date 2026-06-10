@@ -19,7 +19,6 @@ struct Container
     Arena* arena; // should only contain data from array after init has been called
     ItemHeader<T>* items;
     U32 size;
-    U32 element_byte_size;
 
     Arena* arena_free_list;
     ContainerHandle* free_list;
@@ -29,6 +28,10 @@ struct Container
 template <typename T>
 g_internal Container<T>*
 container_init(U64 reserve_element_size);
+
+template <typename T>
+g_internal void
+container_release(Container<T>* container);
 
 template <typename T>
 g_internal T*

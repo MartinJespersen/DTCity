@@ -22,8 +22,11 @@
 * validation errors at null texture destruction as it is still used by some cmd buffers.
 
 # features
-* record asset lifetimes similar to how debug events are done at the moment to be sure everything related to asset lifetimes are handled on the same thread.
 * Show bikes or pedestrians instead of cars.
+* Out of device memory error.
+* delete draw flush and related code
+* Vulkan current_frame should be used exclusively in render::render_frame function (PERFORMANCE).
+* record asset lifetimes similar to how debug events are done at the moment to be sure everything related to asset lifetimes are handled on the same thread.
 * Use a list of fences for draw and compute calls that waits for asynchrounously loaded assets
 * Make it possible to alloc and dealloc whole city
 * Osm data visualizer should not be affected by netascore not showing

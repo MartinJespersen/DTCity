@@ -967,7 +967,6 @@ _tileset_renderer_create_context(Arena* arena, TilesetRenderer* renderer, async:
 g_internal F64
 _sample_height_from_result(const Cesium3DTilesSelection::SampleHeightResult& result, const char* label)
 {
-    B32 sampled = result.sampleSuccess.size() > 0 && result.sampleSuccess[0];
     F64 sampled_height = 0.0;
     if (result.positions.size() > 0)
     {

@@ -248,22 +248,34 @@ car_instance_rendering()
 
     BufferAllocation instance_buffer_alloc = instance_buffer_handle->item.buffer_alloc;
     VkBuffer instance_buffer = instance_buffer_alloc.buffer;
-    VkDescriptorSet descriptor_sets[2] = {vk_ctx->camera_descriptor_sets[vk_ctx->current_frame], vk_ctx->bindless_descriptor_set};
+    VkDescriptorSet descriptor_sets[1] = {vk_ctx->bindless_descriptor_set};
 
     for (CarInstanceRenderNode* node = vk_ctx->render_frame->car_instance_render_list.list.first; node; node = node->next)
     {
         VK_CHECK_RESULT(vmaCopyMemoryToAllocation(vk_ctx->asset_manager->allocator, node->instance_buffer_info.buffer.data, instance_buffer_alloc.allocation, node->instance_buffer_offset,
                                                   node->instance_buffer_info.buffer.size));
 
-        // set up rest of pipeline
+        render::AssetItem<BufferHandle>* asset_item = asset_manager_buffer_item_get(node->camera_handle);
+        BufferHandle* camera_buffer = &asset_item->item;
+
         VkBuffer vertex_buffers[] = {
             node->vertex_handle->buffer_alloc.buffer,
             instance_buffer,
         };
 
+        VkDescriptorBufferInfo camera_buffer_info{};
+        camera_buffer_info.buffer = camera_buffer->buffer_alloc.buffer;
+        camera_buffer_info.offset = 0;
+        camera_buffer_info.range = VK_WHOLE_SIZE;
+
+        VkWriteDescriptorSet push_writes[] = {
+            {.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, .dstBinding = 0, .descriptorCount = 1, .descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, .pBufferInfo = &camera_buffer_info},
+        };
+
+        cmd_push_descriptor_set_khr(cmd_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline->pipeline_layout, 0, ArrayCount(push_writes), push_writes);
         vkCmdPushConstants(cmd_buffer, pipeline->pipeline_layout, VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(CarInstancePushConstants), &node->draw_push_constants);
         VkDeviceSize vertex_offsets[] = {0, node->instance_buffer_offset};
-        vkCmdBindDescriptorSets(cmd_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline->pipeline_layout, 0, ArrayCount(descriptor_sets), descriptor_sets, 0, NULL);
+        vkCmdBindDescriptorSets(cmd_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline->pipeline_layout, 1, ArrayCount(descriptor_sets), descriptor_sets, 0, NULL);
         vkCmdBindVertexBuffers(cmd_buffer, 0, 2, vertex_buffers, vertex_offsets);
         U32 instance_count = U32(node->instance_buffer_info.buffer.size / node->instance_buffer_info.type_size);
         vkCmdBindIndexBuffer(cmd_buffer, node->index_handle->buffer_alloc.buffer, 0, VK_INDEX_TYPE_UINT32);
@@ -271,132 +283,20 @@ car_instance_rendering()
     }
 }
 
-// ~mgj: Camera functions
-static void
-camera_uniform_buffer_create(Context* vk_ctx)
-{
-    VkDeviceSize camera_buffer_size = sizeof(CameraUniformBuffer);
-    VkBufferUsageFlags buffer_usage = VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT;
-
-    for (U32 i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
-    {
-        vk_ctx->camera_buffer_alloc_mapped[i] = buffer_mapped_create(camera_buffer_size, buffer_usage, "camera uniform buffer");
-    }
-}
-
-static void
-camera_uniform_buffer_update(Context* vk_ctx, ui::Camera* camera, Vec2F32 screen_res, U32 current_frame)
-{
-    BufferAllocationMapped* buffer = &vk_ctx->camera_buffer_alloc_mapped[current_frame];
-    CameraUniformBuffer* ubo = (CameraUniformBuffer*)buffer->mapped_ptr;
-    glm::mat4 transform = camera->projection_matrix * camera->view_matrix;
-    frustum_planes_calculate(&ubo->frustum, transform);
-    ubo->viewport_dim.x = screen_res.x;
-    ubo->viewport_dim.y = screen_res.y;
-    ubo->view = camera->view_matrix;
-    ubo->proj = camera->projection_matrix;
-
-    buffer_mapped_update(vk_ctx->command_buffers.data[current_frame], *buffer);
-}
-
 static void
 camera_descriptor_set_layout_create(Context* vk_ctx)
 {
-    VkDescriptorSetLayoutBinding camera_desc_layout{};
-    camera_desc_layout.binding = 0;
-    camera_desc_layout.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-    camera_desc_layout.descriptorCount = 1;
-    camera_desc_layout.stageFlags = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT | VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT;
+    VkDescriptorSetLayoutBinding bindings[] = {
+        {0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1, VK_SHADER_STAGE_VERTEX_BIT, NULL},
+    };
 
-    VkDescriptorSetLayoutBinding descriptor_layout_bindings[] = {camera_desc_layout};
+    VkDescriptorSetLayoutCreateInfo layout_info{};
+    layout_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+    layout_info.flags = VK_DESCRIPTOR_SET_LAYOUT_CREATE_PUSH_DESCRIPTOR_BIT_KHR;
+    layout_info.bindingCount = ArrayCount(bindings);
+    layout_info.pBindings = bindings;
 
-    VkDescriptorSetLayoutCreateInfo layoutInfo{};
-    layoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-    layoutInfo.bindingCount = ArrayCount(descriptor_layout_bindings);
-    layoutInfo.pBindings = descriptor_layout_bindings;
-
-    if (vkCreateDescriptorSetLayout(vk_ctx->device, &layoutInfo, nullptr, &vk_ctx->camera_descriptor_set_layout) != VK_SUCCESS)
-    {
-        exit_with_error("failed to create camera descriptor set layout!");
-    }
-}
-
-static void
-camera_descriptor_set_create(Context* vk_ctx)
-{
-    Temp scratch = ScratchBegin(0, 0);
-    Arena* arena = scratch.arena;
-
-    Buffer<VkDescriptorSetLayout> layouts = buffer_alloc<VkDescriptorSetLayout>(arena, MAX_FRAMES_IN_FLIGHT);
-
-    for (U32 i = 0; i < layouts.size; i++)
-    {
-        layouts.data[i] = vk_ctx->camera_descriptor_set_layout;
-    }
-
-    VkDescriptorSetAllocateInfo allocInfo{};
-    allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
-    allocInfo.descriptorPool = vk_ctx->descriptor_pool;
-    allocInfo.descriptorSetCount = layouts.size;
-    allocInfo.pSetLayouts = layouts.data;
-
-    if (vkAllocateDescriptorSets(vk_ctx->device, &allocInfo, vk_ctx->camera_descriptor_sets) != VK_SUCCESS)
-    {
-        exit_with_error("CameraDescriptorSetCreate: failed to allocate descriptor sets!");
-    }
-
-    for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
-    {
-        VkDescriptorBufferInfo buffer_info{};
-        buffer_info.buffer = vk_ctx->camera_buffer_alloc_mapped[i].buffer_alloc.buffer;
-        buffer_info.offset = 0;
-        buffer_info.range = sizeof(CameraUniformBuffer);
-
-        VkWriteDescriptorSet uniform_buffer_desc{};
-        uniform_buffer_desc.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-        uniform_buffer_desc.dstSet = vk_ctx->camera_descriptor_sets[i];
-        uniform_buffer_desc.dstBinding = 0;
-        uniform_buffer_desc.dstArrayElement = 0;
-        uniform_buffer_desc.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-        uniform_buffer_desc.descriptorCount = 1;
-        uniform_buffer_desc.pBufferInfo = &buffer_info;
-        uniform_buffer_desc.pImageInfo = nullptr;
-        uniform_buffer_desc.pTexelBufferView = nullptr;
-
-        VkWriteDescriptorSet descriptors[] = {uniform_buffer_desc};
-
-        vkUpdateDescriptorSets(vk_ctx->device, ArrayCount(descriptors), descriptors, 0, nullptr);
-    }
-
-    ScratchEnd(scratch);
-}
-
-g_internal DescriptorSetInfo
-descriptor_set_uniform_buffer(VkDevice device, VkDescriptorPool desc_pool, void* data)
-{
-    UniformBufferDescriptor* buffer_desc = (UniformBufferDescriptor*)data;
-
-    VkDescriptorSetLayout desc_set_layout = descriptor_set_layout_create(device, {{0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1, VK_SHADER_STAGE_VERTEX_BIT, NULL}});
-
-    VkDescriptorSet desc_set = descriptor_set_alloc(device, desc_pool, {desc_set_layout});
-
-    VkDescriptorBufferInfo buffer_info{};
-    buffer_info.buffer = buffer_desc->uniform_buffer;
-    buffer_info.offset = 0;
-    buffer_info.range = VK_WHOLE_SIZE;
-
-    VkWriteDescriptorSet uniform_buffer_write{};
-    uniform_buffer_write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-    uniform_buffer_write.dstSet = desc_set;
-    uniform_buffer_write.dstBinding = 0;
-    uniform_buffer_write.dstArrayElement = 0;
-    uniform_buffer_write.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-    uniform_buffer_write.descriptorCount = 1;
-    uniform_buffer_write.pBufferInfo = &buffer_info;
-
-    descriptor_set_update(device, {uniform_buffer_write});
-
-    return DescriptorSetInfo(desc_set, desc_set_layout);
+    VK_CHECK_RESULT(vkCreateDescriptorSetLayout(vk_ctx->device, &layout_info, nullptr, &vk_ctx->camera_descriptor_set_layout));
 }
 
 g_internal DescriptorSetInfo
@@ -442,17 +342,6 @@ descriptor_set_storage_buffers(VkDevice device, VkDescriptorPool desc_pool, void
     return DescriptorSetInfo(desc_set, desc_set_layout);
 }
 
-static void
-camera_cleanup(Context* vk_ctx)
-{
-    for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
-    {
-        buffer_mapped_destroy(&vk_ctx->camera_buffer_alloc_mapped[i]);
-    }
-
-    vkDestroyDescriptorSetLayout(vk_ctx->device, vk_ctx->camera_descriptor_set_layout, NULL);
-}
-
 // ~mgj: Rendering
 
 static void
@@ -464,85 +353,25 @@ pipeline_destroy(Pipeline* pipeline)
 }
 
 static void
-model_3d_bucket_add(render::Model3DPipelineData* pipeline_input)
+blend_3d_bucket_add(BufferAllocation* vertex_buffer_allocation, BufferAllocation* index_buffer_allocation, render::Handle texture_handle, render::Handle colormap_handle, render::Handle camera_handle)
 {
     Context* vk_ctx = ctx_get();
     RenderFrame* render_frame = vk_ctx->render_frame;
-
-    render::AssetItem<vulkan::BufferHandle>* asset_vertex_buffer = 0;
-    render::AssetItem<vulkan::BufferHandle>* asset_index_buffer = 0;
-    render::AssetItem<vulkan::TextureHandle>* asset_base_texture = 0;
-    render::AssetItem<vulkan::TextureHandle>* asset_colormap = 0;
-    render::AssetItem<vulkan::TextureHandle>* overlay_tex = 0;
-
-    B32 overlay_tex_loaded = render::is_resource_loaded(pipeline_input->overlay_texture_handle, &overlay_tex);
-    B32 vertex_loaded = render::is_resource_loaded(pipeline_input->vertex_buffer_handle, &asset_vertex_buffer);
-    B32 index_loaded = render::is_resource_loaded(pipeline_input->index_buffer_handle, &asset_index_buffer);
-    B32 base_texture_loaded = render::is_resource_loaded(pipeline_input->texture_handle, &asset_base_texture);
-    B32 colormap_loaded = render::is_resource_loaded(pipeline_input->colormap_handle, &asset_colormap);
-
-    B32 overlay_enabled = false;
-    if (vertex_loaded && index_loaded && base_texture_loaded && colormap_loaded)
-    {
-        if (pipeline_input->has_overlay_uv && pipeline_input->overlay_texture_coordinate_id == 0 && render::is_handle_zero(pipeline_input->overlay_texture_handle) == false)
-        {
-            overlay_enabled = overlay_tex_loaded;
-        }
-
-        Rng2F32 bbox = {pipeline_input->bbox_min, pipeline_input->bbox_max};
-        Model3dPushConstants push_constants = {};
-        push_constants.tex_idx = asset_base_texture->item.descriptor_set_idx;
-        push_constants.colormap_idx = asset_colormap->item.descriptor_set_idx;
-        push_constants.overlay_tex_idx = overlay_tex_loaded ? overlay_tex->item.descriptor_set_idx : 0;
-        push_constants.overlay_enabled = overlay_enabled;
-        push_constants.overlay_translation_x = pipeline_input->overlay_translation.x;
-        push_constants.overlay_translation_y = pipeline_input->overlay_translation.y;
-        push_constants.overlay_scale_x = pipeline_input->overlay_scale.x;
-        push_constants.overlay_scale_y = pipeline_input->overlay_scale.y;
-        push_constants.bbox_min_x = bbox.min.x;
-        push_constants.bbox_min_y = bbox.min.y;
-        push_constants.bbox_max_x = bbox.max.x;
-        push_constants.bbox_max_y = bbox.max.y;
-        push_constants.height_offset = pipeline_input->height_offset;
-
-        Model3DNode* node = PushStruct(vk_ctx->render_frame_arena, Model3DNode);
-        node->vertex_alloc = asset_vertex_buffer->item.buffer_alloc;
-        node->index_alloc = asset_index_buffer->item.buffer_alloc;
-        node->push_constants = push_constants;
-        node->index_count = pipeline_input->index_count;
-        node->index_buffer_offset = pipeline_input->index_offset;
-        node->depth_write_per_draw_enabled = false;
-        node->depth_bias = pipeline_input->depth_bias;
-
-        SLLQueuePush(render_frame->model_3D_list.first, render_frame->model_3D_list.last, node);
-    }
-    else
-    {
-        DEBUG_LOG("overlay texture: %d, vertex buffer: %d, index buffer: %d, base texture: %d, colormap texture: %d", overlay_tex_loaded, vertex_loaded, index_loaded, base_texture_loaded,
-                  colormap_loaded);
-    }
-}
-
-static void
-blend_3d_bucket_add(BufferAllocation* vertex_buffer_allocation, BufferAllocation* index_buffer_allocation, render::Handle texture_handle, render::Handle colormap_handle)
-{
-    Context* vk_ctx = ctx_get();
-    RenderFrame* render_frame = vk_ctx->render_frame;
-
-    Blend3DNode* node = PushStruct(vk_ctx->render_frame_arena, Blend3DNode);
-    node->vertex_alloc = *vertex_buffer_allocation;
-    node->index_alloc = *index_buffer_allocation;
 
     render::AssetItem<TextureHandle>* base_tex = asset_manager_texture_item_get(texture_handle);
     render::AssetItem<TextureHandle>* colormap_tex = asset_manager_texture_item_get(colormap_handle);
     Assert(base_tex);
     Assert(colormap_tex);
-    if (!base_tex || !colormap_tex)
+    if (!base_tex || !colormap_tex || render::is_handle_zero(camera_handle))
     {
         return;
     }
 
+    Blend3DNode* node = PushStruct(vk_ctx->render_frame_arena, Blend3DNode);
+    node->vertex_alloc = *vertex_buffer_allocation;
+    node->index_alloc = *index_buffer_allocation;
     node->push_constants = {.texture_index = base_tex->item.descriptor_set_idx, .colormap_index = colormap_tex->item.descriptor_set_idx};
+    node->camera_handle = camera_handle;
 
     SLLQueuePush(render_frame->blend_3d_list.first, render_frame->blend_3d_list.last, node);
 }
@@ -605,14 +434,28 @@ model_3d_rendering()
     scissor.extent = swapchain_extent;
     vkCmdSetScissor(cmd_buffer, 0, 1, &scissor);
 
-    VkDescriptorSet descriptor_sets[2] = {vk_ctx->camera_descriptor_sets[vk_ctx->current_frame], vk_ctx->bindless_descriptor_set};
+    VkDescriptorSet descriptor_sets[1] = {vk_ctx->bindless_descriptor_set};
 
     VkDeviceSize offsets[] = {0};
     for (Model3DNode* node = render_frame->model_3D_list.first; node; node = node->next)
     {
+        render::AssetItem<BufferHandle>* camera_buffer_handle = asset_manager_buffer_item_get(node->camera_handle);
+        AssertAlways(camera_buffer_handle);
+        BufferHandle* camera_buffer = &camera_buffer_handle->item;
+
+        VkDescriptorBufferInfo camera_buffer_info{};
+        camera_buffer_info.buffer = camera_buffer->buffer_alloc.buffer;
+        camera_buffer_info.offset = 0;
+        camera_buffer_info.range = VK_WHOLE_SIZE;
+
+        VkWriteDescriptorSet push_writes[] = {
+            {.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, .dstBinding = 0, .descriptorCount = 1, .descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, .pBufferInfo = &camera_buffer_info},
+        };
+
+        cmd_push_descriptor_set_khr(cmd_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, model_3D_pipeline->pipeline_layout, 0, ArrayCount(push_writes), push_writes);
         vkCmdSetDepthBias(cmd_buffer, node->depth_bias, 0, 0);
         vkCmdPushConstants(cmd_buffer, model_3D_pipeline->pipeline_layout, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(Model3dPushConstants), &node->push_constants);
-        vkCmdBindDescriptorSets(cmd_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, model_3D_pipeline->pipeline_layout, 0, ArrayCount(descriptor_sets), descriptor_sets, 0, NULL);
+        vkCmdBindDescriptorSets(cmd_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, model_3D_pipeline->pipeline_layout, 1, ArrayCount(descriptor_sets), descriptor_sets, 0, NULL);
         vkCmdBindVertexBuffers(cmd_buffer, 0, 1, &node->vertex_alloc.buffer, offsets);
         vkCmdBindIndexBuffer(cmd_buffer, node->index_alloc.buffer, 0, VK_INDEX_TYPE_UINT32);
         VkBool32 color_write_enabled[4] = {VK_TRUE, VK_TRUE, VK_TRUE, VK_TRUE};
@@ -657,17 +500,31 @@ blend_3d_rendering()
     scissor.extent = swapchain_extent;
     vkCmdSetScissor(cmd_buffer, 0, 1, &scissor);
 
-    VkDescriptorSet descriptor_sets[2] = {vk_ctx->camera_descriptor_sets[vk_ctx->current_frame], vk_ctx->bindless_descriptor_set};
+    VkDescriptorSet descriptor_sets[1] = {vk_ctx->bindless_descriptor_set};
 
     VkDeviceSize offsets[] = {0};
     for (Blend3DNode* node = render_frame->blend_3d_list.first; node; node = node->next)
     {
+        render::AssetItem<BufferHandle>* camera_buffer_handle = asset_manager_buffer_item_get(node->camera_handle);
+        AssertAlways(camera_buffer_handle);
+        BufferHandle* camera_buffer = &camera_buffer_handle->item;
+
+        VkDescriptorBufferInfo camera_buffer_info{};
+        camera_buffer_info.buffer = camera_buffer->buffer_alloc.buffer;
+        camera_buffer_info.offset = 0;
+        camera_buffer_info.range = VK_WHOLE_SIZE;
+
+        VkWriteDescriptorSet push_writes[] = {
+            {.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, .dstBinding = 0, .descriptorCount = 1, .descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, .pBufferInfo = &camera_buffer_info},
+        };
+
+        cmd_push_descriptor_set_khr(cmd_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, blend_3d_pipeline->pipeline_layout, 0, ArrayCount(push_writes), push_writes);
         vkCmdPushConstants(cmd_buffer, blend_3d_pipeline->pipeline_layout, VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(Blend3dPushConstants), &node->push_constants);
-        U32 index_count = node->index_alloc.size / sizeof(U32);
-        vkCmdBindDescriptorSets(cmd_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, blend_3d_pipeline->pipeline_layout, 0, ArrayCount(descriptor_sets), descriptor_sets, 0, NULL);
+        vkCmdBindDescriptorSets(cmd_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, blend_3d_pipeline->pipeline_layout, 1, ArrayCount(descriptor_sets), descriptor_sets, 0, NULL);
         vkCmdBindVertexBuffers(cmd_buffer, 0, 1, &node->vertex_alloc.buffer, offsets);
         vkCmdBindIndexBuffer(cmd_buffer, node->index_alloc.buffer, 0, VK_INDEX_TYPE_UINT32);
 
+        U32 index_count = node->index_alloc.size / sizeof(U32);
         draw_indexed_separate_depth_and_color_calls(cmd_buffer, 0, index_count);
     }
 }
@@ -691,7 +548,7 @@ swapchain_image_barrier_between_rendering(VkCommandBuffer cmd_buffer, VkImage sw
 }
 
 static void
-command_buffer_record(U32 image_index, U32 current_frame, ui::Camera* camera, Vec2S64 mouse_cursor_pos)
+command_buffer_record(U32 image_index, U32 current_frame, Vec2S64 mouse_cursor_pos)
 {
     prof_scope_marker;
     Temp scratch = ScratchBegin(0, 0);
@@ -827,8 +684,6 @@ command_buffer_record(U32 image_index, U32 current_frame, ui::Camera* camera, Ve
             rendering_info.colorAttachmentCount = ArrayCount(color_attachments);
             rendering_info.pColorAttachments = color_attachments;
             rendering_info.pDepthAttachment = &depth_attachment;
-
-            camera_uniform_buffer_update(vk_ctx, camera, Vec2F32{(F32)vk_ctx->swapchain_resources->swapchain_extent.width, (F32)vk_ctx->swapchain_resources->swapchain_extent.height}, current_frame);
 
             VkDebugUtilsLabelEXT debug_label{};
             debug_label.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_LABEL_EXT;

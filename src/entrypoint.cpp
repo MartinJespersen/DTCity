@@ -144,6 +144,8 @@ dt_async_http_check_result(async::AsyncTaskStatus<async::AsyncHttpTaskState<T>>*
 g_internal void
 imgui_debug_window(city::City* city, cesium::TilesetRenderer* renderer, async::ThreadPool* thread_pool)
 {
+    Context* ctx = dt_ctx_get();
+    ui::Camera* camera = container_item_from_idx(ctx->camera_container, city->camera_handle);
     vulkan::AssetManager* asset_manager = vulkan::asset_manager_get();
     const ImGuiViewport* viewport = ImGui::GetMainViewport();
     F32 max_debug_window_width = ClampTop(720.0f, viewport->WorkSize.x * 0.6f);
@@ -186,7 +188,7 @@ imgui_debug_window(city::City* city, cesium::TilesetRenderer* renderer, async::T
     }
 
     // camera location
-    ImGui::Text("Camera Position: %.2f, %.2f, %.2f", dt_ctx_get()->camera->position.x, dt_ctx_get()->camera->position.y, dt_ctx_get()->camera->position.z);
+    ImGui::Text("Camera Position: %.2f, %.2f, %.2f", camera->position.x, camera->position.y, camera->position.z);
 
     ImGui::End();
 }
@@ -203,7 +205,6 @@ dt_main_loop(void* ptr)
 
     draw::draw_init();
     render::render_ctx_create(ctx->data_subdirs.data[dt_DataDirType::Shaders], io_ctx, ctx->thread_pool);
-    ui::camera_init(ctx->camera);
 
     vulkan::Context* vk_ctx = vulkan::ctx_get();
     dt_imgui_setup(vk_ctx, io_ctx);
@@ -230,6 +231,10 @@ dt_main_loop(void* ptr)
         const city::CityInfo* city_config = &cities_info_arr[i];
         city::City* city = city_buf[i];
 
+        city->camera_handle = container_array_idx_get(ctx->camera_container);
+        ui::Camera* camera = container_item_from_idx(ctx->camera_container, city->camera_handle);
+        ui::camera_init(ctx->arena_main_permanent, camera);
+
         Rng2F64 bbox = util::wgs84_bbox_from_btm_right_corner(city_config->lon, city_config->lat, city_config->bbox_width_meters, city_config->bbox_height_meters);
         city::city_init(city, ctx->data_subdirs.data[dt_DataDirType::Cache]);
         city->bbox = bbox;
@@ -255,7 +260,6 @@ dt_main_loop(void* ptr)
         ImGui::NewFrame();
         async::thread_pool_main_thread_queue_drain(ctx->thread_pool);
         Vec2U32 framebuffer_dim = {(U32)io_ctx->framebuffer_width, (U32)io_ctx->framebuffer_height};
-        ui::camera_update(ctx->camera, ctx->io, ctx->time->delta_time_sec, framebuffer_dim);
 
         ImGui::Begin("Interaction", nullptr);
 
@@ -282,6 +286,10 @@ dt_main_loop(void* ptr)
             city_info = &cities_info_arr[cur_area_option];
         }
 
+        // TODO: current_frame should not be part of vulkan layer
+        render::current_frame_work_done_wait();
+        ui::Camera* camera = container_item_from_idx(ctx->camera_container, city->camera_handle);
+        ui::camera_update(camera, ctx->io, ctx->time->delta_time_sec, vec_2s32(io_ctx->framebuffer_width, io_ctx->framebuffer_height), vk_ctx->current_frame);
         // keep inactive cities' tilesets making progress so their raster overlay
         // tile providers finish creating in the background; the active city is
         // pumped by city_update -> tileset_update_view
@@ -298,7 +306,7 @@ dt_main_loop(void* ptr)
         /////////////////////////////////////
 
         draw::draw_flush();
-        render::render_frame(framebuffer_dim, &io_ctx->framebuffer_resized, ctx->camera, io_ctx->mouse_pos_cur_s64);
+        render::render_frame(framebuffer_dim, &io_ctx->framebuffer_resized, io_ctx->mouse_pos_cur_s64);
 
         ImGui::EndFrame();
         Debug_Frame_End();

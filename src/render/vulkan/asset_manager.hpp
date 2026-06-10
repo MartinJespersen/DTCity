@@ -2,23 +2,12 @@
 
 namespace vulkan
 {
-static const U32 MAX_FRAMES_IN_FLIGHT = 2;
 
 struct BufferAllocation
 {
     VkBuffer buffer;
     VmaAllocation allocation;
     U32 size;
-};
-
-struct BufferAllocationMapped
-{
-    BufferAllocation buffer_alloc;
-    void* mapped_ptr;
-    VkMemoryPropertyFlags mem_prop_flags;
-
-    BufferAllocation staging_buffer_alloc;
-    Arena* arena;
 };
 
 struct BufferReadback
@@ -67,8 +56,9 @@ struct BufferHandle
 {
     render::BufferType type;
     BufferAllocation buffer_alloc;
+    VkMemoryPropertyFlags mem_prop_flags;
     BufferAllocation staging_buffer;
-    U32 elem_size_in_bytes;
+    U32 item_byte_size;
     U32 elem_count;
 };
 
@@ -176,6 +166,7 @@ struct AssetManager
 
     // ~mgj: Threading Buffer Commands
     Buffer<AssetManagerCommandPool> threaded_cmd_pools;
+    VkCommandPool main_thread_cmd_pool;
     U64 total_size;
     AssetManagerCmdQueue* cmd_queue;
     async::ThreadPool* threads;
@@ -186,7 +177,7 @@ struct AssetManager
     DescriptorIndexAllocator descriptor_index_allocator;
 
     // ~mgj: Deferred Deletion Queue
-    DeletionQueue deletion_queues[MAX_FRAMES_IN_FLIGHT + 1];
+    DeletionQueue deletion_queues[render::MAX_FRAMES_IN_FLIGHT + 1];
     U64 deletion_queue_idx;
     PendingDeletion* deletion_queue_free_list;
     U32 deletion_queue_free_list_count;
@@ -215,16 +206,10 @@ asset_manager_destroy(AssetManager* asset_manager);
 // buffer usage patterns with VMA:
 // https://gpuopen-librariesandsdks.github.io/VulkanMemoryAllocator/html/usage_patterns.html
 static BufferAllocation
-buffer_allocation_create(VkDeviceSize size, VkBufferUsageFlags buffer_usage, VmaAllocationCreateInfo vma_info, const char* name);
+_buffer_allocation_create(VkDeviceSize size, VkBufferUsageFlags buffer_usage, VmaAllocationCreateInfo vma_info, const char* name);
 
 static void
 buffer_destroy(BufferAllocation* buffer_allocation);
-static void
-buffer_mapped_destroy(BufferAllocationMapped* mapped_buffer);
-static BufferAllocationMapped
-buffer_mapped_create(VkDeviceSize size, VkBufferUsageFlags buffer_usage, const char* name);
-static void
-buffer_mapped_update(VkCommandBuffer cmd_buffer, BufferAllocationMapped mapped_buffer);
 static BufferAllocation
 staging_buffer_create(VkDeviceSize size);
 static BufferAllocation
@@ -286,8 +271,12 @@ static void
 asset_manager_execute_cmds();
 static void
 asset_manager_cmd_done_check();
+static AssetManagerCommandPool
+asset_manager_cmd_pool_get(AssetManager* asset_manager, U32 thread_id);
 static VkCommandBuffer
 begin_command(VkDevice device, AssetManagerCommandPool* threaded_cmd_pool);
+static void
+end_command(AssetManagerCommandPool* threaded_cmd_pool, VkCommandBuffer command_buffer);
 static AssetManagerCmdQueue*
 asset_manager_cmd_queue_create();
 static void
@@ -308,11 +297,15 @@ static void
 asset_manager_cmd_list_item_remove(AssetManagerCmdList* cmd_list, CmdQueueItem* item);
 
 //~mgj: Asset Free Functions
+
 static void
 asset_manager_buffer_free(render::Handle handle);
 static void
 asset_manager_texture_free(render::Handle handle);
-
+g_internal render::Handle
+asset_manager_buffer_allocation_create(render::ThreadWorkerCmdCtx* thread_ctx, render::BufferInfo* buffer_info, VmaAllocationCreateInfo vma_info);
+g_internal vulkan::BufferAllocation
+asset_manager_buffer_from_staging(VkCommandBuffer cmd_buffer, render::BufferInfo* buffer_info, VkBuffer dest_buffer);
 static void
 asset_cmd_queue_item_enqueue(U32 thread_id, render::ThreadWorkerCmdCtx* thread_input);
 

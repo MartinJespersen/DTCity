@@ -301,6 +301,7 @@ struct City
     Buildings buildings;
     cesium::TilesetRenderer cesium;
     neta::NetaState* neta_state;
+    ContainerHandle camera_handle;
 
     // async
     AsyncCityTaskList task_list;

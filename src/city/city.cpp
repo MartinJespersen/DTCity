@@ -116,6 +116,10 @@ g_internal void
 city_update(City* city, async::ThreadPool* thread_pool, RoadOverlayOption neta_overlay_option, Vec2U32 framebuffer_dim, const CityInfo* city_config)
 {
     Context* ctx = dt_ctx_get();
+    ui::Camera* camera = container_item_from_idx(ctx->camera_container, city->camera_handle);
+    // TODO: vulkan current frame should not be used directly
+    U32 current_frame = vulkan::ctx_get()->current_frame;
+    render::MappedHandle<ui::CameraUniformBuffer> camera_handle = camera->mut_handles[current_frame];
 
     for (AsyncCityTask* task = city->task_list.first; task;)
     {
@@ -264,7 +268,7 @@ city_update(City* city, async::ThreadPool* thread_pool, RoadOverlayOption neta_o
 
     // Update and render Cesium 3D Tiles ////////////
     cesium::TilesetRenderer* renderer = &city->cesium;
-    cesium::tileset_update_view(renderer, ctx->camera, framebuffer_dim, ctx->time->delta_time_sec);
+    cesium::tileset_update_view(renderer, camera, framebuffer_dim, ctx->time->delta_time_sec);
 
     bool overlay_option_changed = neta_overlay_option != city->road.overlay_option_cur;
     if (city->road_building_done)
@@ -303,7 +307,9 @@ city_update(City* city, async::ThreadPool* thread_pool, RoadOverlayOption neta_o
             tile->render_data.depth_bias = 100;
             tile->render_data.height_offset = -renderer->height_offset;
         }
-        draw::draw_model_3d(tile->render_data, colormap_handle);
+        tile->render_data.colormap_handle = colormap_handle;
+        tile->render_data.camera_handle = camera_handle.handle;
+        render::model_3d_bucket_add(&tile->render_data);
     }
 
     if (city->cars_creation_started == false && city->osm_task_done)
@@ -333,18 +339,21 @@ city_update(City* city, async::ThreadPool* thread_pool, RoadOverlayOption neta_o
 
         // instance buffer offset alignment and assignment
         render::BufferInfo instance_buffer_info = render::BufferInfo(instance_buffer, render::BufferType_Vertex | render::BufferType_StorageBuffer);
-        draw::CarInstanceRenderAddResult car_render = draw::draw_car_instance_render(city->car_sim.vertex_handle, city->car_sim.index_handle, city->car_sim.texture_handle, &instance_buffer_info);
+        draw::CarInstanceDrawResult draw_result =
+            draw::draw_car_instance_render(camera->mut_handles[current_frame].handle, city->car_sim.vertex_handle, city->car_sim.index_handle, city->car_sim.texture_handle, &instance_buffer_info);
 
-        if (car_render.queued)
+        if (draw_result.render_scheduled)
         {
+            U32 instance_buffer_offset = draw_result.buffer_offset;
             for (cesium::TileRenderData* tile = renderer->tile_to_show.first; tile; tile = tile->render_next)
             {
                 bool map_tile_reference = tile->render_data.is_map_tile && (city_config->custom_geometry_enabled == false);
                 bool custom_geometry_reference = (tile->render_data.is_map_tile == false) && city_config->custom_geometry_enabled;
+
                 if (map_tile_reference || custom_geometry_reference)
                 {
-                    draw::draw_car_instance_compute(&instance_buffer_info, tile->render_data.vertex_buffer_handle, tile->render_data.index_buffer_handle, -city->car_sim.car_center_offset.min,
-                                                    car_render.instance_buffer_offset);
+                    render::car_instance_compute_bucket_add(&instance_buffer_info, tile->render_data.vertex_buffer_handle, tile->render_data.index_buffer_handle, -city->car_sim.car_center_offset.min,
+                                                            instance_buffer_offset);
                 }
             }
         }

@@ -634,13 +634,13 @@ object_id_resources_cleanup()
 static void
 sync_objects_create(Context* vk_ctx)
 {
-    vk_ctx->in_flight_fences = buffer_alloc<VkFence>(vk_ctx->arena, MAX_FRAMES_IN_FLIGHT);
+    vk_ctx->in_flight_fences = buffer_alloc<VkFence>(vk_ctx->arena, render::MAX_FRAMES_IN_FLIGHT);
 
     VkFenceCreateInfo fenceInfo{};
     fenceInfo.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
     fenceInfo.flags = VK_FENCE_CREATE_SIGNALED_BIT;
 
-    for (U32 i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
+    for (U32 i = 0; i < render::MAX_FRAMES_IN_FLIGHT; i++)
     {
         if ((vkCreateFence(vk_ctx->device, &fenceInfo, nullptr, &vk_ctx->in_flight_fences.data[i]) != VK_SUCCESS))
         {
@@ -652,7 +652,7 @@ sync_objects_create(Context* vk_ctx)
 static void
 command_buffers_create(Context* vk_ctx)
 {
-    vk_ctx->command_buffers = buffer_alloc<VkCommandBuffer>(vk_ctx->arena, MAX_FRAMES_IN_FLIGHT);
+    vk_ctx->command_buffers = buffer_alloc<VkCommandBuffer>(vk_ctx->arena, render::MAX_FRAMES_IN_FLIGHT);
     VkCommandBufferAllocateInfo allocInfo{};
     allocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
     allocInfo.commandPool = vk_ctx->command_pool;
@@ -810,45 +810,6 @@ query_swapchain_support(Arena* arena, VkPhysicalDevice device, VkSurfaceKHR surf
 }
 
 // ~mgj: Camera functions
-static void
-frustum_planes_calculate(Frustum* out_frustum, const glm::mat4 matrix)
-{
-    out_frustum->planes[PlaneType_Left].x = matrix[0].w + matrix[0].x;
-    out_frustum->planes[PlaneType_Left].y = matrix[1].w + matrix[1].x;
-    out_frustum->planes[PlaneType_Left].z = matrix[2].w + matrix[2].x;
-    out_frustum->planes[PlaneType_Left].w = matrix[3].w + matrix[3].x;
-
-    out_frustum->planes[PlaneType_Right].x = matrix[0].w - matrix[0].x;
-    out_frustum->planes[PlaneType_Right].y = matrix[1].w - matrix[1].x;
-    out_frustum->planes[PlaneType_Right].z = matrix[2].w - matrix[2].x;
-    out_frustum->planes[PlaneType_Right].w = matrix[3].w - matrix[3].x;
-
-    out_frustum->planes[PlaneType_Top].x = matrix[0].w - matrix[0].y;
-    out_frustum->planes[PlaneType_Top].y = matrix[1].w - matrix[1].y;
-    out_frustum->planes[PlaneType_Top].z = matrix[2].w - matrix[2].y;
-    out_frustum->planes[PlaneType_Top].w = matrix[3].w - matrix[3].y;
-
-    out_frustum->planes[PlaneType_Btm].x = matrix[0].w + matrix[0].y;
-    out_frustum->planes[PlaneType_Btm].y = matrix[1].w + matrix[1].y;
-    out_frustum->planes[PlaneType_Btm].z = matrix[2].w + matrix[2].y;
-    out_frustum->planes[PlaneType_Btm].w = matrix[3].w + matrix[3].y;
-
-    out_frustum->planes[PlaneType_Back].x = matrix[0].w + matrix[0].z;
-    out_frustum->planes[PlaneType_Back].y = matrix[1].w + matrix[1].z;
-    out_frustum->planes[PlaneType_Back].z = matrix[2].w + matrix[2].z;
-    out_frustum->planes[PlaneType_Back].w = matrix[3].w + matrix[3].z;
-
-    out_frustum->planes[PlaneType_Front].x = matrix[0].w - matrix[0].z;
-    out_frustum->planes[PlaneType_Front].y = matrix[1].w - matrix[1].z;
-    out_frustum->planes[PlaneType_Front].z = matrix[2].w - matrix[2].z;
-    out_frustum->planes[PlaneType_Front].w = matrix[3].w - matrix[3].z;
-
-    for (size_t i = 0; i < ArrayCount(out_frustum->planes); i++)
-    {
-        float length = sqrtf(out_frustum->planes[i].x * out_frustum->planes[i].x + out_frustum->planes[i].y * out_frustum->planes[i].y + out_frustum->planes[i].z * out_frustum->planes[i].z);
-        out_frustum->planes[i] /= length;
-    }
-}
 
 static void
 image_view_resource_destroy(ImageViewResource image_view_resource)
@@ -1156,8 +1117,13 @@ swapchain_recreate(Vec2U32 framebuffer_dim)
     vk_ctx->swapchain_resources = 0;
     SwapChainSupportDetails swapchain_details = query_swapchain_support(scratch.arena, vk_ctx->physical_device, vk_ctx->surface);
     VkExtent2D swapchain_extent = choose_swap_extent(framebuffer_dim, swapchain_details.capabilities);
+
     if (swapchain_extent.width != 0 && swapchain_extent.height != 0)
         vk_ctx->swapchain_resources = swapchain_create(vk_ctx, &swapchain_details, swapchain_extent);
+    else
+    {
+        DEBUG_LOG("swapchain was not recreated");
+    }
 }
 
 // Samplers helpers

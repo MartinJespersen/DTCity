@@ -34,8 +34,8 @@ struct Context
     async::AsyncArena* async_arena;
 
     io::IO* io;
-    ui::Camera* camera;
     dt_Time* time;
+    Container<ui::Camera>* camera_container;
 
     async::ThreadPool* thread_pool;
 };

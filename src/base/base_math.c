@@ -346,6 +346,20 @@ mix_2s16(Vec2S16 a, Vec2S16 b, F32 t)
     return c;
 }
 
+static Vec2U32
+vec_2u32(U32 x, U32 y)
+{
+    Vec2U32 v = {x, y};
+    return v;
+}
+
+static Vec2U64
+vec_2u64(U64 x, U64 y)
+{
+    Vec2U64 v = {x, y};
+    return v;
+}
+
 static Vec3F32
 vec_3f32(F32 x, F32 y, F32 z)
 {

@@ -3,14 +3,6 @@
 namespace vulkan
 {
 
-struct CameraUniformBuffer
-{
-    glm::mat4 view;
-    glm::mat4 proj;
-    Frustum frustum;
-    glm::vec2 viewport_dim;
-};
-
 struct Model3dPushConstants
 {
     U32 tex_idx;
@@ -38,6 +30,7 @@ struct Model3DNode
     BufferAllocation vertex_alloc;
     F32 depth_bias;
     Model3dPushConstants push_constants;
+    render::Handle camera_handle;
 };
 
 struct CarInstancePushConstants
@@ -70,6 +63,7 @@ struct CarInstanceRenderNode
     CarInstanceRenderNode* next;
 
     // draw pipeline ressources
+    render::Handle camera_handle;
     BufferHandle* index_handle;
     BufferHandle* vertex_handle;
     CarInstancePushConstants draw_push_constants;
@@ -126,6 +120,7 @@ struct Blend3DNode
     BufferAllocation index_alloc;
     BufferAllocation vertex_alloc;
     Blend3dPushConstants push_constants;
+    render::Handle camera_handle;
 };
 
 struct Blend3DList
@@ -205,9 +200,7 @@ struct Context
     VkDescriptorPool descriptor_pool;
 
     // ~mgj: camera resources for uniform buffers
-    BufferAllocationMapped camera_buffer_alloc_mapped[MAX_FRAMES_IN_FLIGHT];
     VkDescriptorSetLayout camera_descriptor_set_layout;
-    VkDescriptorSet camera_descriptor_sets[MAX_FRAMES_IN_FLIGHT];
 
     U32 max_texture_count;
     U32 texture_binding;
@@ -221,7 +214,7 @@ struct Context
     AssetManager* asset_manager;
 
     // ~mgj: Profiling
-    TracyVkCtx tracy_ctx[MAX_FRAMES_IN_FLIGHT];
+    TracyVkCtx tracy_ctx[render::MAX_FRAMES_IN_FLIGHT];
 
     // ~mgj: Rendering
     Arena* render_frame_arena;
@@ -235,21 +228,8 @@ struct Context
     VkDescriptorSetLayout road_segment_descriptor_set_layout;
     VkDescriptorSetLayout storage_buffer_descriptor_set_layout;
     VkDescriptorSetLayout car_height_calculate_descriptor_set_layout;
-    render::Handle model_3D_instance_buffer[MAX_FRAMES_IN_FLIGHT];
+    render::Handle model_3D_instance_buffer[render::MAX_FRAMES_IN_FLIGHT];
 };
-
-//~mgj: camera functions
-static void
-camera_cleanup(Context* vk_ctx);
-
-static void
-camera_uniform_buffer_create(Context* vk_ctx);
-static void
-camera_uniform_buffer_update(Context* vk_ctx, ui::Camera* camera, Vec2F32 screen_res, U32 current_frame);
-static void
-camera_descriptor_set_layout_create(Context* vk_ctx);
-static void
-camera_descriptor_set_create(Context* vk_ctx);
 
 // ~mgj: Vulkan Lifetime
 static void
@@ -265,9 +245,6 @@ struct UniformBufferDescriptor
 {
     VkBuffer uniform_buffer;
 };
-
-g_internal DescriptorSetInfo
-descriptor_set_uniform_buffer(VkDevice device, VkDescriptorPool desc_pool, void* data);
 
 struct StorageBufferDescriptor
 {
@@ -287,11 +264,11 @@ struct RoadSegmentDescriptor
 g_internal DescriptorSetInfo
 descriptor_set_road_segment(VkDevice device, VkDescriptorPool desc_pool, void* data);
 
+static void
+camera_descriptor_set_layout_create(Context* vk_ctx);
 // ~mgj: Building
 static void
-model_3d_bucket_add(render::Model3DPipelineData* pipeline_input);
-static void
-blend_3d_bucket_add(BufferAllocation* vertex_buffer_allocation, BufferAllocation* index_buffer_allocation, render::Handle texture_handle, render::Handle colormap_handle);
+blend_3d_bucket_add(BufferAllocation* vertex_buffer_allocation, BufferAllocation* index_buffer_allocation, render::Handle texture_handle, render::Handle colormap_handle, render::Handle camera_handle);
 
 g_internal void
 road_intersection_compute();
@@ -310,7 +287,7 @@ static void
 pipeline_destroy(Pipeline* draw_ctx);
 
 static void
-command_buffer_record(U32 image_index, U32 current_frame, ui::Camera* camera, Vec2S64 mouse_cursor_pos);
+command_buffer_record(U32 image_index, U32 current_frame, Vec2S64 mouse_cursor_pos);
 
 static void
 profile_buffers_create(Context* vk_ctx);

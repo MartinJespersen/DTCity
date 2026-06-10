@@ -39,7 +39,7 @@ struct SwapchainResources
     VkFormat object_id_image_format;
     Buffer<ImageResource> object_id_image_resources;
     Buffer<ImageResource> object_id_image_resolve_resources;
-    BufferReadback object_id_buffer_readback[MAX_FRAMES_IN_FLIGHT];
+    BufferReadback object_id_buffer_readback[render::MAX_FRAMES_IN_FLIGHT];
 
     // sync objects
     Buffer<VkSemaphore> image_available_semaphores;
@@ -68,22 +68,6 @@ struct QueueFamilyIndexBits
 {
     U32 graphicsFamilyIndexBits;
     U32 presentFamilyIndexBits;
-};
-
-enum PlaneType
-{
-    PlaneType_Left,
-    PlaneType_Right,
-    PlaneType_Top,
-    PlaneType_Btm,
-    PlaneType_Back,
-    PlaneType_Front,
-    PlaneType_Count
-};
-
-struct Frustum
-{
-    glm::vec4 planes[PlaneType_Count];
 };
 
 // ~mgj: Globals
@@ -133,9 +117,6 @@ is_device_suitable(Context* vk_ctx, VkPhysicalDevice device, QueueFamilyIndexBit
 
 static SwapChainSupportDetails
 query_swapchain_support(Arena* arena, VkPhysicalDevice device, VkSurfaceKHR surface);
-
-static void
-frustum_planes_calculate(Frustum* out_frustum, const glm::mat4 matrix);
 
 static render::BufferType
 buffer_type_from_usage_flags(VkBufferUsageFlags usage);

@@ -12,7 +12,8 @@ ctx_create(io::IO* io_ctx)
     ctx->arena_frame = arena_alloc();
     ctx->async_arena = async::async_arena_alloc();
     ctx->io = PushStruct(app_arena, io::IO);
-    ctx->camera = PushStruct(app_arena, ui::Camera);
+
+    ctx->camera_container = container_init<ui::Camera>(10);
     ctx->time = PushStruct(app_arena, dt_Time);
     ctx->cwd = os_current_path_get(scratch.arena);
 
@@ -53,6 +54,7 @@ ctx_destroy(Context* ctx)
 {
     async::thread_pool_destroy(ctx->thread_pool);
     async::async_arena_release(ctx->async_arena);
+    container_release(ctx->camera_container);
     arena_release(ctx->arena_main_permanent);
 }
 

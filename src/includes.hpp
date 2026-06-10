@@ -30,8 +30,8 @@
 // user defined: [hpp]
 #include "utility/utility_inc.hpp"
 #include "async/async_inc.hpp"
-#include "misc/misc_inc.hpp"
 #include "render/render_inc.hpp"
+#include "misc/misc_inc.hpp"
 #include "draw/draw.hpp"
 #include "lib_wrappers/lib_wrappers_inc.hpp"
 #include "gltfw/gltfw.hpp"

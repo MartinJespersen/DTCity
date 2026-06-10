@@ -42,6 +42,17 @@ union Vec2S64
     S64 v[2];
 };
 
+typedef union Vec2U64 Vec2U64;
+union Vec2U64
+{
+    struct
+    {
+        U64 x;
+        U64 y;
+    };
+    U64 v[2];
+};
+
 typedef union Vec2U32 Vec2U32;
 union Vec2U32
 {
@@ -608,6 +619,11 @@ static Vec2S16
 normalize_2s16(Vec2S16 v);
 static Vec2S16
 mix_2s16(Vec2S16 a, Vec2S16 b, F32 t);
+
+static Vec2U32
+vec_2u32(U32 x, U32 y);
+static Vec2U64
+vec_2u64(U64 x, U64 y);
 
 #define v3f32(x, y, z) vec_3f32((x), (y), (z))
 static Vec3F32

@@ -1,8 +1,13 @@
 #pragma once
-
+// TODO: IO should not be a dependency of this layer
+namespace io
+{
+struct IO;
+};
 namespace render
 {
 
+static const U32 MAX_FRAMES_IN_FLIGHT = 2;
 ////////////////////////////////
 //~ mgj: Handle Types
 
@@ -19,7 +24,7 @@ enum BufferType : U32
     BufferType_Vertex = (1 << 0),
     BufferType_Index = (1 << 2),
     BufferType_Uniform = (1 << 3),
-    BufferType_StorageBuffer = (1 << 4)
+    BufferType_StorageBuffer = (1 << 4),
 };
 
 struct Handle
@@ -48,6 +53,13 @@ struct Handle
 
     static Handle
     buffer_handle_create(BufferType buffer_type);
+};
+
+template <typename T>
+struct MappedHandle
+{
+    T* data;
+    render::Handle handle;
 };
 
 struct HandleNode
@@ -198,6 +210,7 @@ struct Model3DPipelineData
     Handle texture_handle;
     Handle overlay_texture_handle;
     Handle colormap_handle;
+    Handle camera_handle;
 
     Vec2F32 overlay_translation;
     Vec2F32 overlay_scale;
@@ -233,6 +246,7 @@ struct Blend3DPipelineData
     Handle index_buffer_handle;
     Handle texture_handle;
     Handle colormap_handle;
+    Handle camera_handle;
 };
 
 struct Vertex3D
@@ -336,13 +350,17 @@ render_ctx_create(String8 shader_path, io::IO* io_ctx, async::ThreadPool* thread
 static void
 render_ctx_destroy();
 static void
-render_frame(Vec2U32 framebuffer_dim, B32* in_out_framebuffer_resized, ui::Camera* camera, Vec2S64 mouse_cursor_pos);
+render_frame(Vec2U32 framebuffer_dim, B32* in_out_framebuffer_resized, Vec2S64 mouse_cursor_pos);
+static void
+current_frame_work_done_wait();
 static void
 gpu_work_done_wait();
 static void
 new_frame();
 static U64
 latest_hovered_object_id_get();
+g_internal Vec2U32
+render_actual_framebuffer_dim_get(Vec2S32 framebuffer_dim);
 
 // ~mgj: Texture loading interface
 g_internal Handle
@@ -371,14 +389,13 @@ g_internal void
 handle_done_loading(render::HandleList handles);
 
 g_internal void
-model_3d_draw(Model3DPipelineData* pipeline_input, render::Handle colormap_handle);
-
-g_internal void
 blend_3d_draw(Blend3DPipelineData pipeline_input);
 
+static void
+model_3d_bucket_add(render::Model3DPipelineData* pipeline_input);
 g_internal bool
-car_instance_render_bucket_add(render::Handle vertex_buffer_handle, render::Handle index_buffer_handle, render::Handle tex_handle, render::BufferInfo* instance_buffer_info,
-                               U32 instance_buffer_offset);
+car_instance_render_bucket_add(render::Handle camera_handle, render::Handle vertex_buffer_handle, render::Handle index_buffer_handle, render::Handle tex_handle,
+                               render::BufferInfo* instance_buffer_info, U32 instance_buffer_offset);
 
 g_internal void
 car_instance_compute_bucket_add(render::BufferInfo* instance_buffer_info, render::Handle tile_vertex_buffer_handle, render::Handle tile_index_buffer_handle, F32 car_center_to_road_offset,
@@ -392,6 +409,13 @@ buffer_load_async(BufferInfo* buffer_info);
 
 g_internal Handle
 buffer_load_sync(render::ThreadWorkerCmdCtx* thread_ctx, render::BufferInfo* buffer_info);
+
+template <typename T>
+g_internal MappedHandle<T>
+mapped_buffer_load_sync(Arena* arena, render::ThreadWorkerCmdCtx* thread_ctx, BufferType buffer_type);
+template <typename T>
+g_internal void
+mapped_buffer_update(MappedHandle<T> mut_handle);
 
 g_internal Handle
 storage_buffer_load_sync(Arena* arena, Handle vertex_buffer_handle, Handle index_buffer_handle);

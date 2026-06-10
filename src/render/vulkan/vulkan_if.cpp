@@ -138,9 +138,6 @@ render_ctx_create(String8 shader_path, io::IO* io_ctx, async::ThreadPool* thread
 
     vulkan::sync_objects_create(vk_ctx);
 
-    vulkan::camera_uniform_buffer_create(vk_ctx);
-    vulkan::camera_descriptor_set_layout_create(vk_ctx);
-    vulkan::camera_descriptor_set_create(vk_ctx);
     vulkan::profile_buffers_create(vk_ctx);
 
     // ~mgj: Drawing (TODO: Move out of vulkan context to own module)
@@ -149,6 +146,7 @@ render_ctx_create(String8 shader_path, io::IO* io_ctx, async::ThreadPool* thread
     vk_ctx->bindless_descriptor_set_layout = vulkan::descriptor_set_layout_create_bindless_textures(vk_ctx->device, vk_ctx->texture_binding, vk_ctx->max_texture_count,
                                                                                                     VK_SHADER_STAGE_ALL); // TODO: VK_SHADER_STAGE_ALL is probably not the best flag
     vk_ctx->bindless_descriptor_set = vulkan::descriptor_set_allocate_bindless(vk_ctx->device, vk_ctx->descriptor_pool, vk_ctx->bindless_descriptor_set_layout, vk_ctx->max_texture_count);
+    camera_descriptor_set_layout_create(vk_ctx);
 
     null_texture_create(vk_ctx);
 
@@ -170,7 +168,6 @@ render_ctx_destroy()
 
     vkDeviceWaitIdle(vk_ctx->device);
 
-    vulkan::camera_cleanup(vk_ctx);
     vulkan::profile_buffers_destroy(vk_ctx);
 
     // Asset manager must be destroyed first — it flushes pending GPU commands
@@ -188,7 +185,7 @@ render_ctx_destroy()
     vkDestroyCommandPool(vk_ctx->device, vk_ctx->command_pool, nullptr);
 
     vkDestroySurfaceKHR(vk_ctx->instance, vk_ctx->surface, nullptr);
-    for (U32 i = 0; i < vulkan::MAX_FRAMES_IN_FLIGHT; i++)
+    for (U32 i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
     {
         vkDestroyFence(vk_ctx->device, vk_ctx->in_flight_fences.data[i], nullptr);
     }
@@ -203,6 +200,7 @@ render_ctx_destroy()
     vulkan::pipeline_destroy(&vk_ctx->bbox_pipeline);
 
     vkDestroyDescriptorSetLayout(vk_ctx->device, vk_ctx->bindless_descriptor_set_layout, nullptr);
+    vkDestroyDescriptorSetLayout(vk_ctx->device, vk_ctx->camera_descriptor_set_layout, nullptr);
     vkDestroyDescriptorSetLayout(vk_ctx->device, vk_ctx->road_segment_descriptor_set_layout, nullptr);
     vkDestroyDescriptorSetLayout(vk_ctx->device, vk_ctx->storage_buffer_descriptor_set_layout, nullptr);
     vkDestroyDescriptorSetLayout(vk_ctx->device, vk_ctx->car_height_calculate_descriptor_set_layout, nullptr);
@@ -221,7 +219,7 @@ render_ctx_destroy()
 }
 
 static void
-render_frame(Vec2U32 framebuffer_dim, B32* in_out_framebuffer_resized, ui::Camera* camera, Vec2S64 mouse_cursor_pos)
+render_frame(Vec2U32 framebuffer_dim, B32* in_out_framebuffer_resized, Vec2S64 mouse_cursor_pos)
 {
     ScratchScope scratch = ScratchScope(0, 0);
 
@@ -231,7 +229,7 @@ render_frame(Vec2U32 framebuffer_dim, B32* in_out_framebuffer_resized, ui::Camer
     }
     vulkan::Context* vk_ctx = vulkan::ctx_get();
 
-    defer({ vk_ctx->current_frame = (vk_ctx->current_frame + 1) % vulkan::MAX_FRAMES_IN_FLIGHT; });
+    defer({ vk_ctx->current_frame = (vk_ctx->current_frame + 1) % MAX_FRAMES_IN_FLIGHT; });
 
     vulkan::asset_manager_execute_cmds();
     vulkan::asset_manager_cmd_done_check();
@@ -286,7 +284,7 @@ render_frame(Vec2U32 framebuffer_dim, B32* in_out_framebuffer_resized, ui::Camer
     VK_CHECK_RESULT(vkResetFences(vk_ctx->device, 1, in_flight_fence));
     VK_CHECK_RESULT(vkResetCommandBuffer(cmd_buffer, 0));
 
-    vulkan::command_buffer_record(image_idx, vk_ctx->current_frame, camera, mouse_cursor_pos);
+    vulkan::command_buffer_record(image_idx, vk_ctx->current_frame, mouse_cursor_pos);
 
     VkSemaphoreSubmitInfo waitSemaphoreInfo{};
     waitSemaphoreInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO;
@@ -336,6 +334,14 @@ render_frame(Vec2U32 framebuffer_dim, B32* in_out_framebuffer_resized, ui::Camer
     {
         exit_with_error("failed to present swap chain image!");
     }
+}
+
+static void
+current_frame_work_done_wait()
+{
+    vulkan::Context* vk_ctx = vulkan::ctx_get();
+    VkFence* in_flight_fence = &vk_ctx->in_flight_fences.data[vk_ctx->current_frame];
+    VK_CHECK_RESULT(vkWaitForFences(vk_ctx->device, 1, in_flight_fence, VK_TRUE, UINT64_MAX));
 }
 
 static void
@@ -537,6 +543,62 @@ handle_destroy_deferred(render::Handle handle)
     }
 }
 
+template <typename T>
+g_internal void
+mapped_buffer_update(MappedHandle<T> mut_handle)
+{
+    render::AssetItem<vulkan::BufferHandle>* mapped_buffer_handle = vulkan::asset_manager_buffer_item_get(mut_handle.handle);
+    vulkan::BufferHandle* mapped_buffer = &mapped_buffer_handle->item;
+
+    vulkan::AssetManager* asset_manager = vulkan::asset_manager_get();
+    U32 mapped_buffer_size = mapped_buffer->buffer_alloc.size;
+
+    AssertAlways(mapped_buffer->mem_prop_flags & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT);
+    if ((mapped_buffer->mem_prop_flags & VK_MEMORY_PROPERTY_HOST_COHERENT_BIT) == 0)
+    {
+        VK_CHECK_RESULT(vmaFlushAllocation(asset_manager->allocator, mapped_buffer->buffer_alloc.allocation, 0, mapped_buffer_size));
+    }
+}
+
+template <typename T>
+g_internal MappedHandle<T>
+mapped_buffer_load_sync(Arena* arena, render::ThreadWorkerCmdCtx* thread_ctx, BufferType buffer_type)
+{
+    ScratchScope scratch = ScratchScope(0, 0);
+    vulkan::Context* vk_ctx = vulkan::ctx_get();
+    vulkan::AssetManager* asset_manager = vk_ctx->asset_manager;
+
+    T* data = PushStruct(scratch.arena, T);
+    render::BufferInfo buffer_info = render::BufferInfo(arena, data, buffer_type);
+
+    VmaAllocationCreateInfo vma_info = {0};
+    vma_info.usage = VMA_MEMORY_USAGE_AUTO;
+    vma_info.flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT | VMA_ALLOCATION_CREATE_MAPPED_BIT;
+    vma_info.requiredFlags = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT;
+
+    render::Handle handle = vulkan::asset_manager_buffer_allocation_create(thread_ctx, &buffer_info, vma_info);
+    render::AssetItem<vulkan::BufferHandle>* asset_item_buffer = vulkan::asset_manager_buffer_item_get(handle);
+    vulkan::BufferHandle* buffer_handle = &asset_item_buffer->item;
+
+    VkMemoryPropertyFlags mem_prop_flags;
+    vmaGetAllocationMemoryProperties(asset_manager->allocator, buffer_handle->buffer_alloc.allocation, &mem_prop_flags);
+    buffer_handle->mem_prop_flags = mem_prop_flags;
+
+    VmaAllocationInfo alloc_info;
+    vmaGetAllocationInfo(asset_manager->allocator, buffer_handle->buffer_alloc.allocation, &alloc_info);
+
+    MappedHandle<T> mut_handle = {};
+    mut_handle.handle = handle;
+    mut_handle.data = (T*)alloc_info.pMappedData;
+    if (!mut_handle.data)
+    {
+        mut_handle.data = PushStruct(arena, T);
+        buffer_handle->staging_buffer = vulkan::staging_buffer_create(buffer_info.buffer.size);
+    }
+
+    return mut_handle;
+}
+
 g_internal Handle
 buffer_load_sync(render::ThreadWorkerCmdCtx* thread_ctx, render::BufferInfo* buffer_info)
 {
@@ -548,55 +610,18 @@ buffer_load_sync(render::ThreadWorkerCmdCtx* thread_ctx, render::BufferInfo* buf
         return render::handle_zero();
     }
 
-    vulkan::Context* vk_ctx = vulkan::ctx_get();
-    vulkan::AssetManager* asset_manager = vk_ctx->asset_manager;
-    render::BufferType buffer_type = (render::BufferType)buffer_info->buffer_type;
-    render::Handle asset_handle = render::Handle::buffer_handle_create(buffer_type);
-    render::handle_list_push(thread_ctx, asset_handle);
-
-    // ~mgj: Create buffer allocation
     VmaAllocationCreateInfo vma_info = {0};
     vma_info.usage = VMA_MEMORY_USAGE_AUTO;
     vma_info.requiredFlags = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
-    VkBufferUsageFlags usage_flags = {};
-    U32 type = buffer_info->buffer_type;
-    if (type & render::BufferType_Vertex)
-        usage_flags |= VK_BUFFER_USAGE_VERTEX_BUFFER_BIT;
-    if (type & render::BufferType_Index)
-        usage_flags |= VK_BUFFER_USAGE_INDEX_BUFFER_BIT;
-    if (type & render::BufferType_Uniform)
-        usage_flags |= VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT;
-    if (type & render::BufferType_StorageBuffer)
-        usage_flags |= VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
-    Assert(usage_flags != 0);
-    vulkan::BufferAllocation buffer_alloc = vulkan::buffer_allocation_create(buffer_info->buffer.size, usage_flags | VK_BUFFER_USAGE_TRANSFER_DST_BIT, vma_info, "buffer_load_sync");
+
+    Handle handle = vulkan::asset_manager_buffer_allocation_create(thread_ctx, buffer_info, vma_info);
+    render::AssetItem<vulkan::BufferHandle>* asset_item_buffer = vulkan::asset_manager_buffer_item_get(handle);
+    vulkan::BufferHandle* buffer_handle = &asset_item_buffer->item;
 
     // ~mgj: Create staging buffer allocation
-    vulkan::BufferAllocation staging_buffer_alloc = vulkan::staging_buffer_create(buffer_info->buffer.size);
+    buffer_handle->staging_buffer = vulkan::asset_manager_buffer_from_staging((VkCommandBuffer)thread_ctx->cmd_buffer, buffer_info, buffer_handle->buffer_alloc.buffer);
 
-    // ~mgj: Prepare buffer asset item
-    AssetItem<vulkan::BufferHandle>* asset_item = (AssetItem<vulkan::BufferHandle>*)asset_handle.ptr;
-    if (asset_item)
-    {
-        vulkan::BufferHandle* asset_buffer = (vulkan::BufferHandle*)&asset_item->item;
-        asset_buffer->buffer_alloc = buffer_alloc;
-        asset_buffer->elem_size_in_bytes = buffer_info->type_size;
-        asset_buffer->elem_count = buffer_info->elem_count;
-
-        // ~mgj: copy to staging and record copy command
-        VK_CHECK_RESULT(vmaCopyMemoryToAllocation(asset_manager->allocator, buffer_info->buffer.data, staging_buffer_alloc.allocation, 0, buffer_info->buffer.size));
-        VkBufferCopy copy_region = {0};
-        copy_region.size = buffer_info->buffer.size;
-        vkCmdCopyBuffer((VkCommandBuffer)thread_ctx->cmd_buffer, staging_buffer_alloc.buffer, asset_buffer->buffer_alloc.buffer, 1, &copy_region);
-
-        asset_buffer->staging_buffer = staging_buffer_alloc;
-    }
-    else
-    {
-        buffer_destroy(&staging_buffer_alloc);
-    }
-
-    return asset_handle;
+    return handle;
 }
 
 g_internal Handle
@@ -643,17 +668,16 @@ buffer_load_async(render::BufferInfo* buffer_info)
     vma_info.usage = VMA_MEMORY_USAGE_AUTO;
     vma_info.requiredFlags = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
     VkBufferUsageFlags usage_flags = {};
-    U32 type = buffer_info->buffer_type;
-    if (type & render::BufferType_Vertex)
+    if (buffer_type & render::BufferType_Vertex)
         usage_flags |= VK_BUFFER_USAGE_VERTEX_BUFFER_BIT;
-    if (type & render::BufferType_Index)
+    if (buffer_type & render::BufferType_Index)
         usage_flags |= VK_BUFFER_USAGE_INDEX_BUFFER_BIT;
-    if (type & render::BufferType_Uniform)
+    if (buffer_type & render::BufferType_Uniform)
         usage_flags |= VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT;
-    if (type & render::BufferType_StorageBuffer)
+    if (buffer_type & render::BufferType_StorageBuffer)
         usage_flags |= VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
     Assert(usage_flags != 0);
-    vulkan::BufferAllocation buffer = vulkan::buffer_allocation_create(buffer_info->buffer.size, usage_flags | VK_BUFFER_USAGE_TRANSFER_DST_BIT, vma_info, "buffer_load_async");
+    vulkan::BufferAllocation buffer = vulkan::_buffer_allocation_create(buffer_info->buffer.size, usage_flags | VK_BUFFER_USAGE_TRANSFER_DST_BIT, vma_info, "buffer_load_async");
 
     // ~mgj: Prepare buffer asset item
     OS_MutexScopeW(asset_manager->buffer_mutex)
@@ -661,7 +685,7 @@ buffer_load_async(render::BufferInfo* buffer_info)
         AssetItem<vulkan::BufferHandle>* asset_item = (AssetItem<vulkan::BufferHandle>*)asset_handle.ptr;
         vulkan::BufferHandle* asset_buffer = (vulkan::BufferHandle*)&asset_item->item;
         asset_buffer->buffer_alloc = buffer;
-        asset_buffer->elem_size_in_bytes = buffer_info->type_size;
+        asset_buffer->item_byte_size = buffer_info->type_size;
         asset_buffer->elem_count = buffer_info->elem_count;
     }
 
@@ -682,13 +706,6 @@ buffer_load_async(render::BufferInfo* buffer_info)
     async::thread_pool_push(thread_input->thread_pool, &item);
 
     return asset_handle;
-}
-
-g_internal void
-model_3d_draw(Model3DPipelineData* pipeline_input, render::Handle colormap_handle)
-{
-    pipeline_input->colormap_handle = colormap_handle;
-    vulkan::model_3d_bucket_add(pipeline_input);
 }
 
 g_internal void
@@ -724,7 +741,8 @@ car_instance_compute_bucket_add(render::BufferInfo* instance_buffer_info, render
 }
 
 g_internal bool
-car_instance_render_bucket_add(render::Handle vertex_buffer_handle, render::Handle index_buffer_handle, render::Handle tex_handle, render::BufferInfo* instance_buffer_info, U32 instance_buffer_offset)
+car_instance_render_bucket_add(render::Handle camera_handle, render::Handle vertex_buffer_handle, render::Handle index_buffer_handle, render::Handle tex_handle,
+                               render::BufferInfo* instance_buffer_info, U32 instance_buffer_offset)
 {
     if (instance_buffer_info->buffer.size == 0 || instance_buffer_info->elem_count == 0)
     {
@@ -750,6 +768,7 @@ car_instance_render_bucket_add(render::Handle vertex_buffer_handle, render::Hand
         node->draw_push_constants = push_constants;
         node->instance_buffer_info = *instance_buffer_info;
         node->instance_buffer_offset = instance_buffer_offset;
+        node->camera_handle = camera_handle;
         instance_draw->total_instance_buffer_byte_count = Max(instance_draw->total_instance_buffer_byte_count, instance_buffer_offset + instance_buffer_info->buffer.size);
 
         // push work
@@ -778,6 +797,67 @@ road_intersection_compute_add(Handle vertex_buffer_handle, Handle index_buffer_h
     return compute_scheduled;
 }
 
+static void
+model_3d_bucket_add(render::Model3DPipelineData* pipeline_input)
+{
+    vulkan::Context* vk_ctx = vulkan::ctx_get();
+    vulkan::RenderFrame* render_frame = vk_ctx->render_frame;
+
+    render::AssetItem<vulkan::BufferHandle>* asset_vertex_buffer = 0;
+    render::AssetItem<vulkan::BufferHandle>* asset_index_buffer = 0;
+    render::AssetItem<vulkan::TextureHandle>* asset_base_texture = 0;
+    render::AssetItem<vulkan::TextureHandle>* asset_colormap = 0;
+    render::AssetItem<vulkan::TextureHandle>* overlay_tex = 0;
+
+    B32 overlay_tex_loaded = render::is_resource_loaded(pipeline_input->overlay_texture_handle, &overlay_tex);
+    B32 vertex_loaded = render::is_resource_loaded(pipeline_input->vertex_buffer_handle, &asset_vertex_buffer);
+    B32 index_loaded = render::is_resource_loaded(pipeline_input->index_buffer_handle, &asset_index_buffer);
+    B32 base_texture_loaded = render::is_resource_loaded(pipeline_input->texture_handle, &asset_base_texture);
+    B32 colormap_loaded = render::is_resource_loaded(pipeline_input->colormap_handle, &asset_colormap);
+
+    B32 overlay_enabled = false;
+    if (vertex_loaded && index_loaded && base_texture_loaded && colormap_loaded)
+    {
+        if (pipeline_input->has_overlay_uv && pipeline_input->overlay_texture_coordinate_id == 0 && render::is_handle_zero(pipeline_input->overlay_texture_handle) == false)
+        {
+            overlay_enabled = overlay_tex_loaded;
+        }
+
+        Rng2F32 bbox = {pipeline_input->bbox_min, pipeline_input->bbox_max};
+        vulkan::Model3dPushConstants push_constants = {};
+        push_constants.tex_idx = asset_base_texture->item.descriptor_set_idx;
+        push_constants.colormap_idx = asset_colormap->item.descriptor_set_idx;
+        push_constants.overlay_tex_idx = overlay_tex_loaded ? overlay_tex->item.descriptor_set_idx : 0;
+        push_constants.overlay_enabled = overlay_enabled;
+        push_constants.overlay_translation_x = pipeline_input->overlay_translation.x;
+        push_constants.overlay_translation_y = pipeline_input->overlay_translation.y;
+        push_constants.overlay_scale_x = pipeline_input->overlay_scale.x;
+        push_constants.overlay_scale_y = pipeline_input->overlay_scale.y;
+        push_constants.bbox_min_x = bbox.min.x;
+        push_constants.bbox_min_y = bbox.min.y;
+        push_constants.bbox_max_x = bbox.max.x;
+        push_constants.bbox_max_y = bbox.max.y;
+        push_constants.height_offset = pipeline_input->height_offset;
+
+        vulkan::Model3DNode* node = PushStruct(vk_ctx->render_frame_arena, vulkan::Model3DNode);
+        node->vertex_alloc = asset_vertex_buffer->item.buffer_alloc;
+        node->index_alloc = asset_index_buffer->item.buffer_alloc;
+        node->push_constants = push_constants;
+        node->index_count = pipeline_input->index_count;
+        node->index_buffer_offset = pipeline_input->index_offset;
+        node->depth_write_per_draw_enabled = false;
+        node->depth_bias = pipeline_input->depth_bias;
+        node->camera_handle = pipeline_input->camera_handle;
+
+        SLLQueuePush(render_frame->model_3D_list.first, render_frame->model_3D_list.last, node);
+    }
+    else
+    {
+        DEBUG_LOG("overlay texture: %d, vertex buffer: %d, index buffer: %d, base texture: %d, colormap texture: %d", overlay_tex_loaded, vertex_loaded, index_loaded, base_texture_loaded,
+                  colormap_loaded);
+    }
+}
+
 g_internal void
 blend_3d_draw(render::Blend3DPipelineData pipeline_input)
 {
@@ -788,7 +868,8 @@ blend_3d_draw(render::Blend3DPipelineData pipeline_input)
     if (render::is_resource_loaded(pipeline_input.index_buffer_handle, &asset_index_buffer) && render::is_resource_loaded(pipeline_input.vertex_buffer_handle, &asset_vertex_buffer) &&
         render::is_resource_loaded(pipeline_input.texture_handle, &asset_texture) && render::is_resource_loaded(pipeline_input.colormap_handle, &asset_colormap))
     {
-        vulkan::blend_3d_bucket_add(&asset_vertex_buffer->item.buffer_alloc, &asset_index_buffer->item.buffer_alloc, pipeline_input.texture_handle, pipeline_input.colormap_handle);
+        vulkan::blend_3d_bucket_add(&asset_vertex_buffer->item.buffer_alloc, &asset_index_buffer->item.buffer_alloc, pipeline_input.texture_handle, pipeline_input.colormap_handle,
+                                    pipeline_input.camera_handle);
     }
 }
 
@@ -879,14 +960,17 @@ thread_cmd_buffer_record(ThreadWorkerCmdCtx* thread_ctx)
 
     U32 thread_local_id = async::t_cur_thread_id;
     // ~mgj: Record the command buffer
-    thread_ctx->cmd_buffer = begin_command(asset_manager->device, &asset_manager->threaded_cmd_pools.data[thread_local_id]);
+    vulkan::AssetManagerCommandPool thread_cmd_pool = vulkan::asset_manager_cmd_pool_get(asset_manager, thread_local_id);
+    thread_ctx->cmd_buffer = begin_command(asset_manager->device, &thread_cmd_pool);
 }
 
 g_internal void
 thread_cmd_buffer_end(ThreadWorkerCmdCtx* cmd_ctx)
 {
     U32 thread_local_id = async::t_cur_thread_id;
-    VK_CHECK_RESULT(vkEndCommandBuffer((VkCommandBuffer)cmd_ctx->cmd_buffer));
+    vulkan::AssetManager* asset_manager = vulkan::asset_manager_get();
+    vulkan::AssetManagerCommandPool thread_cmd_pool = vulkan::asset_manager_cmd_pool_get(asset_manager, thread_local_id);
+    end_command(&thread_cmd_pool, (VkCommandBuffer)cmd_ctx->cmd_buffer);
     vulkan::asset_cmd_queue_item_enqueue(thread_local_id, cmd_ctx);
 }
 
@@ -927,4 +1011,17 @@ handle_done_loading(render::HandleList handles)
         }
     }
 }
+
+g_internal Vec2U32
+render_actual_framebuffer_dim_get(Vec2S32 framebuffer_dim)
+{
+    ScratchScope scratch = ScratchScope(0, 0);
+    vulkan::Context* vk_ctx = vulkan::ctx_get();
+
+    Vec2U32 vk_framebuffer_dim_u32 = {(U32)framebuffer_dim.x, (U32)framebuffer_dim.y};
+    vulkan::SwapChainSupportDetails swapchain_details = vulkan::query_swapchain_support(scratch.arena, vk_ctx->physical_device, vk_ctx->surface);
+    VkExtent2D swapchain_extent = vulkan::choose_swap_extent(vk_framebuffer_dim_u32, swapchain_details.capabilities);
+    return vec_2u32(swapchain_extent.width, swapchain_extent.height);
+}
+
 } // namespace render

@@ -3,7 +3,9 @@ namespace async
 
 static constexpr U64 SEGMENT_BUFFER_SHIFT = 6;
 static constexpr U64 SEGMENT_BUFFER_MAX_SEGMENT_COUNT = 26;
-template <typename T> struct SegmentBuffer
+
+template <typename T>
+struct SegmentBuffer
 {
     Arena* arena;
     U64 segment_count;
