@@ -22,9 +22,10 @@
 * validation errors at null texture destruction as it is still used by some cmd buffers.
 
 # features
-* Show bikes or pedestrians instead of cars.
 * Out of device memory error.
 * delete draw flush and related code
+* Simulation
+  * Integrate with MATSim
 * Vulkan current_frame should be used exclusively in render::render_frame function (PERFORMANCE).
 * record asset lifetimes similar to how debug events are done at the moment to be sure everything related to asset lifetimes are handled on the same thread.
 * Use a list of fences for draw and compute calls that waits for asynchrounously loaded assets
@@ -42,8 +43,6 @@
   * Improve tile queue to avoid too many glitches
   * Get 3D geometry from host path
   * Create window to list 5-by-5km geometry with corresponding connection point.
-* Simulation
-  * Integrate with MATSim
 * Make application work on arm arhitecture 
   * Make clang work as compiler
   * Make app work on MACOS

@@ -249,7 +249,7 @@ struct Blend3DPipelineData
     Handle camera_handle;
 };
 
-struct Vertex3D
+struct TileVertex
 {
     Vec3F32 pos;
     F32 colormap_value;
@@ -272,6 +272,12 @@ struct Model3DInstance
     glm::vec4 y_basis;
     glm::vec4 z_basis;
     glm::vec4 w_basis;
+};
+
+struct MeshHandlePair
+{
+    Handle vertex_handle;
+    Handle index_handle;
 };
 
 struct Quad2F64
@@ -396,8 +402,7 @@ blend_3d_draw(Blend3DPipelineData pipeline_input);
 static void
 model_3d_bucket_add(render::Model3DPipelineData* pipeline_input);
 g_internal bool
-car_instance_render_bucket_add(render::Handle camera_handle, render::Handle vertex_buffer_handle, render::Handle index_buffer_handle, render::Handle tex_handle,
-                               render::BufferInfo* instance_buffer_info, U32 instance_buffer_offset);
+car_instance_render_bucket_add(render::Handle camera_handle, Buffer<render::MeshHandlePair> meshes, render::Handle tex_handle, render::BufferInfo* instance_buffer_info, U32 instance_buffer_offset);
 
 g_internal void
 car_instance_compute_bucket_add(render::BufferInfo* instance_buffer_info, render::Handle tile_vertex_buffer_handle, render::Handle tile_index_buffer_handle, F32 car_center_to_road_offset,

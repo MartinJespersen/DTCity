@@ -23,7 +23,7 @@ car_instance_pipeline_create(Context* vk_ctx, String8 shader_path)
     VkPipelineVertexInputStateCreateInfo vertex_input_info{};
     vertex_input_info.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
 
-    U32 uv_offset = (U32)offsetof(render::Vertex3D, uv);
+    U32 uv_offset = (U32)offsetof(render::TileVertex, uv);
     U32 x_basis_offset = (U32)offsetof(render::Model3DInstance, x_basis);
     U32 y_basis_offset = (U32)offsetof(render::Model3DInstance, y_basis);
     U32 z_basis_offset = (U32)offsetof(render::Model3DInstance, z_basis);
@@ -37,7 +37,7 @@ car_instance_pipeline_create(Context* vk_ctx, String8 shader_path)
         {.location = 4, .binding = 1, .format = VK_FORMAT_R32G32B32A32_SFLOAT, .offset = z_basis_offset},
         {.location = 5, .binding = 1, .format = VK_FORMAT_R32G32B32A32_SFLOAT, .offset = w_basis_offset},
     };
-    VkVertexInputBindingDescription input_desc[] = {{.binding = 0, .stride = sizeof(render::Vertex3D), .inputRate = VK_VERTEX_INPUT_RATE_VERTEX},
+    VkVertexInputBindingDescription input_desc[] = {{.binding = 0, .stride = sizeof(render::TileVertex), .inputRate = VK_VERTEX_INPUT_RATE_VERTEX},
                                                     {.binding = 1, .stride = sizeof(render::Model3DInstance), .inputRate = VK_VERTEX_INPUT_RATE_INSTANCE}};
 
     vertex_input_info.vertexBindingDescriptionCount = ArrayCount(input_desc);
@@ -171,11 +171,11 @@ model_3d_pipeline_create(Context* vk_ctx, String8 shader_path)
     VkPipelineVertexInputStateCreateInfo vertex_input_info{};
     vertex_input_info.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
 
-    U32 pos_offset = offsetof(render::Vertex3D, pos);
-    U32 colormap_value_offset = offsetof(render::Vertex3D, colormap_value);
-    U32 uv_offset = offsetof(render::Vertex3D, uv);
-    U32 overlay_uv_offset = offsetof(render::Vertex3D, overlay_uv);
-    U32 object_id_offset = offsetof(render::Vertex3D, object_id);
+    U32 pos_offset = offsetof(render::TileVertex, pos);
+    U32 colormap_value_offset = offsetof(render::TileVertex, colormap_value);
+    U32 uv_offset = offsetof(render::TileVertex, uv);
+    U32 overlay_uv_offset = offsetof(render::TileVertex, overlay_uv);
+    U32 object_id_offset = offsetof(render::TileVertex, object_id);
 
     VkVertexInputAttributeDescription attr_desc[] = {{.location = 0, .binding = 0, .format = VK_FORMAT_R32G32B32_SFLOAT, .offset = pos_offset},
                                                      {.location = 1, .binding = 0, .format = VK_FORMAT_R32_SFLOAT, .offset = colormap_value_offset},
@@ -183,7 +183,7 @@ model_3d_pipeline_create(Context* vk_ctx, String8 shader_path)
                                                      {.location = 3, .binding = 0, .format = VK_FORMAT_R32G32_SFLOAT, .offset = overlay_uv_offset},
                                                      {.location = 4, .binding = 0, .format = vk_ctx->object_id_format, .offset = object_id_offset}};
 
-    VkVertexInputBindingDescription input_desc[] = {{.binding = 0, .stride = sizeof(render::Vertex3D), .inputRate = VK_VERTEX_INPUT_RATE_VERTEX}};
+    VkVertexInputBindingDescription input_desc[] = {{.binding = 0, .stride = sizeof(render::TileVertex), .inputRate = VK_VERTEX_INPUT_RATE_VERTEX}};
 
     vertex_input_info.vertexBindingDescriptionCount = ArrayCount(input_desc);
     vertex_input_info.vertexAttributeDescriptionCount = ArrayCount(attr_desc);

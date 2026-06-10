@@ -750,10 +750,9 @@ car_instance_compute_bucket_add(render::BufferInfo* instance_buffer_info, render
 }
 
 g_internal bool
-car_instance_render_bucket_add(render::Handle camera_handle, render::Handle vertex_buffer_handle, render::Handle index_buffer_handle, render::Handle tex_handle,
-                               render::BufferInfo* instance_buffer_info, U32 instance_buffer_offset)
+car_instance_render_bucket_add(render::Handle camera_handle, Buffer<render::MeshHandlePair> meshes, render::Handle tex_handle, render::BufferInfo* instance_buffer_info, U32 instance_buffer_offset)
 {
-    if (instance_buffer_info->buffer.size == 0 || instance_buffer_info->elem_count == 0)
+    if (instance_buffer_info->buffer.size == 0 || instance_buffer_info->elem_count == 0 || meshes.size == 0)
     {
         return false;
     }
@@ -763,17 +762,21 @@ car_instance_render_bucket_add(render::Handle camera_handle, render::Handle vert
     vulkan::CarInstanceRender* instance_draw = &render_frame->car_instance_render_list;
 
     render::AssetItem<vulkan::TextureHandle>* asset_tex = 0;
-    render::AssetItem<vulkan::BufferHandle>* asset_vertex = 0;
-    render::AssetItem<vulkan::BufferHandle>* asset_index = 0;
-    if (render::is_resource_loaded(tex_handle, &asset_tex) && render::is_resource_loaded(vertex_buffer_handle, &asset_vertex) && render::is_resource_loaded(index_buffer_handle, &asset_index))
+    B32 meshes_loaded = true;
+    for (U32 mesh_idx = 0; mesh_idx < meshes.size; ++mesh_idx)
+    {
+        render::MeshHandlePair* mesh = meshes[mesh_idx];
+        meshes_loaded = meshes_loaded && render::is_resource_loaded(mesh->vertex_handle) && render::is_resource_loaded(mesh->index_handle);
+    }
+
+    if (render::is_resource_loaded(tex_handle, &asset_tex) && meshes_loaded)
     {
         vulkan::TextureHandle* tex = &asset_tex->item;
 
         // draw ressources
         vulkan::CarInstancePushConstants push_constants = {.tex_idx = tex->descriptor_set_idx};
         vulkan::CarInstanceRenderNode* node = PushStruct(vk_ctx->render_frame_arena, vulkan::CarInstanceRenderNode);
-        node->vertex_handle = &asset_vertex->item;
-        node->index_handle = &asset_index->item;
+        node->meshes = meshes;
         node->draw_push_constants = push_constants;
         node->instance_buffer_info = *instance_buffer_info;
         node->instance_buffer_offset = instance_buffer_offset;

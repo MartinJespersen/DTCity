@@ -9,7 +9,7 @@ city_init(City* city, String8 cache_path)
     Arena* arena = arena_alloc();
     city->cache_path = push_str8_copy(arena, cache_path);
     city->arena = arena;
-    city->car_scale_factor = 1.0f;
+    city->car_scale_factor = 0.01f;
 }
 
 g_internal void
@@ -340,8 +340,7 @@ city_update(City* city, async::ThreadPool* thread_pool, RoadOverlayOption neta_o
 
         // instance buffer offset alignment and assignment
         render::BufferInfo instance_buffer_info = render::BufferInfo(instance_buffer, render::BufferType_Vertex | render::BufferType_StorageBuffer);
-        draw::CarInstanceDrawResult draw_result =
-            draw::draw_car_instance_render(camera->mut_handles[current_frame].handle, city->car_sim.vertex_handle, city->car_sim.index_handle, city->car_sim.texture_handle, &instance_buffer_info);
+        draw::CarInstanceDrawResult draw_result = draw::draw_car_instance_render(camera->mut_handles[current_frame].handle, city->car_sim.meshes, city->car_sim.texture_handle, &instance_buffer_info);
 
         if (draw_result.render_scheduled)
         {
@@ -879,7 +878,7 @@ quad_to_buffer_add(RoadSegmentCorners* road_segment, Buffer<render::Vertex3DBlen
 
 // ~mgj: Cars
 g_internal Rng1F32
-car_center_height_offset(Buffer<render::Vertex3D> vertices)
+car_center_height_offset(Buffer<render::TileVertex> vertices)
 {
     F32 highest_value = 0;
     for (U64 i = 0; i < vertices.size; i++)
@@ -916,33 +915,84 @@ cars_create(CarSim* car_sim)
     gltfw_Result glb_result = gltfw_glb_read(car_sim->arena, glb_path);
     // AssertAlways(glb_result.textures.size == 1);
     U32 primitive_count = 0;
-    Buffer<render::Vertex3D> vertex_buffer = {};
     for (gltfw_Primitive* node = glb_result.primitives.first; node; node = node->next)
     {
         primitive_count++;
+    }
+    AssertAlways(primitive_count > 0);
 
+    Vec3F32 model_min = {};
+    Vec3F32 model_max = {};
+    B32 model_bounds_initialized = false;
+    for (gltfw_Primitive* node = glb_result.primitives.first; node; node = node->next)
+    {
+        for (U32 vertex_idx = 0; vertex_idx < node->vertices.size; vertex_idx++)
+        {
+            Vec3F32 pos = node->vertices.data[vertex_idx].pos;
+            if (!model_bounds_initialized)
+            {
+                model_min = pos;
+                model_max = pos;
+                model_bounds_initialized = true;
+            }
+            else
+            {
+                model_min.x = Min(model_min.x, pos.x);
+                model_min.y = Min(model_min.y, pos.y);
+                model_min.z = Min(model_min.z, pos.z);
+                model_max.x = Max(model_max.x, pos.x);
+                model_max.y = Max(model_max.y, pos.y);
+                model_max.z = Max(model_max.z, pos.z);
+            }
+        }
+    }
+
+    Vec3F32 model_pivot = {};
+    model_pivot.x = (model_min.x + model_max.x) * 0.5f;
+    model_pivot.y = model_min.y;
+    model_pivot.z = (model_min.z + model_max.z) * 0.5f;
+
+    car_sim->meshes = buffer_alloc<render::MeshHandlePair>(car_sim->arena, primitive_count);
+    render::ThreadWorkerCmdCtx* thread_ctx = render::thread_ctx_create();
+    render::thread_cmd_buffer_record(thread_ctx);
+    defer(render::thread_cmd_buffer_end(thread_ctx));
+
+    U32 mesh_idx = 0;
+    for (gltfw_Primitive* node = glb_result.primitives.first; node; node = node->next)
+    {
         // texture extraction
         gltfw_Texture* tex = glb_result.textures[node->tex_idx];
         car_sim->sampler_info = sampler_from_cgltf_sampler(tex->sampler);
         car_sim->tex_buffer = tex->tex_buf;
 
         // vertex and index extraction
-        vertex_buffer = vertex_3d_from_gltfw_vertex(car_sim->arena, node->vertices);
-        car_sim->vertex_buffer = render::BufferInfo(vertex_buffer, render::BufferType_Vertex);
+        Buffer<render::TileVertex> vertex_buffer = vertex_3d_from_gltfw_vertex(car_sim->arena, node->vertices);
+        for (U32 vertex_idx = 0; vertex_idx < vertex_buffer.size; vertex_idx++)
+        {
+            vertex_buffer.data[vertex_idx].pos.x -= model_pivot.x;
+            vertex_buffer.data[vertex_idx].pos.y -= model_pivot.y;
+            vertex_buffer.data[vertex_idx].pos.z -= model_pivot.z;
+        }
+        render::BufferInfo vertex_buffer_info = render::BufferInfo(vertex_buffer, render::BufferType_Vertex);
         Buffer<U32> index_buffer = buffer_arena_copy(car_sim->arena, node->indices);
-        car_sim->index_buffer = render::BufferInfo(index_buffer, render::BufferType_Index);
-        break;
+        render::BufferInfo index_buffer_info = render::BufferInfo(index_buffer, render::BufferType_Index);
+        car_sim->meshes.data[mesh_idx].vertex_handle = render::buffer_load_sync(thread_ctx, &vertex_buffer_info);
+        car_sim->meshes.data[mesh_idx].index_handle = render::buffer_load_sync(thread_ctx, &index_buffer_info);
+
+        Rng1F32 vertex_center_offset = car_center_height_offset(vertex_buffer);
+        if (mesh_idx == 0)
+        {
+            car_sim->car_center_offset = vertex_center_offset;
+        }
+        else
+        {
+            car_sim->car_center_offset.min = Min(car_sim->car_center_offset.min, vertex_center_offset.min);
+            car_sim->car_center_offset.max = Max(car_sim->car_center_offset.max, vertex_center_offset.max);
+        }
+        mesh_idx++;
     }
-    AssertAlways(primitive_count == 1);
 
-    render::ThreadWorkerCmdCtx* thread_ctx = render::thread_ctx_create();
-    render::thread_cmd_buffer_record(thread_ctx);
-    defer(render::thread_cmd_buffer_end(thread_ctx));
     car_sim->texture_handle = render::texture_load_sync(thread_ctx, &car_sim->sampler_info, car_sim->tex_buffer);
-    car_sim->vertex_handle = render::buffer_load_sync(thread_ctx, &car_sim->vertex_buffer);
-    car_sim->index_handle = render::buffer_load_sync(thread_ctx, &car_sim->index_buffer);
-
-    car_sim->car_center_offset = car_center_height_offset(vertex_buffer);
     car_sim->cars = buffer_alloc<Car>(car_sim->arena, car_sim->car_count);
 
     for (U32 i = 0; i < car_sim->car_count; ++i)
@@ -964,8 +1014,11 @@ cars_create(CarSim* car_sim)
 g_internal void
 car_sim_destroy(CarSim* car_sim)
 {
-    render::handle_destroy(car_sim->vertex_handle);
-    render::handle_destroy(car_sim->index_handle);
+    for (U32 i = 0; i < car_sim->meshes.size; ++i)
+    {
+        render::handle_destroy(car_sim->meshes.data[i].vertex_handle);
+        render::handle_destroy(car_sim->meshes.data[i].index_handle);
+    }
     render::handle_destroy(car_sim->texture_handle);
 
     arena_release(car_sim->arena);
@@ -1149,7 +1202,7 @@ buildings_buffers_create(Arena* arena, osm::Network* osm_network, F32 road_heigh
         Assert(way->node_ids[0] == way->node_ids[way->node_count - 1]);
     }
 
-    Buffer<render::Vertex3D> vertex_buffer = buffer_alloc<render::Vertex3D>(scratch.arena, total_vertex_count);
+    Buffer<render::TileVertex> vertex_buffer = buffer_alloc<render::TileVertex>(scratch.arena, total_vertex_count);
     Buffer<U32> index_buffer = buffer_alloc<U32>(scratch.arena, total_index_count);
 
     U32 base_index_idx = 0;
@@ -1266,7 +1319,7 @@ buildings_buffers_create(Arena* arena, osm::Network* osm_network, F32 road_heigh
 
     {
         prof_scope_marker_named("buildings_buffers_create_buffer_copy");
-        Buffer<render::Vertex3D> vertex_buffer_final = buffer_alloc<render::Vertex3D>(arena, base_vertex_idx);
+        Buffer<render::TileVertex> vertex_buffer_final = buffer_alloc<render::TileVertex>(arena, base_vertex_idx);
         Buffer<U32> index_buffer_final = buffer_alloc<U32>(arena, base_index_idx);
         BufferCopy(vertex_buffer_final, vertex_buffer, base_vertex_idx);
         BufferCopy(index_buffer_final, index_buffer, base_index_idx);
@@ -1689,10 +1742,10 @@ edge_from_road_edge(osm::Network* network, osm::RoadEdge* road_edge, Map<osm::Wa
     return chosen_edge;
 }
 
-g_internal Buffer<render::Vertex3D>
+g_internal Buffer<render::TileVertex>
 vertex_3d_from_gltfw_vertex(Arena* arena, Buffer<gltfw_Vertex3D> in_vertex_buffer)
 {
-    Buffer<render::Vertex3D> out_vertex_buffer = buffer_alloc<render::Vertex3D>(arena, in_vertex_buffer.size);
+    Buffer<render::TileVertex> out_vertex_buffer = buffer_alloc<render::TileVertex>(arena, in_vertex_buffer.size);
     for (U32 i = 0; i < in_vertex_buffer.size; i++)
     {
         out_vertex_buffer.data[i].pos = in_vertex_buffer.data[i].pos;

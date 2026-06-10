@@ -202,21 +202,18 @@ struct CarSim
     Buffer<Car> cars;
     Buffer<F32> car_height;
 
-    render::BufferInfo vertex_buffer;
-    render::BufferInfo index_buffer;
+    Buffer<render::MeshHandlePair> meshes;
     Buffer<U8> tex_buffer;
 
     render::SamplerInfo sampler_info;
     Rng1F32 car_center_offset;
 
     render::Handle texture_handle;
-    render::Handle vertex_handle;
-    render::Handle index_handle;
 };
 
 struct BuildingRenderInfo
 {
-    Buffer<render::Vertex3D> vertex_buffer;
+    Buffer<render::TileVertex> vertex_buffer;
     Buffer<U32> index_buffer;
     U32 roof_index_offset;
     U32 roof_index_count;
@@ -360,7 +357,7 @@ city_release(City* city);
 g_internal neta::Edge*
 edge_from_road_edge(osm::Network* network, osm::RoadEdge* road_edge, Map<S64, neta::EdgeList>* edge_list_map);
 
-g_internal Buffer<render::Vertex3D>
+g_internal Buffer<render::TileVertex>
 vertex_3d_from_gltfw_vertex(Arena* arena, Buffer<gltfw_Vertex3D> in_vertex_buffer);
 
 g_internal void
@@ -388,7 +385,7 @@ bvh_create(Arena* arena, Buffer<RoadSegmentCorners> road_segment_buffer, U32 lea
 g_internal Vec3F64
 height_dim_add(Vec2F64 pos, F64 height);
 g_internal Rng1F32
-car_center_height_offset(Buffer<render::Vertex3D> vertices);
+car_center_height_offset(Buffer<render::TileVertex> vertices);
 g_internal osm::EcefLocation
 random_ecef_road_node_get(osm::Network* network);
 g_internal F64

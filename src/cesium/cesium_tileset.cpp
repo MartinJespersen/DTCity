@@ -614,7 +614,7 @@ tile_render_data_from_gltf(const CesiumGltf::Model& model, const glm::dmat4& ece
     struct PrimitiveNode
     {
         PrimitiveNode* next;
-        Buffer<render::Vertex3D> vertices;
+        Buffer<render::TileVertex> vertices;
         Buffer<U32> indices;
         U32 material_idx;
         B32 has_overlay_uv;
@@ -719,13 +719,13 @@ tile_render_data_from_gltf(const CesiumGltf::Model& model, const glm::dmat4& ece
                 const CesiumGltf::Accessor* index_accessor = CesiumGltf::Model::getSafe(&model.accessors, primitive.indices);
 
                 // Allocate buffers
-                Buffer<render::Vertex3D> vertices = buffer_alloc<render::Vertex3D>(scratch.arena, pos_accessor->count);
+                Buffer<render::TileVertex> vertices = buffer_alloc<render::TileVertex>(scratch.arena, pos_accessor->count);
                 Buffer<U32> indices = buffer_alloc<U32>(scratch.arena, index_accessor->count);
 
                 // Copy vertices
                 for (U32 i = 0; i < (U32)pos_accessor->count; ++i)
                 {
-                    render::Vertex3D* vertex = &vertices.data[i];
+                    render::TileVertex* vertex = &vertices.data[i];
                     vertex->colormap_value = 0.0f;
                     vertex->uv = {};
                     vertex->overlay_uv = {};
@@ -821,9 +821,9 @@ tile_render_data_from_gltf(const CesiumGltf::Model& model, const glm::dmat4& ece
         U32 vertex_offset = 0;
         U32 index_offset = 0;
 
-        Buffer<render::Vertex3D> vertices = {};
+        Buffer<render::TileVertex> vertices = {};
         Buffer<U32> indices = {};
-        vertices = buffer_alloc<render::Vertex3D>(tile_render_data_list->arena, vertex_count);
+        vertices = buffer_alloc<render::TileVertex>(tile_render_data_list->arena, vertex_count);
         indices = buffer_alloc<U32>(tile_render_data_list->arena, index_count);
         for (PrimitiveNode* prim_node = primitive_list.first; prim_node; prim_node = prim_node->next)
         {

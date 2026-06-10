@@ -78,7 +78,7 @@ draw_road_intersection_compute(render::Handle vertex_buffer_handle, render::Hand
 }
 
 g_internal CarInstanceDrawResult
-draw_car_instance_render(render::Handle camera_handle, render::Handle vertex_buffer_handle, render::Handle index_buffer_handle, render::Handle tex_handle, render::BufferInfo* instance_buffer_info)
+draw_car_instance_render(render::Handle camera_handle, Buffer<render::MeshHandlePair> meshes, render::Handle tex_handle, render::BufferInfo* instance_buffer_info)
 {
     DrawFrame* frame = draw_frame_get();
     U32 align = 16;
@@ -88,7 +88,7 @@ draw_car_instance_render(render::Handle camera_handle, render::Handle vertex_buf
     frame->total_instance_buffer_byte_count = Max(frame->total_instance_buffer_byte_count, instance_buffer_offset + instance_buffer_info->buffer.size);
 
     CarInstanceDrawResult result = {};
-    result.render_scheduled = render::car_instance_render_bucket_add(camera_handle, vertex_buffer_handle, index_buffer_handle, tex_handle, instance_buffer_info, instance_buffer_offset);
+    result.render_scheduled = render::car_instance_render_bucket_add(camera_handle, meshes, tex_handle, instance_buffer_info, instance_buffer_offset);
     result.buffer_offset = instance_buffer_offset;
 
     return result;
