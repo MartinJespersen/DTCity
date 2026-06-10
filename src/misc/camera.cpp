@@ -22,47 +22,52 @@ camera_init(Arena* arena, Camera* camera)
 }
 
 static void
-camera_update(Camera* camera, io::IO* input, F64 time, Vec2S32 extent, U32 current_frame_idx)
+camera_update(Camera* camera, io::IO* input, F64 time, Vec2S32 extent, U32 current_frame_idx, bool enable)
 {
     F32 mouse_sensitivity = 0.1f;
     F32 scroll_sensitivity = 0.2f;
-    if (input->mouse_left_clicked & input->is_cursor_inside_win & input->is_window_focused)
+    if (enable)
     {
-        F32 mouse_delta_x = input->mouse_pos_cur.x - camera->mouse_pos_last.x;
-        F32 mouse_delta_y = input->mouse_pos_cur.y - camera->mouse_pos_last.y;
-        camera->yaw -= mouse_delta_x * mouse_sensitivity;
-        camera->pitch -= mouse_delta_y * mouse_sensitivity;
+        if (input->mouse_left_clicked & input->is_cursor_inside_win & input->is_window_focused)
+        {
+            F32 mouse_delta_x = input->mouse_pos_cur.x - camera->mouse_pos_last.x;
+            F32 mouse_delta_y = input->mouse_pos_cur.y - camera->mouse_pos_last.y;
+            camera->yaw -= mouse_delta_x * mouse_sensitivity;
+            camera->pitch -= mouse_delta_y * mouse_sensitivity;
 
-        if (camera->pitch > 89.0f)
-            camera->pitch = 89.0f;
-        if (camera->pitch < -89.0f)
-            camera->pitch = -89.0f;
-        camera->view_dir = ui_direction_normal_from_euler_angles(camera->yaw, camera->pitch);
+            if (camera->pitch > 89.0f)
+                camera->pitch = 89.0f;
+            if (camera->pitch < -89.0f)
+                camera->pitch = -89.0f;
+            camera->view_dir = ui_direction_normal_from_euler_angles(camera->yaw, camera->pitch);
+        }
+
+        camera->fov -= (F32)input->scroll_y.load(std::memory_order_seq_cst) * scroll_sensitivity;
+        if (camera->fov < 1.0f)
+            camera->fov = 1.0f;
+        if (camera->fov > 45.0f)
+            camera->fov = 45.0f;
+
+        glm::vec3 camera_up = glm::vec3(0.0f, 0.0f, 1.0f);
+
+        F64 move_y = (input->w_btn_clicked + (-input->s_btn_clicked)) * time * (F64)camera->move_sensitivity;
+        F64 move_x = (-input->a_btn_clicked + (input->d_btn_clicked)) * time * (F64)camera->move_sensitivity;
+        glm::vec3 x_view_norm = glm::normalize(glm::cross(camera->view_dir, camera_up));
+
+        camera->position += camera->view_dir * (F32)move_y;
+        camera->position += (F32)move_x * x_view_norm;
     }
+
     camera->mouse_pos_last.x = input->mouse_pos_cur.x;
     camera->mouse_pos_last.y = input->mouse_pos_cur.y;
-
-    camera->fov -= (F32)input->scroll_y.load(std::memory_order_seq_cst) * scroll_sensitivity;
-    if (camera->fov < 1.0f)
-        camera->fov = 1.0f;
-    if (camera->fov > 45.0f)
-        camera->fov = 45.0f;
+    input->scroll_y.store(0.0, std::memory_order_seq_cst);
 
     glm::vec3 camera_up = glm::vec3(0.0f, 0.0f, 1.0f);
-
-    F64 move_y = (input->w_btn_clicked + (-input->s_btn_clicked)) * time * (F64)camera->move_sensitivity;
-    F64 move_x = (-input->a_btn_clicked + (input->d_btn_clicked)) * time * (F64)camera->move_sensitivity;
-    glm::vec3 x_view_norm = glm::normalize(glm::cross(camera->view_dir, camera_up));
-
-    camera->position += camera->view_dir * (F32)move_y;
-    camera->position += (F32)move_x * x_view_norm;
-
     camera->view_matrix = glm::lookAt(camera->position, camera->position + camera->view_dir, camera_up);
 
     F32 aspect_ratio = (F32)Max(extent.x, 1) / (F32)Max(extent.y, 1);
     camera->projection_matrix = glm::perspective(glm::radians(camera->fov), aspect_ratio, 0.1f, 5000.0f);
     camera->projection_matrix[1][1] *= -1.0f;
-    input->scroll_y.store(0.0, std::memory_order_seq_cst);
 
     Vec2U32 camera_framebuffer_dim = vec_2u32((U32)Max(extent.x, 1), (U32)Max(extent.y, 1));
     render::MappedHandle camera_handle = camera->mut_handles[current_frame_idx];

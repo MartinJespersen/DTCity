@@ -422,11 +422,10 @@ texture_load_async(render::SamplerInfo* sampler_info, String8 texture_path)
 }
 
 g_internal Handle
-texture_load_sync(render::ThreadWorkerCmdCtx* thread_ctx, render::SamplerInfo* sampler_info, String8 texture_path)
+texture_load_sync(render::ThreadWorkerCmdCtx* thread_ctx, render::SamplerInfo* sampler_info, Buffer<U8> tex_buf)
 {
     ScratchScope scratch = ScratchScope(0, 0);
 
-    Buffer<U8> tex_buf = io::file_read(scratch.arena, texture_path);
     Assert(tex_buf.size > 0 && "Texture file not found");
     render::Handle tex_handle = render::texture_handle_create(sampler_info);
     B32 err = vulkan::texture_gpu_upload_cmd_recording((VkCommandBuffer)thread_ctx->cmd_buffer, tex_handle, tex_buf);
@@ -436,6 +435,16 @@ texture_load_sync(render::ThreadWorkerCmdCtx* thread_ctx, render::SamplerInfo* s
     }
     render::handle_list_push(thread_ctx, tex_handle);
 
+    return tex_handle;
+}
+
+g_internal Handle
+texture_load_sync(render::ThreadWorkerCmdCtx* thread_ctx, render::SamplerInfo* sampler_info, String8 texture_path)
+{
+    ScratchScope scratch = ScratchScope(0, 0);
+
+    Buffer<U8> tex_buf = io::file_read(scratch.arena, texture_path);
+    Handle tex_handle = texture_load_sync(thread_ctx, sampler_info, tex_buf);
     return tex_handle;
 }
 

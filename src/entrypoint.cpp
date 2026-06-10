@@ -277,6 +277,10 @@ dt_main_loop(void* ptr)
             ImGui::RadioButton(city::road_overlay_option_strs[i], (int*)&neta_overlay_option, (int)i);
         }
 
+        ImGui::SeparatorText("Cars");
+        city::City* selected_city = city_buf[area_option];
+        ImGui::SliderFloat("Scale", &selected_city->car_scale_factor, 0.0f, 1.0f, "%.2f");
+
         ImGui::End();
 
         if (cur_area_option != area_option)
@@ -289,7 +293,11 @@ dt_main_loop(void* ptr)
         // TODO: current_frame should not be part of vulkan layer
         render::current_frame_work_done_wait();
         ui::Camera* camera = container_item_from_idx(ctx->camera_container, city->camera_handle);
-        ui::camera_update(camera, ctx->io, ctx->time->delta_time_sec, vec_2s32(io_ctx->framebuffer_width, io_ctx->framebuffer_height), vk_ctx->current_frame);
+        ImGuiIO& imgui_io = ImGui::GetIO();
+        bool imgui_window_hovered = ImGui::IsWindowHovered(ImGuiHoveredFlags_AnyWindow);
+        bool imgui_input_captured = imgui_io.WantCaptureMouse || imgui_io.WantCaptureKeyboard;
+        bool world_camera_enable = !imgui_window_hovered && !imgui_input_captured;
+        ui::camera_update(camera, ctx->io, ctx->time->delta_time_sec, vec_2s32(io_ctx->framebuffer_width, io_ctx->framebuffer_height), vk_ctx->current_frame, world_camera_enable);
         // keep inactive cities' tilesets making progress so their raster overlay
         // tile providers finish creating in the background; the active city is
         // pumped by city_update -> tileset_update_view

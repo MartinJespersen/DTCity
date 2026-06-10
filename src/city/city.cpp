@@ -9,6 +9,7 @@ city_init(City* city, String8 cache_path)
     Arena* arena = arena_alloc();
     city->cache_path = push_str8_copy(arena, cache_path);
     city->arena = arena;
+    city->car_scale_factor = 1.0f;
 }
 
 g_internal void
@@ -320,7 +321,6 @@ city_update(City* city, async::ThreadPool* thread_pool, RoadOverlayOption neta_o
         car_sim->network = city->road.osm_network;
         car_sim->asset_dir = push_str8_copy(arena, ctx->data_subdirs.data[dt_DataDirType::Assets]);
         car_sim->texture_dir = push_str8_copy(arena, ctx->data_subdirs.data[dt_DataDirType::Texture]);
-        car_sim->texture_path = str8_path_from_str8_list(car_sim->arena, {car_sim->texture_dir, S("car_collection.ktx2")});
         car_sim->car_count = 100;
         async::AsyncTaskStatus<CarSim>* car_sim_task = async::async_task_run(ctx->thread_pool, car_sim_build, car_sim, S("Car Sim Task"));
 
@@ -335,7 +335,8 @@ city_update(City* city, async::ThreadPool* thread_pool, RoadOverlayOption neta_o
     /// car simulation rendering
     if (city->cars_creation_done)
     {
-        Buffer<render::Model3DInstance> instance_buffer = car_sim_update(draw::draw_frame_arena_get(), &city->car_sim, ctx->time->delta_time_sec, city->cesium.ecef_to_local);
+        F32 scale_factor = city->car_scale_factor;
+        Buffer<render::Model3DInstance> instance_buffer = car_sim_update(draw::draw_frame_arena_get(), &city->car_sim, ctx->time->delta_time_sec, city->cesium.ecef_to_local, scale_factor);
 
         // instance buffer offset alignment and assignment
         render::BufferInfo instance_buffer_info = render::BufferInfo(instance_buffer, render::BufferType_Vertex | render::BufferType_StorageBuffer);
@@ -878,18 +879,18 @@ quad_to_buffer_add(RoadSegmentCorners* road_segment, Buffer<render::Vertex3DBlen
 
 // ~mgj: Cars
 g_internal Rng1F32
-car_center_height_offset(Buffer<gltfw_Vertex3D> vertices)
+car_center_height_offset(Buffer<render::Vertex3D> vertices)
 {
     F32 highest_value = 0;
     for (U64 i = 0; i < vertices.size; i++)
     {
-        highest_value = Max(highest_value, vertices.data[i].pos.z);
+        highest_value = Max(highest_value, vertices.data[i].pos.y);
     }
 
     F32 lowest_value = highest_value;
     for (U64 i = 0; i < vertices.size; i++)
     {
-        lowest_value = Min(lowest_value, vertices.data[i].pos.z);
+        lowest_value = Min(lowest_value, vertices.data[i].pos.y);
     }
 
     return r1f32(lowest_value, highest_value);
@@ -910,24 +911,38 @@ cars_create(CarSim* car_sim)
     prof_scope_marker;
     ScratchScope scratch = ScratchScope(0, 0);
 
-    // parse gltf file
-    String8 gltf_path = str8_path_from_str8_list(scratch.arena, {car_sim->asset_dir, S("cars/scene.gltf")});
-    CgltfResult parsed_result = gltfw_gltf_read(scratch.arena, gltf_path, S("Car.013"));
-    car_sim->sampler_info = sampler_from_cgltf_sampler(parsed_result.sampler);
-    Buffer<render::Vertex3D> vertex_buffer = vertex_3d_from_gltfw_vertex(car_sim->arena, parsed_result.vertex_buffer);
-    car_sim->vertex_buffer = render::BufferInfo(vertex_buffer, render::BufferType_Vertex);
-    Buffer<U32> index_buffer = buffer_arena_copy(car_sim->arena, parsed_result.index_buffer);
-    car_sim->index_buffer = render::BufferInfo(index_buffer, render::BufferType_Index);
+    // parse glb file
+    String8 glb_path = str8_path_from_str8_list(scratch.arena, {car_sim->asset_dir, S("bike.glb")});
+    gltfw_Result glb_result = gltfw_glb_read(car_sim->arena, glb_path);
+    // AssertAlways(glb_result.textures.size == 1);
+    U32 primitive_count = 0;
+    Buffer<render::Vertex3D> vertex_buffer = {};
+    for (gltfw_Primitive* node = glb_result.primitives.first; node; node = node->next)
+    {
+        primitive_count++;
+
+        // texture extraction
+        gltfw_Texture* tex = glb_result.textures[node->tex_idx];
+        car_sim->sampler_info = sampler_from_cgltf_sampler(tex->sampler);
+        car_sim->tex_buffer = tex->tex_buf;
+
+        // vertex and index extraction
+        vertex_buffer = vertex_3d_from_gltfw_vertex(car_sim->arena, node->vertices);
+        car_sim->vertex_buffer = render::BufferInfo(vertex_buffer, render::BufferType_Vertex);
+        Buffer<U32> index_buffer = buffer_arena_copy(car_sim->arena, node->indices);
+        car_sim->index_buffer = render::BufferInfo(index_buffer, render::BufferType_Index);
+        break;
+    }
+    AssertAlways(primitive_count == 1);
 
     render::ThreadWorkerCmdCtx* thread_ctx = render::thread_ctx_create();
     render::thread_cmd_buffer_record(thread_ctx);
     defer(render::thread_cmd_buffer_end(thread_ctx));
-
-    car_sim->texture_handle = render::texture_load_sync(thread_ctx, &car_sim->sampler_info, car_sim->texture_path);
+    car_sim->texture_handle = render::texture_load_sync(thread_ctx, &car_sim->sampler_info, car_sim->tex_buffer);
     car_sim->vertex_handle = render::buffer_load_sync(thread_ctx, &car_sim->vertex_buffer);
     car_sim->index_handle = render::buffer_load_sync(thread_ctx, &car_sim->index_buffer);
 
-    car_sim->car_center_offset = car_center_height_offset(parsed_result.vertex_buffer);
+    car_sim->car_center_offset = car_center_height_offset(vertex_buffer);
     car_sim->cars = buffer_alloc<Car>(car_sim->arena, car_sim->car_count);
 
     for (U32 i = 0; i < car_sim->car_count; ++i)
@@ -957,7 +972,7 @@ car_sim_destroy(CarSim* car_sim)
 }
 
 g_internal Buffer<render::Model3DInstance>
-car_sim_update(Arena* arena, CarSim* car, F64 time_delta, glm::dmat4& ecef_to_local)
+car_sim_update(Arena* arena, CarSim* car, F64 time_delta, glm::dmat4& ecef_to_local, F32 scale_factor)
 {
     prof_scope_marker;
     Buffer<render::Model3DInstance> instance_buffer = buffer_alloc<render::Model3DInstance>(arena, car->cars.size);
@@ -999,14 +1014,14 @@ car_sim_update(Arena* arena, CarSim* car, F64 time_delta, glm::dmat4& ecef_to_lo
 
         glm::dvec3 z_up = glm::dvec3(0.0f, 0.0f, 1.0f);
         glm::dvec3 dir = glm::normalize(glm::dvec3(ecef_to_local * glm::dvec4(car_info->dir.x, car_info->dir.y, car_info->dir.z, 0.0)));
-        glm::dvec3 y_basis = -dir;
+        glm::dvec3 x_basis = -dir;
 
-        glm::dvec3 x_basis = glm::cross(y_basis, z_up);
-        glm::dvec3 z_basis = glm::cross(x_basis, y_basis);
+        glm::dvec3 z_basis = glm::cross(x_basis, z_up);
+        glm::dvec3 y_basis = glm::cross(z_basis, x_basis);
 
-        instance->x_basis = glm::vec4(glm::dvec4(x_basis, 0.0f));
-        instance->y_basis = glm::vec4(glm::dvec4(y_basis, 0.0f));
-        instance->z_basis = glm::vec4(glm::dvec4(z_basis, 0.0f));
+        instance->x_basis = glm::vec4(glm::dvec4(x_basis, 0.0f)) * scale_factor;
+        instance->y_basis = glm::vec4(glm::dvec4(y_basis, 0.0f)) * scale_factor;
+        instance->z_basis = glm::vec4(glm::dvec4(z_basis, 0.0f)) * scale_factor;
         instance->w_basis = glm::vec4(ecef_to_local * glm::dvec4(new_pos_3d.x, new_pos_3d.y, new_pos_3d.z, 1.0));
 
         car_info->cur_pos_ecef = new_pos_3d;

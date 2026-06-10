@@ -626,7 +626,8 @@ tile_render_data_from_gltf(const CesiumGltf::Model& model, const glm::dmat4& ece
         PrimitiveNode* last;
     };
 
-    Assert(model.scenes.size() == 1);
+    U32 model_scene_count = model.scenes.size();
+    Assert(model_scene_count == 1);
     for (U32 i = 0; i < model.nodes.size(); i++)
     {
         Assert(model.nodes[i].children.size() == 0);

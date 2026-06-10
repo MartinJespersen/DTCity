@@ -204,6 +204,7 @@ struct CarSim
 
     render::BufferInfo vertex_buffer;
     render::BufferInfo index_buffer;
+    Buffer<U8> tex_buffer;
 
     render::SamplerInfo sampler_info;
     Rng1F32 car_center_offset;
@@ -211,8 +212,6 @@ struct CarSim
     render::Handle texture_handle;
     render::Handle vertex_handle;
     render::Handle index_handle;
-
-    String8 texture_path;
 };
 
 struct BuildingRenderInfo
@@ -298,6 +297,7 @@ struct City
 
     Road road;
     CarSim car_sim;
+    F32 car_scale_factor;
     Buildings buildings;
     cesium::TilesetRenderer cesium;
     neta::NetaState* neta_state;
@@ -334,7 +334,7 @@ cars_create(CarSim* car_sim);
 g_internal void
 car_sim_destroy(CarSim* car_sim);
 g_internal Buffer<render::Model3DInstance>
-car_sim_update(Arena* arena, CarSim* car, F64 time_delta, glm::dmat4& ecef_to_local);
+car_sim_update(Arena* arena, CarSim* car, F64 time_delta, glm::dmat4& ecef_to_local, F32 scale_factor);
 // ~mgj: HTTP and caching
 g_internal String8
 str8_from_bbox(Arena* arena, Rng2F64 bbox);
@@ -388,7 +388,7 @@ bvh_create(Arena* arena, Buffer<RoadSegmentCorners> road_segment_buffer, U32 lea
 g_internal Vec3F64
 height_dim_add(Vec2F64 pos, F64 height);
 g_internal Rng1F32
-car_center_height_offset(Buffer<gltfw_Vertex3D> vertices);
+car_center_height_offset(Buffer<render::Vertex3D> vertices);
 g_internal osm::EcefLocation
 random_ecef_road_node_get(osm::Network* network);
 g_internal F64

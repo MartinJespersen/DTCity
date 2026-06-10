@@ -380,6 +380,8 @@ g_internal Handle
 texture_load_sync(render::ThreadWorkerCmdCtx* thread_ctx, render::SamplerInfo* sampler_info, String8 texture_path);
 g_internal Handle
 texture_load_sync(render::SamplerInfo* sampler_info, TextureUploadData* tex_data, void* cmd);
+g_internal Handle
+texture_load_sync(render::ThreadWorkerCmdCtx* thread_ctx, render::SamplerInfo* sampler_info, Buffer<U8> tex_buf);
 g_internal void
 handle_destroy(Handle handle);
 g_internal void
