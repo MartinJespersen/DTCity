@@ -1042,7 +1042,13 @@ tileset_renderer_create(Arena* arena, TilesetRenderer* in_out_cesium, async::Thr
 
     // setup tilesets
     TilesetRendererCreateContext create_context = _tileset_renderer_create_context(arena, in_out_cesium, threads, origin_longitude, origin_latitude, origin_height);
+    create_context.options.enableLodTransitionPeriod = false;
+    create_context.options.lodTransitionLength = 1.0;
 
+    create_context.options.maximumCachedBytes = 128LL * 1024 * 1024;
+    create_context.options.maximumSimultaneousTileLoads = 8;
+    create_context.options.preloadSiblings = false;
+    create_context.options.loadingDescendantLimit = 4;
     U32 tileset_count = 1;
     if (custom_geometry_enabled)
     {
@@ -1139,11 +1145,8 @@ tileset_renderer_destroy(TilesetRenderer* renderer)
 // Update and Rendering
 //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-// advances a renderer's async work without touching the view. used to keep
-// renderers that are not currently displayed making progress, so their raster
-// overlay tile providers and height-sample continuations finish creating in the
-// background. without this an inactive renderer is frozen until it becomes the
-// active one, which leaves overlays unmapped until the view is updated.
+// Advances completed async work without touching the view. Inactive renderers
+// must still drain freed tile resources, but should not kick more tile loads.
 g_internal void
 tileset_pump_async(TilesetRenderer* renderer)
 {
@@ -1151,10 +1154,7 @@ tileset_pump_async(TilesetRenderer* renderer)
         return;
 
     renderer->async_system.dispatchMainThreadTasks();
-    for (U32 i = 0; i < renderer->tilesets.size; ++i)
-    {
-        renderer->tilesets.data[i]->loadTiles();
-    }
+    tileset_renderer_free_tile_ressource(renderer);
 }
 
 g_internal void
@@ -1186,8 +1186,7 @@ tileset_update_view(TilesetRenderer* renderer, ui::Camera* camera, Vec2U32 viewp
                                                                                      fov_rad * aspect_ratio, // horizontal FOV
                                                                                      fov_rad);               // vertical FOV
 
-    // IMPORTANT: Dispatch main thread tasks to process completed async work
-    // This calls prepareInMainThread for tiles that finished loading
+    renderer->async_system.dispatchMainThreadTasks();
 
     // Clear and rebuild the loaded tiles list
     renderer->tile_to_show = {};
@@ -1198,6 +1197,7 @@ tileset_update_view(TilesetRenderer* renderer, ui::Camera* camera, Vec2U32 viewp
     for (U32 i = 0; i < renderer->tilesets.size; ++i)
     {
         const Cesium3DTilesSelection::ViewUpdateResult& result = renderer->tilesets.data[i]->updateViewGroup(renderer->tilesets.data[i]->getDefaultViewGroup(), views, (F32)delta_time);
+        renderer->tilesets.data[i]->loadTiles();
 
         for (const Cesium3DTilesSelection::Tile* tile : result.tilesToRenderThisFrame)
         {

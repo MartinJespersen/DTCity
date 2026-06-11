@@ -90,8 +90,8 @@ render_ctx_create(String8 shader_path, io::IO* io_ctx, async::ThreadPool* thread
         vk_ctx->validation_layers.data[i] = {str8_c_string(validation_layers[i])};
     }
 
-    const char* device_extensions[] = {VK_KHR_SWAPCHAIN_EXTENSION_NAME, VK_KHR_DYNAMIC_RENDERING_EXTENSION_NAME, VK_EXT_COLOR_WRITE_ENABLE_EXTENSION_NAME, VK_EXT_DESCRIPTOR_INDEXING_EXTENSION_NAME,
-                                       VK_KHR_PUSH_DESCRIPTOR_EXTENSION_NAME};
+    const char* device_extensions[] = {VK_KHR_SWAPCHAIN_EXTENSION_NAME,           VK_KHR_DYNAMIC_RENDERING_EXTENSION_NAME, VK_EXT_COLOR_WRITE_ENABLE_EXTENSION_NAME,
+                                       VK_EXT_DESCRIPTOR_INDEXING_EXTENSION_NAME, VK_KHR_PUSH_DESCRIPTOR_EXTENSION_NAME,   VK_EXT_MEMORY_BUDGET_EXTENSION_NAME};
     vk_ctx->device_extensions = buffer_alloc<String8>(vk_ctx->arena, ArrayCount(device_extensions));
     for (U32 i = 0; i < ArrayCount(device_extensions); i++)
     {
@@ -228,6 +228,7 @@ render_frame(Vec2U32 framebuffer_dim, B32* in_out_framebuffer_resized, Vec2S64 m
         return;
     }
     vulkan::Context* vk_ctx = vulkan::ctx_get();
+    vmaSetCurrentFrameIndex(vk_ctx->asset_manager->allocator, vk_ctx->current_frame);
 
     defer({ vk_ctx->current_frame = (vk_ctx->current_frame + 1) % MAX_FRAMES_IN_FLIGHT; });
 

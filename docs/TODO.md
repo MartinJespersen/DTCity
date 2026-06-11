@@ -6,23 +6,16 @@
   * Raster overlay upload failure can enqueue a command buffer without handles or done_loading_func.
 
 # Less urgent changes
-* vulkan descriptor layout specified twice some places (e.g. compute storage buffers descriptor)
 * Reconsider the number of descriptor pools (whether 1 is enough) and the descriptor numbers
 * In function RoadSegmentFromTwoRoadNodes: the normalize function leads to values being Nan. Handle this in a better way.
 * Improve the threading in the asset manager (e.g. too many mutexes are used at the moment)
-* The implementation of draw functions and similar for compute is ugly
-* Use vulkan push descriptor and buffer device address instead of descriptor sets
-* buildings need to be rendered included in compute pass as well
-* simplify render interface (a little too verbose at the moment)
 * Remove the printf logging and find way to log the queue messages
 * make descriptor_pool and functionallity part of asset_manager.
-* Make TilesetRenderer into global variable
-* Validation error for descriptors not used in shader when null texture is not filling in the wholes
 * tile transform might need to be passed to shader as a uniform buffer
-* validation errors at null texture destruction as it is still used by some cmd buffers.
 
 # features
-* Out of device memory error.
+* Out of device memory error. 
+* Are the amount of descriptor indices not deallocated? 
 * delete draw flush and related code
 * Simulation
   * Integrate with MATSim
@@ -33,6 +26,8 @@
 * Osm data visualizer should not be affected by netascore not showing
 * It should be possible to switch between cities in the editor
 * Use the OSM data for showing data about buildings
+  * buildings need to be rendered included in compute pass as well
+* simplify render interface (a little too verbose at the moment)
 * Logging should be improved to not always print to console 
   * Create memory viewer
 <!--* 3D assets 

@@ -152,7 +152,7 @@ imgui_debug_window(city::City* city, cesium::TilesetRenderer* renderer, async::T
     ImGui::SetNextWindowPos(ImVec2(viewport->WorkPos.x, viewport->WorkPos.y + viewport->WorkSize.y), ImGuiCond_Always, ImVec2(0.0f, 1.0f));
     ImGui::SetNextWindowSizeConstraints(ImVec2(0.0f, 0.0f), ImVec2(max_debug_window_width, FLT_MAX));
 
-    ImGui::Begin("Debug Info", nullptr, ImGuiWindowFlags_AlwaysAutoResize);
+    ImGui::Begin("Debug Info", nullptr, ImGuiWindowFlags_None);
     ImGui::Text("FPS: %f", ImGui::GetIO().Framerate);
     ImGui::Text("Textures:       %d active, %d free", asset_manager->texture_list.count, asset_manager->texture_free_list.count);
     ImGui::Text("Buffers:        %d active, %d free", asset_manager->buffer_list.count, asset_manager->buffer_free_list.count);
@@ -189,6 +189,24 @@ imgui_debug_window(city::City* city, cesium::TilesetRenderer* renderer, async::T
 
     // camera location
     ImGui::Text("Camera Position: %.2f, %.2f, %.2f", camera->position.x, camera->position.y, camera->position.z);
+
+    VmaBudget budgets[VK_MAX_MEMORY_HEAPS] = {};
+    vmaGetHeapBudgets(asset_manager->allocator, budgets);
+    vulkan::Context* vk_ctx = vulkan::ctx_get();
+    VkPhysicalDeviceMemoryProperties memory_properties = {};
+    vkGetPhysicalDeviceMemoryProperties(vk_ctx->physical_device, &memory_properties);
+    for (U32 i = 0; i < memory_properties.memoryHeapCount; i++)
+    {
+        B32 device_local = memory_properties.memoryHeaps[i].flags & VK_MEMORY_HEAP_DEVICE_LOCAL_BIT;
+        U64 budget_mb = budgets[i].budget / MB(1);
+        U64 usage_mb = budgets[i].usage / MB(1);
+        U64 free_mb = 0;
+        if (budgets[i].budget > budgets[i].usage)
+        {
+            free_mb = (budgets[i].budget - budgets[i].usage) / MB(1);
+        }
+        ImGui::Text("Heap %u%s: %llu / %llu MB used, %llu MB free", i, device_local ? " device" : "", usage_mb, budget_mb, free_mb);
+    }
 
     ImGui::End();
 }
@@ -259,6 +277,7 @@ dt_main_loop(void* ptr)
         draw::draw_new_frame();
         ImGui::NewFrame();
         async::thread_pool_main_thread_queue_drain(ctx->thread_pool);
+
         Vec2U32 framebuffer_dim = {(U32)io_ctx->framebuffer_width, (U32)io_ctx->framebuffer_height};
 
         ImGui::Begin("Interaction", nullptr);
@@ -277,7 +296,7 @@ dt_main_loop(void* ptr)
             ImGui::RadioButton(city::road_overlay_option_strs[i], (int*)&neta_overlay_option, (int)i);
         }
 
-        ImGui::SeparatorText("Cars");
+        ImGui::SeparatorText("Agent Size");
         city::City* selected_city = city_buf[area_option];
         ImGui::SliderFloat("Scale", &selected_city->car_scale_factor, 0.01f, 0.1f, "%.3f");
 

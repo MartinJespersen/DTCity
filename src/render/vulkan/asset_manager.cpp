@@ -576,11 +576,18 @@ asset_manager_create(VkPhysicalDevice physical_device, VkDevice device, VkInstan
     asset_manager->graphics_queue_family_index = queue_family_index;
 
     // Create VMA allocator
+    VmaVulkanFunctions vulkan_functions = {};
+    vulkan_functions.vkGetInstanceProcAddr = vkGetInstanceProcAddr;
+    vulkan_functions.vkGetDeviceProcAddr = vkGetDeviceProcAddr;
+
     VmaAllocatorCreateInfo allocatorInfo = {};
+    allocatorInfo.flags = VMA_ALLOCATOR_CREATE_EXT_MEMORY_BUDGET_BIT;
+    allocatorInfo.vulkanApiVersion = VK_API_VERSION_1_3;
     allocatorInfo.physicalDevice = physical_device;
     allocatorInfo.device = device;
     allocatorInfo.instance = instance;
-    vmaCreateAllocator(&allocatorInfo, &asset_manager->allocator);
+    allocatorInfo.pVulkanFunctions = &vulkan_functions;
+    VK_CHECK_RESULT(vmaCreateAllocator(&allocatorInfo, &asset_manager->allocator));
 
     VkCommandPoolCreateInfo cmd_pool_info{};
     cmd_pool_info.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
@@ -597,7 +604,7 @@ asset_manager_create(VkPhysicalDevice physical_device, VkDevice device, VkInstan
     asset_manager->cmd_wait_list = asset_manager_cmd_list_create();
     asset_manager->cmd_queue = asset_manager_cmd_queue_create();
 
-    descriptor_index_allocator_init(&asset_manager->descriptor_index_allocator, arena, 5000);
+    descriptor_index_allocator_init(&asset_manager->descriptor_index_allocator, arena, 10000);
 
     // ~mgj: Mutex for asset operations (Textures and Buffers)
     asset_manager->texture_mutex = os_rw_mutex_alloc();
@@ -642,16 +649,16 @@ asset_manager_destroy(AssetManager* asset_manager)
     asset_manager_cmd_queue_destroy(asset_manager->cmd_queue);
     deletion_queue_empty_all();
 
+    asset_manager_live_resources_destroy(asset_manager);
+
 #if BUILD_DEBUG
     {
         char* vma_json = nullptr;
         vmaBuildStatsString(asset_manager->allocator, &vma_json, VK_TRUE);
-        DEBUG_LOG("VMA live allocations at shutdown:\n%s", vma_json);
+        DEBUG_LOG("VMA live allocations after asset shutdown:\n%s", vma_json);
         vmaFreeStatsString(asset_manager->allocator, vma_json);
     }
 #endif
-
-    asset_manager_live_resources_destroy(asset_manager);
 
     for (U32 i = 0; i < asset_manager->threaded_cmd_pools.size; i++)
     {
@@ -1117,7 +1124,7 @@ asset_manager_texture_free(render::Handle handle)
     vulkan::Context* vk_ctx = ctx_get();
     AssetManager* asset_manager = vk_ctx->asset_manager;
     render::AssetItem<TextureHandle>* item = asset_manager_texture_item_get(handle);
-    render::AssetItem<TextureHandle>* null_tex = asset_manager_texture_item_get(handle);
+    render::AssetItem<TextureHandle>* null_tex = asset_manager_texture_item_get(vk_ctx->null_texture_handle);
     if (item)
     {
         OS_MutexScopeW(asset_manager->texture_mutex)
@@ -1214,9 +1221,10 @@ staging_buffer_mapped_create(VkDeviceSize size, const char* buffer_name)
     staging_alloc_create_info.flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT | VMA_ALLOCATION_CREATE_MAPPED_BIT;
 
     BufferAllocation staging_buf_alloc = {};
-    vmaCreateBuffer(asset_manager->allocator, &staging_buf_create_info, &staging_alloc_create_info, &staging_buf_alloc.buffer, &staging_buf_alloc.allocation, nullptr);
+    VK_CHECK_RESULT(vmaCreateBuffer(asset_manager->allocator, &staging_buf_create_info, &staging_alloc_create_info, &staging_buf_alloc.buffer, &staging_buf_alloc.allocation, nullptr));
 
     vmaSetAllocationName(asset_manager->allocator, staging_buf_alloc.allocation, buffer_name);
+    staging_buf_alloc.size = (U32)size;
 
     return staging_buf_alloc;
 }
@@ -1271,13 +1279,18 @@ buffer_readback_create(VkDeviceSize size, VkBufferUsageFlags buffer_usage, Buffe
     vmaSetAllocationName(asset_manager->allocator, out_buffer_readback->buffer_alloc.allocation, name);
 
     out_buffer_readback->mapped_ptr = alloc_info.pMappedData;
+    out_buffer_readback->buffer_alloc.size = (U32)size;
 }
 
 static void
 buffer_readback_destroy(BufferReadback* out_buffer_readback)
 {
     AssetManager* asset_manager = asset_manager_get();
-    vmaDestroyBuffer(asset_manager->allocator, out_buffer_readback->buffer_alloc.buffer, out_buffer_readback->buffer_alloc.allocation);
+    if (out_buffer_readback->buffer_alloc.buffer != VK_NULL_HANDLE)
+    {
+        vmaDestroyBuffer(asset_manager->allocator, out_buffer_readback->buffer_alloc.buffer, out_buffer_readback->buffer_alloc.allocation);
+        *out_buffer_readback = {};
+    }
 }
 
 //~mgj: Image Allocation Functions (VMA)
