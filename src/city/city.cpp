@@ -130,46 +130,30 @@ city_update(City* city, async::ThreadPool* thread_pool, RoadOverlayOption neta_o
         {
             case AsyncTaskType::Osm:
             {
-                osm::Network* osm_network_stub = 0;
-                B32 success = false;
-                task_done = async::async_task_is_done(task->osm, &osm_network_stub, &success);
-                if (success)
-                {
-                    city->osm_task_done = true;
-                }
+                async::AsyncTaskResult<osm::Network> task_result = async::async_task_is_done(task->osm);
+                task_done = task_result.done;
+                city->osm_task_done = task_result.success;
             };
             break;
             case AsyncTaskType::Neta:
             {
-                neta::NetaTaskState* neta_state_stub = 0;
-                B32 success = false;
-                task_done = async::async_task_is_done(task->neta, &neta_state_stub, &success);
-                if (success)
-                {
-                    city->neta_task_done = true;
-                }
+                async::AsyncTaskResult<neta::NetaTaskState> task_result = async::async_task_is_done(task->neta);
+                task_done = task_result.done;
+                city->neta_task_done = task_result.success;
             }
             break;
             case AsyncTaskType::Road:
             {
-                Road* road_stub = 0;
-                B32 success = false;
-                task_done = async::async_task_is_done(task->road, &road_stub, &success);
-                if (success)
-                {
-                    city->road_building_done = true;
-                }
+                async::AsyncTaskResult<Road> task_result = async::async_task_is_done(task->road);
+                task_done = task_result.done;
+                city->road_building_done = task_result.success;
             }
             break;
             case AsyncTaskType::CarSim:
             {
-                CarSim* car_sim_stub = 0;
-                B32 success = false;
-                task_done = async::async_task_is_done(task->car_sim, &car_sim_stub, &success);
-                if (success)
-                {
-                    city->cars_creation_done = true;
-                }
+                async::AsyncTaskResult<CarSim> task_result = async::async_task_is_done(task->car_sim);
+                task_done = task_result.done;
+                city->cars_creation_done = task_result.success;
             }
             break;
             case city::AsyncTaskType::Cached:

@@ -51,6 +51,80 @@ struct AsyncTaskWork
 };
 
 template <typename T>
+struct AsyncTaskResult
+{
+    AsyncTaskResult()
+    {
+        this->task = 0;
+        this->done = false;
+        this->success = false;
+    }
+
+    AsyncTaskResult(AsyncTaskStatus<T>* task)
+    {
+        this->task = 0;
+        this->done = false;
+        this->success = false;
+
+        B32 expected = 1;
+        if (task->done.compare_exchange_strong(expected, 0))
+        {
+            this->done = true;
+            this->task = task;
+            this->success = !task->error.load(std::memory_order_acquire);
+        }
+    }
+
+    AsyncTaskResult(const AsyncTaskResult<T>& other) = delete;
+    AsyncTaskResult<T>&
+    operator=(const AsyncTaskResult<T>& other) = delete;
+
+    AsyncTaskResult(AsyncTaskResult<T>&& other)
+    {
+        this->task = other.task;
+        this->done = other.done;
+        this->success = other.success;
+
+        other.task = 0;
+        other.done = false;
+        other.success = false;
+    }
+
+    AsyncTaskResult<T>&
+    operator=(AsyncTaskResult<T>&& other)
+    {
+        if (this != &other)
+        {
+            if (this->task)
+            {
+                arena_release(this->task->arena);
+            }
+
+            this->task = other.task;
+            this->done = other.done;
+            this->success = other.success;
+
+            other.task = 0;
+            other.done = false;
+            other.success = false;
+        }
+        return *this;
+    }
+
+    ~AsyncTaskResult()
+    {
+        if (this->task)
+        {
+            arena_release(this->task->arena);
+        }
+    }
+
+    AsyncTaskStatus<T>* task;
+    B32 done;
+    B32 success;
+};
+
+template <typename T>
 g_internal AsyncTaskStatus<T>*
 async_task_run(AsyncTaskStatus<T>* task_status, ThreadPool* thread_pool, WorkerTaskFunc<T> func, S64 us_delay);
 
@@ -59,8 +133,8 @@ g_internal AsyncTaskStatus<T>*
 _async_task_status_create(String8 name);
 
 template <typename T>
-g_internal bool
-async_task_is_done(AsyncTaskStatus<T>* task, T** out_result, B32* out_success = nullptr);
+g_internal AsyncTaskResult<T>
+async_task_is_done(AsyncTaskStatus<T>* task);
 
 template <typename T>
 g_internal AsyncTaskStatus<T>*

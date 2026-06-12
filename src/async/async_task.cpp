@@ -62,11 +62,11 @@ async_task_run(AsyncTaskStatus<T>* task_status, ThreadPool* thread_pool, WorkerT
 }
 
 template <typename T>
-g_internal bool
-async_task_is_done(AsyncTaskStatus<T>* task, T** out_result, B32* out_success)
+g_internal AsyncTaskResult<T>
+async_task_is_done(AsyncTaskStatus<T>* task)
 {
-    B32 task_done = task->done.load(std::memory_order_acquire);
-    if (task_done)
+    AsyncTaskResult<T> result = AsyncTaskResult<T>(task);
+    if (result.done)
     {
         B32 errored = task->error.load();
         if (errored)
@@ -95,14 +95,9 @@ async_task_is_done(AsyncTaskStatus<T>* task, T** out_result, B32* out_success)
             break;
         }
         INFO_LOG("%.*s work successfully complete", str8_varg(task->task_name));
-        *out_result = task->user_data;
-        if (out_success)
-        {
-            *out_success = !errored;
-        }
-        arena_release(task->arena);
     }
-    return task_done;
+
+    return result;
 }
 
 template <typename T>
