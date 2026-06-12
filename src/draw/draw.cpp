@@ -78,7 +78,7 @@ draw_road_intersection_compute(render::Handle vertex_buffer_handle, render::Hand
 }
 
 g_internal CarInstanceDrawResult
-draw_car_instance_render(render::Handle camera_handle, Buffer<render::MeshHandlePair> meshes, render::Handle tex_handle, render::BufferInfo* instance_buffer_info)
+draw_car_instance_render(render::MappedHandle<void> camera_handle, Buffer<render::MeshHandlePair> meshes, render::Handle tex_handle, render::BufferInfo* instance_buffer_info)
 {
     DrawFrame* frame = draw_frame_get();
     U32 align = 16;

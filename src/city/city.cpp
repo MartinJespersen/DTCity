@@ -309,7 +309,7 @@ city_update(City* city, async::ThreadPool* thread_pool, RoadOverlayOption neta_o
             tile->render_data.height_offset = -renderer->height_offset;
         }
         tile->render_data.colormap_handle = colormap_handle;
-        tile->render_data.camera_handle = camera_handle.handle;
+        tile->render_data.camera_handle = render::mapped_handle_erased(camera_handle);
         render::model_3d_bucket_add(&tile->render_data);
     }
 
@@ -340,7 +340,8 @@ city_update(City* city, async::ThreadPool* thread_pool, RoadOverlayOption neta_o
 
         // instance buffer offset alignment and assignment
         render::BufferInfo instance_buffer_info = render::BufferInfo(instance_buffer, render::BufferType_Vertex | render::BufferType_StorageBuffer);
-        draw::CarInstanceDrawResult draw_result = draw::draw_car_instance_render(camera->mut_handles[current_frame].handle, city->car_sim.meshes, city->car_sim.texture_handle, &instance_buffer_info);
+        render::MappedHandle<void> camera_handle_void = render::mapped_handle_erased(camera_handle);
+        draw::CarInstanceDrawResult draw_result = draw::draw_car_instance_render(camera_handle_void, city->car_sim.meshes, city->car_sim.texture_handle, &instance_buffer_info);
 
         if (draw_result.render_scheduled)
         {

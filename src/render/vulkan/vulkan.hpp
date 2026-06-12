@@ -30,7 +30,7 @@ struct Model3DNode
     BufferAllocation vertex_alloc;
     F32 depth_bias;
     Model3dPushConstants push_constants;
-    render::Handle camera_handle;
+    render::MappedHandle<void> camera_handle;
 };
 
 struct CarInstancePushConstants
@@ -63,7 +63,7 @@ struct CarInstanceRenderNode
     CarInstanceRenderNode* next;
 
     // draw pipeline ressources
-    render::Handle camera_handle;
+    render::MappedHandle<void> camera_handle;
     Buffer<render::MeshHandlePair> meshes;
     CarInstancePushConstants draw_push_constants;
 
@@ -153,6 +153,18 @@ struct RenderFrame
     RoadIntersectionList road_intersection_list;
 };
 
+struct MappedHandle
+{
+    void* data;
+    render::Handle handle;
+};
+
+struct MappedHandleTransfer
+{
+    String8 source;
+    render::MappedHandle<void> mapped_handle;
+};
+
 struct Context
 {
     static const U32 WIDTH = 800;
@@ -228,6 +240,7 @@ struct Context
     VkDescriptorSetLayout storage_buffer_descriptor_set_layout;
     VkDescriptorSetLayout car_height_calculate_descriptor_set_layout;
     render::Handle model_3D_instance_buffer[render::MAX_FRAMES_IN_FLIGHT];
+    LinkedList<MappedHandleTransfer> mapped_handle_list; // mapped handles
 };
 
 // ~mgj: Vulkan Lifetime
@@ -287,6 +300,9 @@ pipeline_destroy(Pipeline* draw_ctx);
 
 static void
 command_buffer_record(U32 image_index, U32 current_frame, Vec2S64 mouse_cursor_pos);
+
+g_internal void
+mapped_buffers_update();
 
 static void
 profile_buffers_create(Context* vk_ctx);

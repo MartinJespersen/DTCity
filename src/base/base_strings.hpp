@@ -180,7 +180,7 @@ cstring32_length(U32* c);
 ////////////////////////////////
 //~ rjf: String Constructors
 
-#define str8_lit(S) Str8((U8*)(S), sizeof(S) - 1)
+#define str8_lit(S) str8((U8*)(S), sizeof(S) - 1)
 #define str8_lit_comp(S)                                                                                                                                                                               \
     {                                                                                                                                                                                                  \
         (U8*)(S),                                                                                                                                                                                      \
@@ -188,12 +188,12 @@ cstring32_length(U32* c);
     }
 #define str8_varg(S) (int)((S).size), ((S).str)
 
-#define str8_array(S, C) Str8((U8*)(S), sizeof(*(S)) * (C))
-#define str8_array_fixed(S) Str8((U8*)(S), sizeof(S))
-#define str8_struct(S) Str8((U8*)(S), sizeof(*(S)))
+#define str8_array(S, C) str8((U8*)(S), sizeof(*(S)) * (C))
+#define str8_array_fixed(S) str8((U8*)(S), sizeof(S))
+#define str8_struct(S) str8((U8*)(S), sizeof(*(S)))
 
 static String8
-Str8(U8* str, U64 size);
+str8(U8* str, U64 size);
 static String8
 str8_range(U8* first, U8* one_past_last);
 static String8
@@ -583,5 +583,5 @@ exit_with_error(const char* msg, ...);
 #define c_str_equal(a, b) (!strcmp((a), (b)))
 // ~mgj: String Macros
 #define Str8Cmp(a, b) (!strcmp(((char*)(a).str), ((char*)(b).str)))
-#define S(str) Str8((U8*)(str), sizeof(str) - 1)
+#define S(str) str8((U8*)(str), sizeof(str) - 1)
 #endif // BASE_STRINGS_H

@@ -1835,7 +1835,7 @@ w32_entry_point_caller(int argc, WCHAR** wargv)
             DWORD size = MAX_COMPUTERNAME_LENGTH + 1;
             if (GetComputerNameA((char*)buffer, &size))
             {
-                info->machine_name = push_str8_copy(arena, Str8(buffer, size));
+                info->machine_name = push_str8_copy(arena, str8(buffer, size));
             }
         }
     }

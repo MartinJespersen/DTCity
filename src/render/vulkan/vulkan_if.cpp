@@ -222,12 +222,13 @@ static void
 render_frame(Vec2U32 framebuffer_dim, B32* in_out_framebuffer_resized, Vec2S64 mouse_cursor_pos)
 {
     ScratchScope scratch = ScratchScope(0, 0);
+    vulkan::Context* vk_ctx = vulkan::ctx_get();
 
     if (framebuffer_dim.x == 0 || framebuffer_dim.y == 0)
     {
+        vk_ctx->mapped_handle_list = {};
         return;
     }
-    vulkan::Context* vk_ctx = vulkan::ctx_get();
     vmaSetCurrentFrameIndex(vk_ctx->asset_manager->allocator, vk_ctx->current_frame);
 
     defer({ vk_ctx->current_frame = (vk_ctx->current_frame + 1) % MAX_FRAMES_IN_FLIGHT; });
@@ -257,6 +258,7 @@ render_frame(Vec2U32 framebuffer_dim, B32* in_out_framebuffer_resized, Vec2S64 m
         // delete everyting in the deletion queue as all the command using its ressource have
         // finished execution at this point
         vulkan::deletion_queue_empty_next();
+        vulkan::mapped_buffers_update();
 
         VkResult result = vkAcquireNextImageKHR(vk_ctx->device, vk_ctx->swapchain_resources->swapchain, UINT64_MAX, image_available_semaphore, VK_NULL_HANDLE, &image_idx);
 
@@ -356,6 +358,7 @@ static void
 new_frame()
 {
     vulkan::Context* vk_ctx = vulkan::ctx_get();
+    vk_ctx->mapped_handle_list = {};
     arena_clear(vk_ctx->render_frame_arena);
     vk_ctx->render_frame = PushStruct(vk_ctx->render_frame_arena, vulkan::RenderFrame);
     ImGui_ImplVulkan_NewFrame();
@@ -555,57 +558,53 @@ handle_destroy_deferred(render::Handle handle)
 
 template <typename T>
 g_internal void
-mapped_buffer_update(MappedHandle<T> mut_handle)
+mapped_buffer_add(MappedHandle<T> mut_handle, T* data)
 {
-    render::AssetItem<vulkan::BufferHandle>* mapped_buffer_handle = vulkan::asset_manager_buffer_item_get(mut_handle.handle);
-    vulkan::BufferHandle* mapped_buffer = &mapped_buffer_handle->item;
-
-    vulkan::AssetManager* asset_manager = vulkan::asset_manager_get();
-    U32 mapped_buffer_size = mapped_buffer->buffer_alloc.size;
-
-    AssertAlways(mapped_buffer->mem_prop_flags & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT);
-    if ((mapped_buffer->mem_prop_flags & VK_MEMORY_PROPERTY_HOST_COHERENT_BIT) == 0)
-    {
-        VK_CHECK_RESULT(vmaFlushAllocation(asset_manager->allocator, mapped_buffer->buffer_alloc.allocation, 0, mapped_buffer_size));
-    }
+    vulkan::Context* vk_ctx = vulkan::ctx_get();
+    String8 buffer = str8((U8*)data, sizeof(T));
+    String8 source = push_str8_copy(vk_ctx->render_frame_arena, buffer);
+    LinkedListNode<vulkan::MappedHandleTransfer>* mut_handle_node = PushStruct(vk_ctx->render_frame_arena, LinkedListNode<vulkan::MappedHandleTransfer>);
+    render::MappedHandle<void> handle_void = render::mapped_handle_erased(mut_handle);
+    mut_handle_node->v.mapped_handle = handle_void;
+    mut_handle_node->v.source = source;
+    SLLQueuePush(vk_ctx->mapped_handle_list.first, vk_ctx->mapped_handle_list.last, mut_handle_node);
 }
 
 template <typename T>
 g_internal MappedHandle<T>
-mapped_buffer_load_sync(Arena* arena, render::ThreadWorkerCmdCtx* thread_ctx, BufferType buffer_type)
+mapped_buffer_create(Arena* arena, render::ThreadWorkerCmdCtx* thread_ctx, BufferType buffer_type)
 {
     ScratchScope scratch = ScratchScope(0, 0);
     vulkan::Context* vk_ctx = vulkan::ctx_get();
     vulkan::AssetManager* asset_manager = vk_ctx->asset_manager;
+    Buffer<MappedHandleFrame<T>> handle_buffer = buffer_alloc<MappedHandleFrame<T>>(arena, render::MAX_FRAMES_IN_FLIGHT);
 
-    T* data = PushStruct(scratch.arena, T);
-    render::BufferInfo buffer_info = render::BufferInfo(arena, data, buffer_type);
-
-    VmaAllocationCreateInfo vma_info = {0};
-    vma_info.usage = VMA_MEMORY_USAGE_AUTO;
-    vma_info.flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT | VMA_ALLOCATION_CREATE_MAPPED_BIT;
-    vma_info.requiredFlags = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT;
-
-    render::Handle handle = vulkan::asset_manager_buffer_allocation_create(thread_ctx, &buffer_info, vma_info);
-    render::AssetItem<vulkan::BufferHandle>* asset_item_buffer = vulkan::asset_manager_buffer_item_get(handle);
-    vulkan::BufferHandle* buffer_handle = &asset_item_buffer->item;
-
-    VkMemoryPropertyFlags mem_prop_flags;
-    vmaGetAllocationMemoryProperties(asset_manager->allocator, buffer_handle->buffer_alloc.allocation, &mem_prop_flags);
-    buffer_handle->mem_prop_flags = mem_prop_flags;
-
-    VmaAllocationInfo alloc_info;
-    vmaGetAllocationInfo(asset_manager->allocator, buffer_handle->buffer_alloc.allocation, &alloc_info);
-
-    MappedHandle<T> mut_handle = {};
-    mut_handle.handle = handle;
-    mut_handle.data = (T*)alloc_info.pMappedData;
-    if (!mut_handle.data)
+    for (U32 frame_idx = 0; frame_idx < handle_buffer.size; ++frame_idx)
     {
-        mut_handle.data = PushStruct(arena, T);
-        buffer_handle->staging_buffer = vulkan::staging_buffer_create(buffer_info.buffer.size);
+        MappedHandleFrame<T>* content = &handle_buffer.data[frame_idx];
+        VmaAllocationCreateInfo vma_info = {0};
+        vma_info.usage = VMA_MEMORY_USAGE_AUTO;
+        vma_info.flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT | VMA_ALLOCATION_CREATE_MAPPED_BIT;
+        vma_info.requiredFlags = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT;
+
+        BufferInfo buffer_info = BufferInfo::empty_buffer_info<T>(arena, buffer_type);
+        content->handle = vulkan::asset_manager_buffer_allocation_create(thread_ctx, &buffer_info, vma_info);
+        render::AssetItem<vulkan::BufferHandle>* asset_item_buffer = vulkan::asset_manager_buffer_item_get(content->handle);
+        vulkan::BufferHandle* buffer_handle = &asset_item_buffer->item;
+
+        VkMemoryPropertyFlags mem_prop_flags;
+        vmaGetAllocationMemoryProperties(asset_manager->allocator, buffer_handle->buffer_alloc.allocation, &mem_prop_flags);
+        buffer_handle->mem_prop_flags = mem_prop_flags;
+
+        VmaAllocationInfo alloc_info;
+        vmaGetAllocationInfo(asset_manager->allocator, buffer_handle->buffer_alloc.allocation, &alloc_info);
+
+        content->data = (T*)alloc_info.pMappedData;
+        AssertAlways(content->data);
     }
 
+    MappedHandle<T> mut_handle = {};
+    mut_handle.buffer = handle_buffer;
     return mut_handle;
 }
 
@@ -751,7 +750,8 @@ car_instance_compute_bucket_add(render::BufferInfo* instance_buffer_info, render
 }
 
 g_internal bool
-car_instance_render_bucket_add(render::Handle camera_handle, Buffer<render::MeshHandlePair> meshes, render::Handle tex_handle, render::BufferInfo* instance_buffer_info, U32 instance_buffer_offset)
+car_instance_render_bucket_add(render::MappedHandle<void> camera_handle, Buffer<render::MeshHandlePair> meshes, render::Handle tex_handle, render::BufferInfo* instance_buffer_info,
+                               U32 instance_buffer_offset)
 {
     if (instance_buffer_info->buffer.size == 0 || instance_buffer_info->elem_count == 0 || meshes.size == 0)
     {

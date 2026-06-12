@@ -255,7 +255,8 @@ car_instance_rendering()
         VK_CHECK_RESULT(vmaCopyMemoryToAllocation(vk_ctx->asset_manager->allocator, node->instance_buffer_info.buffer.data, instance_buffer_alloc.allocation, node->instance_buffer_offset,
                                                   node->instance_buffer_info.buffer.size));
 
-        render::AssetItem<BufferHandle>* asset_item = asset_manager_buffer_item_get(node->camera_handle);
+        render::Handle camera_handle = node->camera_handle.buffer[vk_ctx->current_frame]->handle;
+        render::AssetItem<BufferHandle>* asset_item = asset_manager_buffer_item_get(camera_handle);
         BufferHandle* camera_buffer = &asset_item->item;
 
         VkDescriptorBufferInfo camera_buffer_info{};
@@ -452,7 +453,8 @@ model_3d_rendering()
     VkDeviceSize offsets[] = {0};
     for (Model3DNode* node = render_frame->model_3D_list.first; node; node = node->next)
     {
-        render::AssetItem<BufferHandle>* camera_buffer_handle = asset_manager_buffer_item_get(node->camera_handle);
+        render::Handle camera_handle = node->camera_handle.buffer[vk_ctx->current_frame]->handle;
+        render::AssetItem<BufferHandle>* camera_buffer_handle = asset_manager_buffer_item_get(camera_handle);
         AssertAlways(camera_buffer_handle);
         BufferHandle* camera_buffer = &camera_buffer_handle->item;
 
@@ -873,6 +875,31 @@ command_buffer_record(U32 image_index, U32 current_frame, Vec2S64 mouse_cursor_p
         }
     }
     ScratchEnd(scratch);
+}
+
+g_internal void
+mapped_buffers_update()
+{
+    vulkan::Context* vk_ctx = vulkan::ctx_get();
+    for (LinkedListNode<MappedHandleTransfer>* m_handle_transfer = vk_ctx->mapped_handle_list.first; m_handle_transfer; m_handle_transfer = m_handle_transfer->next)
+    {
+        render::MappedHandleFrame<void>* frame_handle = &m_handle_transfer->v.mapped_handle.buffer.data[vk_ctx->current_frame];
+
+        render::AssetItem<vulkan::BufferHandle>* mapped_buffer_handle = vulkan::asset_manager_buffer_item_get(frame_handle->handle);
+        vulkan::BufferHandle* mapped_buffer = &mapped_buffer_handle->item;
+
+        MemoryCopy(frame_handle->data, m_handle_transfer->v.source.str, m_handle_transfer->v.source.size);
+
+        vulkan::AssetManager* asset_manager = vulkan::asset_manager_get();
+        U32 mapped_buffer_size = mapped_buffer->buffer_alloc.size;
+
+        AssertAlways(mapped_buffer->mem_prop_flags & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT);
+        if ((mapped_buffer->mem_prop_flags & VK_MEMORY_PROPERTY_HOST_COHERENT_BIT) == 0)
+        {
+            VK_CHECK_RESULT(vmaFlushAllocation(asset_manager->allocator, mapped_buffer->buffer_alloc.allocation, 0, mapped_buffer_size));
+        }
+    }
+    vk_ctx->mapped_handle_list = {};
 }
 
 static void

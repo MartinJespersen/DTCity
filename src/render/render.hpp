@@ -56,11 +56,27 @@ struct Handle
 };
 
 template <typename T>
-struct MappedHandle
+struct MappedHandleFrame
 {
     T* data;
     render::Handle handle;
 };
+
+template <typename T>
+struct MappedHandle
+{
+    Buffer<MappedHandleFrame<T>> buffer;
+};
+
+template <typename T>
+static MappedHandle<void>
+mapped_handle_erased(MappedHandle<T> handle)
+{
+    MappedHandle<void> result = {};
+    result.buffer.data = (MappedHandleFrame<void>*)handle.buffer.data;
+    result.buffer.size = handle.buffer.size;
+    return result;
+}
 
 struct HandleNode
 {
@@ -161,6 +177,13 @@ struct BufferInfo
 
     template <typename T>
     BufferInfo(Arena* arena, T* buffer, U32 buffer_type);
+
+    template <typename T>
+    static BufferInfo
+    empty_buffer_info(Arena* arena, BufferType buffer_type);
+
+    BufferInfo
+    copy_to_arena(Arena* arena);
 };
 
 enum class PipelineLayoutType
@@ -210,7 +233,7 @@ struct Model3DPipelineData
     Handle texture_handle;
     Handle overlay_texture_handle;
     Handle colormap_handle;
-    Handle camera_handle;
+    MappedHandle<void> camera_handle;
 
     Vec2F32 overlay_translation;
     Vec2F32 overlay_scale;
@@ -402,7 +425,8 @@ blend_3d_draw(Blend3DPipelineData pipeline_input);
 static void
 model_3d_bucket_add(render::Model3DPipelineData* pipeline_input);
 g_internal bool
-car_instance_render_bucket_add(render::Handle camera_handle, Buffer<render::MeshHandlePair> meshes, render::Handle tex_handle, render::BufferInfo* instance_buffer_info, U32 instance_buffer_offset);
+car_instance_render_bucket_add(render::MappedHandle<void> camera_handle, Buffer<render::MeshHandlePair> meshes, render::Handle tex_handle, render::BufferInfo* instance_buffer_info,
+                               U32 instance_buffer_offset);
 
 g_internal void
 car_instance_compute_bucket_add(render::BufferInfo* instance_buffer_info, render::Handle tile_vertex_buffer_handle, render::Handle tile_index_buffer_handle, F32 car_center_to_road_offset,
@@ -419,10 +443,11 @@ buffer_load_sync(render::ThreadWorkerCmdCtx* thread_ctx, render::BufferInfo* buf
 
 template <typename T>
 g_internal MappedHandle<T>
-mapped_buffer_load_sync(Arena* arena, render::ThreadWorkerCmdCtx* thread_ctx, BufferType buffer_type);
+mapped_buffer_create(Arena* arena, render::ThreadWorkerCmdCtx* thread_ctx, BufferType buffer_type);
+
 template <typename T>
 g_internal void
-mapped_buffer_update(MappedHandle<T> mut_handle);
+mapped_buffer_add(MappedHandle<T> mut_handle, T* data);
 
 g_internal Handle
 storage_buffer_load_sync(Arena* arena, Handle vertex_buffer_handle, Handle index_buffer_handle);

@@ -1190,7 +1190,7 @@ int main(int argc, char **argv) {
 
         // rjf: save
         if (got_final_result && size > 0) {
-          String8 full_name = Str8(buffer, size);
+          String8 full_name = str8(buffer, size);
           String8 name_chopped = str8_chop_last_slash(full_name);
           info->binary_path = push_str8_copy(os_lnx_state.arena, name_chopped);
         }

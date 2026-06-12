@@ -60,7 +60,7 @@ static void tctx_set_thread_name(String8 string) {
 
 static String8 tctx_get_thread_name() {
   TCTX *tctx = TCTX_Get();
-  String8 result = Str8(tctx->thread_name, tctx->thread_name_size);
+  String8 result = str8(tctx->thread_name, tctx->thread_name_size);
   return (result);
 }
 

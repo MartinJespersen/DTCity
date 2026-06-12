@@ -151,8 +151,8 @@ way_buffer_from_simd_json(Arena* arena, String8 json)
                 auto value_view = tag.value.get_string();
 
                 // Convert to String8
-                String8 temp_key = Str8((U8*)key_view.data(), key_view.size());
-                String8 temp_value = Str8((U8*)value_view.value().data(), value_view.value().size());
+                String8 temp_key = str8((U8*)key_view.data(), key_view.size());
+                String8 temp_value = str8((U8*)value_view.value().data(), value_view.value().size());
 
                 // Copy to arena
                 way->tags.data[tag_cur_index].key = push_str8_copy(arena, temp_key);

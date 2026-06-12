@@ -309,8 +309,6 @@ dt_main_loop(void* ptr)
             city_info = &cities_info_arr[cur_area_option];
         }
 
-        // TODO: current_frame should not be part of vulkan layer
-        render::current_frame_work_done_wait();
         ui::Camera* camera = container_item_from_idx(ctx->camera_container, city->camera_handle);
         ImGuiIO& imgui_io = ImGui::GetIO();
         bool imgui_window_hovered = ImGui::IsWindowHovered(ImGuiHoveredFlags_AnyWindow);

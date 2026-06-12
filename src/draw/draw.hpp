@@ -44,15 +44,12 @@ struct RoadIntersectionList
     RoadIntersectionNode* last;
 };
 
-// struct CarInstanceComputeNode
-// {
-//     CarInstanceComputeNode* next;
-//     render::BufferInfo instance_buffer_info;
-//     render::Handle tile_vertex_buffer_handle;
-//     render::Handle tile_index_buffer_handle;
-//     F32 car_center_to_road_offset;
-//     U32 instance_buffer_offset;
-// };
+template <typename T>
+struct MappedHandle
+{
+    T* data;
+    render::Handle handle;
+};
 
 struct DrawFrame
 {
@@ -131,6 +128,6 @@ g_internal bool
 draw_road_intersection_compute(render::Handle vertex_buffer_handle, render::Handle index_buffer_handle, render::Handle road_segment_buffer_handle, render::Handle road_segment_node_buffer_handle,
                                U32 overlay_option);
 g_internal CarInstanceDrawResult
-draw_car_instance_render(render::Handle camera_handle, Buffer<render::MeshHandlePair> meshes, render::Handle tex_handle, render::BufferInfo* instance_buffer_info);
+draw_car_instance_render(render::MappedHandle<void> camera_handle, Buffer<render::MeshHandlePair> meshes, render::Handle tex_handle, render::BufferInfo* instance_buffer_info);
 
 } // namespace draw

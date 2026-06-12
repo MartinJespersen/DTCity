@@ -1253,6 +1253,6 @@ root_tileset_url_is_readable(String8 url)
     }
 
     std::string native_path = CesiumUtility::Uri::uriPathToNativePath(std::string(uri.getPath()));
-    return os_file_path_exists(Str8((U8*)native_path.data(), native_path.size()));
+    return os_file_path_exists(str8((U8*)native_path.data(), native_path.size()));
 }
 } // namespace cesium

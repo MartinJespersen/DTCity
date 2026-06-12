@@ -79,4 +79,22 @@ render::BufferInfo::BufferInfo(Arena* arena, T* input, U32 buffer_type)
     this->elem_count = 1;
 }
 
+BufferInfo
+BufferInfo::copy_to_arena(Arena* arena)
+{
+    BufferInfo buffer_info = *this;
+    buffer_info.buffer = buffer_alloc<U8>(arena, this->type_size * this->elem_count);
+    return buffer_info;
+}
+
+template <typename T>
+render::BufferInfo
+render::BufferInfo::empty_buffer_info(Arena* arena, BufferType buffer_type)
+{
+    T* node = PushStruct(arena, T);
+    Buffer<U8> buffer = {.data = (U8*)node, .size = sizeof(T)};
+    render::BufferInfo buffer_info = render::BufferInfo(buffer, buffer_type);
+    return buffer_info;
+}
+
 } // namespace render

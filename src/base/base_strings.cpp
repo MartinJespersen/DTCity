@@ -147,7 +147,7 @@ cstring32_length(U32* c)
 //~ rjf: String Constructors
 
 static String8
-Str8(U8* str, U64 size)
+str8(U8* str, U64 size)
 {
     String8 result = {str, size};
     return (result);
@@ -238,7 +238,7 @@ str8_cstring_capped(void* cstr, void* cap)
     for (; ptr < opl && *ptr != 0; ptr += 1)
         ;
     U64 size = (U64)(ptr - (char*)cstr);
-    String8 result = Str8((U8*)cstr, size);
+    String8 result = str8((U8*)cstr, size);
     return result;
 }
 
@@ -269,7 +269,7 @@ str8_cstring_capped_reverse(void* raw_start, void* raw_cap)
         }
     }
     U64 size = (U64)(ptr - start);
-    String8 result = Str8(start, size);
+    String8 result = str8(start, size);
     return result;
 }
 
@@ -1727,7 +1727,7 @@ str8_from_16(Arena* arena, String16 in)
         }
         str[size] = 0;
         arena_pop(arena, (cap - size));
-        result = Str8(str, size);
+        result = str8(str, size);
     }
     return result;
 }
@@ -1773,7 +1773,7 @@ str8_from_32(Arena* arena, String32 in)
         }
         str[size] = 0;
         arena_pop(arena, (cap - size));
-        result = Str8(str, size);
+        result = str8(str, size);
     }
     return result;
 }
@@ -2231,7 +2231,7 @@ raw_from_escaped_str8(Arena* arena, String8 string)
                 case '"': replace_byte = '"'; break;
                 case '?': replace_byte = '?'; break;
             }
-            String8 replace_string = push_str8_copy(scratch.arena, Str8(&replace_byte, 1));
+            String8 replace_string = push_str8_copy(scratch.arena, str8(&replace_byte, 1));
             str8_list_push(scratch.arena, &strs, replace_string);
             idx += 1;
             start += 1;
@@ -2336,7 +2336,7 @@ rgba_from_hex_string_4f32(String8 hex_string)
     U8 byte_vals[4] = {0};
     for (U64 idx = 0; idx < 4; idx += 1)
     {
-        byte_vals[idx] = (U8)U64FromStr8(Str8(&byte_text[idx * 2], 2), 16);
+        byte_vals[idx] = (U8)U64FromStr8(str8(&byte_text[idx * 2], 2), 16);
     }
     Vec4F32 rgba = v4f32(byte_vals[0] / 255.f, byte_vals[1] / 255.f, byte_vals[2] / 255.f, byte_vals[3] / 255.f);
     return rgba;
@@ -2422,7 +2422,7 @@ str8_serial_end(Arena* arena, String8List* srl)
     U64 size = srl->total_size;
     U8* out = PushArrayNoZero(arena, U8, size);
     str8_serial_write_to_dst(srl, out);
-    String8 result = Str8(out, size);
+    String8 result = str8(out, size);
     return result;
 }
 
@@ -2459,7 +2459,7 @@ str8_serial_push_align(Arena* arena, String8List* srl, U64 align)
         }
         else
         {
-            str8_list_push(arena, srl, Str8(buf, size));
+            str8_list_push(arena, srl, str8(buf, size));
         }
     }
     return size;
@@ -2480,7 +2480,7 @@ str8_serial_push_size(Arena* arena, String8List* srl, U64 size)
         }
         else
         {
-            str8_list_push(arena, srl, Str8(buf, size));
+            str8_list_push(arena, srl, str8(buf, size));
         }
         result = buf;
     }
@@ -2520,7 +2520,7 @@ str8_serial_push_u64(Arena* arena, String8List* srl, U64 x)
     }
     else
     {
-        str8_list_push(arena, srl, Str8(buf, 8));
+        str8_list_push(arena, srl, str8(buf, 8));
     }
 }
 
@@ -2537,7 +2537,7 @@ str8_serial_push_u32(Arena* arena, String8List* srl, U32 x)
     }
     else
     {
-        str8_list_push(arena, srl, Str8(buf, 4));
+        str8_list_push(arena, srl, str8(buf, 4));
     }
 }
 

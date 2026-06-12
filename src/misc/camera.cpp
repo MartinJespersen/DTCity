@@ -17,7 +17,7 @@ camera_init(Arena* arena, Camera* camera)
     render::BufferType buffer_type = render::BufferType_Uniform;
     for (U32 i = 0; i < ArrayCount(camera->mut_handles); ++i)
     {
-        camera->mut_handles[i] = render::mapped_buffer_load_sync<CameraUniformBuffer>(arena, thread_ctx, buffer_type);
+        camera->mut_handles[i] = render::mapped_buffer_create<ui::CameraUniformBuffer>(arena, thread_ctx, buffer_type);
     }
 }
 
@@ -70,22 +70,22 @@ camera_update(Camera* camera, io::IO* input, F64 time, Vec2S32 extent, U32 curre
     camera->projection_matrix[1][1] *= -1.0f;
 
     Vec2U32 camera_framebuffer_dim = vec_2u32((U32)Max(extent.x, 1), (U32)Max(extent.y, 1));
-    render::MappedHandle camera_handle = camera->mut_handles[current_frame_idx];
+    render::MappedHandle<ui::CameraUniformBuffer> camera_handle = camera->mut_handles[current_frame_idx];
     ui::_camera_uniform_buffer_update(camera, camera_handle, camera_framebuffer_dim);
 }
 
 g_internal void
 _camera_uniform_buffer_update(ui::Camera* camera, render::MappedHandle<CameraUniformBuffer> mut_handle, Vec2U32 screen_res)
 {
+    ScratchScope scratch = ScratchScope(0, 0);
     glm::mat4 transform = camera->projection_matrix * camera->view_matrix;
-    CameraUniformBuffer* ubo = mut_handle.data;
-    _frustum_planes_calculate(&ubo->frustum, transform);
-    ubo->viewport_dim.x = screen_res.x;
-    ubo->viewport_dim.y = screen_res.y;
-    ubo->view = camera->view_matrix;
-    ubo->proj = camera->projection_matrix;
-
-    render::mapped_buffer_update(mut_handle);
+    ui::CameraUniformBuffer ubo = {};
+    _frustum_planes_calculate(&ubo.frustum, transform);
+    ubo.viewport_dim.x = screen_res.x;
+    ubo.viewport_dim.y = screen_res.y;
+    ubo.view = camera->view_matrix;
+    ubo.proj = camera->projection_matrix;
+    render::mapped_buffer_add(mut_handle, &ubo);
 }
 
 g_internal void
