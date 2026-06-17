@@ -652,8 +652,8 @@ buffer_load_async(render::BufferInfo* buffer_info)
 }
 
 g_internal void
-car_instance_compute_bucket_add(render::BufferInfo* instance_buffer_info, render::Handle tile_vertex_buffer_handle, render::Handle tile_index_buffer_handle, F32 car_center_to_road_offset,
-                                U32 instance_buffer_offset)
+agent_instance_compute_bucket_add(render::BufferInfo* instance_buffer_info, render::Handle tile_vertex_buffer_handle, render::Handle tile_index_buffer_handle, F32 car_center_to_road_offset,
+                                  U32 instance_buffer_offset)
 {
     if (instance_buffer_info->buffer.size == 0 || instance_buffer_info->elem_count == 0)
     {
@@ -684,8 +684,8 @@ car_instance_compute_bucket_add(render::BufferInfo* instance_buffer_info, render
 }
 
 g_internal bool
-car_instance_render_bucket_add(render::MappedHandle<void> camera_handle, Buffer<render::MeshHandlePair> meshes, Buffer<render::Handle> texture_handles, render::BufferInfo* instance_buffer_info,
-                               U32 instance_buffer_offset)
+agent_instance_render_bucket_add(render::MappedHandle<void> camera_handle, Buffer<render::MeshHandlePair> meshes, Buffer<render::Handle> texture_handles, render::BufferInfo* instance_buffer_info,
+                                 U32 instance_buffer_offset)
 {
     if (instance_buffer_info->buffer.size == 0 || instance_buffer_info->elem_count == 0 || meshes.size == 0 || texture_handles.size == 0)
     {

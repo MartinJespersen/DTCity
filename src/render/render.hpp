@@ -420,12 +420,12 @@ blend_3d_draw(Blend3DPipelineData pipeline_input);
 static void
 model_3d_bucket_add(render::Model3DPipelineData* pipeline_input);
 g_internal bool
-car_instance_render_bucket_add(render::MappedHandle<void> camera_handle, Buffer<render::MeshHandlePair> meshes, Buffer<render::Handle> texture_handles, render::BufferInfo* instance_buffer_info,
-                               U32 instance_buffer_offset);
+agent_instance_render_bucket_add(render::MappedHandle<void> camera_handle, Buffer<render::MeshHandlePair> meshes, Buffer<render::Handle> texture_handles, render::BufferInfo* instance_buffer_info,
+                                 U32 instance_buffer_offset);
 
 g_internal void
-car_instance_compute_bucket_add(render::BufferInfo* instance_buffer_info, render::Handle tile_vertex_buffer_handle, render::Handle tile_index_buffer_handle, F32 car_center_to_road_offset,
-                                U32 instance_buffer_offset);
+agent_instance_compute_bucket_add(render::BufferInfo* instance_buffer_info, render::Handle tile_vertex_buffer_handle, render::Handle tile_index_buffer_handle, F32 car_center_to_road_offset,
+                                  U32 instance_buffer_offset);
 
 g_internal bool
 road_intersection_compute_add(Handle vertex_buffer_handle, Handle index_buffer_handle, Handle road_segment_buffer_handle, Handle road_segment_node_buffer_handle, U32 overlay_option);

@@ -275,7 +275,7 @@ dt_main_loop(void* ptr)
 
         ImGui::SeparatorText("Agent Size");
         city::City* selected_city = city_buf[area_option];
-        ImGui::SliderFloat("Scale", &selected_city->car_scale_factor, 0.01f, 0.1f, "%.3f");
+        ImGui::SliderFloat("Scale", &selected_city->agent_scale_factor, 0.01f, 0.1f, "%.3f");
 
         ImGui::End();
 

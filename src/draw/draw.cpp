@@ -88,7 +88,7 @@ draw_car_instance_render(render::MappedHandle<void> camera_handle, Buffer<render
     frame->total_instance_buffer_byte_count = Max(frame->total_instance_buffer_byte_count, instance_buffer_offset + instance_buffer_info->buffer.size);
 
     CarInstanceDrawResult result = {};
-    result.render_scheduled = render::car_instance_render_bucket_add(camera_handle, meshes, texture_handles, instance_buffer_info, instance_buffer_offset);
+    result.render_scheduled = render::agent_instance_render_bucket_add(camera_handle, meshes, texture_handles, instance_buffer_info, instance_buffer_offset);
     result.buffer_offset = instance_buffer_offset;
 
     return result;

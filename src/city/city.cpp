@@ -9,7 +9,7 @@ city_init(City* city, String8 cache_path)
     Arena* arena = arena_alloc();
     city->cache_path = push_str8_copy(arena, cache_path);
     city->arena = arena;
-    city->car_scale_factor = 0.01f;
+    city->agent_scale_factor = 0.01f;
 }
 
 g_internal void
@@ -302,11 +302,11 @@ city_update(City* city, async::ThreadPool* thread_pool, RoadOverlayOption neta_o
     if (city->cars_creation_started == false && city->osm_task_done)
     {
         Arena* arena = arena_alloc();
-        CarSim* car_sim = &city->car_sim;
+        AgentSim* car_sim = &city->car_sim;
         car_sim->arena = arena;
         car_sim->asset_dir = push_str8_copy(arena, ctx->data_subdirs.data[dt_DataDirType::Assets]);
         car_sim->texture_dir = push_str8_copy(arena, ctx->data_subdirs.data[dt_DataDirType::Texture]);
-        car_sim->car_count = 100;
+        car_sim->agent_count = 100;
         CarSimBuildTask* car_sim_build_task = PushStruct(arena, CarSimBuildTask);
         car_sim_build_task->car_sim = car_sim;
         car_sim_build_task->network = city->osm_network;
@@ -323,7 +323,7 @@ city_update(City* city, async::ThreadPool* thread_pool, RoadOverlayOption neta_o
     /// car simulation rendering
     if (city->cars_creation_done)
     {
-        F32 scale_factor = city->car_scale_factor;
+        F32 scale_factor = city->agent_scale_factor;
         Buffer<render::Model3DInstance> instance_buffer =
             car_sim_update(draw::draw_frame_arena_get(), &city->car_sim, city->osm_network, ctx->time->delta_time_sec, city->cesium.ecef_to_local, scale_factor);
 
@@ -342,8 +342,8 @@ city_update(City* city, async::ThreadPool* thread_pool, RoadOverlayOption neta_o
 
                 if (map_tile_reference || custom_geometry_reference)
                 {
-                    render::car_instance_compute_bucket_add(&instance_buffer_info, tile->render_data.vertex_buffer_handle, tile->render_data.index_buffer_handle, -city->car_sim.car_center_offset.min,
-                                                            instance_buffer_offset);
+                    render::agent_instance_compute_bucket_add(&instance_buffer_info, tile->render_data.vertex_buffer_handle, tile->render_data.index_buffer_handle,
+                                                              -city->car_sim.agent_center_offset.min, instance_buffer_offset);
                 }
             }
         }
@@ -896,14 +896,14 @@ random_ecef_road_node_get(osm::Network* network)
 }
 
 g_internal void
-cars_create(CarSim* car_sim, osm::Network* network)
+cars_create(AgentSim* agent_sim, osm::Network* network)
 {
     prof_scope_marker;
     ScratchScope scratch = ScratchScope(0, 0);
 
     // parse glb file
-    String8 glb_path = str8_path_from_str8_list(scratch.arena, {car_sim->asset_dir, S("bike.glb")});
-    gltfw_Result glb_result = gltfw_glb_read(car_sim->arena, glb_path);
+    String8 glb_path = str8_path_from_str8_list(scratch.arena, {agent_sim->asset_dir, S("bike.glb")});
+    gltfw_Result glb_result = gltfw_glb_read(agent_sim->arena, glb_path);
     // AssertAlways(glb_result.textures.size == 1);
     U32 primitive_count = 0;
     for (gltfw_Primitive* node = glb_result.primitives.first; node; node = node->next)
@@ -943,8 +943,8 @@ cars_create(CarSim* car_sim, osm::Network* network)
     model_pivot.y = model_min.y;
     model_pivot.z = (model_min.z + model_max.z) * 0.5f;
 
-    car_sim->meshes = buffer_alloc<render::MeshHandlePair>(car_sim->arena, primitive_count);
-    car_sim->texture_handles = buffer_alloc<render::Handle>(car_sim->arena, glb_result.textures.size);
+    agent_sim->meshes = buffer_alloc<render::MeshHandlePair>(agent_sim->arena, primitive_count);
+    agent_sim->texture_handles = buffer_alloc<render::Handle>(agent_sim->arena, glb_result.textures.size);
 
     render::ThreadWorkerCmdCtx* thread_ctx = render::thread_ctx_create();
     render::thread_cmd_buffer_record(thread_ctx);
@@ -954,16 +954,16 @@ cars_create(CarSim* car_sim, osm::Network* network)
     {
         gltfw_Texture* tex = glb_result.textures[tex_idx];
         render::SamplerInfo sampler_info = sampler_from_cgltf_sampler(tex->sampler);
-        car_sim->texture_handles.data[tex_idx] = render::texture_load_sync(thread_ctx, &sampler_info, tex->tex_buf);
+        agent_sim->texture_handles.data[tex_idx] = render::texture_load_sync(thread_ctx, &sampler_info, tex->tex_buf);
     }
 
     U32 mesh_idx = 0;
     for (gltfw_Primitive* node = glb_result.primitives.first; node; node = node->next)
     {
-        Assert(node->tex_idx < car_sim->texture_handles.size);
+        Assert(node->tex_idx < agent_sim->texture_handles.size);
 
         // vertex and index extraction
-        Buffer<render::TileVertex> vertex_buffer = vertex_3d_from_gltfw_vertex(car_sim->arena, node->vertices);
+        Buffer<render::TileVertex> vertex_buffer = vertex_3d_from_gltfw_vertex(agent_sim->arena, node->vertices);
         for (U32 vertex_idx = 0; vertex_idx < vertex_buffer.size; vertex_idx++)
         {
             vertex_buffer.data[vertex_idx].pos.x -= model_pivot.x;
@@ -971,33 +971,33 @@ cars_create(CarSim* car_sim, osm::Network* network)
             vertex_buffer.data[vertex_idx].pos.z -= model_pivot.z;
         }
         render::BufferInfo vertex_buffer_info = render::BufferInfo(vertex_buffer, render::BufferType_Vertex);
-        Buffer<U32> index_buffer = buffer_arena_copy(car_sim->arena, node->indices);
+        Buffer<U32> index_buffer = buffer_arena_copy(agent_sim->arena, node->indices);
         render::BufferInfo index_buffer_info = render::BufferInfo(index_buffer, render::BufferType_Index);
-        car_sim->meshes.data[mesh_idx].vertex_handle = render::buffer_load_sync(thread_ctx, &vertex_buffer_info);
-        car_sim->meshes.data[mesh_idx].index_handle = render::buffer_load_sync(thread_ctx, &index_buffer_info);
-        car_sim->meshes.data[mesh_idx].texture_handle_idx = node->tex_idx;
+        agent_sim->meshes.data[mesh_idx].vertex_handle = render::buffer_load_sync(thread_ctx, &vertex_buffer_info);
+        agent_sim->meshes.data[mesh_idx].index_handle = render::buffer_load_sync(thread_ctx, &index_buffer_info);
+        agent_sim->meshes.data[mesh_idx].texture_handle_idx = node->tex_idx;
 
         Rng1F32 vertex_center_offset = car_center_height_offset(vertex_buffer);
         if (mesh_idx == 0)
         {
-            car_sim->car_center_offset = vertex_center_offset;
+            agent_sim->agent_center_offset = vertex_center_offset;
         }
         else
         {
-            car_sim->car_center_offset.min = Min(car_sim->car_center_offset.min, vertex_center_offset.min);
-            car_sim->car_center_offset.max = Max(car_sim->car_center_offset.max, vertex_center_offset.max);
+            agent_sim->agent_center_offset.min = Min(agent_sim->agent_center_offset.min, vertex_center_offset.min);
+            agent_sim->agent_center_offset.max = Max(agent_sim->agent_center_offset.max, vertex_center_offset.max);
         }
         mesh_idx++;
     }
-    car_sim->cars = buffer_alloc<Car>(car_sim->arena, car_sim->car_count);
+    agent_sim->cars = buffer_alloc<Agent>(agent_sim->arena, agent_sim->agent_count);
 
-    for (U32 i = 0; i < car_sim->car_count; ++i)
+    for (U32 i = 0; i < agent_sim->agent_count; ++i)
     {
         osm::EcefLocation source_loc = city::random_ecef_road_node_get(network);
         osm::Node* source_node = osm::node_get(network, source_loc.id);
         osm::Node* target_node = osm::random_neighbour_node_get(network, source_node);
         osm::EcefLocation target_loc = osm::location_get(network, target_node->id);
-        city::Car* car = &car_sim->cars.data[i];
+        city::Agent* car = &agent_sim->cars.data[i];
         car->source_loc = source_loc;
         car->target_loc = target_loc;
         car->speed = 10.0f;
@@ -1008,7 +1008,7 @@ cars_create(CarSim* car_sim, osm::Network* network)
 }
 
 g_internal void
-car_sim_destroy(CarSim* car_sim)
+car_sim_destroy(AgentSim* car_sim)
 {
     for (U32 i = 0; i < car_sim->meshes.size; ++i)
     {
@@ -1024,13 +1024,13 @@ car_sim_destroy(CarSim* car_sim)
 }
 
 g_internal Buffer<render::Model3DInstance>
-car_sim_update(Arena* arena, CarSim* car, osm::Network* network, F64 time_delta, glm::dmat4& ecef_to_local, F32 scale_factor)
+car_sim_update(Arena* arena, AgentSim* car, osm::Network* network, F64 time_delta, glm::dmat4& ecef_to_local, F32 scale_factor)
 {
     prof_scope_marker;
     Buffer<render::Model3DInstance> instance_buffer = buffer_alloc<render::Model3DInstance>(arena, car->cars.size);
 
     render::Model3DInstance* instance;
-    city::Car* car_info;
+    city::Agent* car_info;
 
     F32 car_speed_default = 5.0f; // m/s
     for (U32 car_idx = 0; car_idx < car->cars.size; car_idx++)

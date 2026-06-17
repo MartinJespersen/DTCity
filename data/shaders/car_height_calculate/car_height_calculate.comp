@@ -17,16 +17,16 @@ struct Vertex
     uvec2 object_id;
 };
 
-struct Car {
+struct Agent {
     vec4 row0;
     vec4 row1;
     vec4 row2;
     vec4 row3;
 };
 
-layout(std430, set = 0, binding = 0) buffer CarBuffer {
-    Car data[];
-} cars;
+layout(std430, set = 0, binding = 0) buffer AgentBuffer {
+    Agent data[];
+} agents;
 
 layout(std430, set = 0, binding = 1) readonly buffer VertexBuffer {
     Vertex data[];
@@ -38,8 +38,8 @@ layout(std430, set = 0, binding = 2) readonly buffer IndexBuffer {
 
 layout(push_constant) uniform PushConstants
 {
-    uint car_count;
-    float car_center_offset;
+    uint agent_count;
+    float agent_center_offset;
 } push_constants;
 
 layout(local_size_x = 256, local_size_y = 1, local_size_z = 1) in;
@@ -75,17 +75,17 @@ void main()
     vec3 v1 = vec3(vertices.data[v1_idx].pos_x, vertices.data[v1_idx].pos_y, vertices.data[v1_idx].pos_z);
     vec3 v2 = vec3(vertices.data[v2_idx].pos_x, vertices.data[v2_idx].pos_y, vertices.data[v2_idx].pos_z);
 
-    for (uint i = 0; i < push_constants.car_count; i++)
+    for (uint i = 0; i < push_constants.agent_count; i++)
     {
-        Car car = cars.data[i];
+        Agent Agent = agents.data[i];
         vec2 face[VERTEX_COUNT] = {
                 v0.xy,
                 v1.xy,
                 v2.xy
             };
-        if (is_car_center_inside_face(face, car.row3.xy))
+        if (is_car_center_inside_face(face, Agent.row3.xy))
         {
-            cars.data[i].row3.z = max(max(v0.z, v1.z), v2.z) + push_constants.car_center_offset;
+            agents.data[i].row3.z = max(max(v0.z, v1.z), v2.z) + push_constants.agent_center_offset;
             return;
         }
     }

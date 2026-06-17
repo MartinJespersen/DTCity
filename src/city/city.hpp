@@ -178,7 +178,7 @@ struct RoadSegment
     RoadCrossSection end;
 };
 
-struct Car
+struct Agent
 {
     Vec3F64 cur_pos_ecef;
     osm::EcefLocation source_loc;
@@ -187,19 +187,20 @@ struct Car
     F32 speed;
 };
 
-struct CarSim
+struct AgentSim
 {
     Arena* arena;
 
     String8 asset_dir;
     String8 texture_dir;
-    U32 car_count;
+    U32 agent_count;
 
-    Buffer<Car> cars;
+    Buffer<Agent> cars;
 
+    // rendering
     Buffer<render::MeshHandlePair> meshes;
     Buffer<render::Handle> texture_handles;
-    Rng1F32 car_center_offset;
+    Rng1F32 agent_center_offset;
 };
 
 struct BuildingRenderInfo
@@ -243,7 +244,7 @@ struct RoadBuildTask
 
 struct CarSimBuildTask
 {
-    CarSim* car_sim;
+    AgentSim* car_sim;
     osm::Network* network;
 };
 
@@ -297,8 +298,8 @@ struct City
     bool cars_creation_done;
 
     Road road;
-    CarSim car_sim;
-    F32 car_scale_factor;
+    AgentSim car_sim;
+    F32 agent_scale_factor;
     Buildings buildings;
     cesium::TilesetRenderer cesium;
     neta::NetaState* neta_state;
@@ -332,11 +333,11 @@ EarClipping(Arena* arena, Buffer<Vec2F64> node_buffer);
 
 // ~mgj: Cars
 g_internal void
-cars_create(CarSim* car_sim, osm::Network* network);
+cars_create(AgentSim* car_sim, osm::Network* network);
 g_internal void
-car_sim_destroy(CarSim* car_sim);
+car_sim_destroy(AgentSim* car_sim);
 g_internal Buffer<render::Model3DInstance>
-car_sim_update(Arena* arena, CarSim* car, osm::Network* network, F64 time_delta, glm::dmat4& ecef_to_local, F32 scale_factor);
+car_sim_update(Arena* arena, AgentSim* car, osm::Network* network, F64 time_delta, glm::dmat4& ecef_to_local, F32 scale_factor);
 
 // ~mgj: HTTP and caching
 g_internal String8
