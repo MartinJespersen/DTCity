@@ -684,10 +684,10 @@ car_instance_compute_bucket_add(render::BufferInfo* instance_buffer_info, render
 }
 
 g_internal bool
-car_instance_render_bucket_add(render::MappedHandle<void> camera_handle, Buffer<render::MeshHandlePair> meshes, render::Handle tex_handle, render::BufferInfo* instance_buffer_info,
+car_instance_render_bucket_add(render::MappedHandle<void> camera_handle, Buffer<render::MeshHandlePair> meshes, Buffer<render::Handle> texture_handles, render::BufferInfo* instance_buffer_info,
                                U32 instance_buffer_offset)
 {
-    if (instance_buffer_info->buffer.size == 0 || instance_buffer_info->elem_count == 0 || meshes.size == 0)
+    if (instance_buffer_info->buffer.size == 0 || instance_buffer_info->elem_count == 0 || meshes.size == 0 || texture_handles.size == 0)
     {
         return false;
     }
@@ -696,23 +696,24 @@ car_instance_render_bucket_add(render::MappedHandle<void> camera_handle, Buffer<
     vulkan::RenderFrame* render_frame = vk_ctx->render_frame;
     vulkan::CarInstanceRender* instance_draw = &render_frame->car_instance_render_list;
 
-    render::AssetItem<vulkan::TextureHandle>* asset_tex = 0;
-    B32 meshes_loaded = true;
+    B32 resources_loaded = true;
     for (U32 mesh_idx = 0; mesh_idx < meshes.size; ++mesh_idx)
     {
         render::MeshHandlePair* mesh = meshes[mesh_idx];
-        meshes_loaded = meshes_loaded && render::is_resource_loaded(mesh->vertex_handle) && render::is_resource_loaded(mesh->index_handle);
+        if (mesh->texture_handle_idx >= texture_handles.size)
+        {
+            return false;
+        }
+        render::Handle texture_handle = texture_handles.data[mesh->texture_handle_idx];
+        resources_loaded = resources_loaded && render::is_resource_loaded(mesh->vertex_handle) && render::is_resource_loaded(mesh->index_handle) && render::is_resource_loaded(texture_handle);
     }
 
-    if (render::is_resource_loaded(tex_handle, &asset_tex) && meshes_loaded)
+    if (resources_loaded)
     {
-        vulkan::TextureHandle* tex = &asset_tex->item;
-
         // draw ressources
-        vulkan::CarInstancePushConstants push_constants = {.tex_idx = tex->descriptor_set_idx};
         vulkan::CarInstanceRenderNode* node = PushStruct(vk_ctx->render_frame_arena, vulkan::CarInstanceRenderNode);
         node->meshes = meshes;
-        node->draw_push_constants = push_constants;
+        node->texture_handles = texture_handles;
         node->instance_buffer_info = *instance_buffer_info;
         node->instance_buffer_offset = instance_buffer_offset;
         node->camera_handle = camera_handle;
@@ -958,6 +959,5 @@ handle_done_loading(render::HandleList handles)
         }
     }
 }
-
 
 } // namespace render

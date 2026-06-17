@@ -330,7 +330,7 @@ city_update(City* city, async::ThreadPool* thread_pool, RoadOverlayOption neta_o
         // instance buffer offset alignment and assignment
         render::BufferInfo instance_buffer_info = render::BufferInfo(instance_buffer, render::BufferType_Vertex | render::BufferType_StorageBuffer);
         render::MappedHandle<void> camera_handle_void = render::mapped_handle_erased(camera_handle);
-        draw::CarInstanceDrawResult draw_result = draw::draw_car_instance_render(camera_handle_void, city->car_sim.meshes, city->car_sim.texture_handle, &instance_buffer_info);
+        draw::CarInstanceDrawResult draw_result = draw::draw_car_instance_render(camera_handle_void, city->car_sim.meshes, city->car_sim.texture_handles, &instance_buffer_info);
 
         if (draw_result.render_scheduled)
         {
@@ -944,17 +944,23 @@ cars_create(CarSim* car_sim, osm::Network* network)
     model_pivot.z = (model_min.z + model_max.z) * 0.5f;
 
     car_sim->meshes = buffer_alloc<render::MeshHandlePair>(car_sim->arena, primitive_count);
+    car_sim->texture_handles = buffer_alloc<render::Handle>(car_sim->arena, glb_result.textures.size);
+
     render::ThreadWorkerCmdCtx* thread_ctx = render::thread_ctx_create();
     render::thread_cmd_buffer_record(thread_ctx);
     defer(render::thread_cmd_buffer_end(thread_ctx));
 
+    for (U32 tex_idx = 0; tex_idx < glb_result.textures.size; ++tex_idx)
+    {
+        gltfw_Texture* tex = glb_result.textures[tex_idx];
+        render::SamplerInfo sampler_info = sampler_from_cgltf_sampler(tex->sampler);
+        car_sim->texture_handles.data[tex_idx] = render::texture_load_sync(thread_ctx, &sampler_info, tex->tex_buf);
+    }
+
     U32 mesh_idx = 0;
     for (gltfw_Primitive* node = glb_result.primitives.first; node; node = node->next)
     {
-        // texture extraction
-        gltfw_Texture* tex = glb_result.textures[node->tex_idx];
-        car_sim->sampler_info = sampler_from_cgltf_sampler(tex->sampler);
-        car_sim->tex_buffer = tex->tex_buf;
+        Assert(node->tex_idx < car_sim->texture_handles.size);
 
         // vertex and index extraction
         Buffer<render::TileVertex> vertex_buffer = vertex_3d_from_gltfw_vertex(car_sim->arena, node->vertices);
@@ -969,6 +975,7 @@ cars_create(CarSim* car_sim, osm::Network* network)
         render::BufferInfo index_buffer_info = render::BufferInfo(index_buffer, render::BufferType_Index);
         car_sim->meshes.data[mesh_idx].vertex_handle = render::buffer_load_sync(thread_ctx, &vertex_buffer_info);
         car_sim->meshes.data[mesh_idx].index_handle = render::buffer_load_sync(thread_ctx, &index_buffer_info);
+        car_sim->meshes.data[mesh_idx].texture_handle_idx = node->tex_idx;
 
         Rng1F32 vertex_center_offset = car_center_height_offset(vertex_buffer);
         if (mesh_idx == 0)
@@ -982,8 +989,6 @@ cars_create(CarSim* car_sim, osm::Network* network)
         }
         mesh_idx++;
     }
-
-    car_sim->texture_handle = render::texture_load_sync(thread_ctx, &car_sim->sampler_info, car_sim->tex_buffer);
     car_sim->cars = buffer_alloc<Car>(car_sim->arena, car_sim->car_count);
 
     for (U32 i = 0; i < car_sim->car_count; ++i)
@@ -1010,7 +1015,10 @@ car_sim_destroy(CarSim* car_sim)
         render::handle_destroy(car_sim->meshes.data[i].vertex_handle);
         render::handle_destroy(car_sim->meshes.data[i].index_handle);
     }
-    render::handle_destroy(car_sim->texture_handle);
+    for (U32 i = 0; i < car_sim->texture_handles.size; ++i)
+    {
+        render::handle_destroy(car_sim->texture_handles.data[i]);
+    }
 
     arena_release(car_sim->arena);
 }

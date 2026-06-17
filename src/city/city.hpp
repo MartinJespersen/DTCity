@@ -198,12 +198,8 @@ struct CarSim
     Buffer<Car> cars;
 
     Buffer<render::MeshHandlePair> meshes;
-    Buffer<U8> tex_buffer;
-
-    render::SamplerInfo sampler_info;
+    Buffer<render::Handle> texture_handles;
     Rng1F32 car_center_offset;
-
-    render::Handle texture_handle;
 };
 
 struct BuildingRenderInfo

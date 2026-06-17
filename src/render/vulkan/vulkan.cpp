@@ -226,7 +226,6 @@ car_instance_rendering()
         };
 
         cmd_push_descriptor_set_khr(cmd_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline->pipeline_layout, 0, ArrayCount(push_writes), push_writes);
-        vkCmdPushConstants(cmd_buffer, pipeline->pipeline_layout, VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(CarInstancePushConstants), &node->draw_push_constants);
         vkCmdBindDescriptorSets(cmd_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline->pipeline_layout, 1, ArrayCount(descriptor_sets), descriptor_sets, 0, NULL);
         U32 instance_count = U32(node->instance_buffer_info.buffer.size / node->instance_buffer_info.type_size);
         VkDeviceSize vertex_offsets[] = {0, node->instance_buffer_offset};
@@ -235,18 +234,27 @@ car_instance_rendering()
             render::MeshHandlePair* mesh = node->meshes[mesh_idx];
             render::AssetItem<BufferHandle>* vertex_item = asset_manager_buffer_item_get(mesh->vertex_handle);
             render::AssetItem<BufferHandle>* index_item = asset_manager_buffer_item_get(mesh->index_handle);
-            if (!vertex_item || !index_item)
+            if (mesh->texture_handle_idx >= node->texture_handles.size)
+            {
+                continue;
+            }
+            render::Handle texture_handle = node->texture_handles.data[mesh->texture_handle_idx];
+            render::AssetItem<TextureHandle>* texture_item = asset_manager_texture_item_get(texture_handle);
+            if (!vertex_item || !index_item || !texture_item)
             {
                 continue;
             }
 
             BufferHandle* vertex_handle = &vertex_item->item;
             BufferHandle* index_handle = &index_item->item;
+            TextureHandle* texture = &texture_item->item;
+            CarInstancePushConstants push_constants = {.tex_idx = texture->descriptor_set_idx};
             VkBuffer vertex_buffers[] = {
                 vertex_handle->buffer_alloc.buffer,
                 instance_buffer,
             };
 
+            vkCmdPushConstants(cmd_buffer, pipeline->pipeline_layout, VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(CarInstancePushConstants), &push_constants);
             vkCmdBindVertexBuffers(cmd_buffer, 0, 2, vertex_buffers, vertex_offsets);
             vkCmdBindIndexBuffer(cmd_buffer, index_handle->buffer_alloc.buffer, 0, VK_INDEX_TYPE_UINT32);
             vkCmdDrawIndexed(cmd_buffer, index_handle->elem_count, instance_count, 0, 0, 0);

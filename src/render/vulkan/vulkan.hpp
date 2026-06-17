@@ -65,7 +65,7 @@ struct CarInstanceRenderNode
     // draw pipeline ressources
     render::MappedHandle<void> camera_handle;
     Buffer<render::MeshHandlePair> meshes;
-    CarInstancePushConstants draw_push_constants;
+    Buffer<render::Handle> texture_handles;
 
     // shared pipeline ressources
     render::BufferInfo instance_buffer_info;

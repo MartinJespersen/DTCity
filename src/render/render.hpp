@@ -301,6 +301,7 @@ struct MeshHandlePair
 {
     Handle vertex_handle;
     Handle index_handle;
+    U32 texture_handle_idx;
 };
 
 struct Quad2F64
@@ -388,7 +389,6 @@ new_frame();
 static U64
 latest_hovered_object_id_get();
 
-
 // ~mgj: Texture loading interface
 g_internal Handle
 texture_zero_handle_get();
@@ -420,7 +420,7 @@ blend_3d_draw(Blend3DPipelineData pipeline_input);
 static void
 model_3d_bucket_add(render::Model3DPipelineData* pipeline_input);
 g_internal bool
-car_instance_render_bucket_add(render::MappedHandle<void> camera_handle, Buffer<render::MeshHandlePair> meshes, render::Handle tex_handle, render::BufferInfo* instance_buffer_info,
+car_instance_render_bucket_add(render::MappedHandle<void> camera_handle, Buffer<render::MeshHandlePair> meshes, Buffer<render::Handle> texture_handles, render::BufferInfo* instance_buffer_info,
                                U32 instance_buffer_offset);
 
 g_internal void
@@ -443,7 +443,6 @@ mapped_buffer_create(Arena* arena, render::ThreadWorkerCmdCtx* thread_ctx, Buffe
 template <typename T>
 g_internal void
 mapped_buffer_add(MappedHandle<T> mut_handle, T* data);
-
 
 template <typename T>
 g_internal bool
