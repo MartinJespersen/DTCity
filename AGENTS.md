@@ -24,6 +24,7 @@ In the src directory all sub-directories are layers that are all responsible for
 - You should avoid returning nullptr except when the pointer is used to iterate over such as a linked list or stack. In this case a nullptr will just result in zero iterations in the caller.
 - struct should always be placed in the header file (.h/.hpp)
 - ScratchScope should always be created with the arena passed to the function, e.g. `ScratchScope scratch = ScratchScope(&arena, 1);`, to avoid arena collisions.
+- Data in structs should always be placed at the top with methods, constructor and destructors below it.
 
 # Third party libraries
 - Cesium Native library source code can be found at https://github.com/CesiumGS/cesium-native or C:/repos/cesium-native

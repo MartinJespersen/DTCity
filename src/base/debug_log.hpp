@@ -48,7 +48,6 @@ struct DebugHttpEvent
 {
     S32 async_result;
     U32 error_code;
-    String8 error_str;
 };
 ///////////////////////////////////////
 enum class DebugEventType : S32
@@ -215,7 +214,7 @@ debug_event_frame_end()
     for (DebugEvent& debug_http_event : g_debug_table.http_events)
     {
         DebugHttpEvent* http_event = &debug_http_event.http_event;
-        String8 str = push_str8f(g_debug_table.arena, "%d\t%u\t%.*s\t%u\n", http_event->async_result, http_event->error_code, str8_varg(http_event->error_str), debug_http_event.tid);
+        String8 str = push_str8f(g_debug_table.arena, "%d\t%u\t%u\n", http_event->async_result, http_event->error_code, debug_http_event.tid);
         str8_list_push(g_debug_table.arena, &http_list, str);
     }
 
@@ -238,9 +237,8 @@ debug_event_frame_end()
     {                                                                                                                                                                                                  \
         auto debug_http_result__ = (http_result);                                                                                                                                                      \
         DebugEvent* event = debug_event_record(DebugEventType::Http, Debug_Name("Http Push"), S("Http Push"));                                                                                         \
-        event->http_event.async_result = (S32)debug_http_result__.async_result;                                                                                                                        \
-        event->http_event.error_code = debug_http_result__.error_code;                                                                                                                                 \
-        event->http_event.error_str = debug_http_result__.error_str;                                                                                                                                   \
+        event->http_event.async_result = (S32)debug_http_result__.result;                                                                                                                              \
+        event->http_event.error_code = debug_http_result__.curl_code;                                                                                                                                  \
     }
 ////////////////////////////////////////
 

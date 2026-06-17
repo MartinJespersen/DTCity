@@ -22,10 +22,10 @@ _worker_task_func(ThreadInfo thread_info, WorkerData data)
         // observed, the consumer (async_task_is_done) is free to release the
         // arena backing both `task` and the http extension, which would turn
         // the cleanup below into a use-after-free.
-        if (task->ext_type == ExtensionType::Http)
+        if (has_flag(task->ext_type, ExtensionType::Http))
         {
             AsyncHttpTaskState<T>* http_ctx = task->http_ext;
-            _curl_context_cleanup(&http_ctx->curl_ctx);
+            _curl_context_cleanup(http_ctx->curl_ctx);
         }
         task->done.store(true, std::memory_order_release);
     }
@@ -34,9 +34,11 @@ _worker_task_func(ThreadInfo thread_info, WorkerData data)
 
 template <typename T>
 g_internal AsyncTaskStatus<T>*
-_async_task_status_create(Arena* arena, String8 name, T* data)
+_async_task_status_create(Arena* arena, ThreadPool* thread_pool, String8 name, T* data)
 {
     AsyncTaskStatus<T>* task_status = PushStruct(arena, AsyncTaskStatus<T>);
+
+    task_status->thread_pool = thread_pool;
     task_status->arena = arena;
     task_status->task_name = push_str8_copy(arena, name);
     task_status->user_data = data;
@@ -73,40 +75,23 @@ async_task_is_done(AsyncTaskStatus<T>* task)
         {
             ERROR_LOG("Error in task: %.*s", str8_varg(task->task_name));
         }
-        switch (task->ext_type)
+        if (has_flag(task->ext_type, ExtensionType::Http))
         {
-            case ExtensionType::Http:
+            AsyncHttpTaskState<T>* http_ctx = task->http_ext;
+            if (http_ctx->error.has_error())
             {
-                AsyncHttpTaskState<T>* async_ctx = task->http_ext;
-                const AsyncHttpResult& http_result = async_ctx->http_result;
-                if (http_result.async_result != AsyncResult::Success)
+                AsyncError* error = &http_ctx->error;
+                INFO_LOG("%.*s error: %u", str8_varg(task->task_name), (U32)error->result);
+                if (error->curl_code)
                 {
-                    INFO_LOG("%.*s error: %u", str8_varg(task->task_name), (U32)http_result.async_result);
-                    if (http_result.error_code)
-                    {
-                        INFO_LOG("%.*s error code: %u", str8_varg(task->task_name), http_result.error_code);
-                    }
-                    if (http_result.error_str.size > 0)
-                    {
-                        INFO_LOG("%.*s error msg: %.*s", str8_varg(task->task_name), str8_varg(http_result.error_str));
-                    }
+                    INFO_LOG("%.*s error curl code: %u from type %u", str8_varg(task->task_name), error->curl_code, (U32)error->curl_code_type);
                 }
             }
-            break;
         }
-        INFO_LOG("%.*s work successfully complete", str8_varg(task->task_name));
+        INFO_LOG("%.*s work complete", str8_varg(task->task_name));
     }
 
     return result;
-}
-
-template <typename T>
-g_internal WorkerTaskFunc<T>
-async_task_done(AsyncTaskStatus<T>* task_status, bool success)
-{
-    task_status->success.store(success, std::memory_order_release);
-    task_status->done.store(true, std::memory_order_release);
-    return {};
 }
 
 template <typename T>
@@ -114,7 +99,7 @@ g_internal AsyncTaskStatus<T>*
 async_task_run(ThreadPool* thread_pool, WorkerTaskFunc<T> func, T* data, String8 task_name, S64 us_delay)
 {
     Arena* task_arena = arena_alloc();
-    AsyncTaskStatus<T>* task_status = _async_task_status_create<T>(task_arena, task_name, data);
+    AsyncTaskStatus<T>* task_status = _async_task_status_create<T>(task_arena, thread_pool, task_name, data);
     return async_task_run(task_status, thread_pool, func, us_delay);
 }
 
@@ -122,7 +107,7 @@ template <typename T>
 g_internal AsyncTaskStatus<T>*
 async_task_run(Arena* arena, ThreadPool* thread_pool, WorkerTaskFunc<T> func, T* data, String8 task_name, S64 us_delay)
 {
-    AsyncTaskStatus<T>* task_status = _async_task_status_create<T>(arena, task_name, data);
+    AsyncTaskStatus<T>* task_status = _async_task_status_create<T>(arena, thread_pool, task_name, data);
     return async_task_run(task_status, thread_pool, func, us_delay);
 }
 
@@ -130,14 +115,14 @@ template <typename T>
 g_internal AsyncTaskStatus<T>*
 async_task_with_ext_run(Arena* arena, ThreadPool* thread_pool, WorkerTaskFunc<T> func, T* data, String8 task_name, S64 us_delay, ExtensionType ext_type, void* ext)
 {
-    AsyncTaskStatus<T>* task_status = _async_task_status_create<T>(arena, task_name, data);
+    AsyncTaskStatus<T>* task_status = _async_task_status_create<T>(arena, thread_pool, task_name, data);
     task_status->ext_type = ext_type;
 
-    switch (ext_type)
+    if (has_flag(ext_type, ExtensionType::Http) || (ext != 0))
     {
-        case ExtensionType::Http: task_status->http_ext = (AsyncHttpTaskState<T>*)ext; break;
-        default: InvalidPath;
+        task_status->http_ext = (AsyncHttpTaskState<T>*)ext;
     }
+
     return async_task_run(task_status, thread_pool, func, us_delay);
 }
 

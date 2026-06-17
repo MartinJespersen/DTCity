@@ -182,8 +182,14 @@ template <typename T>
 ChunkList<T>*
 chunk_list_create(Arena* arena, U64 capacity);
 template <typename T>
+ChunkItem<T>*
+chunk_item_from_array(Arena* arena, T* values, U64 count);
+template <typename T>
 void
 chunk_list_insert(Arena* arena, ChunkList<T>* list, T& item);
+template <typename T>
+void
+chunk_list_insert_chunk(ChunkList<T>* list, ChunkItem<T>* chunk);
 template <typename T>
 T*
 chunk_list_get_next(Arena* arena, ChunkList<T>* list);
@@ -191,6 +197,8 @@ template <typename T>
 static Buffer<T>
 buffer_from_chunk_list(Arena* arena, ChunkList<T>* list);
 
+static String8
+str8_from_chunk_list(Arena* arena, ChunkList<U8>* list);
 // defer implementation
 template <typename F>
 struct privDefer

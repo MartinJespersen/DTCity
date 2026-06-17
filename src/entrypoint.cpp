@@ -108,39 +108,6 @@ dt_imgui_setup(vulkan::Context* vk_ctx, io::IO* io_ctx)
     ImGui_ImplVulkan_Init(&init_info);
 }
 
-template <typename T>
-static bool
-dt_async_http_check_result(async::AsyncTaskStatus<async::AsyncHttpTaskState<T>>* async_call, String8 name)
-{
-    B32 done = async_call->done.load(std::memory_order_acquire);
-    if (done)
-    {
-        return true;
-    }
-
-    async::AsyncHttpTaskState<T>* task_state = async_call->result;
-    const async::AsyncHttpResult& http_result = task_state->http_result;
-    switch (http_result.async_result)
-    {
-        case async::AsyncResult::CurlError:
-        {
-            exit_with_error("%.*s failed with curl error %u at %s:%u", str8_varg(name), http_result.error_code, task_state->err_file, task_state->err_line);
-        }
-        break;
-        case async::AsyncResult::HttpError:
-        {
-            exit_with_error("%.*s failed with http error %u at %s:%u", str8_varg(name), http_result.error_code, task_state->err_file, task_state->err_line);
-        }
-        break;
-        case async::AsyncResult::UserFunctionError:
-        {
-            exit_with_error("%.*s failed: %.*s", str8_varg(name), str8_varg(http_result.error_str));
-        }
-        break;
-    }
-    return false;
-}
-
 g_internal void
 imgui_debug_window(city::City* city, cesium::TilesetRenderer* renderer, async::ThreadPool* thread_pool)
 {
@@ -261,6 +228,12 @@ dt_main_loop(void* ptr)
         ////////////////////////////////////////////////////////
     }
 
+    async::AsyncWebsocketCreateResult ws_task_result = async::async_websocket_start(S("ws://127.0.0.1:8080/ws"));
+    if (ws_task_result.has_error())
+    {
+        ERROR_LOG("Error from websocket");
+    }
+
     city::RoadOverlayOption neta_overlay_option = city::RoadOverlayOption_None;
     S32 cur_area_option = 0;
     S32 area_option = cur_area_option;
@@ -278,6 +251,14 @@ dt_main_loop(void* ptr)
         ImGui::NewFrame();
         async::thread_pool_main_thread_queue_drain(ctx->thread_pool);
 
+        if (!ws_task_result.has_error())
+        {
+            String8List ws_msgs = async::async_websocket_read(ctx->arena_frame, ws_task_result.ws_session);
+            for (String8Node* node = ws_msgs.first; node; node = node->next)
+            {
+                INFO_LOG("ws msg: %s", node->string.str);
+            }
+        }
         Vec2U32 framebuffer_dim = {(U32)io_ctx->framebuffer_width, (U32)io_ctx->framebuffer_height};
 
         ImGui::Begin("Interaction", nullptr);

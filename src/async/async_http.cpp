@@ -72,6 +72,7 @@ _curl_context_cleanup(CurlContext* curl_ctx)
         curl_slist_free_all(curl_ctx->headers);
         curl_ctx->headers = 0;
     }
+    arena_release(curl_ctx->arena);
 }
 
 template <typename T>
@@ -80,15 +81,13 @@ _libcurl_callback(void* contents, size_t size, size_t nmemb, void* userp)
 {
     size_t total_size = size * nmemb;
     LibCurlCallbackData<T>* callback_data = (LibCurlCallbackData<T>*)userp;
-    AsyncHttpTaskState<T>* async_ctx = callback_data->http_ctx;
+    AsyncHttpTaskState<T>* http_ctx = callback_data->http_ctx;
+    CurlContext* curl_ctx = http_ctx->curl_ctx;
 
-    WriteChunk* chunk = PushStruct(callback_data->arena, WriteChunk);
-    chunk->buffer = buffer_alloc<U8>(callback_data->arena, total_size);
-    MemoryCopy(chunk->buffer.data, contents, total_size);
-
-    CurlContext* curl_ctx = &async_ctx->curl_ctx;
-    SLLQueuePush(curl_ctx->chunk_list.first, curl_ctx->chunk_list.last, chunk);
-    curl_ctx->chunk_list.buffer_byte_count += chunk->buffer.size;
+    U8* buffer = PushArray(curl_ctx->arena, U8, total_size);
+    ChunkItem<U8>* chunk = chunk_item_from_array(curl_ctx->arena, buffer, total_size);
+    MemoryCopy(buffer, contents, total_size);
+    chunk_list_insert_chunk(&curl_ctx->chunk_list, chunk);
 
     return total_size;
 }
@@ -101,7 +100,7 @@ _async_http_task_continuation(AsyncHttpTaskState<T>* http_ctx, AsyncWorkFunc<T> 
     http_ctx->next_func = func;
 
     AsyncTaskContinuation<T> continuation = {};
-    continuation.func = _write_data_complete<T>;
+    continuation.func = _http_main<T>;
     continuation.us_delay = us_delay;
     return continuation;
 }
@@ -130,31 +129,21 @@ _async_main_thread_queue_push(ThreadPool* thread_pool, AsyncTaskStatus<T>* task_
     return queued;
 }
 
-template <typename T>
-g_internal void
-_error_set(AsyncResult async_result, const char* file, S32 line, AsyncHttpTaskState<T>* ctx, String8 error_msg)
+g_internal CurlContext*
+_curl_ctx_create(Arena* arena)
 {
-    ctx->err_file = file;
-    ctx->err_line = line;
-    ctx->http_result.async_result = async_result;
-    ctx->http_result.error_str = error_msg;
-}
+    CurlContext* curl_ctx = PushStruct(arena, CurlContext);
+    curl_ctx->arena = arena_alloc();
 
-template <typename T>
-g_internal void
-_error_reset(AsyncHttpTaskState<T>* ctx)
-{
-    ctx->http_result = {};
-    ctx->err_line = 0;
-    ctx->err_file = 0;
-}
+    // curl library inits
+    async_http_global_init();
+    CURL* session_handle = curl_easy_init();
+    CURLM* multi_handle = curl_multi_init();
 
-template <typename T>
-g_internal void
-_curl_error_set(S32 curl_error_code, const char* file, S32 line, AsyncHttpTaskState<T>* ctx)
-{
-    _error_set(AsyncResult::CurlError, file, line, ctx);
-    ctx->http_result.error_code = (U32)curl_error_code;
+    // create curl handles
+    curl_ctx->session_handle = session_handle;
+    curl_ctx->multi_handle = multi_handle;
+    return curl_ctx;
 }
 
 g_internal void
@@ -170,25 +159,28 @@ _curl_reset(CurlContext* curl_ctx)
     curl_ctx->headers = 0;
 
     curl_ctx->chunk_list = {};
+    arena_clear(curl_ctx->arena);
 }
 
-template <typename T>
-g_internal AsyncResult
-_async_http_configure(Arena* arena, AsyncHttpTaskState<T>* http_ctx, HttpInfo* http_info)
+g_internal AsyncError
+_async_http_configure(Arena* arena, CurlContext* curl_ctx, HttpInfo* http_info, CurlWriteCallback curl_write_callback, void* callback_data)
 {
-    CurlContext* curl_ctx = &http_ctx->curl_ctx;
-
     CURLU* url_handle = curl_url();
     defer(curl_url_cleanup(url_handle));
     if (curl_ctx->session_handle == 0 || curl_ctx->multi_handle == 0 || url_handle == 0)
     {
-        return AsyncResult::HandleInitError;
+        return async_user_error(AsyncResult::HandleInitError);
     }
 
-    CURLUcode url_err = curl_url_set(url_handle, CURLUPART_URL, (const char*)http_info->http_path.str, 0);
+    B32 is_ws = str8_match(http_info->http_path, S("ws://"), MatchFlag_RightSideSloppy);
+    B32 is_wss = str8_match(http_info->http_path, S("wss://"), MatchFlag_RightSideSloppy);
+    B32 is_websocket = is_ws | is_wss;
+    U32 url_flags = is_websocket ? CURLU_NON_SUPPORT_SCHEME : 0;
+
+    CURLUcode url_err = curl_url_set(url_handle, CURLUPART_URL, (const char*)http_info->http_path.str, url_flags);
     if (url_err)
     {
-        return AsyncResult::UrlError;
+        return async_curl_error(CurlCodeType::Url, url_err);
     }
 
     char* query_str = 0;
@@ -200,20 +192,21 @@ _async_http_configure(Arena* arena, AsyncHttpTaskState<T>* http_ctx, HttpInfo* h
             CURLUcode query_err = curl_url_set(url_handle, CURLUPART_QUERY, (const char*)param_copy.str, CURLU_APPENDQUERY | CURLU_URLENCODE);
             if (query_err)
             {
-                return AsyncResult::QueryError;
+                return async_user_error(AsyncResult::QueryError);
             }
         }
 
         CURLUcode query_err = curl_url_get(url_handle, CURLUPART_QUERY, &query_str, 0);
         if (query_err)
         {
-            return AsyncResult::QueryError;
+            return async_user_error(AsyncResult::QueryError);
         }
     }
     defer(if (query_str) { curl_free(query_str); });
 
     String8 request_url = push_str8_copy(arena, http_info->http_path);
     B32 append_params_to_url = http_info->http_method == HTTP_Method_Get;
+    B32 passthrough_url = http_info->http_method == HTTP_Method_None;
     if (http_info->http_method == HTTP_Method_Post && http_info->params.node_count != 0 && !str8_match(http_info->content_type, S("application/x-www-form-urlencoded"), 0))
     {
         append_params_to_url = true;
@@ -226,20 +219,20 @@ _async_http_configure(Arena* arena, AsyncHttpTaskState<T>* http_ctx, HttpInfo* h
         defer(if (url_str) { curl_free(url_str); });
         if (request_url_err)
         {
-            return AsyncResult::UrlError;
+            return async_curl_error(CurlCodeType::Url, request_url_err);
         }
         request_url = push_str8_copy(arena, str8_c_string(url_str));
     }
-    else if (http_info->http_method != HTTP_Method_Post)
+    else if (!passthrough_url && http_info->http_method != HTTP_Method_Post)
     {
-        return AsyncResult::InvalidMethodTypeError;
+        return async_user_error(AsyncResult::InvalidMethodTypeError);
     }
 
-    OrReturnError(curl_easy_setopt(curl_ctx->session_handle, CURLOPT_URL, (const char*)request_url.str), AsyncResult::CurlError, http_ctx, __LINE__, __FILE__);
+    async_return_curl_error(CurlCodeType::Url, curl_easy_setopt(curl_ctx->session_handle, CURLOPT_URL, (const char*)request_url.str));
 
     if (http_info->http_method == HTTP_Method_Get)
     {
-        OrReturnError(curl_easy_setopt(curl_ctx->session_handle, CURLOPT_HTTPGET, 1L), AsyncResult::CurlError, http_ctx, __LINE__, __FILE__);
+        async_return_curl_error(CurlCodeType::Regular, curl_easy_setopt(curl_ctx->session_handle, CURLOPT_HTTPGET, 1L));
     }
     else if (http_info->http_method == HTTP_Method_Post)
     {
@@ -253,9 +246,9 @@ _async_http_configure(Arena* arena, AsyncHttpTaskState<T>* http_ctx, HttpInfo* h
             body = push_str8_copy(arena, str8_c_string(query_str));
         }
 
-        OrReturnError(curl_easy_setopt(curl_ctx->session_handle, CURLOPT_POST, 1L), AsyncResult::CurlError, http_ctx, __LINE__, __FILE__);
-        OrReturnError(curl_easy_setopt(curl_ctx->session_handle, CURLOPT_POSTFIELDS, body.str), AsyncResult::CurlError, http_ctx, __LINE__, __FILE__);
-        OrReturnError(curl_easy_setopt(curl_ctx->session_handle, CURLOPT_POSTFIELDSIZE_LARGE, (curl_off_t)body.size), AsyncResult::CurlError, http_ctx, __LINE__, __FILE__);
+        async_return_curl_error(CurlCodeType::Regular, curl_easy_setopt(curl_ctx->session_handle, CURLOPT_POST, 1L));
+        async_return_curl_error(CurlCodeType::Regular, curl_easy_setopt(curl_ctx->session_handle, CURLOPT_POSTFIELDS, body.str));
+        async_return_curl_error(CurlCodeType::Regular, curl_easy_setopt(curl_ctx->session_handle, CURLOPT_POSTFIELDSIZE_LARGE, (curl_off_t)body.size));
     }
 
     curl_slist* headers = 0;
@@ -271,30 +264,34 @@ _async_http_configure(Arena* arena, AsyncHttpTaskState<T>* http_ctx, HttpInfo* h
 
     curl_ctx->headers = headers;
 
-    LibCurlCallbackData<T>* callback_data = PushStruct(arena, LibCurlCallbackData<T>);
-    callback_data->http_ctx = http_ctx;
-    callback_data->arena = arena;
-
-    OrReturnError(curl_easy_setopt(curl_ctx->session_handle, CURLOPT_HTTPHEADER, curl_ctx->headers), AsyncResult::CurlError, http_ctx, __LINE__, __FILE__);
-    OrReturnError(curl_easy_setopt(curl_ctx->session_handle, CURLOPT_WRITEFUNCTION, _libcurl_callback<T>), AsyncResult::CurlError, http_ctx, __LINE__, __FILE__);
-    OrReturnError(curl_easy_setopt(curl_ctx->session_handle, CURLOPT_WRITEDATA, callback_data), AsyncResult::CurlError, http_ctx, __LINE__, __FILE__);
+    async_return_curl_error(CurlCodeType::Regular, curl_easy_setopt(curl_ctx->session_handle, CURLOPT_HTTPHEADER, curl_ctx->headers));
+    async_return_curl_error(CurlCodeType::Regular, curl_easy_setopt(curl_ctx->session_handle, CURLOPT_WRITEFUNCTION, curl_write_callback));
+    async_return_curl_error(CurlCodeType::Regular, curl_easy_setopt(curl_ctx->session_handle, CURLOPT_WRITEDATA, callback_data));
 
     CURLMcode multi_err = curl_multi_add_handle(curl_ctx->multi_handle, curl_ctx->session_handle);
     if (multi_err != CURLM_OK)
     {
-        http_ctx->http_result.error_code = (U32)multi_err;
-        http_ctx->err_line = __LINE__;
-        http_ctx->err_file = __FILE__;
-        return AsyncResult::CurlError;
+        return async_curl_error(CurlCodeType::Multi, multi_err);
     }
     curl_ctx->added_to_multi = true;
 
-    return AsyncResult::Success;
+    return async_no_error();
+}
+
+template <typename T>
+g_internal AsyncError
+_async_http_configure(Arena* arena, AsyncHttpTaskState<T>* http_ctx, HttpInfo* http_info)
+{
+    LibCurlCallbackData<T>* callback_data = PushStruct(arena, LibCurlCallbackData<T>);
+    callback_data->http_ctx = http_ctx;
+    callback_data->arena = arena;
+    AsyncError result = _async_http_configure(arena, http_ctx->curl_ctx, http_info, _libcurl_callback<T>, callback_data);
+    return result;
 }
 
 template <typename T>
 g_internal AsyncTaskContinuation<T>
-_write_data_complete(ThreadInfo thread_info, AsyncTaskStatus<T>* task_status)
+_http_main(ThreadInfo thread_info, AsyncTaskStatus<T>* task_status)
 {
     prof_scope_marker;
 
@@ -302,12 +299,12 @@ _write_data_complete(ThreadInfo thread_info, AsyncTaskStatus<T>* task_status)
     AsyncHttpTaskState<T>* http_ctx = task_status->http_ext;
     HttpInfo* next_http_info = http_ctx->next_http_info;
     AsyncWorkFunc<T> next_func = http_ctx->next_func;
-    CurlContext* curl_ctx = &http_ctx->curl_ctx;
+    CurlContext* curl_ctx = http_ctx->curl_ctx;
 
     if (http_ctx->timeout_us + http_ctx->task_start_us < os_now_microseconds())
     {
-        _error_set(AsyncResult::TimeoutError, __FILE__, __LINE__, http_ctx);
-        Debug_Http_Push(http_ctx->http_result);
+        async_error_set(http_ctx, async_user_error(AsyncResult::TimeoutError));
+        Debug_Http_Push(http_ctx->error);
         task_status->error.store(true);
         return {};
     }
@@ -319,10 +316,10 @@ _write_data_complete(ThreadInfo thread_info, AsyncTaskStatus<T>* task_status)
     B32 http_error = false;
     if (curl_code != CURLM_OK)
     {
-        _curl_error_set(curl_code, __FILE__, __LINE__, http_ctx);
+        async_error_set(http_ctx, async_curl_regular_error(curl_code));
         retry = true;
     }
-    else if (!running && retry == false)
+    else if (!running)
     {
         S32 msgs_left = 0;
         B32 found_msg = 0;
@@ -348,29 +345,20 @@ _write_data_complete(ThreadInfo thread_info, AsyncTaskStatus<T>* task_status)
         UserFuncResult<T> user_result = {};
         if (result != CURLE_OK)
         {
-            AsyncResult error_type = result ? AsyncResult::CurlError : AsyncResult::HttpError;
             S32 error_code = result ? result : http_code;
-            _error_set(error_type, __FILE__, __LINE__, http_ctx);
-            http_ctx->http_result.error_code = (U32)error_code;
+            async_error_set(http_ctx, async_curl_regular_error(error_code));
+            http_ctx->error.curl_code = (U32)error_code;
             retry = true;
         }
         else
         {
             // prepare response body as string input
-            U32 count = 0;
-            String8 final_str_buffer = push_str8_fill_byte(task_status->arena, curl_ctx->chunk_list.buffer_byte_count, 0);
-            for (WriteChunk* node = curl_ctx->chunk_list.first; node; node = node->next)
-            {
-                MemoryCopy(final_str_buffer.str + count, node->buffer.data, node->buffer.size);
-                count += node->buffer.size;
-            }
+            String8 final_str_buffer = str8_from_chunk_list(task_status->arena, &curl_ctx->chunk_list);
 
             if (http_code >= 400)
             {
-                AsyncResult error_type = AsyncResult::HttpError;
-                S32 error_code = http_code;
-                _error_set(error_type, __FILE__, __LINE__, http_ctx, final_str_buffer);
-                http_ctx->http_result.error_code = (U32)error_code;
+                http_ctx->http_error_code = (U32)http_code;
+                async_error_set(http_ctx, async_user_error(AsyncResult::HttpError));
                 http_error = true;
                 retry = true;
             }
@@ -403,7 +391,7 @@ _write_data_complete(ThreadInfo thread_info, AsyncTaskStatus<T>* task_status)
         {
             // task http call retry
             http_ctx->cur_http_retry_count += 1;
-            Debug_Http_Push(http_ctx->http_result);
+            Debug_Http_Push(http_ctx->error);
             us_delay = 10'000'000; // 10 sec
             retry = true;
         }
@@ -413,7 +401,7 @@ _write_data_complete(ThreadInfo thread_info, AsyncTaskStatus<T>* task_status)
             http_ctx->cur_task_retry_count += 1;
             http_ctx->cur_http_retry_count = 0;
             task_retry = true;
-            Debug_Http_Push(http_ctx->http_result);
+            Debug_Http_Push(http_ctx->error);
             us_delay = 10'000'000; // 10 sec
             retry = true;
         }
@@ -427,13 +415,13 @@ _write_data_complete(ThreadInfo thread_info, AsyncTaskStatus<T>* task_status)
                 next_func = http_ctx->first_func;
             }
 
-            _error_reset(http_ctx);
-            _curl_reset(&http_ctx->curl_ctx);
-            AsyncResult configure_result = _async_http_configure(task_status->arena, http_ctx, next_http_info);
-            if (configure_result != AsyncResult::Success)
+            http_ctx->error = async_no_error();
+            _curl_reset(http_ctx->curl_ctx);
+            AsyncError configure_result = _async_http_configure(task_status->arena, http_ctx, next_http_info);
+            if (configure_result.result != AsyncResult::Success)
             {
-                http_ctx->http_result.async_result = configure_result;
-                Debug_Http_Push(http_ctx->http_result);
+                http_ctx->error = configure_result;
+                Debug_Http_Push(http_ctx->error);
                 task_status->error.store(true);
                 return {};
             }
@@ -445,9 +433,9 @@ _write_data_complete(ThreadInfo thread_info, AsyncTaskStatus<T>* task_status)
         // record user function error and end the session
         if (user_result.successful == false)
         {
-            http_ctx->http_result.error_str = push_str8_copy(task_status->arena, user_result.msg);
-            http_ctx->http_result.async_result = AsyncResult::UserFunctionError;
-            Debug_Http_Push(http_ctx->http_result);
+            http_ctx->http_error_msg = push_str8_copy(task_status->arena, user_result.msg);
+            http_ctx->error = async_user_error(AsyncResult::UserFunctionError);
+            Debug_Http_Push(http_ctx->error);
             task_status->error.store(true);
             return {};
         }
@@ -462,12 +450,11 @@ _write_data_complete(ThreadInfo thread_info, AsyncTaskStatus<T>* task_status)
         if (next_http_info != 0)
         {
             AssertAlways(next_func != 0);
-            _curl_reset(&http_ctx->curl_ctx);
-            AsyncResult configure_result = _async_http_configure(task_status->arena, http_ctx, next_http_info);
-            if (configure_result != AsyncResult::Success)
+            _curl_reset(http_ctx->curl_ctx);
+            http_ctx->error = _async_http_configure(task_status->arena, http_ctx, next_http_info);
+            if (http_ctx->error.has_error())
             {
-                http_ctx->http_result.async_result = configure_result;
-                Debug_Http_Push(http_ctx->http_result);
+                Debug_Http_Push(http_ctx->error);
                 task_status->error.store(true);
                 return {};
             }
@@ -476,7 +463,7 @@ _write_data_complete(ThreadInfo thread_info, AsyncTaskStatus<T>* task_status)
         }
         else
         {
-            Debug_Http_Push(http_ctx->http_result);
+            Debug_Http_Push(http_ctx->error);
             if (user_result.main_thread_func)
             {
                 _async_main_thread_queue_push(thread_info.thread_pool, task_status, user_result.main_thread_func);
@@ -492,22 +479,13 @@ _write_data_complete(ThreadInfo thread_info, AsyncTaskStatus<T>* task_status)
 }
 
 template <typename T>
-g_internal void
-async_task_state_destroy(AsyncTaskStatus<T>* task)
-{
-    AssertAlways(task->done.load(std::memory_order_acquire));
-    AsyncHttpTaskState<T>* async_ctx = task->http_ext;
-    _curl_context_cleanup(&async_ctx->curl_ctx);
-
-    Arena* arena = task->arena;
-    arena_release(arena);
-}
-
-template <typename T>
 g_internal AsyncHttpTaskCreateResult<T>
 async_http_task_run(Arena* arena, ThreadPool* thread_pool, HttpInfo* http_info, AsyncHttpTaskStateConfig<T>* config, String8 task_name)
 {
+    AsyncHttpTaskCreateResult<T> result = {};
     AsyncHttpTaskState<T>* http_ctx = PushStruct(arena, AsyncHttpTaskState<T>);
+    http_ctx->curl_ctx = _curl_ctx_create(arena);
+    defer(if (result.async_result.has_error()) { _curl_context_cleanup(http_ctx->curl_ctx); });
     http_ctx->thread_pool = thread_pool;
     http_ctx->first_func = config->first_func;
     http_ctx->next_func = http_ctx->first_func;
@@ -517,16 +495,12 @@ async_http_task_run(Arena* arena, ThreadPool* thread_pool, HttpInfo* http_info, 
     http_ctx->max_task_retries = config->max_task_retries;
     http_ctx->timeout_sec = config->timeout_sec;
 
-    AsyncHttpTaskCreateResult<T> result = {};
-
     if (http_ctx->thread_pool == 0 || http_ctx->first_func == 0 || http_ctx->first_http_info == 0)
     {
-        http_ctx->http_result.async_result = AsyncResult::NoWorkError;
-        result.async_result = AsyncResult::NoWorkError;
+        result.async_result = async_user_error(AsyncResult::NoWorkError);
         return result;
     }
 
-    async_http_global_init();
     if (http_ctx->timeout_us == 0)
     {
         U32 timeout_sec = http_ctx->timeout_sec == 0 ? 300 : http_ctx->timeout_sec;
@@ -534,29 +508,17 @@ async_http_task_run(Arena* arena, ThreadPool* thread_pool, HttpInfo* http_info, 
     }
     http_ctx->task_start_us = os_now_microseconds();
 
-    // curl library inits
-    CURL* session_handle = curl_easy_init();
-    CURLM* multi_handle = curl_multi_init();
-
-    // create curl handles
-    CurlContext* curl_ctx = &http_ctx->curl_ctx;
-    curl_ctx->session_handle = session_handle;
-    curl_ctx->multi_handle = multi_handle;
-    defer(if (result.async_result != AsyncResult::Success) { _curl_context_cleanup(curl_ctx); });
-
     // thread pool push
     http_ctx->first_http_info = http_info;
-    AsyncResult async_result = _async_http_configure(arena, http_ctx, http_info);
-    if (async_result != AsyncResult::Success)
+    result.async_result = _async_http_configure(arena, http_ctx, http_info);
+    if (result.async_result.has_error())
     {
-        http_ctx->http_result.async_result = async_result;
-        result.async_result = async_result;
         return result;
     }
 
-    result.task_state = async::async_task_with_ext_run(arena, http_ctx->thread_pool, _write_data_complete, config->user_data, task_name, 0, ExtensionType::Http, http_ctx);
+    ExtensionType extension_type = ExtensionType::Http;
+    result.task_state = async::async_task_with_ext_run(arena, http_ctx->thread_pool, _http_main, config->user_data, task_name, 0, extension_type, http_ctx);
 
-    result.async_result = AsyncResult::Success;
     return result;
 }
 
@@ -568,4 +530,5 @@ async_http_task_run(ThreadPool* thread_pool, HttpInfo* http_info, AsyncHttpTaskS
     AsyncHttpTaskCreateResult<T> result = async_http_task_run(task_arena, thread_pool, http_info, config, task_name);
     return result;
 }
+
 } // namespace async

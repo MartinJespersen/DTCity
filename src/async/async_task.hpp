@@ -11,17 +11,23 @@ enum class ExtensionType
     Http
 };
 
+} // namespace async
+
+template <>
+inline constexpr bool enable_bitmask<async::ExtensionType> = true;
+
+namespace async
+{
+
 template <typename T>
 struct AsyncTaskStatus
 {
     Arena* arena;
     String8 task_name;
+    ThreadPool* thread_pool;
 
     ExtensionType ext_type;
-    union
-    {
-        AsyncHttpTaskState<T>* http_ext;
-    };
+    AsyncHttpTaskState<T>* http_ext;
 
     B32 started;
     std::atomic<B32> done;
@@ -79,7 +85,7 @@ struct AsyncTaskResult
     AsyncTaskResult<T>&
     operator=(const AsyncTaskResult<T>& other) = delete;
 
-    AsyncTaskResult(AsyncTaskResult<T>&& other)
+    AsyncTaskResult(AsyncTaskResult<T>&& other) noexcept
     {
         this->task = other.task;
         this->done = other.done;
@@ -91,7 +97,7 @@ struct AsyncTaskResult
     }
 
     AsyncTaskResult<T>&
-    operator=(AsyncTaskResult<T>&& other)
+    operator=(AsyncTaskResult<T>&& other) noexcept
     {
         if (this != &other)
         {

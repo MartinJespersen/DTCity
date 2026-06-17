@@ -97,4 +97,6 @@ static B32
 thread_pool_main_thread_queue_try_pull(ThreadPool* thread_pool, WorkerItem* item);
 static void
 thread_pool_main_thread_queue_drain(ThreadPool* thread_pool);
+g_internal B32
+thread_pool_is_main_thread(ThreadPool* thread_pool);
 } // namespace async

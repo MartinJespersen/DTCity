@@ -1254,35 +1254,35 @@ os_rw_mutex_alloc()
 }
 
 static void
-OS_RWMutexRelease(OS_Handle rw_mutex)
+os_rw_mutex_release(OS_Handle rw_mutex)
 {
     OS_W32_Entity* entity = (OS_W32_Entity*)PtrFromInt(rw_mutex.u64[0]);
     os_w32_entity_release(entity);
 }
 
 static void
-OS_RWMutexTakeR(OS_Handle rw_mutex)
+os_rw_mutex_take_r(OS_Handle rw_mutex)
 {
     OS_W32_Entity* entity = (OS_W32_Entity*)PtrFromInt(rw_mutex.u64[0]);
     AcquireSRWLockShared(&entity->rw_mutex);
 }
 
 static void
-OS_RWMutexDropR(OS_Handle rw_mutex)
+os_rw_mutex_drop_r(OS_Handle rw_mutex)
 {
     OS_W32_Entity* entity = (OS_W32_Entity*)PtrFromInt(rw_mutex.u64[0]);
     ReleaseSRWLockShared(&entity->rw_mutex);
 }
 
 static void
-OS_RWMutexTakeW(OS_Handle rw_mutex)
+os_rw_mutex_take_w(OS_Handle rw_mutex)
 {
     OS_W32_Entity* entity = (OS_W32_Entity*)PtrFromInt(rw_mutex.u64[0]);
     AcquireSRWLockExclusive(&entity->rw_mutex);
 }
 
 static void
-OS_RWMutexDropW(OS_Handle rw_mutex)
+os_rw_mutex_drop_w(OS_Handle rw_mutex)
 {
     OS_W32_Entity* entity = (OS_W32_Entity*)PtrFromInt(rw_mutex.u64[0]);
     ReleaseSRWLockExclusive(&entity->rw_mutex);

@@ -353,15 +353,15 @@ os_mutex_drop(OS_Handle mutex);
 static OS_Handle
 os_rw_mutex_alloc();
 static void
-OS_RWMutexRelease(OS_Handle rw_mutex);
+os_rw_mutex_release(OS_Handle rw_mutex);
 static void
-OS_RWMutexTakeR(OS_Handle mutex);
+os_rw_mutex_take_r(OS_Handle mutex);
 static void
-OS_RWMutexDropR(OS_Handle mutex);
+os_rw_mutex_drop_r(OS_Handle mutex);
 static void
-OS_RWMutexTakeW(OS_Handle mutex);
+os_rw_mutex_take_w(OS_Handle mutex);
 static void
-OS_RWMutexDropW(OS_Handle mutex);
+os_rw_mutex_drop_w(OS_Handle mutex);
 
 //- rjf: condition variables
 static OS_Handle
@@ -396,9 +396,9 @@ OS_SemaphoreDrop(OS_Handle semaphore);
 
 //- rjf: scope macros
 #define os_mutex_scope(mutex) DeferLoop(os_mutex_take(mutex), os_mutex_drop(mutex))
-#define OS_MutexScopeR(mutex) DeferLoop(OS_RWMutexTakeR(mutex), OS_RWMutexDropR(mutex))
-#define OS_MutexScopeW(mutex) DeferLoop(OS_RWMutexTakeW(mutex), OS_RWMutexDropW(mutex))
-#define OS_MutexScopeRWPromote(mutex) DeferLoop((OS_RWMutexDropR(mutex), OS_RWMutexTakeW(mutex)), (OS_RWMutexDropW(mutex), OS_RWMutexTakeR(mutex)))
+#define os_mutex_scope_r(mutex) DeferLoop(os_rw_mutex_take_r(mutex), os_rw_mutex_drop_r(mutex))
+#define os_mutex_scope_w(mutex) DeferLoop(os_rw_mutex_take_w(mutex), os_rw_mutex_drop_w(mutex))
+#define os_mutex_scope_rWPromote(mutex) DeferLoop((os_rw_mutex_drop_r(mutex), os_rw_mutex_take_w(mutex)), (os_rw_mutex_drop_w(mutex), os_rw_mutex_take_r(mutex)))
 
 ////////////////////////////////
 //~ rjf: @os_hooks Dynamically-Loaded Libraries (Implemented Per-OS)

@@ -109,6 +109,7 @@ typedef enum HTTP_StatusCodeEnum
 
 typedef enum HTTP_Method
 {
+    HTTP_Method_None,
     HTTP_Method_Post,
     // TODO: implement the below methods for linux
     HTTP_Method_Get,

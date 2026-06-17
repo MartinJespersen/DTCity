@@ -72,7 +72,7 @@ async_heap_release(Heap<T>* heap)
     {
         Arena* arena = heap->buffer.arena;
         OS_Handle mutex = heap->mutex;
-        OS_RWMutexRelease(mutex);
+        os_rw_mutex_release(mutex);
         arena_release(arena);
     }
 }
@@ -85,7 +85,7 @@ async_min_heap_push(Heap<T>* heap, const T& v, S64 k)
     item.k = k;
     item.v = v;
 
-    OS_MutexScopeW(heap->mutex)
+    os_mutex_scope_w(heap->mutex)
     {
         U64 cur_idx = heap->size;
         heap->size += 1;
@@ -112,7 +112,7 @@ template <typename T>
 g_internal void
 async_min_heap_pop(Heap<T>* heap)
 {
-    OS_MutexScopeW(heap->mutex)
+    os_mutex_scope_w(heap->mutex)
     {
         if (heap->size > 0)
         {
@@ -126,7 +126,7 @@ g_internal B32
 async_min_heap_pop_ready(Heap<T>* heap, S64 max_key, HeapItem<T>* out_value)
 {
     B32 result = false;
-    OS_MutexScopeW(heap->mutex)
+    os_mutex_scope_w(heap->mutex)
     {
         if (heap->size > 0)
         {
@@ -150,7 +150,7 @@ g_internal B32
 async_min_heap_peek(Heap<T>* heap, HeapItem<T>* out_value)
 {
     B32 result = false;
-    OS_MutexScopeR(heap->mutex)
+    os_mutex_scope_r(heap->mutex)
     {
         if (heap->size > 0)
         {

@@ -1,15 +1,3 @@
-struct WriteChunk
-{
-    WriteChunk* next;
-    Buffer<U8> buffer;
-};
-
-struct WriteChunkList
-{
-    WriteChunk* first;
-    WriteChunk* last;
-    U32 buffer_byte_count;
-};
 
 template <typename T>
 struct LinkedListNode

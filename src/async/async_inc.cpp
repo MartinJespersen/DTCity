@@ -6,3 +6,4 @@
 #include "async_http.cpp"
 #include "async_task.cpp"
 #include "mpmc_queue.cpp"
+#include "async_websocket.cpp"

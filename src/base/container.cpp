@@ -156,11 +156,30 @@ chunk_list_create(Arena* arena, U64 capacity)
 }
 
 template <typename T>
+ChunkItem<T>*
+chunk_item_from_array(Arena* arena, T* values, U64 count)
+{
+    ChunkItem<T>* chunk = PushStruct(arena, ChunkItem<T>);
+    chunk->values = values;
+    chunk->count = count;
+    return chunk;
+}
+
+template <typename T>
 void
 chunk_list_insert(Arena* arena, ChunkList<T>* list, T& item)
 {
     T* res = chunk_list_get_next(arena, list);
     *res = item;
+}
+
+template <typename T>
+void
+chunk_list_insert_chunk(ChunkList<T>* list, ChunkItem<T>* chunk)
+{
+    SLLQueuePush(list->first, list->last, chunk);
+    list->chunk_count += 1;
+    list->total_count += chunk->count;
 }
 
 template <typename T>
@@ -194,6 +213,18 @@ buffer_from_chunk_list(Arena* arena, ChunkList<T>* list)
     return buffer;
 }
 
+static String8
+str8_from_chunk_list(Arena* arena, ChunkList<U8>* list)
+{
+    String8 buffer = push_str8_fill_byte(arena, list->total_count, 0);
+    U64 offset = 0;
+    for (ChunkItem<U8>* chunk = list->first; chunk; chunk = chunk->next)
+    {
+        MemoryCopy(buffer.str + offset, chunk->values, chunk->count * sizeof(U8));
+        offset += chunk->count;
+    }
+    return buffer;
+}
 // Linked List Map
 static inline U64
 map_hash_u64(U64 x)

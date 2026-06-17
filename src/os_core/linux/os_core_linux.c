@@ -761,7 +761,7 @@ static OS_Handle os_rw_mutex_alloc() {
   return handle;
 }
 
-static void OS_RWMutexRelease(OS_Handle rw_mutex) {
+static void os_rw_mutex_release(OS_Handle rw_mutex) {
   if (OS_HandleMatch(rw_mutex, OS_HandleIsZero())) {
     return;
   }
@@ -770,7 +770,7 @@ static void OS_RWMutexRelease(OS_Handle rw_mutex) {
   os_lnx_entity_release(entity);
 }
 
-static void OS_RWMutexTakeR(OS_Handle rw_mutex) {
+static void os_rw_mutex_take_r(OS_Handle rw_mutex) {
   if (OS_HandleMatch(rw_mutex, OS_HandleIsZero())) {
     return;
   }
@@ -778,7 +778,7 @@ static void OS_RWMutexTakeR(OS_Handle rw_mutex) {
   pthread_rwlock_rdlock(&entity->rwmutex_handle);
 }
 
-static void OS_RWMutexDropR(OS_Handle rw_mutex) {
+static void os_rw_mutex_drop_r(OS_Handle rw_mutex) {
   if (OS_HandleMatch(rw_mutex, OS_HandleIsZero())) {
     return;
   }
@@ -786,7 +786,7 @@ static void OS_RWMutexDropR(OS_Handle rw_mutex) {
   pthread_rwlock_unlock(&entity->rwmutex_handle);
 }
 
-static void OS_RWMutexTakeW(OS_Handle rw_mutex) {
+static void os_rw_mutex_take_w(OS_Handle rw_mutex) {
   if (OS_HandleMatch(rw_mutex, OS_HandleIsZero())) {
     return;
   }
@@ -794,7 +794,7 @@ static void OS_RWMutexTakeW(OS_Handle rw_mutex) {
   pthread_rwlock_wrlock(&entity->rwmutex_handle);
 }
 
-static void OS_RWMutexDropW(OS_Handle rw_mutex) {
+static void os_rw_mutex_drop_w(OS_Handle rw_mutex) {
   if (OS_HandleMatch(rw_mutex, OS_HandleIsZero())) {
     return;
   }

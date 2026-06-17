@@ -11,3 +11,4 @@
 #include "async_arena.hpp"
 #include "async_task.hpp"
 #include "async_http.hpp"
+#include "async_websocket.hpp"

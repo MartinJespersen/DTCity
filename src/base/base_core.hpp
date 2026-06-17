@@ -13,6 +13,7 @@
 #include <string.h>
 #include <stdint.h>
 #include <float.h>
+#include <type_traits>
 
 ////////////////////////////////
 //~ rjf: Codebase Keywords
@@ -987,4 +988,78 @@ u64_array_bsearch(U64* arr, U64 count, U64 value);
 // type casts
 
 #define enum_idx(a) static_cast<U32>(a)
+
+// Bitmask enum class
+
+template <typename Enum>
+inline constexpr bool enable_bitmask = false;
+
+template <typename Enum>
+concept BitmaskEnum = std::is_enum_v<Enum> && enable_bitmask<Enum>;
+
+
+template <BitmaskEnum Enum>
+constexpr Enum
+operator|(Enum lhs, Enum rhs) noexcept
+{
+    using T = std::underlying_type_t<Enum>;
+
+    return static_cast<Enum>(static_cast<T>(lhs) | static_cast<T>(rhs));
+}
+
+template <BitmaskEnum Enum>
+constexpr Enum
+operator&(Enum lhs, Enum rhs) noexcept
+{
+    using T = std::underlying_type_t<Enum>;
+
+    return static_cast<Enum>(static_cast<T>(lhs) & static_cast<T>(rhs));
+}
+
+template <BitmaskEnum Enum>
+constexpr Enum
+operator^(Enum lhs, Enum rhs) noexcept
+{
+    using T = std::underlying_type_t<Enum>;
+
+    return static_cast<Enum>(static_cast<T>(lhs) ^ static_cast<T>(rhs));
+}
+
+template <BitmaskEnum Enum>
+constexpr Enum
+operator~(Enum value) noexcept
+{
+    using T = std::underlying_type_t<Enum>;
+
+    return static_cast<Enum>(~static_cast<T>(value));
+}
+
+template <BitmaskEnum Enum>
+constexpr Enum&
+operator|=(Enum& lhs, Enum rhs) noexcept
+{
+    return lhs = lhs | rhs;
+}
+
+template <BitmaskEnum Enum>
+constexpr Enum&
+operator&=(Enum& lhs, Enum rhs) noexcept
+{
+    return lhs = lhs & rhs;
+}
+
+template <BitmaskEnum Enum>
+constexpr Enum&
+operator^=(Enum& lhs, Enum rhs) noexcept
+{
+    return lhs = lhs ^ rhs;
+}
+
+template <BitmaskEnum Enum>
+constexpr bool
+has_flag(Enum value, Enum flag) noexcept
+{
+    return (value & flag) == flag;
+}
+
 #endif // BASE_CORE_H

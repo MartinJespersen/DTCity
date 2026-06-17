@@ -49,14 +49,14 @@ template <typename T>
 static void
 queue_release(Queue<T>* queue)
 {
-    OS_RWMutexRelease(queue->mutex);
+    os_rw_mutex_release(queue->mutex);
 }
 
 template <typename T>
 static void
 queue_push(Queue<T>* queue, T* data)
 {
-    OS_MutexScopeW(queue->mutex)
+    os_mutex_scope_w(queue->mutex)
     {
         if (queue->items_in_queue_count >= queue->queue_size)
         {
@@ -72,7 +72,7 @@ static B32
 queue_try_push(Queue<T>* queue, T* data)
 {
     B32 inserted = false;
-    OS_MutexScopeW(queue->mutex)
+    os_mutex_scope_w(queue->mutex)
     {
         if (queue->items_in_queue_count < queue->queue_size)
         {
@@ -88,7 +88,7 @@ static B32
 queue_try_read(Queue<T>* queue, T* item)
 {
     B32 has_read = 0;
-    OS_MutexScopeW(queue->mutex)
+    os_mutex_scope_w(queue->mutex)
     {
         if (queue->items_in_queue_count > 0)
         {

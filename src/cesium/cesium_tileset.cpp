@@ -385,7 +385,7 @@ class DTCityPrepareRendererResources : public Cesium3DTilesSelection::IPrepareRe
         if (!render_data_list)
             return;
 
-        OS_MutexScopeW(tile_set_renderer->tiles_to_free_mutex)
+        os_mutex_scope_w(tile_set_renderer->tiles_to_free_mutex)
         {
             SLLStackPush(tile_set_renderer->tiles_to_free_stack, render_data_list);
             tile_set_renderer->tiles_to_free_stack_count++;
@@ -1078,7 +1078,7 @@ tileset_renderer_free_tile_ressource(TilesetRenderer* renderer)
     while (1)
     {
         TileRenderDataList* tile_data = 0;
-        OS_MutexScopeW(renderer->tiles_to_free_mutex)
+        os_mutex_scope_w(renderer->tiles_to_free_mutex)
         {
             tile_data = renderer->tiles_to_free_stack;
             if (tile_data)
@@ -1138,7 +1138,7 @@ tileset_renderer_destroy(TilesetRenderer* renderer)
     }
 
     tileset_renderer_free_tile_ressource(renderer);
-    OS_RWMutexRelease(renderer->tiles_to_free_mutex);
+    os_rw_mutex_release(renderer->tiles_to_free_mutex);
 }
 
 //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

@@ -349,7 +349,7 @@ buffer_loading_thread(void* data, render::ThreadWorkerCmdCtx* thread_input)
     BufferAllocation staging_buffer_alloc = staging_buffer_create(buffer.size);
     VK_CHECK_RESULT(vmaCopyMemoryToAllocation(asset_manager->allocator, buffer.data, staging_buffer_alloc.allocation, 0, buffer.size));
 
-    OS_MutexScopeW(asset_manager->buffer_mutex)
+    os_mutex_scope_w(asset_manager->buffer_mutex)
     {
         render::AssetItem<BufferHandle>* asset_item_buffer = asset_manager_item_get<BufferHandle>(handle);
         if (asset_item_buffer)
@@ -381,7 +381,7 @@ texture_loading_thread(void* data, render::ThreadWorkerCmdCtx* thread_input)
     Assert(texture);
     ImageAllocationResource image_allocation_resource = texture_upload_with_blitting((VkCommandBuffer)thread_input->cmd_buffer, texture);
 
-    OS_MutexScopeW(asset_manager->texture_mutex)
+    os_mutex_scope_w(asset_manager->texture_mutex)
     {
         render::AssetItem<TextureHandle>* tex_asset = asset_manager_item_get<TextureHandle>(handle);
         if (tex_asset)
@@ -755,7 +755,7 @@ asset_manager_buffer_item_get(render::Handle handle)
 {
     AssetManager* asset_manager = asset_manager_get();
     render::AssetItem<BufferHandle>* asset_item_buffer = {};
-    OS_MutexScopeR(asset_manager->buffer_mutex)
+    os_mutex_scope_r(asset_manager->buffer_mutex)
     {
         asset_item_buffer = asset_manager_item_get<BufferHandle>(handle);
     }
@@ -767,7 +767,7 @@ asset_manager_texture_item_get(render::Handle handle)
 {
     AssetManager* asset_manager = asset_manager_get();
     render::AssetItem<TextureHandle>* asset_item_texture = {};
-    OS_MutexScopeR(asset_manager->texture_mutex)
+    os_mutex_scope_r(asset_manager->texture_mutex)
     {
         asset_item_texture = asset_manager_item_get<TextureHandle>(handle);
     }
@@ -1109,7 +1109,7 @@ asset_manager_buffer_free(render::Handle handle)
     render::AssetItem<BufferHandle>* item = asset_manager_buffer_item_get(handle);
     if (item)
     {
-        OS_MutexScopeW(asset_manager->buffer_mutex)
+        os_mutex_scope_w(asset_manager->buffer_mutex)
         {
             buffer_destroy(&item->item.buffer_alloc);
             buffer_destroy(&item->item.staging_buffer);
@@ -1127,7 +1127,7 @@ asset_manager_texture_free(render::Handle handle)
     render::AssetItem<TextureHandle>* null_tex = asset_manager_texture_item_get(vk_ctx->null_texture_handle);
     if (item)
     {
-        OS_MutexScopeW(asset_manager->texture_mutex)
+        os_mutex_scope_w(asset_manager->texture_mutex)
         {
             if (asset_manager->shutting_down == false)
             {

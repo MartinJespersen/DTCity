@@ -98,7 +98,7 @@ _cache_and_parse_osm_json(async::ThreadPool* thread_pool, Road* road)
         http_info->body = push_str8_copy(osm_network->arena, body);
         async::AsyncHttpTaskStateConfig<osm::Network> config = async::AsyncHttpTaskStateConfig<osm::Network>(osm::fetch_osm_data_and_parse, osm_network, 3, 1);
         async::AsyncHttpTaskCreateResult<osm::Network> http_task_result = async::async_http_task_run(thread_pool, http_info, &config, S("Osm Task"));
-        AssertAlways(http_task_result.async_result == async::AsyncResult::Success);
+        AssertAlways(http_task_result.async_result.has_error() == false);
 
         osm_task->osm = http_task_result.task_state;
     }

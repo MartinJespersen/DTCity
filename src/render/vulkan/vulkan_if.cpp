@@ -393,7 +393,7 @@ texture_handle_create(SamplerInfo* sampler_info)
 
     // ~mgj: Assign values to texture
     render::Handle asset_handle = render::Handle::texture_handle_create();
-    OS_MutexScopeW(asset_manager->texture_mutex)
+    os_mutex_scope_w(asset_manager->texture_mutex)
     {
         AssetItem<vulkan::TextureHandle>* asset_item = (AssetItem<vulkan::TextureHandle>*)asset_handle.ptr;
         vulkan::TextureHandle* texture = &asset_item->item;
@@ -689,7 +689,7 @@ buffer_load_async(render::BufferInfo* buffer_info)
     vulkan::BufferAllocation buffer = vulkan::_buffer_allocation_create(buffer_info->buffer.size, usage_flags | VK_BUFFER_USAGE_TRANSFER_DST_BIT, vma_info, "buffer_load_async");
 
     // ~mgj: Prepare buffer asset item
-    OS_MutexScopeW(asset_manager->buffer_mutex)
+    os_mutex_scope_w(asset_manager->buffer_mutex)
     {
         AssetItem<vulkan::BufferHandle>* asset_item = (AssetItem<vulkan::BufferHandle>*)asset_handle.ptr;
         vulkan::BufferHandle* asset_buffer = (vulkan::BufferHandle*)&asset_item->item;
@@ -947,9 +947,9 @@ Handle
 Handle::texture_handle_create()
 {
     vulkan::AssetManager* asset_manager = vulkan::asset_manager_get();
-    OS_RWMutexTakeW(asset_manager->texture_mutex);
+    os_rw_mutex_take_w(asset_manager->texture_mutex);
     Handle handle = asset_manager_item_create(&asset_manager->texture_list, &asset_manager->texture_free_list, render::HandleType::Texture);
-    OS_RWMutexDropW(asset_manager->texture_mutex);
+    os_rw_mutex_drop_w(asset_manager->texture_mutex);
     return handle;
 }
 
@@ -957,12 +957,12 @@ Handle
 Handle::buffer_handle_create(BufferType buffer_type)
 {
     vulkan::AssetManager* asset_manager = vulkan::asset_manager_get();
-    OS_RWMutexTakeW(asset_manager->buffer_mutex);
+    os_rw_mutex_take_w(asset_manager->buffer_mutex);
     Handle handle = asset_manager_item_create(&asset_manager->buffer_list, &asset_manager->buffer_free_list, render::HandleType::Buffer);
     render::AssetItem<vulkan::BufferHandle>* asset_item = (render::AssetItem<vulkan::BufferHandle>*)handle.ptr;
     asset_item->item.type = buffer_type;
 
-    OS_RWMutexDropW(asset_manager->buffer_mutex);
+    os_rw_mutex_drop_w(asset_manager->buffer_mutex);
     return handle;
 }
 

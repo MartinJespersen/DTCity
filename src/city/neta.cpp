@@ -384,7 +384,7 @@ netascore_async_task_create(Arena* arena, NetaState* neta, Rng2F64 bbox)
                                                              {target_srid_param, neta->task_state.cache_bbox_str, S("output_format=GeoJSON")});
         async::AsyncHttpTaskStateConfig<NetaTaskState> config = async::AsyncHttpTaskStateConfig<NetaTaskState>(neta::netascore_job_create_complete, &neta->task_state, 5, 1);
         async::AsyncHttpTaskCreateResult<NetaTaskState> result = async::async_http_task_run(task_arena, ctx->thread_pool, http_info, &config, S("Neta Task"));
-        AssertAlways(result.async_result == async::AsyncResult::Success);
+        AssertAlways(result.async_result.has_error() == false);
 
         neta_task->type = city::AsyncTaskType::Neta;
         neta_task->neta = result.task_state;

@@ -4,6 +4,7 @@
     "vulkan-loader",
     "glfw3",
     { "name": "glslang", "features": ["tools"] },
+    { "name": "curl", "features": ["websockets"] },
     "cesium-native",
     "abseil"
   ],

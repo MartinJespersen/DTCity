@@ -14,11 +14,12 @@
 * tile transform might need to be passed to shader as a uniform buffer
 
 # features
+* Simulation
+  * Integrate with MATSim
+  * make streaming possible from multiple cities simultanously
 * Out of device memory error. 
 * Are the amount of descriptor indices not deallocated? 
 * delete draw flush and related code
-* Simulation
-  * Integrate with MATSim
 * Vulkan current_frame should be used exclusively in render::render_frame function (PERFORMANCE).
 * record asset lifetimes similar to how debug events are done at the moment to be sure everything related to asset lifetimes are handled on the same thread.
 * Use a list of fences for draw and compute calls that waits for asynchrounously loaded assets
