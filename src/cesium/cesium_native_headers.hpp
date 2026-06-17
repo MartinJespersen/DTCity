@@ -11,7 +11,6 @@
 #include <vector>
 #include <any>
 
-#include "base/base_diagnostics.hpp"
 #include <Cesium3DTilesSelection/Tileset.h>
 #include <Cesium3DTilesSelection/Tile.h>
 #include <Cesium3DTilesSelection/TileContent.h>

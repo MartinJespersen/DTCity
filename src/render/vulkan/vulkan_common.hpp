@@ -132,16 +132,6 @@ sampler_create(VkDevice device, VkSamplerCreateInfo* sampler_info);
 static void
 descriptor_pool_create(Context* vk_ctx, U32 max_textures);
 
-static VkDescriptorSetLayout
-descriptor_set_layout_create(VkDevice device, VkDescriptorSetLayoutBinding* bindings, U32 binding_count);
-
-static VkDescriptorSetLayout
-descriptor_set_layout_create(VkDevice device, std::initializer_list<VkDescriptorSetLayoutBinding> bindings);
-g_internal VkDescriptorSet
-descriptor_set_alloc(VkDevice device, VkDescriptorPool desc_pool, std::initializer_list<VkDescriptorSetLayout> layouts);
-static void
-descriptor_set_update(VkDevice device, std::initializer_list<VkWriteDescriptorSet> writes);
-
 // ~mgj: Descriptor Indexing / Bindless Descriptor Functions
 // Creates a descriptor set layout with descriptor indexing flags for bindless resources
 static VkDescriptorSetLayout

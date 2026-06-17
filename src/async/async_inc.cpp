@@ -1,6 +1,5 @@
 #include "thread_pool.cpp"
 #include "spmc_queue.cpp"
-#include "async_arena.cpp"
 #include "segment_buffer.cpp"
 #include "async_heap.cpp"
 #include "async_http.cpp"

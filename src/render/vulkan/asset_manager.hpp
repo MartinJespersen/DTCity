@@ -328,8 +328,7 @@ static void
 colormap_loading_thread(void* data, render::ThreadWorkerCmdCtx* thread_input);
 g_internal void
 colormap_loading_thread(render::Handle handle, render::ColorMapLoadingInfo* colormap_info, render::ThreadWorkerCmdCtx* thread_input);
-g_internal void
-texture_loading_thread(void* data, render::ThreadWorkerCmdCtx* thread_input);
+
 g_internal void
 texture_loading_from_path_thread(void* data, render::ThreadWorkerCmdCtx* thread_input);
 

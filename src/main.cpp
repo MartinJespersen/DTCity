@@ -10,7 +10,6 @@ ctx_create(io::IO* io_ctx)
     Context* ctx = PushStruct(app_arena, Context);
     ctx->arena_main_permanent = app_arena;
     ctx->arena_frame = arena_alloc();
-    ctx->async_arena = async::async_arena_alloc();
     ctx->io = PushStruct(app_arena, io::IO);
 
     ctx->camera_container = container_init<ui::Camera>(10);
@@ -53,7 +52,6 @@ static void
 ctx_destroy(Context* ctx)
 {
     async::thread_pool_destroy(ctx->thread_pool);
-    async::async_arena_release(ctx->async_arena);
     container_release(ctx->camera_container);
     arena_release(ctx->arena_main_permanent);
 }

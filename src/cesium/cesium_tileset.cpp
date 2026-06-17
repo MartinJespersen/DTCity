@@ -626,7 +626,7 @@ tile_render_data_from_gltf(const CesiumGltf::Model& model, const glm::dmat4& ece
         PrimitiveNode* last;
     };
 
-    U32 model_scene_count = model.scenes.size();
+    U64 model_scene_count = model.scenes.size();
     Assert(model_scene_count == 1);
     for (U32 i = 0; i < model.nodes.size(); i++)
     {
@@ -1238,21 +1238,5 @@ tileset_update_view(TilesetRenderer* renderer, ui::Camera* camera, Vec2U32 viewp
     }
 }
 
-g_internal B32
-root_tileset_url_is_readable(String8 url)
-{
-    if (url.size == 0)
-    {
-        return false;
-    }
 
-    CesiumUtility::Uri uri((const char*)url.str);
-    if (uri.getScheme() != "file:")
-    {
-        return false;
-    }
-
-    std::string native_path = CesiumUtility::Uri::uriPathToNativePath(std::string(uri.getPath()));
-    return os_file_path_exists(str8((U8*)native_path.data(), native_path.size()));
-}
 } // namespace cesium

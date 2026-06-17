@@ -228,7 +228,7 @@ dt_main_loop(void* ptr)
         ////////////////////////////////////////////////////////
     }
 
-    async::AsyncWebsocketCreateResult ws_task_result = async::async_websocket_start(S("ws://127.0.0.1:8080/ws"));
+    async::WebsocketConnection ws_task_result = async::async_websocket_start(S("ws://127.0.0.1:8080/ws"));
     if (ws_task_result.has_error())
     {
         ERROR_LOG("Error from websocket");
@@ -251,13 +251,10 @@ dt_main_loop(void* ptr)
         ImGui::NewFrame();
         async::thread_pool_main_thread_queue_drain(ctx->thread_pool);
 
-        if (!ws_task_result.has_error())
+        String8List ws_msgs = ws_task_result.read(ctx->arena_frame);
+        for (String8Node* node = ws_msgs.first; node; node = node->next)
         {
-            String8List ws_msgs = async::async_websocket_read(ctx->arena_frame, ws_task_result.ws_session);
-            for (String8Node* node = ws_msgs.first; node; node = node->next)
-            {
-                INFO_LOG("ws msg: %s", node->string.str);
-            }
+            INFO_LOG("ws msg: %s", node->string.str);
         }
         Vec2U32 framebuffer_dim = {(U32)io_ctx->framebuffer_width, (U32)io_ctx->framebuffer_height};
 

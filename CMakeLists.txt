@@ -8,6 +8,7 @@ set(SHADER_BINARY_DIR ${CMAKE_CURRENT_SOURCE_DIR}/data/shaders/bin)
 set(ASAN_LINK_FLAGS "")
 set(ASAN_COMPILE_FLAGS "")
 set(GLSL_SHADER_FLAGS "")
+set(DISABLE_WARNINGS_COMPILE_FLAG "")
 set(ALL_TARGETS city)
 
 option(BUILD_DEBUG "Enable Additional Debugging Information (e.g Vulkan Validation Layers)" OFF)
@@ -42,7 +43,7 @@ if (MSVC)
   endif()
   add_compile_options(
             /W4
-            /wd4201  /wd4005 /wd4838 /wd4244 /wd4996 /wd4310 /wd4245 /wd4100 /wd4505
+            /wd4201  /wd4005 /wd4838 /wd4244 /wd4996 /wd4310 /wd4245 /wd4100
             /EHsc
             /utf-8
             /Zc:preprocessor
@@ -59,6 +60,7 @@ if (MSVC)
 
   list(APPEND ASAN_LINK_FLAGS /INCREMENTAL:NO)
   list(APPEND ASAN_COMPILE_FLAGS /fsanitize=address /D_DISABLE_STRING_ANNOTATION /D_DISABLE_VECTOR_ANNOTATION /D_DISABLE_OPTIONAL_ANNOTATION)
+  set(DISABLE_WARNINGS_COMPILE_FLAG /W0)
 elseif(CMAKE_COMPILER_IS_GNUCXX)
   add_compile_options(
     -maes
@@ -76,9 +78,18 @@ elseif(CMAKE_COMPILER_IS_GNUCXX)
 
   list(APPEND ASAN_LINK_FLAGS -fsanitize=address)
   list(APPEND ASAN_COMPILE_FLAGS -fsanitize=address)
+  set(DISABLE_WARNINGS_COMPILE_FLAG -w)
 else()
   message(FATAL_ERROR "Unsupported compiler")
 endif()
+
+function(disable_warnings_for_sources)
+  set_source_files_properties(
+    ${ARGV}
+    PROPERTIES
+    COMPILE_OPTIONS ${DISABLE_WARNINGS_COMPILE_FLAG}
+  )
+endfunction()
 
 find_package(glm CONFIG REQUIRED)
 
@@ -165,6 +176,7 @@ target_link_directories(city PRIVATE
         ${PLATFORM_LIB_ARTIFACT_DIR}
 )
 target_sources(city PRIVATE src/third_party/simdjson/simdjson.cpp src/third_party/imgui/imgui_inc.cpp)
+disable_warnings_for_sources(src/third_party/simdjson/simdjson.cpp src/third_party/imgui/imgui_inc.cpp)
 target_link_libraries(city PRIVATE
     glfw
     KTX::ktx

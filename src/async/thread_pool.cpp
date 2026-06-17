@@ -13,7 +13,7 @@ _thread_pool_is_main_thread(ThreadPool* thread_pool)
     return t_thread_pool == thread_pool && t_cur_thread_id == max_U32;
 }
 
-g_internal B32
+lib_internal B32
 thread_pool_is_main_thread(ThreadPool* thread_pool)
 {
     return _thread_pool_is_main_thread(thread_pool);

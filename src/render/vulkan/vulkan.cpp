@@ -26,49 +26,6 @@ ctx_get()
     return g_vk_ctx;
 }
 
-g_internal DescriptorSetInfo
-descriptor_set_road_segment(VkDevice device, VkDescriptorPool desc_pool, void* data)
-{
-    RoadSegmentDescriptor* buffer_desc = (RoadSegmentDescriptor*)data;
-
-    VkDescriptorSetLayout desc_set_layout = descriptor_set_layout_create(
-        device, {{0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, NULL}, {1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, NULL}});
-
-    VkDescriptorSet desc_set = descriptor_set_alloc(device, desc_pool, {desc_set_layout});
-
-    VkDescriptorBufferInfo buffer_info{};
-    buffer_info.buffer = buffer_desc->road_segment_buffer;
-    buffer_info.offset = 0;
-    buffer_info.range = VK_WHOLE_SIZE;
-
-    VkDescriptorBufferInfo buffer_node_info{};
-    buffer_node_info.buffer = buffer_desc->road_segment_node_buffer;
-    buffer_node_info.offset = 0;
-    buffer_node_info.range = VK_WHOLE_SIZE;
-
-    VkWriteDescriptorSet write{};
-    write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-    write.dstSet = desc_set;
-    write.dstBinding = 0;
-    write.dstArrayElement = 0;
-    write.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-    write.descriptorCount = 1;
-    write.pBufferInfo = &buffer_info;
-
-    VkWriteDescriptorSet write_node{};
-    write_node.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-    write_node.dstSet = desc_set;
-    write_node.dstBinding = 1;
-    write_node.dstArrayElement = 0;
-    write_node.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-    write_node.descriptorCount = 1;
-    write_node.pBufferInfo = &buffer_node_info;
-
-    descriptor_set_update(device, {write, write_node});
-
-    return DescriptorSetInfo(desc_set, desc_set_layout);
-}
-
 static void
 road_intersection_bucket_add(BufferHandle* vertex_buffer, BufferHandle* index_buffer, BufferHandle* road_segment_buffer, BufferHandle* road_segment_node_buffer, U32 overlay_option)
 {
@@ -311,49 +268,6 @@ camera_descriptor_set_layout_create(Context* vk_ctx)
     layout_info.pBindings = bindings;
 
     VK_CHECK_RESULT(vkCreateDescriptorSetLayout(vk_ctx->device, &layout_info, nullptr, &vk_ctx->camera_descriptor_set_layout));
-}
-
-g_internal DescriptorSetInfo
-descriptor_set_storage_buffers(VkDevice device, VkDescriptorPool desc_pool, void* data)
-{
-    StorageBufferDescriptor* buffer_desc = (StorageBufferDescriptor*)data;
-
-    VkDescriptorSetLayout desc_set_layout = descriptor_set_layout_create(
-        device, {{0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, NULL}, {1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, NULL}});
-
-    VkDescriptorSet desc_set = descriptor_set_alloc(device, desc_pool, {desc_set_layout});
-
-    VkDescriptorBufferInfo vertex_buffer_info{};
-    vertex_buffer_info.buffer = buffer_desc->vertex_buffer;
-    vertex_buffer_info.offset = 0;
-    vertex_buffer_info.range = VK_WHOLE_SIZE;
-
-    VkDescriptorBufferInfo index_buffer_info{};
-    index_buffer_info.buffer = buffer_desc->index_buffer;
-    index_buffer_info.offset = 0;
-    index_buffer_info.range = VK_WHOLE_SIZE;
-
-    VkWriteDescriptorSet vertex_write{};
-    vertex_write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-    vertex_write.dstSet = desc_set;
-    vertex_write.dstBinding = 0;
-    vertex_write.dstArrayElement = 0;
-    vertex_write.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-    vertex_write.descriptorCount = 1;
-    vertex_write.pBufferInfo = &vertex_buffer_info;
-
-    VkWriteDescriptorSet index_write{};
-    index_write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-    index_write.dstSet = desc_set;
-    index_write.dstBinding = 1;
-    index_write.dstArrayElement = 0;
-    index_write.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-    index_write.descriptorCount = 1;
-    index_write.pBufferInfo = &index_buffer_info;
-
-    descriptor_set_update(device, {vertex_write, index_write});
-
-    return DescriptorSetInfo(desc_set, desc_set_layout);
 }
 
 // ~mgj: Rendering

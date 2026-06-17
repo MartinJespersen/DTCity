@@ -1,7 +1,3 @@
-#if (BUILD_DEBUG)
-#define SIMDJSON_DEVELOPMENT_CHECKS 1
-#endif
-#include "simdjson/simdjson.h"
 namespace city
 {
 struct AsyncCityTask;

@@ -61,35 +61,35 @@ template <typename T>
 Buffer<T>
 buffer_alloc(Arena* arena, U64 count);
 template <typename T>
-static void
+lib_internal void
 BufferCopy(Buffer<T> dst, Buffer<T> src, U64 element_count_to_copy);
 template <typename T>
-static void
+lib_internal void
 BufferCopy(Buffer<T> dst, Buffer<T> src, U64 dst_offset, U64 src_offset, U64 size);
 template <typename T>
-static void
+lib_internal void
 BufferItemRemove(Buffer<T>* in_out_buffer, U32 index);
 template <typename T>
-static Buffer<T>
+lib_internal Buffer<T>
 buffer_arena_copy(Arena* arena, Buffer<T> buffer);
 template <typename T>
-static Buffer<T>
+lib_internal Buffer<T>
 buffer_concat(Arena* arena, Buffer<T> a, Buffer<T> b);
-static Buffer<String8>
+lib_internal Buffer<String8>
 Str8BufferFromCString(Arena* arena, std::initializer_list<const char*> strings);
-static String8
+lib_internal String8
 str8_path_from_str8_list(Arena* arena, std::initializer_list<String8> strings);
-static String8
+lib_internal String8
 CreatePathFromStrings(Arena* arena, Buffer<String8> path_elements);
 
 ////////////////////////////////////////////////////////
 namespace io
 {
-static Buffer<U8>
+lib_internal Buffer<U8>
 file_read(Arena* arena, String8 filename);
 }
 
-static char**
+lib_internal char**
 CStrArrFromStr8Buffer(Arena* arena, Buffer<String8> buffer);
 
 // ~mgj: ChunkList
@@ -194,10 +194,10 @@ template <typename T>
 T*
 chunk_list_get_next(Arena* arena, ChunkList<T>* list);
 template <typename T>
-static Buffer<T>
+lib_internal Buffer<T>
 buffer_from_chunk_list(Arena* arena, ChunkList<T>* list);
 
-static String8
+lib_internal String8
 str8_from_chunk_list(Arena* arena, ChunkList<U8>* list);
 // defer implementation
 template <typename F>
@@ -267,26 +267,26 @@ enum class MapResult : B32
 };
 
 template <typename K, typename V>
-static Map<K, V>*
+lib_internal Map<K, V>*
 map_create(Arena* arena, U64 capacity);
 
 template <typename K, typename V>
-static V*
+lib_internal V*
 map_get(Map<K, V>* m, K key);
 
 template <typename K, typename V>
-static MapResult
+lib_internal MapResult
 map_get(Map<K, V>* m, K key, V** out_value);
 
 template <typename K, typename V>
-static V*
+lib_internal V*
 map_insert(Map<K, V>* m, K key, V& value);
 
 // private map functions
-static inline U64
+lib_internal inline U64
 map_hash_u64(U64 x);
 
-static inline U64
+lib_internal inline U64
 map_round_up_pow2_u64(U64 v);
 
 /////////////////////////////////////////////////////

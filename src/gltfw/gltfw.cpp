@@ -34,7 +34,7 @@ ChildrenNodesDepthFirstPreOrder(Arena* arena, CgltfNode** stack, CgltfNode* node
     return next;
 }
 
-g_internal CgltfResult
+lib_internal CgltfResult
 gltfw_gltf_read(Arena* arena, String8 gltf_path, String8 root_node_name)
 {
     ScratchScope scratch = ScratchScope(&arena, 1);

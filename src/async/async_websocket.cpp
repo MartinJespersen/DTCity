@@ -50,7 +50,7 @@ _ws_main(AsyncWebsocketSession* ws_session)
     }
 }
 
-g_internal AsyncWebsocketCreateResult
+g_internal WebsocketConnection
 async_websocket_start(String8 url)
 {
     Arena* session_arena = arena_alloc();
@@ -69,19 +69,19 @@ async_websocket_start(String8 url)
         if (!is_websocket)
         {
             AsyncError error = async_user_error(AsyncResult::Expecting_Websocket);
-            AsyncWebsocketCreateResult result = AsyncWebsocketCreateResult(error, ws_session);
+            WebsocketConnection result = WebsocketConnection(error, ws_session);
             return result;
         }
     }
 
     ws_session->error = _async_http_configure(session_arena, ws_session->curl_ctx, http_info, _libcurl_ws_callback, ws_session);
 
-    AsyncWebsocketCreateResult result = AsyncWebsocketCreateResult(ws_session->error, ws_session);
+    WebsocketConnection result = WebsocketConnection(ws_session->error, ws_session);
     return result;
 }
 
 g_internal void
-async_http_connection_end(AsyncWebsocketSession* ws_session)
+_async_http_connection_end(AsyncWebsocketSession* ws_session)
 {
     if (ws_session == 0)
     {
@@ -95,8 +95,19 @@ async_http_connection_end(AsyncWebsocketSession* ws_session)
     arena_release(ws_session->arena);
 }
 
+String8List
+WebsocketConnection::read(Arena* arena)
+{
+    String8List result = {};
+    if (!this->has_error())
+    {
+        result = _async_websocket_read(arena, this->ws_session);
+    }
+    return result;
+}
+
 g_internal String8List
-async_websocket_read(Arena* arena, AsyncWebsocketSession* ws_session)
+_async_websocket_read(Arena* arena, AsyncWebsocketSession* ws_session)
 {
     String8List result = {};
 

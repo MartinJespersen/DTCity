@@ -22,35 +22,41 @@ struct AsyncWebsocketSession
 };
 
 g_internal void
-async_http_connection_end(AsyncWebsocketSession* ws_session);
+_async_http_connection_end(AsyncWebsocketSession* ws_session);
 
-struct AsyncWebsocketCreateResult
+g_internal String8List
+_async_websocket_read(Arena* arena, AsyncWebsocketSession* ws_session);
+
+struct WebsocketConnection
 {
-    AsyncError async_result;
+  private:
     AsyncWebsocketSession* ws_session;
 
-    AsyncWebsocketCreateResult()
+  public:
+    AsyncError async_result;
+
+    WebsocketConnection()
     {
         this->async_result = async_no_error();
         this->ws_session = 0;
     }
 
-    AsyncWebsocketCreateResult(AsyncError async_result, AsyncWebsocketSession* ws_session)
+    WebsocketConnection(AsyncError async_result, AsyncWebsocketSession* ws_session)
     {
         this->async_result = async_result;
         this->ws_session = ws_session;
     }
 
-    ~AsyncWebsocketCreateResult()
+    ~WebsocketConnection()
     {
-        async_http_connection_end(this->ws_session);
+        _async_http_connection_end(this->ws_session);
     }
 
-    AsyncWebsocketCreateResult(const AsyncWebsocketCreateResult& other) = delete;
-    AsyncWebsocketCreateResult&
-    operator=(const AsyncWebsocketCreateResult& other) = delete;
+    WebsocketConnection(const WebsocketConnection& other) = delete;
+    WebsocketConnection&
+    operator=(const WebsocketConnection& other) = delete;
 
-    AsyncWebsocketCreateResult(AsyncWebsocketCreateResult&& other) noexcept
+    WebsocketConnection(WebsocketConnection&& other) noexcept
     {
         this->async_result = other.async_result;
         this->ws_session = other.ws_session;
@@ -59,12 +65,12 @@ struct AsyncWebsocketCreateResult
         other.ws_session = 0;
     }
 
-    AsyncWebsocketCreateResult&
-    operator=(AsyncWebsocketCreateResult&& other) noexcept
+    WebsocketConnection&
+    operator=(WebsocketConnection&& other) noexcept
     {
         if (this != &other)
         {
-            async_http_connection_end(this->ws_session);
+            _async_http_connection_end(this->ws_session);
 
             this->async_result = other.async_result;
             this->ws_session = other.ws_session;
@@ -80,13 +86,13 @@ struct AsyncWebsocketCreateResult
     {
         return async_result.result != AsyncResult::Success;
     }
+
+    String8List
+    read(Arena* arena);
 };
 
-g_internal AsyncWebsocketCreateResult
+g_internal WebsocketConnection
 async_websocket_start(String8 url);
-
-g_internal String8List
-async_websocket_read(Arena* arena, AsyncWebsocketSession* ws_session);
 
 g_internal size_t
 _libcurl_ws_callback(void* contents, size_t size, size_t nmemb, void* userp);

@@ -371,32 +371,6 @@ buffer_loading_thread(void* data, render::ThreadWorkerCmdCtx* thread_input)
     }
 }
 
-g_internal void
-texture_loading_thread(void* data, render::ThreadWorkerCmdCtx* thread_input)
-{
-    Assert(thread_input->handles.count == 1);
-    render::Handle handle = render::handle_list_first_handle(&thread_input->handles);
-    AssetManager* asset_manager = asset_manager_get();
-    render::TextureUploadData* texture = (render::TextureUploadData*)data;
-    Assert(texture);
-    ImageAllocationResource image_allocation_resource = texture_upload_with_blitting((VkCommandBuffer)thread_input->cmd_buffer, texture);
-
-    os_mutex_scope_w(asset_manager->texture_mutex)
-    {
-        render::AssetItem<TextureHandle>* tex_asset = asset_manager_item_get<TextureHandle>(handle);
-        if (tex_asset)
-        {
-            tex_asset->item.image_resource = image_allocation_resource.image_resource;
-            tex_asset->item.staging_allocation = image_allocation_resource.staging_buffer_alloc;
-        }
-        else
-        {
-            buffer_destroy(&image_allocation_resource.staging_buffer_alloc);
-            image_resource_destroy(image_allocation_resource.image_resource);
-        }
-    }
-}
-
 static void
 texture_loading_from_path_thread(void* data, render::ThreadWorkerCmdCtx* thread_input)
 {

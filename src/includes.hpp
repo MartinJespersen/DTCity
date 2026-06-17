@@ -1,8 +1,13 @@
 #pragma once
 
+///////////////////////////////////////////////////////////////////
+// std includes
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+
+// helper diagnostics
+#include "diagnostics.hpp"
 
 // cesium native libraries
 #include "cesium/cesium_native_headers.hpp"
@@ -12,7 +17,6 @@
 #include <GLFW/glfw3.h>
 #undef APIENTRY
 
-#include "base/base_inc.hpp"
 //////////////////////////////////////////////
 // mgj: third party libs
 #define GLM_FORCE_RADIANS
@@ -22,10 +26,20 @@
 #define GLM_FORCE_INLINE
 #include "glm/glm.hpp"
 #include "glm/gtc/matrix_transform.hpp"
-#define IM_ASSERT(x) Assert(x)
+#define IM_ASSERT(x) assert(x)
 #include "third_party/imgui/imgui_inc.hpp"
+
 //////////////////////////////////////////////
+
+DISABLE_WARNINGS_PUSH
+#include "base/base_inc.hpp"
 #include "os_core/os_core_inc.hpp"
+DISABLE_WARNINGS_POP
+
+#if (BUILD_DEBUG)
+#define SIMDJSON_DEVELOPMENT_CHECKS 1
+#endif
+#include "simdjson/simdjson.h"
 
 // user defined: [hpp]
 #include "utility/utility_inc.hpp"

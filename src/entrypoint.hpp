@@ -31,7 +31,6 @@ struct Context
 
     Arena* arena_frame;
     Arena* arena_main_permanent;
-    async::AsyncArena* async_arena;
 
     io::IO* io;
     dt_Time* time;

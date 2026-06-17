@@ -1,4 +1,4 @@
-static U64
+lib_internal U64
 cpu_timer_freq_estimate()
 {
     U64 ms_to_wait = 100;
@@ -27,7 +27,7 @@ cpu_timer_freq_estimate()
     return cpu_freq;
 }
 
-static F64
+lib_internal F64
 us_from_cpu_cycles(U64 cycles)
 {
     U64 cpu_freq = cpu_timer_freq_estimate();

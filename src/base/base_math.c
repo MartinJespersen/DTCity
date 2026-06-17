@@ -4,14 +4,14 @@
 ////////////////////////////////
 //~ rjf: Scalar Ops
 
-static F32
+lib_internal F32
 mix_1f32(F32 a, F32 b, F32 t)
 {
     F32 c = (a + (b - a) * Clamp(0.f, t, 1.f));
     return c;
 }
 
-static F64
+lib_internal F64
 mix_1f64(F64 a, F64 b, F64 t)
 {
     F64 c = (a + (b - a) * Clamp(0.0, t, 1.0));
@@ -21,123 +21,123 @@ mix_1f64(F64 a, F64 b, F64 t)
 ////////////////////////////////
 //~ rjf: Vector Ops
 
-static Vec2F32
+lib_internal Vec2F32
 vec_2f32(F32 x, F32 y)
 {
     Vec2F32 v = {x, y};
     return v;
 }
-static Vec2F32
+lib_internal Vec2F32
 add_2f32(Vec2F32 a, Vec2F32 b)
 {
     Vec2F32 c = {a.x + b.x, a.y + b.y};
     return c;
 }
-static Vec2F32
+lib_internal Vec2F32
 sub_2f32(Vec2F32 a, Vec2F32 b)
 {
     Vec2F32 c = {a.x - b.x, a.y - b.y};
     return c;
 }
-static Vec2F64
+lib_internal Vec2F64
 add_2f64(Vec2F64 a, Vec2F64 b)
 {
     Vec2F64 c = {a.x + b.x, a.y + b.y};
     return c;
 }
-static Vec2F64
+lib_internal Vec2F64
 sub_2f64(Vec2F64 a, Vec2F64 b)
 {
     Vec2F64 c = {a.x - b.x, a.y - b.y};
     return c;
 }
-static Vec2F64
+lib_internal Vec2F64
 div_2f64(Vec2F64 a, F64 x)
 {
     Vec2F64 c = {a.x / x, a.y / x};
     return c;
 }
-static Vec2F64
+lib_internal Vec2F64
 scale_2f64(Vec2F64 v, F64 s)
 {
     Vec2F64 c = {v.x * s, v.y * s};
     return c;
 }
-static F64
+lib_internal F64
 dot_2f64(Vec2F64 a, Vec2F64 b)
 {
     F64 c = a.x * b.x + a.y * b.y;
     return c;
 }
-static Vec2F64
+lib_internal Vec2F64
 normalize_2f64(Vec2F64 v)
 {
     v = scale_2f64(v, 1.0 / length_2f64(v));
     return v;
 }
-static Vec2F32
+lib_internal Vec2F32
 vec2f32_from_64(Vec2F64 v)
 {
     Vec2F32 c = {(F32)v.x, (F32)v.y};
     return c;
 }
-static Vec2F64
+lib_internal Vec2F64
 vec2f64_from_32(Vec2F32 v)
 {
     Vec2F64 c = {(F64)v.x, (F64)v.y};
     return c;
 }
-static Vec2F32
+lib_internal Vec2F32
 Mul2F32(Vec2F32 a, Vec2F32 b)
 {
     Vec2F32 c = {a.x * b.x, a.y * b.y};
     return c;
 }
 
-static Vec2F32
+lib_internal Vec2F32
 scale_2f32(Vec2F32 v, F32 s)
 {
     Vec2F32 c = {v.x * s, v.y * s};
     return c;
 }
-static F32
+lib_internal F32
 Dot2F32(Vec2F32 a, Vec2F32 b)
 {
     F32 c = a.x * b.x + a.y * b.y;
     return c;
 }
-static F32
+lib_internal F32
 length_squared_2f32(Vec2F32 v)
 {
     F32 c = v.x * v.x + v.y * v.y;
     return c;
 }
-static F32
+lib_internal F32
 length_2f32(Vec2F32 v)
 {
     F32 c = SqrtF32(v.x * v.x + v.y * v.y);
     return c;
 }
-static F64
+lib_internal F64
 length_2f64(Vec2F64 v)
 {
     F64 c = sqrt_f64(v.x * v.x + v.y * v.y);
     return c;
 }
-static Vec2F32
+lib_internal Vec2F32
 normalize_2f32(Vec2F32 v)
 {
     v = scale_2f32(v, 1.f / length_2f32(v));
     return v;
 }
-static Vec2F32
+lib_internal Vec2F32
 mix_2f32(Vec2F32 a, Vec2F32 b, F32 t)
 {
     Vec2F32 c = {mix_1f32(a.x, b.x, t), mix_1f32(a.y, b.y, t)};
     return c;
 }
 
-static Vec2F64
+lib_internal Vec2F64
 vec_2f64(F64 x, F64 y)
 {
     Vec2F64 v = {x, y};
@@ -145,550 +145,550 @@ vec_2f64(F64 x, F64 y)
 }
 
 // signed integers
-static Vec2S64
+lib_internal Vec2S64
 vec_2s64(S64 x, S64 y)
 {
     Vec2S64 v = {x, y};
     return v;
 }
-static Vec2S64
+lib_internal Vec2S64
 add_2s64(Vec2S64 a, Vec2S64 b)
 {
     Vec2S64 c = {a.x + b.x, a.y + b.y};
     return c;
 }
-static Vec2S64
+lib_internal Vec2S64
 sub_2s64(Vec2S64 a, Vec2S64 b)
 {
     Vec2S64 c = {a.x - b.x, a.y - b.y};
     return c;
 }
-static Vec2S64
+lib_internal Vec2S64
 mul_2s64(Vec2S64 a, Vec2S64 b)
 {
     Vec2S64 c = {a.x * b.x, a.y * b.y};
     return c;
 }
-static Vec2S64
+lib_internal Vec2S64
 div_2s64(Vec2S64 a, Vec2S64 b)
 {
     Vec2S64 c = {a.x / b.x, a.y / b.y};
     return c;
 }
-static Vec2S64
+lib_internal Vec2S64
 scale_2s64(Vec2S64 v, S64 s)
 {
     Vec2S64 c = {v.x * s, v.y * s};
     return c;
 }
-static S64
+lib_internal S64
 dot_2s64(Vec2S64 a, Vec2S64 b)
 {
     S64 c = a.x * b.x + a.y * b.y;
     return c;
 }
-static S64
+lib_internal S64
 length_squared_2s64(Vec2S64 v)
 {
     S64 c = v.x * v.x + v.y * v.y;
     return c;
 }
-static S64
+lib_internal S64
 length_2s64(Vec2S64 v)
 {
     S64 c = (S64)sqrt_f64((F64)(v.x * v.x + v.y * v.y));
     return c;
 }
-static Vec2S64
+lib_internal Vec2S64
 normalize_2s64(Vec2S64 v)
 {
     v = scale_2s64(v, (S64)(1.f / length_2s64(v)));
     return v;
 }
-static Vec2S64
+lib_internal Vec2S64
 mix_2s64(Vec2S64 a, Vec2S64 b, F32 t)
 {
     Vec2S64 c = {(S64)mix_1f32((F32)a.x, (F32)b.x, t), (S64)mix_1f32((F32)a.y, (F32)b.y, t)};
     return c;
 }
 
-static Vec2S32
+lib_internal Vec2S32
 vec_2s32(S32 x, S32 y)
 {
     Vec2S32 v = {x, y};
     return v;
 }
-static Vec2S32
+lib_internal Vec2S32
 add_2s32(Vec2S32 a, Vec2S32 b)
 {
     Vec2S32 c = {a.x + b.x, a.y + b.y};
     return c;
 }
-static Vec2S32
+lib_internal Vec2S32
 Sub_2S32(Vec2S32 a, Vec2S32 b)
 {
     Vec2S32 c = {a.x - b.x, a.y - b.y};
     return c;
 }
-static Vec2S32
+lib_internal Vec2S32
 mul_2s32(Vec2S32 a, Vec2S32 b)
 {
     Vec2S32 c = {a.x * b.x, a.y * b.y};
     return c;
 }
-static Vec2S32
+lib_internal Vec2S32
 div_2s32(Vec2S32 a, Vec2S32 b)
 {
     Vec2S32 c = {a.x / b.x, a.y / b.y};
     return c;
 }
-static Vec2S32
+lib_internal Vec2S32
 scale_2s32(Vec2S32 v, S32 s)
 {
     Vec2S32 c = {v.x * s, v.y * s};
     return c;
 }
-static S32
+lib_internal S32
 dot_2s32(Vec2S32 a, Vec2S32 b)
 {
     S32 c = a.x * b.x + a.y * b.y;
     return c;
 }
-static S32
+lib_internal S32
 length_squared_2s32(Vec2S32 v)
 {
     S32 c = v.x * v.x + v.y * v.y;
     return c;
 }
-static S32
+lib_internal S32
 length_2s32(Vec2S32 v)
 {
     S32 c = (S32)SqrtF32((F32)v.x * (F32)v.x + (F32)v.y * (F32)v.y);
     return c;
 }
-static Vec2S32
+lib_internal Vec2S32
 normalize_2s32(Vec2S32 v)
 {
     v = scale_2s32(v, (S32)(1.f / length_2s32(v)));
     return v;
 }
-static Vec2S32
+lib_internal Vec2S32
 mix_2s32(Vec2S32 a, Vec2S32 b, F32 t)
 {
     Vec2S32 c = {(S32)mix_1f32((F32)a.x, (F32)b.x, t), (S32)mix_1f32((F32)a.y, (F32)b.y, t)};
     return c;
 }
 
-static Vec2S16
+lib_internal Vec2S16
 vec_2s16(S16 x, S16 y)
 {
     Vec2S16 v = {x, y};
     return v;
 }
-static Vec2S16
+lib_internal Vec2S16
 add_2s16(Vec2S16 a, Vec2S16 b)
 {
     Vec2S16 c = {(S16)(a.x + b.x), (S16)(a.y + b.y)};
     return c;
 }
-static Vec2S16
+lib_internal Vec2S16
 sub_2s16(Vec2S16 a, Vec2S16 b)
 {
     Vec2S16 c = {(S16)(a.x - b.x), (S16)(a.y - b.y)};
     return c;
 }
-static Vec2S16
+lib_internal Vec2S16
 mul_2s16(Vec2S16 a, Vec2S16 b)
 {
     Vec2S16 c = {(S16)(a.x * b.x), (S16)(a.y * b.y)};
     return c;
 }
-static Vec2S16
+lib_internal Vec2S16
 div_2s16(Vec2S16 a, Vec2S16 b)
 {
     Vec2S16 c = {(S16)(a.x / b.x), (S16)(a.y / b.y)};
     return c;
 }
-static Vec2S16
+lib_internal Vec2S16
 scale_2s16(Vec2S16 v, S16 s)
 {
     Vec2S16 c = {(S16)(v.x * s), (S16)(v.y * s)};
     return c;
 }
-static S16
+lib_internal S16
 dot_2s16(Vec2S16 a, Vec2S16 b)
 {
     S16 c = a.x * b.x + a.y * b.y;
     return c;
 }
-static S16
+lib_internal S16
 length_squared_2s16(Vec2S16 v)
 {
     S16 c = v.x * v.x + v.y * v.y;
     return c;
 }
-static S16
+lib_internal S16
 length_2s16(Vec2S16 v)
 {
     S16 c = (S16)SqrtF32((F32)(v.x * v.x + v.y * v.y));
     return c;
 }
-static Vec2S16
+lib_internal Vec2S16
 normalize_2s16(Vec2S16 v)
 {
     v = scale_2s16(v, (S16)(1.f / length_2s16(v)));
     return v;
 }
-static Vec2S16
+lib_internal Vec2S16
 mix_2s16(Vec2S16 a, Vec2S16 b, F32 t)
 {
     Vec2S16 c = {(S16)mix_1f32((F32)a.x, (F32)b.x, t), (S16)mix_1f32((F32)a.y, (F32)b.y, t)};
     return c;
 }
 
-static Vec2U32
+lib_internal Vec2U32
 vec_2u32(U32 x, U32 y)
 {
     Vec2U32 v = {x, y};
     return v;
 }
 
-static Vec2U64
+lib_internal Vec2U64
 vec_2u64(U64 x, U64 y)
 {
     Vec2U64 v = {x, y};
     return v;
 }
 
-static Vec3F32
+lib_internal Vec3F32
 vec_3f32(F32 x, F32 y, F32 z)
 {
     Vec3F32 v = {x, y, z};
     return v;
 }
-static Vec3F32
+lib_internal Vec3F32
 add_3f32(Vec3F32 a, Vec3F32 b)
 {
     Vec3F32 c = {a.x + b.x, a.y + b.y, a.z + b.z};
     return c;
 }
-static Vec3F32
+lib_internal Vec3F32
 sub_3f32(Vec3F32 a, Vec3F32 b)
 {
     Vec3F32 c = {a.x - b.x, a.y - b.y, a.z - b.z};
     return c;
 }
-static Vec3F32
+lib_internal Vec3F32
 mul_3f32(Vec3F32 a, Vec3F32 b)
 {
     Vec3F32 c = {a.x * b.x, a.y * b.y, a.z * b.z};
     return c;
 }
-static Vec3F32
+lib_internal Vec3F32
 div_3f32(Vec3F32 a, Vec3F32 b)
 {
     Vec3F32 c = {a.x / b.x, a.y / b.y, a.z / b.z};
     return c;
 }
-static Vec3F32
+lib_internal Vec3F32
 scale_3f32(Vec3F32 v, F32 s)
 {
     Vec3F32 c = {v.x * s, v.y * s, v.z * s};
     return c;
 }
-static F32
+lib_internal F32
 dot_3f32(Vec3F32 a, Vec3F32 b)
 {
     F32 c = a.x * b.x + a.y * b.y + a.z * b.z;
     return c;
 }
-static F32
+lib_internal F32
 length_squared_3f32(Vec3F32 v)
 {
     F32 c = v.x * v.x + v.y * v.y + v.z * v.z;
     return c;
 }
-static F32
+lib_internal F32
 length_3f32(Vec3F32 v)
 {
     F32 c = SqrtF32(v.x * v.x + v.y * v.y + v.z * v.z);
     return c;
 }
-static Vec3F32
+lib_internal Vec3F32
 normalize_3f32(Vec3F32 v)
 {
     v = scale_3f32(v, 1.f / length_3f32(v));
     return v;
 }
-static Vec3F32
+lib_internal Vec3F32
 mix_3f32(Vec3F32 a, Vec3F32 b, F32 t)
 {
     Vec3F32 c = {mix_1f32(a.x, b.x, t), mix_1f32(a.y, b.y, t), mix_1f32(a.z, b.z, t)};
     return c;
 }
-static Vec3F32
+lib_internal Vec3F32
 cross_3f32(Vec3F32 a, Vec3F32 b)
 {
     Vec3F32 c = {a.y * b.z - a.z * b.y, a.z * b.x - a.x * b.z, a.x * b.y - a.y * b.x};
     return c;
 }
 
-static Vec3F64
+lib_internal Vec3F64
 vec_3f64(F64 x, F64 y, F64 z)
 {
     Vec3F64 v = {x, y, z};
     return v;
 }
-static Vec3F64
+lib_internal Vec3F64
 vec3f64_from_2f64(Vec2F64 xy, F64 z)
 {
     Vec3F64 v = {xy.x, xy.y, z};
     return v;
 }
-static Vec3F64
+lib_internal Vec3F64
 add_3f64(Vec3F64 a, Vec3F64 b)
 {
     Vec3F64 c = {a.x + b.x, a.y + b.y, a.z + b.z};
     return c;
 }
-static Vec3F64
+lib_internal Vec3F64
 sub_3f64(Vec3F64 a, Vec3F64 b)
 {
     Vec3F64 c = {a.x - b.x, a.y - b.y, a.z - b.z};
     return c;
 }
-static Vec3F64
+lib_internal Vec3F64
 scale_3f64(Vec3F64 v, F64 s)
 {
     Vec3F64 c = {v.x * s, v.y * s, v.z * s};
     return c;
 }
-static F64
+lib_internal F64
 length_3f64(Vec3F64 v)
 {
     F64 c = sqrt_f64(v.x * v.x + v.y * v.y + v.z * v.z);
     return c;
 }
-static Vec3F64
+lib_internal Vec3F64
 normalize_3f64(Vec3F64 v)
 {
     v = scale_3f64(v, 1.0 / length_3f64(v));
     return v;
 }
-static Vec3F32
+lib_internal Vec3F32
 vec3f32_from_64(Vec3F64 v)
 {
     Vec3F32 c = {(F32)v.x, (F32)v.y, (F32)v.z};
     return c;
 }
 
-static Vec3S32
+lib_internal Vec3S32
 vec_3s32(S32 x, S32 y, S32 z)
 {
     Vec3S32 v = {x, y, z};
     return v;
 }
-static Vec3S32
+lib_internal Vec3S32
 add_3s32(Vec3S32 a, Vec3S32 b)
 {
     Vec3S32 c = {a.x + b.x, a.y + b.y, a.z + b.z};
     return c;
 }
-static Vec3S32
+lib_internal Vec3S32
 sub_3s32(Vec3S32 a, Vec3S32 b)
 {
     Vec3S32 c = {a.x - b.x, a.y - b.y, a.z - b.z};
     return c;
 }
-static Vec3S32
+lib_internal Vec3S32
 mul_3s32(Vec3S32 a, Vec3S32 b)
 {
     Vec3S32 c = {a.x * b.x, a.y * b.y, a.z * b.z};
     return c;
 }
-static Vec3S32
+lib_internal Vec3S32
 div_3s32(Vec3S32 a, Vec3S32 b)
 {
     Vec3S32 c = {a.x / b.x, a.y / b.y, a.z / b.z};
     return c;
 }
-static Vec3S32
+lib_internal Vec3S32
 scale_3s32(Vec3S32 v, S32 s)
 {
     Vec3S32 c = {v.x * s, v.y * s, v.z * s};
     return c;
 }
-static S32
+lib_internal S32
 dot_3s32(Vec3S32 a, Vec3S32 b)
 {
     S32 c = a.x * b.x + a.y * b.y + a.z * b.z;
     return c;
 }
-static S32
+lib_internal S32
 length_squared_3s32(Vec3S32 v)
 {
     S32 c = v.x * v.x + v.y * v.y + v.z * v.z;
     return c;
 }
-static S32
+lib_internal S32
 length_3s32(Vec3S32 v)
 {
     S32 c = (S32)SqrtF32((F32)(v.x * v.x + v.y * v.y + v.z * v.z));
     return c;
 }
-static Vec3S32
+lib_internal Vec3S32
 normalize_3s32(Vec3S32 v)
 {
     v = scale_3s32(v, (S32)(1.f / length_3s32(v)));
     return v;
 }
-static Vec3S32
+lib_internal Vec3S32
 mix_3s32(Vec3S32 a, Vec3S32 b, F32 t)
 {
     Vec3S32 c = {(S32)mix_1f32((F32)a.x, (F32)b.x, t), (S32)mix_1f32((F32)a.y, (F32)b.y, t), (S32)mix_1f32((F32)a.z, (F32)b.z, t)};
     return c;
 }
-static Vec3S32
+lib_internal Vec3S32
 cross_3s32(Vec3S32 a, Vec3S32 b)
 {
     Vec3S32 c = {a.y * b.z - a.z * b.y, a.z * b.x - a.x * b.z, a.x * b.y - a.y * b.x};
     return c;
 }
 
-static Vec4F32
+lib_internal Vec4F32
 vec_4f32(F32 x, F32 y, F32 z, F32 w)
 {
     Vec4F32 v = {x, y, z, w};
     return v;
 }
-static Vec4F32
+lib_internal Vec4F32
 add_4f32(Vec4F32 a, Vec4F32 b)
 {
     Vec4F32 c = {a.x + b.x, a.y + b.y, a.z + b.z, a.w + b.w};
     return c;
 }
-static Vec4F32
+lib_internal Vec4F32
 sub_4f32(Vec4F32 a, Vec4F32 b)
 {
     Vec4F32 c = {a.x - b.x, a.y - b.y, a.z - b.z, a.w - b.w};
     return c;
 }
-static Vec4F32
+lib_internal Vec4F32
 mul_4f32(Vec4F32 a, Vec4F32 b)
 {
     Vec4F32 c = {a.x * b.x, a.y * b.y, a.z * b.z, a.w * b.w};
     return c;
 }
-static Vec4F32
+lib_internal Vec4F32
 div_4f32(Vec4F32 a, Vec4F32 b)
 {
     Vec4F32 c = {a.x / b.x, a.y / b.y, a.z / b.z, a.w / b.w};
     return c;
 }
-static Vec4F32
+lib_internal Vec4F32
 scale_4f32(Vec4F32 v, F32 s)
 {
     Vec4F32 c = {v.x * s, v.y * s, v.z * s, v.w * s};
     return c;
 }
-static F32
+lib_internal F32
 dot_4f32(Vec4F32 a, Vec4F32 b)
 {
     F32 c = a.x * b.x + a.y * b.y + a.z * b.z + a.w * b.w;
     return c;
 }
-static F32
+lib_internal F32
 length_squared_4f32(Vec4F32 v)
 {
     F32 c = v.x * v.x + v.y * v.y + v.z * v.z + v.w * v.w;
     return c;
 }
-static F32
+lib_internal F32
 length_4f32(Vec4F32 v)
 {
     F32 c = SqrtF32(v.x * v.x + v.y * v.y + v.z * v.z + v.w * v.w);
     return c;
 }
-static Vec4F32
+lib_internal Vec4F32
 normalize_4f32(Vec4F32 v)
 {
     v = scale_4f32(v, 1.f / length_4f32(v));
     return v;
 }
-static Vec4F32
+lib_internal Vec4F32
 mix_4f32(Vec4F32 a, Vec4F32 b, F32 t)
 {
     Vec4F32 c = {mix_1f32(a.x, b.x, t), mix_1f32(a.y, b.y, t), mix_1f32(a.z, b.z, t), mix_1f32(a.w, b.w, t)};
     return c;
 }
 
-static Vec4S32
+lib_internal Vec4S32
 vec_4s32(S32 x, S32 y, S32 z, S32 w)
 {
     Vec4S32 v = {x, y, z, w};
     return v;
 }
-static Vec4S32
+lib_internal Vec4S32
 add_4s32(Vec4S32 a, Vec4S32 b)
 {
     Vec4S32 c = {a.x + b.x, a.y + b.y, a.z + b.z, a.w + b.w};
     return c;
 }
-static Vec4S32
+lib_internal Vec4S32
 sub_4s32(Vec4S32 a, Vec4S32 b)
 {
     Vec4S32 c = {a.x - b.x, a.y - b.y, a.z - b.z, a.w - b.w};
     return c;
 }
-static Vec4S32
+lib_internal Vec4S32
 mul_4s32(Vec4S32 a, Vec4S32 b)
 {
     Vec4S32 c = {a.x * b.x, a.y * b.y, a.z * b.z, a.w * b.w};
     return c;
 }
-static Vec4S32
+lib_internal Vec4S32
 div_4s32(Vec4S32 a, Vec4S32 b)
 {
     Vec4S32 c = {a.x / b.x, a.y / b.y, a.z / b.z, a.w / b.w};
     return c;
 }
-static Vec4S32
+lib_internal Vec4S32
 scale_4s32(Vec4S32 v, S32 s)
 {
     Vec4S32 c = {v.x * s, v.y * s, v.z * s, v.w * s};
     return c;
 }
-static S32
+lib_internal S32
 dot_4s32(Vec4S32 a, Vec4S32 b)
 {
     S32 c = a.x * b.x + a.y * b.y + a.z * b.z + a.w * b.w;
     return c;
 }
-static S32
+lib_internal S32
 length_squared_4s32(Vec4S32 v)
 {
     S32 c = v.x * v.x + v.y * v.y + v.z * v.z + v.w * v.w;
     return c;
 }
-static S32
+lib_internal S32
 length_4s32(Vec4S32 v)
 {
     S32 c = (S32)SqrtF32((F32)(v.x * v.x + v.y * v.y + v.z * v.z + v.w * v.w));
     return c;
 }
-static Vec4S32
+lib_internal Vec4S32
 normalize_4s32(Vec4S32 v)
 {
     v = scale_4s32(v, (S32)(1.f / length_4s32(v)));
     return v;
 }
-static Vec4S32
+lib_internal Vec4S32
 mix_4s32(Vec4S32 a, Vec4S32 b, F32 t)
 {
     Vec4S32 c = {(S32)mix_1f32((F32)a.x, (F32)b.x, t), (S32)mix_1f32((F32)a.y, (F32)b.y, t), (S32)mix_1f32((F32)a.z, (F32)b.z, t), (S32)mix_1f32((F32)a.w, (F32)b.w, t)};
     return c;
 }
-static F32
+lib_internal F32
 dist_2f32(Vec2F32 a, Vec2F32 b)
 {
     Vec2F32 diff = {a.x - b.x, a.y - b.y};
@@ -696,7 +696,7 @@ dist_2f32(Vec2F32 a, Vec2F32 b)
     return c;
 }
 
-static F64
+lib_internal F64
 dist_2f64(Vec2F64 a, Vec2F64 b)
 {
     Vec2F64 diff = {a.x - b.x, a.y - b.y};
@@ -706,7 +706,7 @@ dist_2f64(Vec2F64 a, Vec2F64 b)
 ////////////////////////////////
 //~ rjf: Matrix Ops
 
-static Mat3x3F32
+lib_internal Mat3x3F32
 mat_3x3f32(F32 diagonal)
 {
     Mat3x3F32 result = {0};
@@ -716,7 +716,7 @@ mat_3x3f32(F32 diagonal)
     return result;
 }
 
-static Mat3x3F32
+lib_internal Mat3x3F32
 make_translate_3x3f32(Vec2F32 delta)
 {
     Mat3x3F32 mat = mat_3x3f32(1.f);
@@ -725,7 +725,7 @@ make_translate_3x3f32(Vec2F32 delta)
     return mat;
 }
 
-static Mat3x3F32
+lib_internal Mat3x3F32
 make_scale_3x3f32(Vec2F32 scale)
 {
     Mat3x3F32 mat = mat_3x3f32(1.f);
@@ -734,7 +734,7 @@ make_scale_3x3f32(Vec2F32 scale)
     return mat;
 }
 
-static Mat3x3F32
+lib_internal Mat3x3F32
 mul_3x3f32(Mat3x3F32 a, Mat3x3F32 b)
 {
     Mat3x3F32 c = {0};
@@ -748,7 +748,7 @@ mul_3x3f32(Mat3x3F32 a, Mat3x3F32 b)
     return c;
 }
 
-static Mat4x4F32
+lib_internal Mat4x4F32
 mat_4x4f32(F32 diagonal)
 {
     Mat4x4F32 result = {0};
@@ -759,7 +759,7 @@ mat_4x4f32(F32 diagonal)
     return result;
 }
 
-static Mat4x4F32
+lib_internal Mat4x4F32
 make_translate_4x4f32(Vec3F32 delta)
 {
     Mat4x4F32 result = mat_4x4f32(1.f);
@@ -769,7 +769,7 @@ make_translate_4x4f32(Vec3F32 delta)
     return result;
 }
 
-static Mat4x4F32
+lib_internal Mat4x4F32
 make_scale_4x4f32(Vec3F32 scale)
 {
     Mat4x4F32 result = mat_4x4f32(1.f);
@@ -779,7 +779,7 @@ make_scale_4x4f32(Vec3F32 scale)
     return result;
 }
 
-static Mat4x4F32
+lib_internal Mat4x4F32
 make_perspective_4x4f32(F32 fov, F32 aspect_ratio, F32 near_z, F32 far_z)
 {
     Mat4x4F32 result = mat_4x4f32(1.f);
@@ -793,7 +793,7 @@ make_perspective_4x4f32(F32 fov, F32 aspect_ratio, F32 near_z, F32 far_z)
     return result;
 }
 
-static Mat4x4F32
+lib_internal Mat4x4F32
 make_orthographic_4x4f32(F32 left, F32 right, F32 bottom, F32 top, F32 near_z, F32 far_z)
 {
     Mat4x4F32 result = mat_4x4f32(1.f);
@@ -810,7 +810,7 @@ make_orthographic_4x4f32(F32 left, F32 right, F32 bottom, F32 top, F32 near_z, F
     return result;
 }
 
-static Mat4x4F32
+lib_internal Mat4x4F32
 make_look_at_4x4f32(Vec3F32 eye, Vec3F32 center, Vec3F32 up)
 {
     Mat4x4F32 result;
@@ -836,7 +836,7 @@ make_look_at_4x4f32(Vec3F32 eye, Vec3F32 center, Vec3F32 up)
     return result;
 }
 
-static Mat4x4F32
+lib_internal Mat4x4F32
 make_rotate_4x4f32(Vec3F32 axis, F32 turns)
 {
     Mat4x4F32 result = mat_4x4f32(1.f);
@@ -856,7 +856,7 @@ make_rotate_4x4f32(Vec3F32 axis, F32 turns)
     return result;
 }
 
-static Mat4x4F32
+lib_internal Mat4x4F32
 Mul4x4f32(Mat4x4F32 a, Mat4x4F32 b)
 {
     Mat4x4F32 c = {0};
@@ -870,7 +870,7 @@ Mul4x4f32(Mat4x4F32 a, Mat4x4F32 b)
     return c;
 }
 
-static Vec4F32
+lib_internal Vec4F32
 Mul4x4Vec4F32(Mat4x4F32 a, Vec4F32 b)
 {
     Vec4F32 c = {0};
@@ -881,7 +881,7 @@ Mul4x4Vec4F32(Mat4x4F32 a, Vec4F32 b)
     return c;
 }
 
-static Mat4x4F32
+lib_internal Mat4x4F32
 scale_4x4f32(Mat4x4F32 m, F32 scale)
 {
     for (int j = 0; j < 4; j += 1)
@@ -894,7 +894,7 @@ scale_4x4f32(Mat4x4F32 m, F32 scale)
     return m;
 }
 
-static Mat4x4F32
+lib_internal Mat4x4F32
 inverse_4x4f32(Mat4x4F32 m)
 {
     F32 coef00 = m.v[2][2] * m.v[3][3] - m.v[3][2] * m.v[2][3];
@@ -955,7 +955,7 @@ inverse_4x4f32(Mat4x4F32 m)
     return scale_4x4f32(inverse, one_over_det);
 }
 
-static Mat4x4F32
+lib_internal Mat4x4F32
 derotate_4x4f32(Mat4x4F32 mat)
 {
     Vec3F32 scale = {
@@ -978,7 +978,7 @@ derotate_4x4f32(Mat4x4F32 mat)
 ////////////////////////////////
 //~ rjf: Range Ops
 
-static Rng1U32
+lib_internal Rng1U32
 rng_1u32(U32 min, U32 max)
 {
     Rng1U32 r = {min, max};
@@ -988,58 +988,58 @@ rng_1u32(U32 min, U32 max)
     }
     return r;
 }
-static Rng1U32
+lib_internal Rng1U32
 shift_1u32(Rng1U32 r, U32 x)
 {
     r.min += x;
     r.max += x;
     return r;
 }
-static Rng1U32
+lib_internal Rng1U32
 pad_1u32(Rng1U32 r, U32 x)
 {
     r.min -= x;
     r.max += x;
     return r;
 }
-static U32
+lib_internal U32
 center_1u32(Rng1U32 r)
 {
     U32 c = (r.min + r.max) / 2;
     return c;
 }
-static B32
+lib_internal B32
 contains_1u32(Rng1U32 r, U32 x)
 {
     B32 c = (r.min <= x && x < r.max);
     return c;
 }
-static U32
+lib_internal U32
 dim_1u32(Rng1U32 r)
 {
     U32 c = ((r.max > r.min) ? (r.max - r.min) : 0);
     return c;
 }
-static Rng1U32
+lib_internal Rng1U32
 union_1u32(Rng1U32 a, Rng1U32 b)
 {
     Rng1U32 c = {Min(a.min, b.min), Max(a.max, b.max)};
     return c;
 }
-static Rng1U32
+lib_internal Rng1U32
 intersect_1u32(Rng1U32 a, Rng1U32 b)
 {
     Rng1U32 c = {Max(a.min, b.min), Min(a.max, b.max)};
     return c;
 }
-static U32
+lib_internal U32
 clamp_1u32(Rng1U32 r, U32 v)
 {
     v = Clamp(r.min, v, r.max);
     return v;
 }
 
-static Rng1S32
+lib_internal Rng1S32
 rng_1s32(S32 min, S32 max)
 {
     Rng1S32 r = {min, max};
@@ -1049,58 +1049,58 @@ rng_1s32(S32 min, S32 max)
     }
     return r;
 }
-static Rng1S32
+lib_internal Rng1S32
 shift_1s32(Rng1S32 r, S32 x)
 {
     r.min += x;
     r.max += x;
     return r;
 }
-static Rng1S32
+lib_internal Rng1S32
 pad_1s32(Rng1S32 r, S32 x)
 {
     r.min -= x;
     r.max += x;
     return r;
 }
-static S32
+lib_internal S32
 center_1s32(Rng1S32 r)
 {
     S32 c = (r.min + r.max) / 2;
     return c;
 }
-static B32
+lib_internal B32
 contains_1s32(Rng1S32 r, S32 x)
 {
     B32 c = (r.min <= x && x < r.max);
     return c;
 }
-static S32
+lib_internal S32
 dim_1s32(Rng1S32 r)
 {
     S32 c = ((r.max > r.min) ? (r.max - r.min) : 0);
     return c;
 }
-static Rng1S32
+lib_internal Rng1S32
 union_1s32(Rng1S32 a, Rng1S32 b)
 {
     Rng1S32 c = {Min(a.min, b.min), Max(a.max, b.max)};
     return c;
 }
-static Rng1S32
+lib_internal Rng1S32
 intersect_1s32(Rng1S32 a, Rng1S32 b)
 {
     Rng1S32 c = {Max(a.min, b.min), Min(a.max, b.max)};
     return c;
 }
-static S32
+lib_internal S32
 clamp_1s32(Rng1S32 r, S32 v)
 {
     v = Clamp(r.min, v, r.max);
     return v;
 }
 
-static Rng1U64
+lib_internal Rng1U64
 rng_1u64(U64 min, U64 max)
 {
     Rng1U64 r = {min, max};
@@ -1110,58 +1110,58 @@ rng_1u64(U64 min, U64 max)
     }
     return r;
 }
-static Rng1U64
+lib_internal Rng1U64
 shift_1u64(Rng1U64 r, U64 x)
 {
     r.min += x;
     r.max += x;
     return r;
 }
-static Rng1U64
+lib_internal Rng1U64
 pad_1u64(Rng1U64 r, U64 x)
 {
     r.min -= x;
     r.max += x;
     return r;
 }
-static U64
+lib_internal U64
 center_1u64(Rng1U64 r)
 {
     U64 c = (r.min + r.max) / 2;
     return c;
 }
-static B32
+lib_internal B32
 contains_1u64(Rng1U64 r, U64 x)
 {
     B32 c = (r.min <= x && x < r.max);
     return c;
 }
-static U64
+lib_internal U64
 dim_1u64(Rng1U64 r)
 {
     U64 c = ((r.max > r.min) ? (r.max - r.min) : 0);
     return c;
 }
-static Rng1U64
+lib_internal Rng1U64
 union_1u64(Rng1U64 a, Rng1U64 b)
 {
     Rng1U64 c = {Min(a.min, b.min), Max(a.max, b.max)};
     return c;
 }
-static Rng1U64
+lib_internal Rng1U64
 intersect_1u64(Rng1U64 a, Rng1U64 b)
 {
     Rng1U64 c = {Max(a.min, b.min), Min(a.max, b.max)};
     return c;
 }
-static U64
+lib_internal U64
 clamp_1u64(Rng1U64 r, U64 v)
 {
     v = Clamp(r.min, v, r.max);
     return v;
 }
 
-static Rng1S64
+lib_internal Rng1S64
 rng_1s64(S64 min, S64 max)
 {
     Rng1S64 r = {min, max};
@@ -1171,58 +1171,58 @@ rng_1s64(S64 min, S64 max)
     }
     return r;
 }
-static Rng1S64
+lib_internal Rng1S64
 shift_1s64(Rng1S64 r, S64 x)
 {
     r.min += x;
     r.max += x;
     return r;
 }
-static Rng1S64
+lib_internal Rng1S64
 pad_1s64(Rng1S64 r, S64 x)
 {
     r.min -= x;
     r.max += x;
     return r;
 }
-static S64
+lib_internal S64
 center_1s64(Rng1S64 r)
 {
     S64 c = (r.min + r.max) / 2;
     return c;
 }
-static B32
+lib_internal B32
 contains_1s64(Rng1S64 r, S64 x)
 {
     B32 c = (r.min <= x && x < r.max);
     return c;
 }
-static S64
+lib_internal S64
 dim_1s64(Rng1S64 r)
 {
     S64 c = ((r.max > r.min) ? (r.max - r.min) : 0);
     return c;
 }
-static Rng1S64
+lib_internal Rng1S64
 union_1s64(Rng1S64 a, Rng1S64 b)
 {
     Rng1S64 c = {Min(a.min, b.min), Max(a.max, b.max)};
     return c;
 }
-static Rng1S64
+lib_internal Rng1S64
 intersect_1s64(Rng1S64 a, Rng1S64 b)
 {
     Rng1S64 c = {Max(a.min, b.min), Min(a.max, b.max)};
     return c;
 }
-static S64
+lib_internal S64
 clamp_1s64(Rng1S64 r, S64 v)
 {
     v = Clamp(r.min, v, r.max);
     return v;
 }
 
-static Rng1F32
+lib_internal Rng1F32
 rng_1f32(F32 min, F32 max)
 {
     Rng1F32 r = {min, max};
@@ -1232,71 +1232,71 @@ rng_1f32(F32 min, F32 max)
     }
     return r;
 }
-static Rng1F32
+lib_internal Rng1F32
 shift_1f32(Rng1F32 r, F32 x)
 {
     r.min += x;
     r.max += x;
     return r;
 }
-static Rng1F32
+lib_internal Rng1F32
 pad_1f32(Rng1F32 r, F32 x)
 {
     r.min -= x;
     r.max += x;
     return r;
 }
-static F32
+lib_internal F32
 center_1f32(Rng1F32 r)
 {
     F32 c = (r.min + r.max) / 2;
     return c;
 }
-static B32
+lib_internal B32
 contains_1f32(Rng1F32 r, F32 x)
 {
     B32 c = (r.min <= x && x < r.max);
     return c;
 }
-static F32
+lib_internal F32
 dim_1f32(Rng1F32 r)
 {
     F32 c = ((r.max > r.min) ? (r.max - r.min) : 0);
     return c;
 }
-static Rng1F32
+lib_internal Rng1F32
 union_1f32(Rng1F32 a, Rng1F32 b)
 {
     Rng1F32 c = {Min(a.min, b.min), Max(a.max, b.max)};
     return c;
 }
-static Rng1F32
+lib_internal Rng1F32
 intersect_1f32(Rng1F32 a, Rng1F32 b)
 {
     Rng1F32 c = {Max(a.min, b.min), Min(a.max, b.max)};
     return c;
 }
-static F32
+lib_internal F32
 clamp_1f32(Rng1F32 r, F32 v)
 {
     v = Clamp(r.min, v, r.max);
     return v;
 }
 
-static Rng2S16
+lib_internal Rng2S16
 rng_2s16(Vec2S16 min, Vec2S16 max)
 {
     Rng2S16 r = {min, max};
     return r;
 }
-static Rng2S16
+lib_internal Rng2S16
 shift_2s16(Rng2S16 r, Vec2S16 x)
 {
     r.min = add_2s16(r.min, x);
     r.max = add_2s16(r.max, x);
     return r;
 }
-static Rng2S16
+lib_internal Rng2S16
 pad_2s16(Rng2S16 r, S16 x)
 {
     Vec2S16 xv = {x, x};
@@ -1304,25 +1304,25 @@ pad_2s16(Rng2S16 r, S16 x)
     r.max = add_2s16(r.max, xv);
     return r;
 }
-static Vec2S16
+lib_internal Vec2S16
 center_2s16(Rng2S16 r)
 {
     Vec2S16 c = {(S16)((r.min.x + r.max.x) / 2), (S16)((r.min.y + r.max.y) / 2)};
     return c;
 }
-static B32
+lib_internal B32
 contains_2s16(Rng2S16 r, Vec2S16 x)
 {
     B32 c = (r.min.x <= x.x && x.x < r.max.x && r.min.y <= x.y && x.y < r.max.y);
     return c;
 }
-static Vec2S16
+lib_internal Vec2S16
 dim_2s16(Rng2S16 r)
 {
     Vec2S16 dim = {(S16)(((r.max.x > r.min.x) ? (r.max.x - r.min.x) : 0)), (S16)(((r.max.y > r.min.y) ? (r.max.y - r.min.y) : 0))};
     return dim;
 }
-static Rng2S16
+lib_internal Rng2S16
 union_2s16(Rng2S16 a, Rng2S16 b)
 {
     Rng2S16 c;
@@ -1332,7 +1332,7 @@ union_2s16(Rng2S16 a, Rng2S16 b)
     c.p1.y = Max(a.max.y, b.max.y);
     return c;
 }
-static Rng2S16
+lib_internal Rng2S16
 intersect_2s16(Rng2S16 a, Rng2S16 b)
 {
     Rng2S16 c;
@@ -1342,7 +1342,7 @@ intersect_2s16(Rng2S16 a, Rng2S16 b)
     c.p1.y = Min(a.max.y, b.max.y);
     return c;
 }
-static Vec2S16
+lib_internal Vec2S16
 clamp_2s16(Rng2S16 r, Vec2S16 v)
 {
     v.x = Clamp(r.min.x, v.x, r.max.x);
@@ -1350,20 +1350,20 @@ clamp_2s16(Rng2S16 r, Vec2S16 v)
     return v;
 }
 
-static Rng2S32
+lib_internal Rng2S32
 rng_2s32(Vec2S32 min, Vec2S32 max)
 {
     Rng2S32 r = {min, max};
     return r;
 }
-static Rng2S32
+lib_internal Rng2S32
 shift_2s32(Rng2S32 r, Vec2S32 x)
 {
     r.min = add_2s32(r.min, x);
     r.max = add_2s32(r.max, x);
     return r;
 }
-static Rng2S32
+lib_internal Rng2S32
 pad_2s32(Rng2S32 r, S32 x)
 {
     Vec2S32 xv = {x, x};
@@ -1371,25 +1371,25 @@ pad_2s32(Rng2S32 r, S32 x)
     r.max = add_2s32(r.max, xv);
     return r;
 }
-static Vec2S32
+lib_internal Vec2S32
 center_2s32(Rng2S32 r)
 {
     Vec2S32 c = {(r.min.x + r.max.x) / 2, (r.min.y + r.max.y) / 2};
     return c;
 }
-static B32
+lib_internal B32
 contains_2s32(Rng2S32 r, Vec2S32 x)
 {
     B32 c = (r.min.x <= x.x && x.x < r.max.x && r.min.y <= x.y && x.y < r.max.y);
     return c;
 }
-static Vec2S32
+lib_internal Vec2S32
 dim_2s32(Rng2S32 r)
 {
     Vec2S32 dim = {((r.max.x > r.min.x) ? (r.max.x - r.min.x) : 0), ((r.max.y > r.min.y) ? (r.max.y - r.min.y) : 0)};
     return dim;
 }
-static Rng2S32
+lib_internal Rng2S32
 union_2s32(Rng2S32 a, Rng2S32 b)
 {
     Rng2S32 c;
@@ -1399,7 +1399,7 @@ union_2s32(Rng2S32 a, Rng2S32 b)
     c.p1.y = Max(a.max.y, b.max.y);
     return c;
 }
-static Rng2S32
+lib_internal Rng2S32
 intersect_2s32(Rng2S32 a, Rng2S32 b)
 {
     Rng2S32 c;
@@ -1409,7 +1409,7 @@ intersect_2s32(Rng2S32 a, Rng2S32 b)
     c.p1.y = Min(a.max.y, b.max.y);
     return c;
 }
-static Vec2S32
+lib_internal Vec2S32
 clamp_2s32(Rng2S32 r, Vec2S32 v)
 {
     v.x = Clamp(r.min.x, v.x, r.max.x);
@@ -1417,20 +1417,20 @@ clamp_2s32(Rng2S32 r, Vec2S32 v)
     return v;
 }
 
-static Rng2S64
+lib_internal Rng2S64
 rng_2s64(Vec2S64 min, Vec2S64 max)
 {
     Rng2S64 r = {min, max};
     return r;
 }
-static Rng2S64
+lib_internal Rng2S64
 shift_2s64(Rng2S64 r, Vec2S64 x)
 {
     r.min = add_2s64(r.min, x);
     r.max = add_2s64(r.max, x);
     return r;
 }
-static Rng2S64
+lib_internal Rng2S64
 pad_2s64(Rng2S64 r, S64 x)
 {
     Vec2S64 xv = {x, x};
@@ -1438,25 +1438,25 @@ pad_2s64(Rng2S64 r, S64 x)
     r.max = add_2s64(r.max, xv);
     return r;
 }
-static Vec2S64
+lib_internal Vec2S64
 center_2s64(Rng2S64 r)
 {
     Vec2S64 c = {(r.min.x + r.max.x) / 2, (r.min.y + r.max.y) / 2};
     return c;
 }
-static B32
+lib_internal B32
 contains_2s64(Rng2S64 r, Vec2S64 x)
 {
     B32 c = (r.min.x <= x.x && x.x < r.max.x && r.min.y <= x.y && x.y < r.max.y);
     return c;
 }
-static Vec2S64
+lib_internal Vec2S64
 dim_2s64(Rng2S64 r)
 {
     Vec2S64 dim = {((r.max.x > r.min.x) ? (r.max.x - r.min.x) : 0), ((r.max.y > r.min.y) ? (r.max.y - r.min.y) : 0)};
     return dim;
 }
-static Rng2S64
+lib_internal Rng2S64
 union_2s64(Rng2S64 a, Rng2S64 b)
 {
     Rng2S64 c;
@@ -1466,7 +1466,7 @@ union_2s64(Rng2S64 a, Rng2S64 b)
     c.p1.y = Max(a.max.y, b.max.y);
     return c;
 }
-static Rng2S64
+lib_internal Rng2S64
 intersect_2s64(Rng2S64 a, Rng2S64 b)
 {
     Rng2S64 c;
@@ -1476,7 +1476,7 @@ intersect_2s64(Rng2S64 a, Rng2S64 b)
     c.p1.y = Min(a.max.y, b.max.y);
     return c;
 }
-static Vec2S64
+lib_internal Vec2S64
 clamp_2s64(Rng2S64 r, Vec2S64 v)
 {
     v.x = Clamp(r.min.x, v.x, r.max.x);
@@ -1484,25 +1484,25 @@ clamp_2s64(Rng2S64 r, Vec2S64 v)
     return v;
 }
 
-static Rng2F32
+lib_internal Rng2F32
 rng_2f32(Vec2F32 min, Vec2F32 max)
 {
     Rng2F32 r = {min, max};
     return r;
 }
-static Rng2F32
+lib_internal Rng2F32
 rng2f32_inverted_inf(void)
 {
     return rng_2f32(V2F32(max_f32, max_f32), V2F32(min_f32, min_f32));
 }
-static Rng2F32
+lib_internal Rng2F32
 shift_2f32(Rng2F32 r, Vec2F32 x)
 {
     r.min = add_2f32(r.min, x);
     r.max = add_2f32(r.max, x);
     return r;
 }
-static Rng2F32
+lib_internal Rng2F32
 pad_2f32(Rng2F32 r, F32 x)
 {
     Vec2F32 xv = {x, x};
@@ -1510,25 +1510,25 @@ pad_2f32(Rng2F32 r, F32 x)
     r.max = add_2f32(r.max, xv);
     return r;
 }
-static Vec2F32
+lib_internal Vec2F32
 center_2f32(Rng2F32 r)
 {
     Vec2F32 c = {(r.min.x + r.max.x) / 2, (r.min.y + r.max.y) / 2};
     return c;
 }
-static B32
+lib_internal B32
 contains_2f32(Rng2F32 r, Vec2F32 x)
 {
     B32 c = (r.min.x <= x.x && x.x < r.max.x && r.min.y <= x.y && x.y < r.max.y);
     return c;
 }
-static Vec2F32
+lib_internal Vec2F32
 dim_2f32(Rng2F32 r)
 {
     Vec2F32 dim = {((r.max.x > r.min.x) ? (r.max.x - r.min.x) : 0), ((r.max.y > r.min.y) ? (r.max.y - r.min.y) : 0)};
     return dim;
 }
-static Rng2F32
+lib_internal Rng2F32
 union_2f32(Rng2F32 a, Rng2F32 b)
 {
     Rng2F32 c;
@@ -1538,7 +1538,7 @@ union_2f32(Rng2F32 a, Rng2F32 b)
     c.p1.y = Max(a.max.y, b.max.y);
     return c;
 }
-static Rng2F32
+lib_internal Rng2F32
 intersect_2f32(Rng2F32 a, Rng2F32 b)
 {
     Rng2F32 c;
@@ -1548,7 +1548,7 @@ intersect_2f32(Rng2F32 a, Rng2F32 b)
     c.p1.y = Min(a.max.y, b.max.y);
     return c;
 }
-static Vec2F32
+lib_internal Vec2F32
 clamp_2f32(Rng2F32 r, Vec2F32 v)
 {
     v.x = Clamp(r.min.x, v.x, r.max.x);
@@ -1561,7 +1561,7 @@ clamp_2f32(Rng2F32 r, Vec2F32 v)
 
 //- rjf: hsv <-> rgb
 
-static Vec3F32
+lib_internal Vec3F32
 hsv_from_rgb(Vec3F32 rgb)
 {
     F32 c_max = Max(rgb.x, Max(rgb.y, rgb.z));
@@ -1578,7 +1578,7 @@ hsv_from_rgb(Vec3F32 rgb)
     return hsv;
 }
 
-static Vec3F32
+lib_internal Vec3F32
 rgb_from_hsv(Vec3F32 hsv)
 {
     F32 h = mod_f32(hsv.x * 360.f, 360.f);
@@ -1634,7 +1634,7 @@ rgb_from_hsv(Vec3F32 hsv)
     return (rgb);
 }
 
-static Vec4F32
+lib_internal Vec4F32
 hsva_from_rgba(Vec4F32 rgba)
 {
     Vec3F32 rgb = v3f32(rgba.x, rgba.y, rgba.z);
@@ -1643,7 +1643,7 @@ hsva_from_rgba(Vec4F32 rgba)
     return hsva;
 }
 
-static Vec4F32
+lib_internal Vec4F32
 rgba_from_hsva(Vec4F32 hsva)
 {
     Vec3F32 hsv = v3f32(hsva.x, hsva.y, hsva.z);
@@ -1654,7 +1654,7 @@ rgba_from_hsva(Vec4F32 hsva)
 
 //- rjf: srgb <-> linear
 
-static Vec3F32
+lib_internal Vec3F32
 linear_from_srgb(Vec3F32 srgb)
 {
     Vec3F32 result;
@@ -1666,7 +1666,7 @@ linear_from_srgb(Vec3F32 srgb)
   return result;
 }
 
-static Vec3F32
+lib_internal Vec3F32
 srgb_from_linear(Vec3F32 linear)
 {
     Vec3F32 result;
@@ -1678,7 +1678,7 @@ srgb_from_linear(Vec3F32 linear)
   return result;
 }
 
-static Vec4F32
+lib_internal Vec4F32
 linear_from_srgba(Vec4F32 srgba)
 {
     Vec4F32 result;
@@ -1687,7 +1687,7 @@ linear_from_srgba(Vec4F32 srgba)
     return result;
 }
 
-static Vec4F32
+lib_internal Vec4F32
 srgba_from_linear(Vec4F32 linear)
 {
     Vec4F32 result;
@@ -1698,7 +1698,7 @@ srgba_from_linear(Vec4F32 linear)
 
 //- rjf: oklab <-> linear
 
-static Vec3F32
+lib_internal Vec3F32
 oklab_from_linear(Vec3F32 linear)
 {
     F32 l = (0.4122214708f * linear.x + 0.5363325363f * linear.y + 0.0514459929f * linear.z);
@@ -1714,7 +1714,7 @@ oklab_from_linear(Vec3F32 linear)
     return result;
 }
 
-static Vec3F32
+lib_internal Vec3F32
 linear_from_oklab(Vec3F32 oklab)
 {
     F32 l_ = oklab.x + 0.3963377774f * oklab.y + 0.2158037573f * oklab.z;
@@ -1730,7 +1730,7 @@ linear_from_oklab(Vec3F32 oklab)
     return result;
 }
 
-static Vec4F32
+lib_internal Vec4F32
 oklab_from_lineara(Vec4F32 lineara)
 {
     Vec4F32 result;
@@ -1739,7 +1739,7 @@ oklab_from_lineara(Vec4F32 lineara)
     return result;
 }
 
-static Vec4F32
+lib_internal Vec4F32
 lineara_from_oklab(Vec4F32 oklab)
 {
     Vec4F32 result;
@@ -1750,7 +1750,7 @@ lineara_from_oklab(Vec4F32 oklab)
 
 //- rjf: rgba <-> U32
 
-static U32
+lib_internal U32
 u32_from_rgba(Vec4F32 rgba)
 {
     U32 result = 0;
@@ -1761,7 +1761,7 @@ u32_from_rgba(Vec4F32 rgba)
     return result;
 }
 
-static Vec4F32
+lib_internal Vec4F32
 rgba_from_u32(U32 hex)
 {
     Vec4F32 result = v4f32(((hex & 0xff000000) >> 24) / 255.f, ((hex & 0x00ff0000) >> 16) / 255.f, ((hex & 0x0000ff00) >> 8) / 255.f, ((hex & 0x000000ff) >> 0) / 255.f);
@@ -1771,7 +1771,7 @@ rgba_from_u32(U32 hex)
 ////////////////////////////////
 //~ rjf: List Type Functions
 
-static void
+lib_internal void
 rng1u64_list_push(Arena* arena, Rng1U64List* list, Rng1U64 rng)
 {
     Rng1U64Node* n = PushArray(arena, Rng1U64Node, 1);
@@ -1780,7 +1780,7 @@ rng1u64_list_push(Arena* arena, Rng1U64List* list, Rng1U64 rng)
     list->count += 1;
 }
 
-static void
+lib_internal void
 rng1u64_list_concat(Rng1U64List* list, Rng1U64List* to_concat)
 {
     if (to_concat->first)
@@ -1799,7 +1799,7 @@ rng1u64_list_concat(Rng1U64List* list, Rng1U64List* to_concat)
     }
 }
 
-static Rng1U64Array
+lib_internal Rng1U64Array
 rng1u64_array_from_list(Arena* arena, Rng1U64List* list)
 {
     Rng1U64Array arr = {0};
@@ -1814,7 +1814,7 @@ rng1u64_array_from_list(Arena* arena, Rng1U64List* list)
     return arr;
 }
 
-static U64
+lib_internal U64
 rng_1u64_array_bsearch(Rng1U64Array arr, U64 value)
 {
     if (arr.count > 0 && arr.v[0].min <= value && value < arr.v[arr.count - 1].max)
@@ -1845,7 +1845,7 @@ rng_1u64_array_bsearch(Rng1U64Array arr, U64 value)
     return max_U64;
 }
 
-static void
+lib_internal void
 rng1s64_list_push(Arena* arena, Rng1S64List* list, Rng1S64 rng)
 {
     Rng1S64Node* n = PushArray(arena, Rng1S64Node, 1);
@@ -1854,7 +1854,7 @@ rng1s64_list_push(Arena* arena, Rng1S64List* list, Rng1S64 rng)
     list->count += 1;
 }
 
-static Rng1S64Array
+lib_internal Rng1S64Array
 rng1s64_array_from_list(Arena* arena, Rng1S64List* list)
 {
     Rng1S64Array arr = {0};

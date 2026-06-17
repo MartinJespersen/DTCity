@@ -1163,58 +1163,6 @@ descriptor_pool_create(Context* vk_ctx, U32 max_textures)
     }
 }
 
-static VkDescriptorSetLayout
-descriptor_set_layout_create(VkDevice device, std::initializer_list<VkDescriptorSetLayoutBinding> bindings)
-{
-    VkDescriptorSetLayoutCreateInfo layoutInfo{};
-    layoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-    layoutInfo.bindingCount = (U32)bindings.size();
-    layoutInfo.pBindings = bindings.begin();
-
-    VkDescriptorSetLayout desc_set_layout;
-    VK_CHECK_RESULT(vkCreateDescriptorSetLayout(device, &layoutInfo, nullptr, &desc_set_layout));
-
-    return desc_set_layout;
-}
-
-g_internal VkDescriptorSet
-descriptor_set_alloc(VkDevice device, VkDescriptorPool desc_pool, std::initializer_list<VkDescriptorSetLayout> layouts)
-{
-    VkDescriptorSetAllocateInfo allocInfo{};
-    allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
-    allocInfo.descriptorPool = desc_pool;
-    allocInfo.descriptorSetCount = (U32)layouts.size();
-    allocInfo.pSetLayouts = layouts.begin();
-
-    VkDescriptorSet desc_set;
-    VK_CHECK_RESULT(vkAllocateDescriptorSets(device, &allocInfo, &desc_set));
-
-    return desc_set;
-}
-
-static void
-descriptor_set_update(VkDevice device, std::initializer_list<VkWriteDescriptorSet> writes)
-{
-    vkUpdateDescriptorSets(device, (U32)writes.size(), writes.begin(), 0, nullptr);
-}
-
-static VkDescriptorSetLayout
-descriptor_set_layout_create(VkDevice device, VkDescriptorSetLayoutBinding* bindings, U32 binding_count)
-{
-    VkDescriptorSetLayoutCreateInfo layoutInfo{};
-    layoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-    layoutInfo.bindingCount = binding_count;
-    layoutInfo.pBindings = bindings;
-
-    VkDescriptorSetLayout desc_set_layout;
-    if (vkCreateDescriptorSetLayout(device, &layoutInfo, nullptr, &desc_set_layout) != VK_SUCCESS)
-    {
-        exit_with_error("failed to create descriptor set layout!");
-    }
-
-    return desc_set_layout;
-}
-
 // ~mgj: Descriptor Indexing / Bindless Descriptor Set Layout Creation
 // Creates a descriptor set layout with descriptor indexing flags for bindless resources
 static VkDescriptorSetLayout

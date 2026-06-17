@@ -380,16 +380,14 @@ static void
 render_ctx_destroy();
 static void
 render_frame(Vec2U32 framebuffer_dim, B32* in_out_framebuffer_resized, Vec2S64 mouse_cursor_pos);
-static void
-current_frame_work_done_wait();
+
 static void
 gpu_work_done_wait();
 static void
 new_frame();
 static U64
 latest_hovered_object_id_get();
-g_internal Vec2U32
-render_actual_framebuffer_dim_get(Vec2S32 framebuffer_dim);
+
 
 // ~mgj: Texture loading interface
 g_internal Handle
@@ -398,15 +396,12 @@ g_internal Handle
 texture_handle_create(SamplerInfo* sampler_info);
 g_internal Handle
 texture_load_async(SamplerInfo* sampler_info, String8 texture_path);
-g_internal render::Handle
-texture_load_async(render::SamplerInfo* sampler_info, TextureUploadData* tex_upload_info);
+
 static render::Handle
 colormap_load_async(render::SamplerInfo* sampler_info, const U8* colormap_data, U64 colormap_size);
 g_internal render::Handle
 colormap_load_sync(render::ThreadWorkerCmdCtx* thread_ctx, render::SamplerInfo* sampler_info, const U8* colormap_data, U64 colormap_size);
 
-g_internal Handle
-texture_load_sync(render::ThreadWorkerCmdCtx* thread_ctx, render::SamplerInfo* sampler_info, String8 texture_path);
 g_internal Handle
 texture_load_sync(render::SamplerInfo* sampler_info, TextureUploadData* tex_data, void* cmd);
 g_internal Handle
@@ -449,8 +444,6 @@ template <typename T>
 g_internal void
 mapped_buffer_add(MappedHandle<T> mut_handle, T* data);
 
-g_internal Handle
-storage_buffer_load_sync(Arena* arena, Handle vertex_buffer_handle, Handle index_buffer_handle);
 
 template <typename T>
 g_internal bool

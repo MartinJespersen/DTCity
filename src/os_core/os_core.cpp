@@ -5,14 +5,14 @@
 //~ rjf: Handle Type Functions (Helpers, Implemented Once)
 
 #include "os_core/os_core.hpp"
-static OS_Handle
+lib_internal OS_Handle
 OS_HandleIsZero()
 {
     OS_Handle handle = {0};
     return handle;
 }
 
-static OS_Handle
+lib_internal OS_Handle
 OS_HandleFromPtr(void* ptr)
 {
     OS_Handle handle = {0};
@@ -20,13 +20,13 @@ OS_HandleFromPtr(void* ptr)
     return handle;
 }
 
-static B32
+lib_internal B32
 OS_HandleMatch(OS_Handle a, OS_Handle b)
 {
     return a.u64[0] == b.u64[0];
 }
 
-static void
+lib_internal void
 os_handle_list_push(Arena* arena, OS_HandleList* handles, OS_Handle handle)
 {
     OS_HandleNode* n = PushArray(arena, OS_HandleNode, 1);
@@ -35,7 +35,7 @@ os_handle_list_push(Arena* arena, OS_HandleList* handles, OS_Handle handle)
     handles->count += 1;
 }
 
-static OS_HandleArray
+lib_internal OS_HandleArray
 os_handle_array_from_list(Arena* arena, OS_HandleList* list)
 {
     OS_HandleArray result = {0};
@@ -52,7 +52,7 @@ os_handle_array_from_list(Arena* arena, OS_HandleList* list)
 ////////////////////////////////
 //~ rjf: Command Line Argc/Argv Helper (Helper, Implemented Once)
 
-static String8List
+lib_internal String8List
 os_string_list_from_argcv(Arena* arena, int argc, char** argv)
 {
     String8List result = {0};
@@ -67,7 +67,7 @@ os_string_list_from_argcv(Arena* arena, int argc, char** argv)
 ////////////////////////////////
 //~ rjf: Filesystem Helpers (Helpers, Implemented Once)
 
-static String8
+lib_internal String8
 os_data_from_file_path(Arena* arena, String8 path)
 {
     OS_Handle file = os_file_open(OS_AccessFlag_Read | OS_AccessFlag_ShareRead, path);
@@ -77,7 +77,7 @@ os_data_from_file_path(Arena* arena, String8 path)
     return data;
 }
 
-static B32
+lib_internal B32
 os_write_data_to_file_path(String8 path, String8 data)
 {
     B32 good = 0;
@@ -91,7 +91,7 @@ os_write_data_to_file_path(String8 path, String8 data)
     return good;
 }
 
-static B32
+lib_internal B32
 os_write_data_list_to_file_path(String8 path, String8List list)
 {
     B32 good = 0;
@@ -110,7 +110,7 @@ os_write_data_list_to_file_path(String8 path, String8List list)
     return good;
 }
 
-static B32
+lib_internal B32
 os_make_parent_directory_if_missing(String8 file_path)
 {
     String8 dir = str8_chop_last_slash(file_path);
@@ -122,7 +122,7 @@ os_make_parent_directory_if_missing(String8 file_path)
     return good;
 }
 
-static B32
+lib_internal B32
 os_append_data_to_file_path(String8 path, String8 data, OS_AccessFlags additional_flags)
 {
     B32 good = 0;
@@ -140,7 +140,7 @@ os_append_data_to_file_path(String8 path, String8 data, OS_AccessFlags additiona
     return good;
 }
 
-static B32
+lib_internal B32
 os_clear_directory(String8 path)
 {
     if (!os_folder_path_exists(path))
@@ -176,7 +176,7 @@ os_clear_directory(String8 path)
     return good;
 }
 
-static OS_FileID
+lib_internal OS_FileID
 os_id_from_file_path(String8 path)
 {
     OS_Handle file = os_file_open(OS_AccessFlag_Read | OS_AccessFlag_ShareRead, path);
@@ -185,14 +185,14 @@ os_id_from_file_path(String8 path)
     return id;
 }
 
-static S64
+lib_internal S64
 os_file_id_compare(OS_FileID a, OS_FileID b)
 {
     S64 cmp = MemoryCompare((void*)&a.v[0], (void*)&b.v[0], sizeof(a.v));
     return cmp;
 }
 
-static String8
+lib_internal String8
 os_string_from_file_range(Arena* arena, OS_Handle file, Rng1U64 range)
 {
     U64 pre_pos = arena_pos(arena);
@@ -209,7 +209,7 @@ os_string_from_file_range(Arena* arena, OS_Handle file, Rng1U64 range)
 }
 
 // ~mgj: Timers
-force_inline static U64
+force_inline lib_internal U64
 os_cpu_timer_read()
 {
     return __rdtsc();
@@ -217,7 +217,7 @@ os_cpu_timer_read()
 
 // ~mgj: Cmdline
 
-g_internal String8List
+lib_internal String8List
 os_parse_cmd_line(Arena* arena, int argc, char** argv)
 {
     String8List str_list = {};
@@ -229,7 +229,7 @@ os_parse_cmd_line(Arena* arena, int argc, char** argv)
     return str_list;
 }
 
-g_internal String8
+lib_internal String8
 os_arg_from_cmdline(Arena* arena, String8List* list, String8 arg_name)
 {
     String8 result = {};

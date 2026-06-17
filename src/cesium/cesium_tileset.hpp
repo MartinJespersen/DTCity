@@ -101,6 +101,5 @@ tile_render_data_from_gltf(const CesiumGltf::Model& model, const glm::dmat4& ece
 g_internal render::BBoxDraw*
 render_raster_tile_record(render::ThreadWorkerCmdCtx* thread_input, RasterTileInfo* tile_info);
 
-g_internal B32
-root_tileset_url_is_readable(String8 url);
+
 } // namespace cesium

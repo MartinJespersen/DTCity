@@ -264,17 +264,11 @@ struct StorageBufferDescriptor
     VkBuffer index_buffer;
 };
 
-g_internal DescriptorSetInfo
-descriptor_set_storage_buffers(VkDevice device, VkDescriptorPool desc_pool, void* data);
-
 struct RoadSegmentDescriptor
 {
     VkBuffer road_segment_buffer;
     VkBuffer road_segment_node_buffer;
 };
-
-g_internal DescriptorSetInfo
-descriptor_set_road_segment(VkDevice device, VkDescriptorPool desc_pool, void* data);
 
 static void
 camera_descriptor_set_layout_create(Context* vk_ctx);

@@ -10,8 +10,6 @@
 //~ rjf: Base Includes
 #include "base_context_cracking.h"
 
-#include "base_diagnostics.hpp"
-
 #include "base_core.hpp"
 #include "base_profile.hpp"
 #include "base_arena.hpp"

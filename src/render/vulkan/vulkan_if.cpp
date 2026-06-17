@@ -340,14 +340,6 @@ render_frame(Vec2U32 framebuffer_dim, B32* in_out_framebuffer_resized, Vec2S64 m
 }
 
 static void
-current_frame_work_done_wait()
-{
-    vulkan::Context* vk_ctx = vulkan::ctx_get();
-    VkFence* in_flight_fence = &vk_ctx->in_flight_fences.data[vk_ctx->current_frame];
-    VK_CHECK_RESULT(vkWaitForFences(vk_ctx->device, 1, in_flight_fence, VK_TRUE, UINT64_MAX));
-}
-
-static void
 gpu_work_done_wait()
 {
     vulkan::Context* vk_ctx = vulkan::ctx_get();
@@ -443,16 +435,6 @@ texture_load_sync(render::ThreadWorkerCmdCtx* thread_ctx, render::SamplerInfo* s
 }
 
 g_internal Handle
-texture_load_sync(render::ThreadWorkerCmdCtx* thread_ctx, render::SamplerInfo* sampler_info, String8 texture_path)
-{
-    ScratchScope scratch = ScratchScope(0, 0);
-
-    Buffer<U8> tex_buf = io::file_read(scratch.arena, texture_path);
-    Handle tex_handle = texture_load_sync(thread_ctx, sampler_info, tex_buf);
-    return tex_handle;
-}
-
-g_internal Handle
 texture_load_sync(render::SamplerInfo* sampler_info, TextureUploadData* tex_data, void* cmd)
 {
     prof_scope_marker;
@@ -477,31 +459,6 @@ texture_load_sync(render::SamplerInfo* sampler_info, TextureUploadData* tex_data
             image_resource_destroy(image_allocation_resource.image_resource);
         }
     }
-    return handle;
-}
-
-g_internal render::Handle
-texture_load_async(render::SamplerInfo* sampler_info, TextureUploadData* tex_upload_info)
-{
-    prof_scope_marker;
-    ScratchScope scratch = ScratchScope(0, 0);
-    render::ThreadWorkerCmdCtx* thread_input = render::thread_ctx_create();
-
-    // ~mgj: make input ready for texture loading on thread
-    TextureUploadData* tex_upload_data = PushStruct(thread_input->arena, TextureUploadData);
-    *tex_upload_data = *tex_upload_info;
-    tex_upload_data->data = PushArray(thread_input->arena, U8, tex_upload_info->data_byte_size);
-    MemoryCopy(tex_upload_data->data, tex_upload_info->data, tex_upload_info->data_byte_size);
-
-    thread_input->user_data = tex_upload_data;
-    render::Handle handle = render::texture_handle_create(sampler_info);
-    render::handle_list_push(thread_input, handle);
-
-    thread_input->loading_func = vulkan::texture_loading_thread;
-
-    async::WorkerItem item = async::WorkerItem(thread_input, vulkan::thread_main);
-    async::thread_pool_push(thread_input->thread_pool, &item);
-
     return handle;
 }
 
@@ -631,29 +588,6 @@ buffer_load_sync(render::ThreadWorkerCmdCtx* thread_ctx, render::BufferInfo* buf
     buffer_handle->staging_buffer = vulkan::asset_manager_buffer_from_staging((VkCommandBuffer)thread_ctx->cmd_buffer, buffer_info, buffer_handle->buffer_alloc.buffer);
 
     return handle;
-}
-
-g_internal Handle
-storage_buffer_load_sync(Arena* arena, Handle vertex_buffer_handle, Handle index_buffer_handle)
-{
-    Handle desc_handle = Handle();
-    if (is_handle_zero(vertex_buffer_handle) == false && is_handle_zero(index_buffer_handle) == false)
-    {
-        AssetItem<vulkan::BufferHandle>* vertex_asset = vulkan::asset_manager_buffer_item_get(vertex_buffer_handle);
-        AssetItem<vulkan::BufferHandle>* index_asset = vulkan::asset_manager_buffer_item_get(index_buffer_handle);
-        if (vertex_asset && index_asset)
-        {
-            vulkan::StorageBufferDescriptor* storage_desc = PushStruct(arena, vulkan::StorageBufferDescriptor);
-            storage_desc->vertex_buffer = vertex_asset->item.buffer_alloc.buffer;
-            storage_desc->index_buffer = index_asset->item.buffer_alloc.buffer;
-        }
-    }
-    else
-    {
-        AssertStr("storage_buffer_load_sync: zero handle passed");
-    }
-
-    return desc_handle;
 }
 
 static render::Handle
@@ -871,7 +805,7 @@ model_3d_bucket_add(render::Model3DPipelineData* pipeline_input)
     }
 }
 
-g_internal void
+lib_internal void
 blend_3d_draw(render::Blend3DPipelineData pipeline_input)
 {
     render::AssetItem<vulkan::BufferHandle>* asset_vertex_buffer = 0;
@@ -1025,16 +959,5 @@ handle_done_loading(render::HandleList handles)
     }
 }
 
-g_internal Vec2U32
-render_actual_framebuffer_dim_get(Vec2S32 framebuffer_dim)
-{
-    ScratchScope scratch = ScratchScope(0, 0);
-    vulkan::Context* vk_ctx = vulkan::ctx_get();
-
-    Vec2U32 vk_framebuffer_dim_u32 = {(U32)framebuffer_dim.x, (U32)framebuffer_dim.y};
-    vulkan::SwapChainSupportDetails swapchain_details = vulkan::query_swapchain_support(scratch.arena, vk_ctx->physical_device, vk_ctx->surface);
-    VkExtent2D swapchain_extent = vulkan::choose_swap_extent(vk_framebuffer_dim_u32, swapchain_details.capabilities);
-    return vec_2u32(swapchain_extent.width, swapchain_extent.height);
-}
 
 } // namespace render

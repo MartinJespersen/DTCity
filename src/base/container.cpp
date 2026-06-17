@@ -12,7 +12,7 @@ buffer_alloc(Arena* arena, U64 count)
 };
 
 template <typename T>
-static void
+lib_internal void
 BufferCopy(Buffer<T> dst, Buffer<T> src, U64 element_count_to_copy)
 {
     Assert(dst.size >= element_count_to_copy);
@@ -20,7 +20,7 @@ BufferCopy(Buffer<T> dst, Buffer<T> src, U64 element_count_to_copy)
 }
 
 template <typename T>
-static void
+lib_internal void
 BufferCopy(Buffer<T> dst, Buffer<T> src, U64 dst_offset, U64 src_offset, U64 size)
 {
     Assert(dst.size >= dst_offset + size);
@@ -28,7 +28,7 @@ BufferCopy(Buffer<T> dst, Buffer<T> src, U64 dst_offset, U64 src_offset, U64 siz
 }
 
 template <typename T>
-static void
+lib_internal void
 BufferItemRemove(Buffer<T>* in_out_buffer, U32 index)
 {
     Assert(index < in_out_buffer->size);
@@ -38,7 +38,7 @@ BufferItemRemove(Buffer<T>* in_out_buffer, U32 index)
 }
 
 template <typename T>
-static Buffer<T>
+lib_internal Buffer<T>
 buffer_arena_copy(Arena* arena, Buffer<T> buffer)
 {
     Buffer<T> new_buffer = buffer_alloc<T>(arena, buffer.size);
@@ -47,7 +47,7 @@ buffer_arena_copy(Arena* arena, Buffer<T> buffer)
 }
 
 template <typename T>
-static Buffer<T>
+lib_internal Buffer<T>
 buffer_concat(Arena* arena, Buffer<T> a, Buffer<T> b)
 {
     Buffer<T> result = buffer_alloc<T>(arena, a.size + b.size);
@@ -57,7 +57,7 @@ buffer_concat(Arena* arena, Buffer<T> a, Buffer<T> b)
 }
 
 ////////////////////////////////
-static Buffer<String8>
+lib_internal Buffer<String8>
 Str8BufferFromCString(Arena* arena, std::initializer_list<const char*> strings)
 {
     Buffer<String8> buffer = buffer_alloc<String8>(arena, strings.size());
@@ -69,7 +69,7 @@ Str8BufferFromCString(Arena* arena, std::initializer_list<const char*> strings)
     return buffer;
 }
 
-static String8
+lib_internal String8
 str8_path_from_str8_list(Arena* arena, std::initializer_list<String8> strings)
 {
     String8List path_list = {0};
@@ -82,7 +82,7 @@ str8_path_from_str8_list(Arena* arena, std::initializer_list<String8> strings)
     return result;
 }
 
-static String8
+lib_internal String8
 CreatePathFromStrings(Arena* arena, Buffer<String8> path_elements)
 {
     String8List path_list = {0};
@@ -102,7 +102,7 @@ CreatePathFromStrings(Arena* arena, Buffer<String8> path_elements)
 namespace io
 {
 
-static Buffer<U8>
+lib_internal Buffer<U8>
 file_read(Arena* arena, String8 filename)
 {
     Buffer<U8> buffer = {0};
@@ -130,7 +130,7 @@ file_read(Arena* arena, String8 filename)
 
 //~mgj: Strings functions
 
-static char**
+lib_internal char**
 CStrArrFromStr8Buffer(Arena* arena, Buffer<String8> buffer)
 {
     char** arr = PushArray(arena, char*, buffer.size);
@@ -200,7 +200,7 @@ chunk_list_get_next(Arena* arena, ChunkList<T>* list)
 }
 
 template <typename T>
-static Buffer<T>
+lib_internal Buffer<T>
 buffer_from_chunk_list(Arena* arena, ChunkList<T>* list)
 {
     Buffer<T> buffer = buffer_alloc<T>(arena, list->total_count);
@@ -213,7 +213,7 @@ buffer_from_chunk_list(Arena* arena, ChunkList<T>* list)
     return buffer;
 }
 
-static String8
+lib_internal String8
 str8_from_chunk_list(Arena* arena, ChunkList<U8>* list)
 {
     String8 buffer = push_str8_fill_byte(arena, list->total_count, 0);
@@ -226,7 +226,7 @@ str8_from_chunk_list(Arena* arena, ChunkList<U8>* list)
     return buffer;
 }
 // Linked List Map
-static inline U64
+lib_internal inline U64
 map_hash_u64(U64 x)
 {
     prof_scope_marker;
@@ -235,7 +235,7 @@ map_hash_u64(U64 x)
     return res;
 }
 
-static inline U64
+lib_internal inline U64
 map_round_up_pow2_u64(U64 v)
 {
     if (v <= 8)
@@ -251,7 +251,7 @@ map_round_up_pow2_u64(U64 v)
 }
 
 template <typename K, typename V>
-static Map<K, V>*
+lib_internal Map<K, V>*
 map_create(Arena* arena, U64 capacity)
 {
     using MapType = Map<K, V>;
@@ -265,7 +265,7 @@ map_create(Arena* arena, U64 capacity)
 }
 
 template <typename K, typename V>
-static V*
+lib_internal V*
 map_get(Map<K, V>* m, K key)
 {
     U64 hash = map_hash_u64(key);
@@ -285,7 +285,7 @@ map_get(Map<K, V>* m, K key)
 }
 
 template <typename K, typename V>
-static MapResult
+lib_internal MapResult
 map_get(Map<K, V>* m, K key, V** out_value)
 {
     V* value = map_get(m, key);
@@ -300,7 +300,7 @@ map_get(Map<K, V>* m, K key, V** out_value)
 }
 
 template <typename K, typename V>
-static V*
+lib_internal V*
 map_insert(Map<K, V>* m, K key, V& value)
 {
     using KeyPair = MapChunk<K, V>;
