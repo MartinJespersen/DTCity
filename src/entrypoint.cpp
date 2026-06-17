@@ -252,10 +252,9 @@ dt_main_loop(void* ptr)
         async::thread_pool_main_thread_queue_drain(ctx->thread_pool);
 
         String8List ws_msgs = ws_task_result.read(ctx->arena_frame);
-        for (String8Node* node = ws_msgs.first; node; node = node->next)
-        {
-            INFO_LOG("ws msg: %s", node->string.str);
-        }
+        Buffer<city::Coordinate> coords = city::city_latest_coordinates_buffer_from_str8_list(ctx->arena_frame, &ws_msgs);
+        for (auto obj : coords)
+            INFO_LOG("id : %llu, lat : %f, lon : %f", obj.id, obj.lat, obj.lon);
         Vec2U32 framebuffer_dim = {(U32)io_ctx->framebuffer_width, (U32)io_ctx->framebuffer_height};
 
         ImGui::Begin("Interaction", nullptr);

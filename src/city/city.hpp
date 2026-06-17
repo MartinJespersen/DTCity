@@ -408,4 +408,46 @@ g_internal B32
 PointInTriangle(Vec2F64 p1, Vec2F64 p2, Vec2F64 p3, Vec2F64 point);
 g_internal void
 NodeBufferPrintDebug(Buffer<Vec2F64> node_buffer);
+
+// coordinates from str list
+
+g_internal Buffer<Coordinate>
+_city_coordinate_buffer_from_str(Arena* arena, String8 json)
+{
+    prof_scope_marker;
+    simdjson::ondemand::parser parser;
+    simdjson::ondemand::document doc;
+    simdjson::padded_string json_padded((char*)json.str, json.size);
+    simdjson::error_code error = parser.iterate(json_padded).get(doc);
+    defer(if (error) DEBUG_LOG("error in Coordinate Buffer deserialization"););
+
+    U64 element_count = doc.count_elements();
+    Buffer<Coordinate> coord_buffer = buffer_alloc<Coordinate>(arena, element_count);
+    U32 idx = 0;
+    for (auto obj : doc)
+    {
+        Coordinate* coord = coord_buffer[idx];
+        error = obj.get<Coordinate>(*coord);
+        if (error)
+        {
+            return {};
+        }
+        idx++;
+    }
+
+    return coord_buffer;
+}
+
+g_internal Buffer<Coordinate>
+city_latest_coordinates_buffer_from_str8_list(Arena* arena, String8List* list)
+{
+    Buffer<Coordinate> buffer = {};
+    if (list->last)
+    {
+        String8 json = list->last->string;
+        buffer = _city_coordinate_buffer_from_str(arena, json);
+    }
+    return buffer;
+}
+
 } // namespace city
