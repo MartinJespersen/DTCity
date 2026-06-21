@@ -112,7 +112,7 @@ g_internal void
 imgui_debug_window(city::City* city, cesium::TilesetRenderer* renderer, async::ThreadPool* thread_pool)
 {
     Context* ctx = dt_ctx_get();
-    ui::Camera* camera = container_item_from_idx(ctx->camera_container, city->camera_handle);
+    ui::Camera* camera = resource_pool_item_from_idx(ctx->camera_container, city->camera_handle);
     vulkan::AssetManager* asset_manager = vulkan::asset_manager_get();
     const ImGuiViewport* viewport = ImGui::GetMainViewport();
     F32 max_debug_window_width = ClampTop(720.0f, viewport->WorkSize.x * 0.6f);
@@ -208,7 +208,8 @@ dt_main_loop(void* ptr)
                                                .lat = 59.36163877297,
                                                .bbox_width_meters = 5000,
                                                .bbox_height_meters = 5000,
-                                               .tileset_path = S("file:///C:/ByModel/eskiltuna/Totalstad_2025_q3/tileset.json")}};
+                                               .tileset_path = S("file:///C:/ByModel/eskiltuna/Totalstad_2025_q3/tileset.json")},
+                                              {.name = S("Berlin"), .lon = 8.532010538692882, .lat = 47.40024260563559, .bbox_width_meters = 5000, .bbox_height_meters = 5000}};
 
     Buffer<city::City> city_buf = buffer_alloc<city::City>(ctx->arena_main_permanent, ArrayCount(cities_info_arr));
     for (U32 i = 0; i < city_buf.size; ++i)
@@ -216,8 +217,8 @@ dt_main_loop(void* ptr)
         const city::CityInfo* city_config = &cities_info_arr[i];
         city::City* city = city_buf[i];
 
-        city->camera_handle = container_array_idx_get(ctx->camera_container);
-        ui::Camera* camera = container_item_from_idx(ctx->camera_container, city->camera_handle);
+        city->camera_handle = resource_pool_array_idx_get(ctx->camera_container);
+        ui::Camera* camera = resource_pool_item_from_idx(ctx->camera_container, city->camera_handle);
         ui::camera_init(ctx->arena_main_permanent, camera);
 
         Rng2F64 bbox = util::wgs84_bbox_from_btm_right_corner(city_config->lon, city_config->lat, city_config->bbox_width_meters, city_config->bbox_height_meters);
@@ -252,9 +253,7 @@ dt_main_loop(void* ptr)
         async::thread_pool_main_thread_queue_drain(ctx->thread_pool);
 
         String8List ws_msgs = ws_task_result.read(ctx->arena_frame);
-        Buffer<city::Coordinate> coords = city::city_latest_coordinates_buffer_from_str8_list(ctx->arena_frame, &ws_msgs);
-        for (auto obj : coords)
-            INFO_LOG("id : %llu, lat : %f, lon : %f", obj.id, obj.lat, obj.lon);
+        Buffer<city::Coordinate> new_agent_coords = city::city_latest_coordinates_buffer_from_str8_list(ctx->arena_frame, &ws_msgs);
         Vec2U32 framebuffer_dim = {(U32)io_ctx->framebuffer_width, (U32)io_ctx->framebuffer_height};
 
         ImGui::Begin("Interaction", nullptr);
@@ -275,7 +274,7 @@ dt_main_loop(void* ptr)
 
         ImGui::SeparatorText("Agent Size");
         city::City* selected_city = city_buf[area_option];
-        ImGui::SliderFloat("Scale", &selected_city->agent_scale_factor, 0.01f, 0.1f, "%.3f");
+        ImGui::SliderFloat("Scale", &selected_city->agent_scale_factor, 0.01f, 1.0f, "%.3f");
 
         ImGui::End();
 
@@ -286,7 +285,7 @@ dt_main_loop(void* ptr)
             city_info = &cities_info_arr[cur_area_option];
         }
 
-        ui::Camera* camera = container_item_from_idx(ctx->camera_container, city->camera_handle);
+        ui::Camera* camera = resource_pool_item_from_idx(ctx->camera_container, city->camera_handle);
         ImGuiIO& imgui_io = ImGui::GetIO();
         bool imgui_window_hovered = ImGui::IsWindowHovered(ImGuiHoveredFlags_AnyWindow);
         bool imgui_input_captured = imgui_io.WantCaptureMouse || imgui_io.WantCaptureKeyboard;
@@ -299,7 +298,7 @@ dt_main_loop(void* ptr)
         {
             cesium::tileset_pump_async(&city_buf[i]->cesium);
         }
-        city::city_update(city, ctx->thread_pool, neta_overlay_option, framebuffer_dim, city_info);
+        city::city_update(city, new_agent_coords, ctx->thread_pool, neta_overlay_option, framebuffer_dim, city_info);
 
         // #if BUILD_DEBUG
         imgui_debug_window(city, &city->cesium, ctx->thread_pool);

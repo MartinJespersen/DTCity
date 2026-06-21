@@ -8,8 +8,7 @@ g_internal Rng2F64
 wgs84_bbox_from_btm_right_corner(F64 lon, F64 lat, F64 width, F64 height)
 {
     CesiumGeospatial::Cartographic corner = CesiumGeospatial::Cartographic::fromDegrees(lon, lat, 0.0);
-    CesiumGeospatial::LocalHorizontalCoordinateSystem enu(corner, CesiumGeospatial::LocalDirection::East, CesiumGeospatial::LocalDirection::North,
-                                                          CesiumGeospatial::LocalDirection::Up);
+    CesiumGeospatial::LocalHorizontalCoordinateSystem enu(corner, CesiumGeospatial::LocalDirection::East, CesiumGeospatial::LocalDirection::North, CesiumGeospatial::LocalDirection::Up);
 
     glm::dvec3 opposite_ecef = enu.localPositionToEcef(glm::dvec3(width, height, 0.0));
     std::optional<CesiumGeospatial::Cartographic> opposite = CesiumGeospatial::Ellipsoid::WGS84.cartesianToCartographic(opposite_ecef);
@@ -45,4 +44,11 @@ target_srid_from_wgs84(Vec2F64 wgs84_point)
     return srid_base + zone_number;
 }
 
+g_internal glm::dvec3
+ecef_from_wgs84(F64 lon, F64 lat)
+{
+    CesiumGeospatial::Cartographic origin_cartographic(glm::radians(lon), glm::radians(lat), 0);
+    glm::dvec3 coord_ecef = CesiumGeospatial::Ellipsoid::WGS84.cartographicToCartesian(origin_cartographic);
+    return coord_ecef;
+}
 } // namespace util

@@ -78,7 +78,7 @@ cache_needs_update(String8 cache_data_file, String8 cache_meta_file)
     return update_needed;
 }
 
-g_internal void
+lib_internal void
 cache_write(String8 cache_file, String8 content, String8 hash_content)
 {
     prof_scope_marker;
@@ -115,7 +115,7 @@ cache_write(String8 cache_file, String8 content, String8 hash_content)
     }
 }
 
-g_internal Result<String8>
+lib_internal Result<String8>
 cache_read(Arena* arena, String8 cache_file, String8 hash_input)
 {
     prof_scope_marker;

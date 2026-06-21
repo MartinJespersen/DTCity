@@ -292,7 +292,7 @@ map_get(Map<K, V>* m, K key, V** out_value)
     if (value)
     {
         *out_value = value;
-        return MapResult::Ok;
+        return MapResult::Success;
     }
 
     *out_value = nullptr;

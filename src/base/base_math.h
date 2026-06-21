@@ -951,7 +951,7 @@ clamp_2s64(Rng2S64 r, Vec2S64 v);
 lib_internal Rng2F32
 rng_2f32(Vec2F32 min, Vec2F32 max);
 lib_internal Rng2F32
-rng2f32_inverted_inf(void);
+rng2f32_inverted_inf();
 lib_internal Rng2F32
 shift_2f32(Rng2F32 r, Vec2F32 x);
 lib_internal Rng2F32

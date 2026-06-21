@@ -34,7 +34,7 @@ struct Context
 
     io::IO* io;
     dt_Time* time;
-    Container<ui::Camera>* camera_container;
+    ResourcePool<ui::Camera>* camera_container;
 
     async::ThreadPool* thread_pool;
 };

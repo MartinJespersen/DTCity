@@ -1,6 +1,6 @@
 #include <random>
 
-g_internal U32
+lib_internal U32
 random_u32()
 {
     std::random_device rd;                   // OS entropy source
@@ -10,7 +10,7 @@ random_u32()
     return value;
 }
 
-g_internal U64
+lib_internal U64
 random_u64()
 {
     std::random_device rd;                   // OS entropy source

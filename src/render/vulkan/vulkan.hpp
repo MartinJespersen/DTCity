@@ -41,7 +41,7 @@ struct CarInstancePushConstants
 struct CarHeightCalculatePushConstants
 {
     U32 car_count;
-    F32 car_center_offset;
+    F32 agent_center_offset;
 };
 
 struct CarInstanceComputeNode

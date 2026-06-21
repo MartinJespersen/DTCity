@@ -17,6 +17,7 @@
 * Simulation
   * Integrate with MATSim
   * make streaming possible from multiple cities simultanously
+* remove local map from 
 * Out of device memory error. 
 * Are the amount of descriptor indices not deallocated? 
 * delete draw flush and related code

@@ -40,6 +40,7 @@ struct Arena
     U64 pos;
     U64 cmt;
     U64 res;
+    U64 destructor_pos;
 #if ARENA_FREE_LIST
     U64 free_size;
     Arena* free_last;

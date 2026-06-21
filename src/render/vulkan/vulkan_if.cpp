@@ -671,7 +671,7 @@ agent_instance_compute_bucket_add(render::BufferInfo* instance_buffer_info, rend
         vulkan::CarInstanceComputeNode* node = PushStruct(vk_ctx->render_frame_arena, vulkan::CarInstanceComputeNode);
 
         // compute ressources
-        vulkan::CarHeightCalculatePushConstants compute_push_constants = {.car_count = instance_buffer_info->elem_count, .car_center_offset = car_center_to_road_offset};
+        vulkan::CarHeightCalculatePushConstants compute_push_constants = {.car_count = instance_buffer_info->elem_count, .agent_center_offset = car_center_to_road_offset};
         node->tile_index_handle = &asset_tile_index->item;
         node->tile_vertex_handle = &asset_tile_vertex->item;
         node->compute_push_constants = compute_push_constants;

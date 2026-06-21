@@ -60,11 +60,11 @@ async_websocket_start(String8 url)
     ws_session->msg_arena = arena_alloc();
     async_http_global_init();
     ws_session->curl_ctx = _curl_ctx_create(session_arena);
-    async::HttpInfo* http_info = async::http_info_create(session_arena, HTTP_Method_None, url, {}, {}, {});
+    ws_session->http_info = async::http_info_create(session_arena, HTTP_Method_None, url, {}, {}, {});
     // websocket extension
     {
-        B32 is_ws = str8_match(http_info->http_path, S("ws://"), MatchFlag_RightSideSloppy);
-        B32 is_wss = str8_match(http_info->http_path, S("wss://"), MatchFlag_RightSideSloppy);
+        B32 is_ws = str8_match(ws_session->http_info->http_path, S("ws://"), MatchFlag_RightSideSloppy);
+        B32 is_wss = str8_match(ws_session->http_info->http_path, S("wss://"), MatchFlag_RightSideSloppy);
         B32 is_websocket = is_ws | is_wss;
         if (!is_websocket)
         {
@@ -74,7 +74,7 @@ async_websocket_start(String8 url)
         }
     }
 
-    ws_session->error = _async_http_configure(session_arena, ws_session->curl_ctx, http_info, _libcurl_ws_callback, ws_session);
+    ws_session->error = _async_http_configure(session_arena, ws_session->curl_ctx, ws_session->http_info, _libcurl_ws_callback, ws_session);
 
     WebsocketConnection result = WebsocketConnection(ws_session->error, ws_session);
     return result;
@@ -115,6 +115,8 @@ _async_websocket_read(Arena* arena, AsyncWebsocketSession* ws_session)
     if (ws_session->error.has_error())
     {
         DEBUG_LOG("error when reading websocket: %u", ws_session->error.curl_code);
+        _curl_reset(ws_session->curl_ctx);
+        ws_session->error = _async_http_configure(ws_session->arena, ws_session->curl_ctx, ws_session->http_info, _libcurl_ws_callback, ws_session);
     }
 
     os_mutex_scope_w(ws_session->msg_rw_mutex)

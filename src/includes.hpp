@@ -32,6 +32,7 @@
 //////////////////////////////////////////////
 
 DISABLE_WARNINGS_PUSH
+#define OS_FEATURE_GRAPHICAL 1
 #include "base/base_inc.hpp"
 #include "os_core/os_core_inc.hpp"
 DISABLE_WARNINGS_POP

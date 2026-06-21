@@ -4,6 +4,20 @@ namespace vulkan
 // ~mgj: Global asset manager pointer
 static AssetManager* g_asset_manager = nullptr;
 
+static const char*
+_allocation_name_get(VmaAllocator allocator, VmaAllocation allocation)
+{
+    if (allocation == 0)
+    {
+        return "<null>";
+    }
+
+    VmaAllocationInfo alloc_info = {};
+    vmaGetAllocationInfo(allocator, allocation, &alloc_info);
+    const char* result = alloc_info.pName ? alloc_info.pName : "<unnamed>";
+    return result;
+}
+
 g_internal AssetManager*
 asset_manager_get()
 {
@@ -592,18 +606,22 @@ asset_manager_create(VkPhysicalDevice physical_device, VkDevice device, VkInstan
 }
 
 static void
-asset_manager_live_resources_destroy(AssetManager* asset_manager)
+_asset_manager_live_resources_destroy(AssetManager* asset_manager)
 {
     for (render::AssetItem<BufferHandle>* item = asset_manager->buffer_list.first; item != NULL; item = item->next)
     {
-        DEBUG_LOG("Buffer Not Destroyed: gen_id=%llu", (U64)item->gen_id);
+        const char* buffer_name = _allocation_name_get(asset_manager->allocator, item->item.buffer_alloc.allocation);
+        const char* staging_name = _allocation_name_get(asset_manager->allocator, item->item.staging_buffer.allocation);
+        DEBUG_LOG("Buffer Not Destroyed: gen_id=%llu, name=%s, staging=%s", (U64)item->gen_id, buffer_name, staging_name);
         buffer_destroy(&item->item.buffer_alloc);
         buffer_destroy(&item->item.staging_buffer);
     }
 
     for (render::AssetItem<TextureHandle>* item = asset_manager->texture_list.first; item != NULL; item = item->next)
     {
-        DEBUG_LOG("Texture Not Destroyed: gen_id=%llu", (U64)item->gen_id);
+        const char* image_name = _allocation_name_get(asset_manager->allocator, item->item.image_resource.image_alloc.allocation);
+        const char* staging_name = _allocation_name_get(asset_manager->allocator, item->item.staging_allocation.allocation);
+        DEBUG_LOG("Texture Not Destroyed: gen_id=%llu, image=%s, staging=%s", (U64)item->gen_id, image_name, staging_name);
         descriptor_index_free(&asset_manager->descriptor_index_allocator, item->item.descriptor_set_idx);
         texture_destroy(&item->item);
     }
@@ -623,7 +641,7 @@ asset_manager_destroy(AssetManager* asset_manager)
     asset_manager_cmd_queue_destroy(asset_manager->cmd_queue);
     deletion_queue_empty_all();
 
-    asset_manager_live_resources_destroy(asset_manager);
+    _asset_manager_live_resources_destroy(asset_manager);
 
 #if BUILD_DEBUG
     {

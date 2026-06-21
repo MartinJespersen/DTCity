@@ -12,7 +12,7 @@ ctx_create(io::IO* io_ctx)
     ctx->arena_frame = arena_alloc();
     ctx->io = PushStruct(app_arena, io::IO);
 
-    ctx->camera_container = container_init<ui::Camera>(10);
+    ctx->camera_container = resource_pool_init<ui::Camera>(10);
     ctx->time = PushStruct(app_arena, dt_Time);
     ctx->cwd = os_current_path_get(scratch.arena);
 
@@ -52,7 +52,7 @@ static void
 ctx_destroy(Context* ctx)
 {
     async::thread_pool_destroy(ctx->thread_pool);
-    container_release(ctx->camera_container);
+    resource_pool_release(ctx->camera_container);
     arena_release(ctx->arena_main_permanent);
 }
 
@@ -60,6 +60,7 @@ int
 App(int argc, char** argv)
 {
     ScratchScope scratch = ScratchScope(0, 0);
+    dynamic_array_init();
 
     io::IO* io_ctx = io::window_create(S("Digital Twin City"), vulkan::Context::WIDTH, vulkan::Context::HEIGHT);
     io::input_state_update(io_ctx);

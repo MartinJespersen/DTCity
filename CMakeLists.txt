@@ -10,11 +10,13 @@ set(ASAN_COMPILE_FLAGS "")
 set(GLSL_SHADER_FLAGS "")
 set(DISABLE_WARNINGS_COMPILE_FLAG "")
 set(ALL_TARGETS city)
+set(RADLINKER_PATH "C:/repos/raddebugger/build/radlink.exe")
 
 option(BUILD_DEBUG "Enable Additional Debugging Information (e.g Vulkan Validation Layers)" OFF)
 option(ASAN_ENABLED "Enable Address Sanitizer" OFF)
 option(BUILD_TESTS "Build tests" OFF)
 option(SHADER_DEBUG "Enable Shader Debugging" OFF)
+option(USE_RADLINKER "Use RAD linker for MSVC debug builds" ON)
 
 # cmake macro -> compiler macro
 if(BUILD_DEBUG OR SHADER_DEBUG)
@@ -32,6 +34,17 @@ endif()
 
 # Compiler specific options
 if (MSVC)
+  if(USE_RADLINKER AND NOT ASAN_ENABLED)
+    if(EXISTS "${RADLINKER_PATH}")
+      set(CMAKE_LINKER "${RADLINKER_PATH}" CACHE FILEPATH "RAD linker" FORCE)
+      set(CMAKE_CXX_LINK_EXECUTABLE
+          "<CMAKE_LINKER> /nologo <OBJECTS> ${CMAKE_START_TEMP_FILE} /out:<TARGET> /implib:<TARGET_IMPLIB> /pdb:<TARGET_PDB> /version:<TARGET_VERSION_MAJOR>.<TARGET_VERSION_MINOR> <LINK_FLAGS> <LINK_LIBRARIES> ${CMAKE_END_TEMP_FILE}")
+      set(CMAKE_C_LINK_EXECUTABLE "${CMAKE_CXX_LINK_EXECUTABLE}")
+    else()
+      message(FATAL_ERROR "RAD linker not found at ${RADLINKER_PATH}")
+    endif()
+  endif()
+
   if(BUILD_DEBUG)
     message(DEBUG "Setting MSVC flags to /Z7 for ccache compatibility.  Current flags: ${CMAKE_CXX_FLAGS_DEBUG}")
     string(REPLACE "/Zi" "/Z7" CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG}")
@@ -107,6 +120,7 @@ if(ASAN_ENABLED)
     target_compile_options(${target} PRIVATE ${ASAN_COMPILE_FLAGS})
     target_link_options(${target} PRIVATE ${ASAN_LINK_FLAGS})
   endforeach()
+
 endif()
 
 

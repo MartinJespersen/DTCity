@@ -262,7 +262,7 @@ struct Map
 
 enum class MapResult : B32
 {
-    Ok = 0,
+    Success = 0,
     NotFound = 1
 };
 

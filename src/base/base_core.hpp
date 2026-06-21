@@ -7,13 +7,14 @@
 ////////////////////////////////
 //~ rjf: Foreign Includes
 
-#include <stdio.h>
-#include <stdarg.h>
-#include <math.h>
-#include <string.h>
-#include <stdint.h>
-#include <float.h>
+#include <cstdio>
+#include <cstdarg>
+#include <cmath>
+#include <cstring>
+#include <cstdint>
+#include <cfloat>
 #include <type_traits>
+#include <bit>
 
 ////////////////////////////////
 //~ rjf: Codebase Keywords
@@ -358,7 +359,7 @@ __asan_unpoison_memory_region(void const volatile* addr, size_t size);
 #define PtrFromInt(i) (void*)((U8*)0 + (i))
 
 #define Compose64Bit(a, b) ((((U64)(a)) << 32) | ((U64)(b)));
-#define AlignPow2(x, b) (((x) + (b) - 1) & (~((b) - 1)))
+#define align_pow2(x, b) (((x) + (b) - 1) & (~((b) - 1)))
 #define AlignDownPow2(x, b) ((x) & (~((b) - 1)))
 #define AlignPadPow2(x, b) ((0 - (x)) & ((b) - 1))
 #define IsPow2(x) ((x) != 0 && ((x) & ((x) - 1)) == 0)
@@ -976,7 +977,7 @@ ring_read(U8* ring_base, U64 ring_size, U64 ring_pos, void* dst_data, U64 read_s
 lib_internal U64
 u64_array_bsearch(U64* arr, U64 count, U64 value);
 
-// compiler specifics
+// bit level functions
 #ifdef __GNUC__
 #define LSBIndex(n) (__builtin_ffs((n)) - 1)
 #elif defined(_MSC_VER)
@@ -986,6 +987,8 @@ u64_array_bsearch(U64* arr, U64 count, U64 value);
 #error compiler not supported
 #endif
 
+#define msb_index(v) (std::bit_width(v) - 1)
+#define msb(v) (std::bit_width(v))
 // type casts
 
 #define enum_idx(a) static_cast<U32>(a)

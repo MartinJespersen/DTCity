@@ -12,6 +12,7 @@ struct AsyncWebsocketSession
     CurlContext* curl_ctx;
 
     // http
+    HttpInfo* http_info;
     U32 http_error_code;
     String8 http_error_msg;
 

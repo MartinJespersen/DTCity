@@ -2444,7 +2444,7 @@ str8_serial_push_align(Arena* arena, String8List* srl, U64 align)
     Assert(IsPow2(align));
 
     U64 pos = srl->total_size;
-    U64 new_pos = AlignPow2(pos, align);
+    U64 new_pos = align_pow2(pos, align);
     U64 size = (new_pos - pos);
 
     if (size != 0)
@@ -2785,7 +2785,7 @@ env_vars_from_env_file(Arena* arena)
     return env_output;
 }
 
-g_internal B32
+lib_internal B32
 env_vars_value_get(Arena* arena, const String8 key, String8* out_value, bool env_file_included)
 {
     ScratchScope scratch = ScratchScope(&arena, 1);
