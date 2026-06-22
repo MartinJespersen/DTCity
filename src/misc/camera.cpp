@@ -15,10 +15,8 @@ camera_init(Arena* arena, Camera* camera)
     render::thread_cmd_buffer_record(thread_ctx);
     defer(render::thread_cmd_buffer_end(thread_ctx));
     render::BufferType buffer_type = render::BufferType_Uniform;
-    for (U32 i = 0; i < ArrayCount(camera->mut_handles); ++i)
-    {
-        camera->mut_handles[i] = render::mapped_buffer_create<ui::CameraUniformBuffer>(arena, thread_ctx, buffer_type);
-    }
+    String8 debug_name = push_str8f(arena, "camera_uniform_buffer");
+    camera->mut_handles = render::mapped_buffer_create<ui::CameraUniformBuffer>(arena, thread_ctx, buffer_type, debug_name);
 }
 
 static void
@@ -70,7 +68,7 @@ camera_update(Camera* camera, io::IO* input, F64 time, Vec2S32 extent, U32 curre
     camera->projection_matrix[1][1] *= -1.0f;
 
     Vec2U32 camera_framebuffer_dim = vec_2u32((U32)Max(extent.x, 1), (U32)Max(extent.y, 1));
-    render::MappedHandle<ui::CameraUniformBuffer> camera_handle = camera->mut_handles[current_frame_idx];
+    render::MappedHandle<ui::CameraUniformBuffer> camera_handle = camera->mut_handles;
     ui::_camera_uniform_buffer_update(camera, camera_handle, camera_framebuffer_dim);
 }
 

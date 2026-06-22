@@ -28,7 +28,7 @@ struct CameraUniformBuffer
 
 struct Camera
 {
-    render::MappedHandle<CameraUniformBuffer> mut_handles[render::MAX_FRAMES_IN_FLIGHT];
+    render::MappedHandle<CameraUniformBuffer> mut_handles;
     glm::mat4 view_matrix;
     glm::mat4 projection_matrix;
     glm::vec3 position;

@@ -316,6 +316,20 @@ dt_main_loop(void* ptr)
     {
     }
     render::gpu_work_done_wait();
+    for (U32 i = 0; i < ctx->camera_container->size; ++i)
+    {
+        ItemHeader<ui::Camera>* camera_item = &ctx->camera_container->items[i];
+        if (camera_item->in_use)
+        {
+            render::mapped_buffer_destroy(camera_item->data.mut_handles);
+        }
+    }
+    resource_pool_release(ctx->camera_container);
+    for (U32 i = 0; i < city_buf.size; i += 1)
+    {
+        city::city_release(city_buf[i]);
+    }
+    render::gpu_work_done_wait();
     draw::draw_release();
     render::render_ctx_destroy();
 }

@@ -206,20 +206,23 @@ asset_manager_destroy(AssetManager* asset_manager);
 // buffer usage patterns with VMA:
 // https://gpuopen-librariesandsdks.github.io/VulkanMemoryAllocator/html/usage_patterns.html
 static BufferAllocation
-_buffer_allocation_create(VkDeviceSize size, VkBufferUsageFlags buffer_usage, VmaAllocationCreateInfo vma_info, const char* name);
+_buffer_allocation_create(VkDeviceSize size, VkBufferUsageFlags buffer_usage, VmaAllocationCreateInfo* vma_info, VmaAllocationInfo* alloc_info);
 
 static void
 buffer_destroy(BufferAllocation* buffer_allocation);
 static BufferAllocation
-staging_buffer_create(VkDeviceSize size);
+_staging_buffer_create(VkDeviceSize size);
 static BufferAllocation
-staging_buffer_mapped_create(VkDeviceSize size, const char* name);
+_staging_buffer_mapped_create(VkDeviceSize size);
 static render::Handle
-buffer_alloc_create_or_resize(U32 total_buffer_byte_count, render::Handle handle, VkBufferUsageFlags usage, const char* name);
+buffer_alloc_create_or_resize(U32 total_buffer_byte_count, render::Handle handle, VkBufferUsageFlags usage);
 static void
-buffer_readback_create(VkDeviceSize size, VkBufferUsageFlags buffer_usage, BufferReadback* out_buffer_readback, const char* name);
+buffer_readback_create(VkDeviceSize size, VkBufferUsageFlags buffer_usage, BufferReadback* out_buffer_readback);
 static void
 buffer_readback_destroy(BufferReadback* out_buffer_readback);
+
+g_internal void*
+asset_manager_allocation_cpu_pointer_get(void* allocation);
 
 //~mgj: Image Allocation Functions (VMA)
 static ImageAllocation
@@ -335,6 +338,9 @@ texture_loading_from_path_thread(void* data, render::ThreadWorkerCmdCtx* thread_
 static async::WorkerResult
 thread_main(async::ThreadInfo thread_info, async::WorkerData input);
 
+// debug helpers
+lib_internal void
+asset_manager_debug_name_set(void* allocation, String8 name);
 } // namespace vulkan
 
 #define VK_CHECK_RESULT(f)                                                                                                                                                                             \

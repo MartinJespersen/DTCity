@@ -529,11 +529,9 @@ mapped_buffer_add(MappedHandle<T> mut_handle, T* data)
 
 template <typename T>
 g_internal MappedHandle<T>
-mapped_buffer_create(Arena* arena, render::ThreadWorkerCmdCtx* thread_ctx, BufferType buffer_type)
+mapped_buffer_create(Arena* arena, render::ThreadWorkerCmdCtx* thread_ctx, BufferType buffer_type, String8 debug_name)
 {
     ScratchScope scratch = ScratchScope(0, 0);
-    vulkan::Context* vk_ctx = vulkan::ctx_get();
-    vulkan::AssetManager* asset_manager = vk_ctx->asset_manager;
     Buffer<MappedHandleFrame<T>> handle_buffer = buffer_alloc<MappedHandleFrame<T>>(arena, render::MAX_FRAMES_IN_FLIGHT);
 
     for (U32 frame_idx = 0; frame_idx < handle_buffer.size; ++frame_idx)
@@ -549,14 +547,12 @@ mapped_buffer_create(Arena* arena, render::ThreadWorkerCmdCtx* thread_ctx, Buffe
         render::AssetItem<vulkan::BufferHandle>* asset_item_buffer = vulkan::asset_manager_buffer_item_get(content->handle);
         vulkan::BufferHandle* buffer_handle = &asset_item_buffer->item;
 
-        VkMemoryPropertyFlags mem_prop_flags;
-        vmaGetAllocationMemoryProperties(asset_manager->allocator, buffer_handle->buffer_alloc.allocation, &mem_prop_flags);
-        buffer_handle->mem_prop_flags = mem_prop_flags;
+#if BUILD_DEBUG
+        String8 frame_debug_name = push_str8f(scratch.arena, "%.*s[%u]", str8_varg(debug_name), frame_idx);
+        vulkan::asset_manager_debug_name_set(buffer_handle->buffer_alloc.allocation, frame_debug_name);
+#endif
 
-        VmaAllocationInfo alloc_info;
-        vmaGetAllocationInfo(asset_manager->allocator, buffer_handle->buffer_alloc.allocation, &alloc_info);
-
-        content->data = (T*)alloc_info.pMappedData;
+        content->data = (T*)vulkan::asset_manager_allocation_cpu_pointer_get(buffer_handle->buffer_alloc.allocation);
         AssertAlways(content->data);
     }
 
@@ -565,8 +561,17 @@ mapped_buffer_create(Arena* arena, render::ThreadWorkerCmdCtx* thread_ctx, Buffe
     return mut_handle;
 }
 
+template <typename T>
+g_internal void
+mapped_buffer_destroy(MappedHandle<T> mapped_handle)
+{
+    for (auto h : mapped_handle.buffer)
+    {
+        render::handle_destroy(h.handle);
+    }
+}
 g_internal Handle
-buffer_load_sync(render::ThreadWorkerCmdCtx* thread_ctx, render::BufferInfo* buffer_info)
+_buffer_load_sync(render::ThreadWorkerCmdCtx* thread_ctx, render::BufferInfo* buffer_info, String8 debug_name)
 {
     prof_scope_marker;
     if (buffer_info->buffer.size == 0)
@@ -586,6 +591,13 @@ buffer_load_sync(render::ThreadWorkerCmdCtx* thread_ctx, render::BufferInfo* buf
 
     // ~mgj: Create staging buffer allocation
     buffer_handle->staging_buffer = vulkan::asset_manager_buffer_from_staging((VkCommandBuffer)thread_ctx->cmd_buffer, buffer_info, buffer_handle->buffer_alloc.buffer);
+
+#if BUILD_DEBUG
+    ScratchScope scratch = ScratchScope(0, 0);
+    vulkan::asset_manager_debug_name_set(buffer_handle->buffer_alloc.allocation, debug_name);
+    String8 staging_debug_name = str8_concat(scratch.arena, debug_name, S("(staging buffer)"));
+    vulkan::asset_manager_debug_name_set(buffer_handle->staging_buffer.allocation, staging_debug_name);
+#endif
 
     return handle;
 }
@@ -620,7 +632,7 @@ buffer_load_async(render::BufferInfo* buffer_info)
     if (buffer_type & render::BufferType_StorageBuffer)
         usage_flags |= VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
     Assert(usage_flags != 0);
-    vulkan::BufferAllocation buffer = vulkan::_buffer_allocation_create(buffer_info->buffer.size, usage_flags | VK_BUFFER_USAGE_TRANSFER_DST_BIT, vma_info, "buffer_load_async");
+    vulkan::BufferAllocation buffer = vulkan::_buffer_allocation_create(buffer_info->buffer.size, usage_flags | VK_BUFFER_USAGE_TRANSFER_DST_BIT, &vma_info, nullptr);
 
     // ~mgj: Prepare buffer asset item
     os_mutex_scope_w(asset_manager->buffer_mutex)

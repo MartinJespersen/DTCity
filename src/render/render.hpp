@@ -434,12 +434,20 @@ g_internal Handle
 buffer_load_async(BufferInfo* buffer_info);
 
 g_internal Handle
-buffer_load_sync(render::ThreadWorkerCmdCtx* thread_ctx, render::BufferInfo* buffer_info);
+_buffer_load_sync(render::ThreadWorkerCmdCtx* thread_ctx, render::BufferInfo* buffer_info, String8 debug_name);
+#if BUILD_DEBUG
+#define buffer_load_sync(thread_ctx, buffer_info, name) _buffer_load_sync(thread_ctx, buffer_info, name)
+#else
+#define buffer_load_sync(thread_ctx, buffer_info, name) _buffer_load_sync(thread_ctx, buffer_info, S(""))
+#endif
 
 template <typename T>
 g_internal MappedHandle<T>
-mapped_buffer_create(Arena* arena, render::ThreadWorkerCmdCtx* thread_ctx, BufferType buffer_type);
+mapped_buffer_create(Arena* arena, render::ThreadWorkerCmdCtx* thread_ctx, BufferType buffer_type, String8 debug_name);
 
+template <typename T>
+g_internal void
+mapped_buffer_destroy(MappedHandle<T> mapped_handle);
 template <typename T>
 g_internal void
 mapped_buffer_add(MappedHandle<T> mut_handle, T* data);

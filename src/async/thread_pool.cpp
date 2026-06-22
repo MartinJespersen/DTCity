@@ -41,7 +41,6 @@ _thread_pool_try_get_work(ThreadPool* thread_pool, WorkerItem* item)
 
     if (queue_try_read(thread_pool->mpmc_queue, item))
     {
-        thread_pool->pending_task_count.fetch_sub(1);
         return true;
     }
 
@@ -51,7 +50,6 @@ _thread_pool_try_get_work(ThreadPool* thread_pool, WorkerItem* item)
     if (async::async_min_heap_pop_ready(thread_pool->timer_min_heap, now_s64, &heap_item))
     {
         *item = heap_item.v;
-        thread_pool->pending_task_count.fetch_sub(1);
         return true;
     }
 
@@ -236,6 +234,7 @@ thread_worker(void* data)
         if (_thread_pool_try_get_work(thread_pool, &item))
         {
             thread_pool->in_flight_count.fetch_add(1);
+            thread_pool->pending_task_count.fetch_sub(1);
             _thread_pool_worker_task_execute(thread_info, &item);
             thread_pool->in_flight_count.fetch_sub(1);
             continue;

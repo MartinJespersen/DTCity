@@ -217,7 +217,7 @@ object_id_image_resource_create(SwapchainResources* swapchain_resources, U32 ima
 
     for (U32 i = 0; i < ArrayCount(swapchain_resources->object_id_buffer_readback); i++)
     {
-        buffer_readback_create(buffer_size, VK_BUFFER_USAGE_TRANSFER_DST_BIT, &swapchain_resources->object_id_buffer_readback[i], "object_id readback");
+        buffer_readback_create(buffer_size, VK_BUFFER_USAGE_TRANSFER_DST_BIT, &swapchain_resources->object_id_buffer_readback[i]);
     }
 }
 
@@ -1258,6 +1258,7 @@ static void
 descriptor_set_clear_bindless_texture(U32 array_index, render::AssetItem<TextureHandle>* null_texture)
 {
     vulkan::Context* vk_ctx = ctx_get();
+    AssertAlways(array_index < vk_ctx->max_texture_count);
 
     VkDescriptorImageInfo image_info{};
     image_info.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;

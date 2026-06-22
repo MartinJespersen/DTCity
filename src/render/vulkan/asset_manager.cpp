@@ -76,7 +76,7 @@ texture_ktx_cmd_record(VkCommandBuffer cmd, TextureHandle* tex, Buffer<U8> tex_b
 
         VkFormat vk_format = ktxTexture2_GetVkFormat(ktx_texture);
 
-        BufferAllocation staging_allocation = staging_buffer_mapped_create(ktx_texture->dataSize, "texture_ktx staging");
+        BufferAllocation staging_allocation = _staging_buffer_mapped_create(ktx_texture->dataSize);
         VmaAllocationInfo staging_allocation_info;
         vmaGetAllocationInfo(asset_manager->allocator, staging_allocation.allocation, &staging_allocation_info);
 
@@ -150,7 +150,7 @@ colormap_texture_cmd_record(VkCommandBuffer cmd, TextureHandle* tex, Buffer<U8> 
     AssertAlways(colormap_size == 256);
     VkFormat vk_format = VK_FORMAT_R32G32B32A32_SFLOAT;
 
-    BufferAllocation staging_allocation = staging_buffer_mapped_create(staging_buffer_size, "colormap_texture staging");
+    BufferAllocation staging_allocation = _staging_buffer_mapped_create(staging_buffer_size);
     VmaAllocationInfo staging_allocation_info;
     vmaGetAllocationInfo(asset_manager->allocator, staging_allocation.allocation, &staging_allocation_info);
 
@@ -169,7 +169,7 @@ colormap_texture_cmd_record(VkCommandBuffer cmd, TextureHandle* tex, Buffer<U8> 
     VmaAllocationCreateInfo vma_info = {.usage = VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE};
     ImageAllocation image_alloc =
         image_allocation_create(colormap_size, 1, VK_SAMPLE_COUNT_1_BIT, vk_format, VK_IMAGE_TILING_OPTIMAL,
-                                VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, mip_levels, vma_info, "colormap_texture image", VK_IMAGE_TYPE_2D);
+                                VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, mip_levels, vma_info, "colormap_texture_image", VK_IMAGE_TYPE_2D);
 
     ImageViewResource image_view_resource = image_view_resource_create(asset_manager->device, image_alloc.image, vk_format, VK_IMAGE_ASPECT_COLOR_BIT, mip_levels, VK_IMAGE_VIEW_TYPE_2D);
 
@@ -213,7 +213,7 @@ texture_upload_with_blitting(VkCommandBuffer cmd, render::TextureUploadData* dat
     U32 mip_levels = floor(log2f(Max(data->width, data->height))) + 1;
     VkFormat vk_format = VK_FORMAT_R8G8B8A8_SRGB;
 
-    BufferAllocation staging_allocation = staging_buffer_mapped_create(data->data_byte_size, "texture_upload_with_blitting staging");
+    BufferAllocation staging_allocation = _staging_buffer_mapped_create(data->data_byte_size);
     // upload base mip level
 
     VmaAllocationCreateInfo vma_info = {.usage = VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE};
@@ -360,7 +360,7 @@ buffer_loading_thread(void* data, render::ThreadWorkerCmdCtx* thread_input)
     AssetManager* asset_manager = asset_manager_get();
 
     // ~mgj: copy to staging and record copy command
-    BufferAllocation staging_buffer_alloc = staging_buffer_create(buffer.size);
+    BufferAllocation staging_buffer_alloc = _staging_buffer_create(buffer.size);
     VK_CHECK_RESULT(vmaCopyMemoryToAllocation(asset_manager->allocator, buffer.data, staging_buffer_alloc.allocation, 0, buffer.size));
 
     os_mutex_scope_w(asset_manager->buffer_mutex)
@@ -805,6 +805,7 @@ asset_manager_item_create(render::AssetItemList<T>* list, render::AssetItemList<
 g_internal render::Handle
 asset_manager_buffer_allocation_create(render::ThreadWorkerCmdCtx* thread_ctx, render::BufferInfo* buffer_info, VmaAllocationCreateInfo vma_info)
 {
+    AssetManager* asset_manager = asset_manager_get();
     render::Handle handle = render::Handle::buffer_handle_create((render::BufferType)buffer_info->buffer_type);
     render::handle_list_push(thread_ctx, handle);
 
@@ -819,7 +820,7 @@ asset_manager_buffer_allocation_create(render::ThreadWorkerCmdCtx* thread_ctx, r
     if (buffer_type & render::BufferType_StorageBuffer)
         usage_flags |= VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
     Assert(usage_flags != 0);
-    vulkan::BufferAllocation buffer_alloc = _buffer_allocation_create(buffer_info->buffer.size, usage_flags | VK_BUFFER_USAGE_TRANSFER_DST_BIT, vma_info, "buffer_load_sync");
+    vulkan::BufferAllocation buffer_alloc = _buffer_allocation_create(buffer_info->buffer.size, usage_flags | VK_BUFFER_USAGE_TRANSFER_DST_BIT, &vma_info, nullptr);
 
     render::AssetItem<vulkan::BufferHandle>* asset_item = vulkan::asset_manager_buffer_item_get(handle);
     vulkan::BufferHandle* asset_buffer = (vulkan::BufferHandle*)&asset_item->item;
@@ -827,13 +828,17 @@ asset_manager_buffer_allocation_create(render::ThreadWorkerCmdCtx* thread_ctx, r
     asset_buffer->item_byte_size = buffer_info->type_size;
     asset_buffer->elem_count = buffer_info->elem_count;
 
+    VkMemoryPropertyFlags mem_prop_flags;
+    vmaGetAllocationMemoryProperties(asset_manager->allocator, buffer_alloc.allocation, &mem_prop_flags);
+    asset_buffer->mem_prop_flags = mem_prop_flags;
+
     return handle;
 }
 
 g_internal vulkan::BufferAllocation
 asset_manager_buffer_from_staging(VkCommandBuffer cmd_buffer, render::BufferInfo* buffer_info, VkBuffer dest_buffer)
 {
-    vulkan::BufferAllocation staging_alloc = vulkan::staging_buffer_create(buffer_info->buffer.size);
+    vulkan::BufferAllocation staging_alloc = vulkan::_staging_buffer_create(buffer_info->buffer.size);
     vulkan::AssetManager* asset_manager = vulkan::asset_manager_get();
     VK_CHECK_RESULT(vmaCopyMemoryToAllocation(asset_manager->allocator, buffer_info->buffer.data, staging_alloc.allocation, 0, buffer_info->buffer.size));
     VkBufferCopy copy_region = {0};
@@ -1156,26 +1161,6 @@ asset_manager_handle_free(render::Handle handle)
 }
 
 //~mgj: Buffer Allocation Functions (VMA)
-static BufferAllocation
-_buffer_allocation_create(VkDeviceSize size, VkBufferUsageFlags buffer_usage, VmaAllocationCreateInfo vma_info, const char* name)
-{
-    AssetManager* asset_manager = asset_manager_get();
-    BufferAllocation buffer = {};
-
-    VkBufferCreateInfo bufferInfo = {};
-    bufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
-    bufferInfo.size = size;
-    bufferInfo.usage = buffer_usage;
-    bufferInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
-
-    VK_CHECK_RESULT(vmaCreateBuffer(asset_manager->allocator, &bufferInfo, &vma_info, &buffer.buffer, &buffer.allocation, nullptr));
-    vmaSetAllocationName(asset_manager->allocator, buffer.allocation, name);
-    buffer.size = (U32)size;
-
-    MEMORY_LOG("VMA Buffer Allocated: %p (size: %llu bytes, usage: 0x%x)", buffer.buffer, buffer.size, buffer_usage);
-
-    return buffer;
-}
 
 static void
 buffer_destroy(BufferAllocation* buffer_allocation)
@@ -1190,39 +1175,50 @@ buffer_destroy(BufferAllocation* buffer_allocation)
 }
 
 static BufferAllocation
-staging_buffer_create(VkDeviceSize size)
+_staging_buffer_create(VkDeviceSize size)
 {
     VmaAllocationCreateInfo vma_staging_info = {0};
     vma_staging_info.usage = VMA_MEMORY_USAGE_AUTO;
     vma_staging_info.flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT;
     vma_staging_info.requiredFlags = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT;
-    BufferAllocation staging_buffer = _buffer_allocation_create(size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, vma_staging_info, "staging buffer");
+    BufferAllocation staging_buffer = _buffer_allocation_create(size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, &vma_staging_info, nullptr);
     return staging_buffer;
 }
 
 static BufferAllocation
-staging_buffer_mapped_create(VkDeviceSize size, const char* buffer_name)
+_staging_buffer_mapped_create(VkDeviceSize size)
 {
-    AssetManager* asset_manager = asset_manager_get();
-    VkBufferCreateInfo staging_buf_create_info = {VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO};
-    staging_buf_create_info.size = size;
-    staging_buf_create_info.usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
-
     VmaAllocationCreateInfo staging_alloc_create_info = {};
     staging_alloc_create_info.usage = VMA_MEMORY_USAGE_AUTO;
     staging_alloc_create_info.flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT | VMA_ALLOCATION_CREATE_MAPPED_BIT;
 
-    BufferAllocation staging_buf_alloc = {};
-    VK_CHECK_RESULT(vmaCreateBuffer(asset_manager->allocator, &staging_buf_create_info, &staging_alloc_create_info, &staging_buf_alloc.buffer, &staging_buf_alloc.allocation, nullptr));
+    BufferAllocation allocation = _buffer_allocation_create(size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, &staging_alloc_create_info, nullptr);
 
-    vmaSetAllocationName(asset_manager->allocator, staging_buf_alloc.allocation, buffer_name);
-    staging_buf_alloc.size = (U32)size;
+    return allocation;
+}
 
-    return staging_buf_alloc;
+static BufferAllocation
+_buffer_allocation_create(VkDeviceSize size, VkBufferUsageFlags buffer_usage, VmaAllocationCreateInfo* vma_info, VmaAllocationInfo* alloc_info)
+{
+    AssetManager* asset_manager = asset_manager_get();
+    BufferAllocation buffer = {};
+
+    VkBufferCreateInfo bufferInfo = {};
+    bufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+    bufferInfo.size = size;
+    bufferInfo.usage = buffer_usage;
+    bufferInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+
+    VK_CHECK_RESULT(vmaCreateBuffer(asset_manager->allocator, &bufferInfo, vma_info, &buffer.buffer, &buffer.allocation, alloc_info));
+    buffer.size = (U32)size;
+
+    MEMORY_LOG("VMA Buffer Allocated: %p (size: %llu bytes, usage: 0x%x)", buffer.buffer, buffer.size, buffer_usage);
+
+    return buffer;
 }
 
 static render::Handle
-buffer_alloc_create_or_resize(U32 total_buffer_byte_count, render::Handle handle, VkBufferUsageFlags usage, const char* name)
+buffer_alloc_create_or_resize(U32 total_buffer_byte_count, render::Handle handle, VkBufferUsageFlags usage)
 {
     // buffer alloc get
     render::BufferType buffer_type = buffer_type_from_usage_flags(usage);
@@ -1246,7 +1242,7 @@ buffer_alloc_create_or_resize(U32 total_buffer_byte_count, render::Handle handle
         vma_info.flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT | VMA_ALLOCATION_CREATE_MAPPED_BIT;
         vma_info.requiredFlags = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT;
 
-        asset_item_buffer->item.buffer_alloc = _buffer_allocation_create(total_buffer_byte_count, usage, vma_info, name);
+        asset_item_buffer->item.buffer_alloc = _buffer_allocation_create(total_buffer_byte_count, usage, &vma_info, nullptr);
         asset_item_buffer->item.item_byte_size = 1;
         asset_item_buffer->item.elem_count = total_buffer_byte_count;
     }
@@ -1254,36 +1250,34 @@ buffer_alloc_create_or_resize(U32 total_buffer_byte_count, render::Handle handle
 }
 
 static void
-buffer_readback_create(VkDeviceSize size, VkBufferUsageFlags buffer_usage, BufferReadback* out_buffer_readback, const char* name)
+buffer_readback_create(VkDeviceSize size, VkBufferUsageFlags buffer_usage, BufferReadback* out_buffer_readback)
 {
-    AssetManager* asset_manager = asset_manager_get();
-
-    VkBufferCreateInfo bufCreateInfo = {VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO};
-    bufCreateInfo.size = size;
-    bufCreateInfo.usage = VK_BUFFER_USAGE_TRANSFER_DST_BIT | buffer_usage;
-
-    VmaAllocationCreateInfo allocCreateInfo = {};
-    allocCreateInfo.usage = VMA_MEMORY_USAGE_AUTO;
-    allocCreateInfo.flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_RANDOM_BIT | VMA_ALLOCATION_CREATE_MAPPED_BIT;
+    VmaAllocationCreateInfo alloc_create_info = {};
+    alloc_create_info.usage = VMA_MEMORY_USAGE_AUTO;
+    alloc_create_info.flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_RANDOM_BIT | VMA_ALLOCATION_CREATE_MAPPED_BIT;
 
     VmaAllocationInfo alloc_info = {};
-    VK_CHECK_RESULT(vmaCreateBuffer(asset_manager->allocator, &bufCreateInfo, &allocCreateInfo, &out_buffer_readback->buffer_alloc.buffer, &out_buffer_readback->buffer_alloc.allocation, &alloc_info));
-    vmaSetAllocationName(asset_manager->allocator, out_buffer_readback->buffer_alloc.allocation, name);
-
+    BufferAllocation allocation = _buffer_allocation_create(size, VK_BUFFER_USAGE_TRANSFER_DST_BIT | buffer_usage, &alloc_create_info, &alloc_info);
+    out_buffer_readback->buffer_alloc = allocation;
     out_buffer_readback->mapped_ptr = alloc_info.pMappedData;
-    out_buffer_readback->buffer_alloc.size = (U32)size;
 }
 
 static void
 buffer_readback_destroy(BufferReadback* out_buffer_readback)
 {
-    AssetManager* asset_manager = asset_manager_get();
-    if (out_buffer_readback->buffer_alloc.buffer != VK_NULL_HANDLE)
-    {
-        vmaDestroyBuffer(asset_manager->allocator, out_buffer_readback->buffer_alloc.buffer, out_buffer_readback->buffer_alloc.allocation);
-        *out_buffer_readback = {};
-    }
+    buffer_destroy(&out_buffer_readback->buffer_alloc);
+    out_buffer_readback->mapped_ptr = 0;
 }
+
+g_internal void*
+asset_manager_allocation_cpu_pointer_get(void* allocation)
+{
+    AssetManager* asset_manager = asset_manager_get();
+    VmaAllocationInfo alloc_info;
+    vmaGetAllocationInfo(asset_manager->allocator, (VmaAllocation)allocation, &alloc_info);
+    return alloc_info.pMappedData;
+}
+//~mgj: Image Allocation Functions (VMA)
 
 //~mgj: Image Allocation Functions (VMA)
 static ImageAllocation
@@ -1330,6 +1324,17 @@ image_resource_destroy(ImageResource image)
 {
     image_view_resource_destroy(image.image_view_resource);
     image_allocation_destroy(image.image_alloc);
+}
+
+// debug helpers
+lib_internal void
+asset_manager_debug_name_set(void* allocation, String8 name)
+{
+    AssetManager* asset_manager = asset_manager_get();
+    if (name.size > 0)
+    {
+        vmaSetAllocationName(asset_manager->allocator, (VmaAllocation)allocation, (char*)name.str);
+    }
 }
 
 } // namespace vulkan

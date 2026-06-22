@@ -845,8 +845,8 @@ tile_render_data_from_gltf(const CesiumGltf::Model& model, const glm::dmat4& ece
         glm::mat4 model_matrix = glm::identity<glm::mat4>();
         render::BufferInfo model_matrix_info = render::BufferInfo(tile_arena, &model_matrix, render::BufferType_Uniform);
 
-        render_data->render_data.vertex_buffer_handle = render::buffer_load_sync(thread_input, &vertex_info);
-        render_data->render_data.index_buffer_handle = render::buffer_load_sync(thread_input, &index_info);
+        render_data->render_data.vertex_buffer_handle = render::buffer_load_sync(thread_input, &vertex_info, S("cesium_tile_vertex"));
+        render_data->render_data.index_buffer_handle = render::buffer_load_sync(thread_input, &index_info, S("cesium_tile_index"));
 
         // Texture Loading
         S32 tex_idx = -1;
@@ -1045,7 +1045,7 @@ tileset_renderer_create(Arena* arena, TilesetRenderer* in_out_cesium, async::Thr
     create_context.options.enableLodTransitionPeriod = false;
     create_context.options.lodTransitionLength = 1.0;
 
-    create_context.options.maximumCachedBytes = 128LL * 1024 * 1024;
+    create_context.options.maximumCachedBytes = 512LL * 1024 * 1024;
     create_context.options.maximumSimultaneousTileLoads = 8;
     create_context.options.preloadSiblings = false;
     create_context.options.loadingDescendantLimit = 4;
@@ -1066,6 +1066,7 @@ tileset_renderer_create(Arena* arena, TilesetRenderer* in_out_cesium, async::Thr
     {
         is_map_tile = false;
         create_context.options.rendererOptions = is_map_tile;
+        create_context.options.loadingDescendantLimit = 20;
         create_context.renderer->tilesets.data[1] = new Cesium3DTilesSelection::Tileset(create_context.externals, (const char*)url.str, create_context.options);
         CesiumGeospatial::Cartographic center_position(glm::radians(origin_longitude), glm::radians(origin_latitude), 0.0);
         _height_offset_sample_async(create_context.renderer, center_position);
@@ -1237,6 +1238,5 @@ tileset_update_view(TilesetRenderer* renderer, ui::Camera* camera, Vec2U32 viewp
         }
     }
 }
-
 
 } // namespace cesium

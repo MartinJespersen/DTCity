@@ -115,11 +115,11 @@ _cache_and_parse_osm_json(async::ThreadPool* thread_pool, Road* road, osm::Netwo
 g_internal void
 city_update(City* city, Buffer<city::Coordinate> new_agent_coords, async::ThreadPool* thread_pool, RoadOverlayOption neta_overlay_option, Vec2U32 framebuffer_dim, const CityInfo* city_config)
 {
+    prof_scope_marker;
     Context* ctx = dt_ctx_get();
     ui::Camera* camera = resource_pool_item_from_idx(ctx->camera_container, city->camera_handle);
     // TODO: vulkan current frame should not be used directly
-    U32 current_frame = vulkan::ctx_get()->current_frame;
-    render::MappedHandle<ui::CameraUniformBuffer> camera_handle = camera->mut_handles[current_frame];
+    render::MappedHandle<ui::CameraUniformBuffer> camera_handle = camera->mut_handles;
 
     for (AsyncCityTask* task = city->task_list.first; task;)
     {
@@ -360,13 +360,30 @@ city_update(City* city, Buffer<city::Coordinate> new_agent_coords, async::Thread
 g_internal void
 city_release(City* city)
 {
-    road_destroy(&city->road);
-    osm::osm_release(city->osm_network);
-    cesium::tileset_renderer_destroy(&city->cesium);
-    agent_sim_destroy(&city->car_sim);
-
-    arena_release(city->neta_state->arena);
-    arena_release(city->arena);
+    if (city->road.arena)
+    {
+        road_destroy(&city->road);
+    }
+    if (city->osm_network)
+    {
+        osm::osm_release(city->osm_network);
+    }
+    if (city->cesium.task_processor)
+    {
+        cesium::tileset_renderer_destroy(&city->cesium);
+    }
+    if (city->car_sim.allocator)
+    {
+        agent_sim_destroy(&city->car_sim);
+    }
+    if (city->neta_state && city->neta_state->arena)
+    {
+        arena_release(city->neta_state->arena);
+    }
+    if (city->arena)
+    {
+        arena_release(city->arena);
+    }
 }
 
 g_internal async::AsyncTaskContinuation<RoadBuildTask>
@@ -391,9 +408,9 @@ road_build(async::ThreadInfo info, async::AsyncTaskStatus<RoadBuildTask>* status
     // build road buffers
     road->road_build_result = city::road_segment_build(road->arena, network, network->edge_structure.edges, road->default_road_width, road->road_height, road->ecef_to_local, road->road_info_map);
     render::BufferInfo road_segment_buffer_info = render::BufferInfo(road->road_build_result.bvh_result.road_segment_buffer_sorted, render::BufferType_StorageBuffer);
-    road->segment_buffer_handle = render::buffer_load_sync(thread_ctx, &road_segment_buffer_info);
+    road->segment_buffer_handle = render::buffer_load_sync(thread_ctx, &road_segment_buffer_info, S("road_segment_buffer"));
     render::BufferInfo road_segment_node_buffer_info = render::BufferInfo(road->road_build_result.bvh_result.node_buffer, render::BufferType_StorageBuffer);
-    road->segment_node_buffer_handle = render::buffer_load_sync(thread_ctx, &road_segment_node_buffer_info);
+    road->segment_node_buffer_handle = render::buffer_load_sync(thread_ctx, &road_segment_node_buffer_info, S("road_segment_node_buffer"));
     //// build building buffers
     // render::SamplerInfo sampler_info = {
     //     .min_filter = render::Filter_Linear,
@@ -980,8 +997,8 @@ agents_create(AgentSim* agent_sim, osm::Network* network)
         render::BufferInfo vertex_buffer_info = render::BufferInfo(vertex_buffer, render::BufferType_Vertex);
         Buffer<U32> index_buffer = buffer_arena_copy(agent_sim->allocator->arena, node->indices);
         render::BufferInfo index_buffer_info = render::BufferInfo(index_buffer, render::BufferType_Index);
-        agent_sim->meshes.data[mesh_idx].vertex_handle = render::buffer_load_sync(thread_ctx, &vertex_buffer_info);
-        agent_sim->meshes.data[mesh_idx].index_handle = render::buffer_load_sync(thread_ctx, &index_buffer_info);
+        agent_sim->meshes.data[mesh_idx].vertex_handle = render::buffer_load_sync(thread_ctx, &vertex_buffer_info, S("agent_mesh_vertex"));
+        agent_sim->meshes.data[mesh_idx].index_handle = render::buffer_load_sync(thread_ctx, &index_buffer_info, S("agent_mesh_index"));
         agent_sim->meshes.data[mesh_idx].texture_handle_idx = node->tex_idx;
 
         Rng1F32 vertex_center_offset = car_center_height_offset(vertex_buffer);
@@ -1019,6 +1036,11 @@ agents_create(AgentSim* agent_sim, osm::Network* network)
 g_internal void
 agent_sim_destroy(AgentSim* car_sim)
 {
+    if (car_sim->allocator == 0)
+    {
+        return;
+    }
+
     for (U32 i = 0; i < car_sim->meshes.size; ++i)
     {
         render::handle_destroy(car_sim->meshes.data[i].vertex_handle);

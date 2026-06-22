@@ -14,10 +14,9 @@
 * tile transform might need to be passed to shader as a uniform buffer
 
 # features
+* Use new Allocator for C++ object in tileset_renderer
 * Simulation
-  * Integrate with MATSim
-  * make streaming possible from multiple cities simultanously
-* remove local map from 
+  * Improve reconnection if connection is lost
 * Out of device memory error. 
 * Are the amount of descriptor indices not deallocated? 
 * delete draw flush and related code
