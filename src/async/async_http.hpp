@@ -105,7 +105,8 @@ enum class AsyncResult : U32
     HttpError,
     UserFunctionError,
     TimeoutError,
-    Expecting_Websocket
+    Expecting_Websocket,
+    WebsocketDisconnected
 
 };
 

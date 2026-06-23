@@ -36,12 +36,6 @@ struct WebsocketConnection
   public:
     AsyncError async_result;
 
-    WebsocketConnection()
-    {
-        this->async_result = async_no_error();
-        this->ws_session = 0;
-    }
-
     WebsocketConnection(AsyncError async_result, AsyncWebsocketSession* ws_session)
     {
         this->async_result = async_result;

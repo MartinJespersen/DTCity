@@ -46,6 +46,10 @@ _ws_main(AsyncWebsocketSession* ws_session)
                 ws_session->http_error_code = (U32)http_code;
                 async_error_set(ws_session, async_user_error(AsyncResult::HttpError));
             }
+            else
+            {
+                async_error_set(ws_session, async_user_error(AsyncResult::WebsocketDisconnected));
+            }
         }
     }
 }
@@ -99,10 +103,8 @@ String8List
 WebsocketConnection::read(Arena* arena)
 {
     String8List result = {};
-    if (!this->has_error())
-    {
-        result = _async_websocket_read(arena, this->ws_session);
-    }
+    result = _async_websocket_read(arena, this->ws_session);
+    this->async_result = this->ws_session->error;
     return result;
 }
 

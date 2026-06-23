@@ -11,7 +11,6 @@
 * tile transform might need to be passed to shader as a uniform buffer
 
 # features
-* Use new Allocator for C++ object in tileset_renderer
 * Simulation
   * Improve reconnection if connection is lost
 * Netascore task cause memory violation at shutdown due to arena being deallocated.

@@ -262,6 +262,7 @@ dt_main_loop(void* ptr)
         String8List ws_msgs = ws_task_result.read(ctx->arena_frame);
         Buffer<city::Coordinate> new_agent_coords = city::city_latest_coordinates_buffer_from_str8_list(ctx->arena_frame, &ws_msgs);
         Vec2U32 framebuffer_dim = {(U32)io_ctx->framebuffer_width, (U32)io_ctx->framebuffer_height};
+        printf("Number of new agent coords: %llu", new_agent_coords.size);
 
         ImGui::Begin("Interaction", nullptr);
 
