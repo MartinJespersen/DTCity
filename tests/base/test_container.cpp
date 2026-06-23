@@ -74,6 +74,44 @@ TEST_CASE("Free item")
     resource_pool_release(container);
 }
 
+TEST_CASE("Array Resource Pool Reuses Freed Slot")
+{
+    struct TestObject
+    {
+        U32 num;
+    };
+
+    Arena* arena = arena_alloc();
+    defer(arena_release(arena));
+
+    ArrayResourcePool<TestObject>* pool = ArrayResourcePool<TestObject>::create(arena, 2);
+
+    ArrayResourcePoolHandle handle_a = pool->handle_get();
+    ArrayResourcePoolHandle handle_b = pool->handle_get();
+
+    CHECK(handle_a.idx == 1);
+    CHECK(handle_b.idx == 2);
+    CHECK(pool->free_list == 0);
+
+    TestObject* object_a = 0;
+    bool object_a_found = pool->item_from_handle(handle_a, &object_a);
+    CHECK(object_a_found);
+    object_a->num = 42;
+
+    pool->item_free(handle_a);
+
+    object_a_found = pool->item_from_handle(handle_a, &object_a);
+    CHECK(!object_a_found);
+
+    ArrayResourcePoolHandle handle_c = pool->handle_get();
+    CHECK(handle_c.idx == handle_a.idx);
+    CHECK(handle_c.gen_id != handle_a.gen_id);
+
+    object_a_found = pool->item_from_handle(handle_c, &object_a);
+    CHECK(object_a_found);
+    CHECK(object_a->num == 42);
+}
+
 TEST_CASE("Dynamic Array Grows")
 {
     dynamic_array_init(MB(1));

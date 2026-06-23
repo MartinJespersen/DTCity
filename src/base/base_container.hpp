@@ -1,5 +1,4 @@
-namespace
-{
+
 // Dynamic Array ////////////////////////////////////////////////////////
 template <typename T>
 struct DynamicArray
@@ -181,4 +180,41 @@ resource_pool_array_idx_get(ResourcePool<T>* container);
 template <typename T>
 g_internal void
 resource_pool_item_free(ResourcePool<T>* container, ResourcePoolHandle item_handle);
-} // namespace
+
+/////////////////////////////////////////////////////////////////////////
+// Array Resource Pool /////////////////////////////////////////////////////////
+
+struct ArrayResourcePoolHandle
+{
+    U32 idx;
+    U32 gen_id;
+};
+
+template <typename T>
+struct ArrayItemHeader
+{
+    U32 next;
+    U32 gen_id;
+    bool in_use;
+    T data;
+};
+
+template <typename T>
+struct ArrayResourcePool
+{
+    ArrayItemHeader<T>* items;
+    U32 capacity;
+    U32 free_list;
+
+    static ArrayResourcePool<T>*
+    create(Arena* arena, U32 capacity);
+
+    bool
+    item_from_handle(ArrayResourcePoolHandle item_handle, T** out_value);
+
+    ArrayResourcePoolHandle
+    handle_get();
+
+    void
+    item_free(ArrayResourcePoolHandle item_handle);
+};

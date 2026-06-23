@@ -72,6 +72,17 @@ struct Allocator
         return static_cast<T*>(new (mem) T{std::forward<Args>(args)...});
     }
 
+    template <typename T, typename... Args>
+    void
+    place(T* mem, Args&&... args)
+    {
+        if constexpr (!std::is_trivially_destructible_v<T>)
+        {
+            _push_only_destructor(mem, Destructor::create<T>(nullptr));
+        }
+        new (mem) T{std::forward<Args>(args)...};
+    }
+
   private:
     // push some bytes onto the 'stack' - the way to allocate
     void*
@@ -82,6 +93,8 @@ struct Allocator
     _allocator_push_destructor();
     void
     _allocator_destroy_all();
+    void
+    _push_only_destructor(void* object, Destructor destructor);
 };
 
 #endif // BASE_ALLOCATOR_HPP

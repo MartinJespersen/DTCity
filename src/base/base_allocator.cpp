@@ -37,14 +37,19 @@ Allocator::push_with_destructor(U64 bytes, U64 alignment, Destructor destructor)
 {
     void* result = push(bytes, alignment);
 
-    Destructor* destructor_slot = _allocator_push_destructor();
-    destructor.bound_object = result;
-    *destructor_slot = destructor;
-    destructor_count += 1;
+    _push_only_destructor(result, destructor);
 
     return result;
 }
 
+void
+Allocator::_push_only_destructor(void* object, Destructor destructor)
+{
+    Destructor* destructor_slot = _allocator_push_destructor();
+    destructor.bound_object = object;
+    *destructor_slot = destructor;
+    destructor_count += 1;
+}
 // get the # of bytes currently allocated.
 U64
 Allocator::get_usage()

@@ -13,7 +13,35 @@ city_init(City* city, String8 cache_path)
 }
 
 g_internal void
-city_build(City* city, const CityInfo* city_config, Rng2F64 bbox, String8 tileset_url, String8 area)
+city_area_streaming_begin(async::ThreadPool* thread_pool, City* city, const AreaConfig* area_config)
+{
+    Assert(city);
+    Assert(thread_pool);
+    Assert(area_config);
+    Context* ctx = dt_ctx_get();
+
+    cesium::TilesetRenderer* tileset = {};
+    if (ctx->tileset_pool->item_from_handle(city->tileset_handle, &tileset))
+    {
+        Vec2F64 bbox_center = {.x = (city->bbox.min.x + city->bbox.max.x) * 0.5, .y = (city->bbox.min.y + city->bbox.max.y) * 0.5};
+        cesium::tileset_renderer_create(tileset, thread_pool, city->tileset_url, bbox_center.x, bbox_center.y, 0.0, area_config->custom_geometry_enabled, MB(512));
+    }
+}
+
+g_internal void
+city_area_streaming_end(City* city)
+{
+    Context* ctx = dt_ctx_get();
+
+    cesium::TilesetRenderer* tileset = {};
+    if (ctx->tileset_pool->item_from_handle(city->tileset_handle, &tileset))
+    {
+        cesium::tileset_renderer_destroy(tileset);
+    }
+}
+
+g_internal void
+city_build(City* city, Rng2F64 bbox, String8 tileset_url, String8 area)
 {
     ScratchScope scratch = ScratchScope(0, 0);
     Context* ctx = dt_ctx_get();
@@ -32,7 +60,6 @@ city_build(City* city, const CityInfo* city_config, Rng2F64 bbox, String8 tilese
 
     // cesium init
     Vec2F64 bbox_center = {.x = (bbox.min.x + bbox.max.x) * 0.5, .y = (bbox.min.y + bbox.max.y) * 0.5};
-    cesium::tileset_renderer_create(city->arena, &city->cesium, ctx->thread_pool, tileset_url, bbox_center.x, bbox_center.y, 0.0, city_config->custom_geometry_enabled);
     CesiumGeospatial::Cartographic origin_cartographic(glm::radians(bbox_center.x), glm::radians(bbox_center.y), 0);
     CesiumGeospatial::LocalHorizontalCoordinateSystem* local_coord = new CesiumGeospatial::LocalHorizontalCoordinateSystem(
         origin_cartographic, CesiumGeospatial::LocalDirection::East, CesiumGeospatial::LocalDirection::North, CesiumGeospatial::LocalDirection::Up);
@@ -113,7 +140,7 @@ _cache_and_parse_osm_json(async::ThreadPool* thread_pool, Road* road, osm::Netwo
 }
 
 g_internal void
-city_update(City* city, Buffer<city::Coordinate> new_agent_coords, async::ThreadPool* thread_pool, RoadOverlayOption neta_overlay_option, Vec2U32 framebuffer_dim, const CityInfo* city_config)
+city_update(City* city, Buffer<city::Coordinate> new_agent_coords, async::ThreadPool* thread_pool, RoadOverlayOption neta_overlay_option, Vec2U32 framebuffer_dim, const AreaConfig* city_config)
 {
     prof_scope_marker;
     Context* ctx = dt_ctx_get();
@@ -254,103 +281,107 @@ city_update(City* city, Buffer<city::Coordinate> new_agent_coords, async::Thread
     //
 
     // Update and render Cesium 3D Tiles ////////////
-    cesium::TilesetRenderer* renderer = &city->cesium;
-    cesium::tileset_update_view(renderer, camera, framebuffer_dim, ctx->time->delta_time_sec);
-
     bool overlay_option_changed = neta_overlay_option != city->road.overlay_option_cur;
     if (city->road_building_done)
     {
         city->road.overlay_option_cur = neta_overlay_option;
     }
-    for (cesium::TileRenderData* tile = renderer->tile_to_show.first; tile; tile = tile->render_next)
+
+    cesium::TilesetRenderer* tileset = {};
+    if (ctx->tileset_pool->item_from_handle(city->tileset_handle, &tileset))
     {
-        if (city->road_building_done)
+        cesium::tileset_update_view(tileset, camera, framebuffer_dim, ctx->time->delta_time_sec);
+
+        for (cesium::TileRenderData* tile = tileset->tile_to_show.first; tile; tile = tile->render_next)
         {
-            if (tile->compute_scheduled == false || overlay_option_changed)
+            if (city->road_building_done)
             {
-                tile->compute_scheduled = draw::draw_road_intersection_compute(tile->render_data.vertex_buffer_handle, tile->render_data.index_buffer_handle, city->road.segment_buffer_handle,
-                                                                               city->road.segment_node_buffer_handle, neta_overlay_option);
-            }
-        }
-        render::Handle colormap_handle = city->road.overlay_option_cur ? city->road.colormap_handle : city->road.zero_colormap_handle;
-
-        if (tile->render_data.is_map_tile && city_config->bbox_clipping_enabled)
-        {
-            F32 border_offset_lon_m = 50;
-            F32 border_offset_lat_m = 50;
-            CesiumGeospatial::Cartographic bbox_min_cartographic(glm::radians(city->bbox.min.x), glm::radians(city->bbox.min.y), 0);
-            CesiumGeospatial::Cartographic bbox_max_cartographic(glm::radians(city->bbox.max.x), glm::radians(city->bbox.max.y), 0);
-
-            glm::dvec3 bbox_min_ecef = CesiumGeospatial::Ellipsoid::WGS84.cartographicToCartesian(bbox_min_cartographic);
-            glm::dvec3 bbox_max_ecef = CesiumGeospatial::Ellipsoid::WGS84.cartographicToCartesian(bbox_max_cartographic);
-
-            glm::dvec4 bbox_min_local = city->cesium.ecef_to_local * glm::dvec4(bbox_min_ecef, 1.0);
-            glm::dvec4 bbox_max_local = city->cesium.ecef_to_local * glm::dvec4(bbox_max_ecef, 1.0);
-
-            border_offset_lon_m = Min((bbox_max_local.x - bbox_min_local.x) * 0.5, border_offset_lon_m);
-            border_offset_lat_m = Min((bbox_max_local.y - bbox_min_local.y) * 0.5, border_offset_lat_m);
-            tile->render_data.bbox_min = {.x = (F32)bbox_min_local.x + border_offset_lon_m, .y = (F32)bbox_min_local.y + border_offset_lat_m};
-            tile->render_data.bbox_max = {.x = (F32)bbox_max_local.x - border_offset_lon_m, .y = (F32)bbox_max_local.y - border_offset_lat_m};
-            tile->render_data.depth_bias = 100;
-            tile->render_data.height_offset = -renderer->height_offset;
-        }
-        tile->render_data.colormap_handle = colormap_handle;
-        tile->render_data.camera_handle = render::mapped_handle_erased(camera_handle);
-        render::model_3d_bucket_add(&tile->render_data);
-    }
-
-    if (city->cars_creation_started == false && city->osm_task_done)
-    {
-        Allocator* allocator = Allocator::create();
-        AgentSim* car_sim = &city->car_sim;
-        car_sim->allocator = allocator;
-        car_sim->asset_dir = push_str8_copy(allocator->arena, ctx->data_subdirs.data[dt_DataDirType::Assets]);
-        car_sim->texture_dir = push_str8_copy(allocator->arena, ctx->data_subdirs.data[dt_DataDirType::Texture]);
-        car_sim->agent_count = 100;
-        car_sim->max_agent_count = 10000;
-        CarSimBuildTask* car_sim_build_task = PushStruct(allocator->arena, CarSimBuildTask);
-        car_sim_build_task->car_sim = car_sim;
-        car_sim_build_task->network = city->osm_network;
-        async::AsyncTaskStatus<CarSimBuildTask>* car_sim_task = async::async_task_run(ctx->thread_pool, agent_sim_build, car_sim_build_task, S("Car Sim Task"));
-
-        AsyncCityTask* car_sim_task_list_elem = PushStruct(allocator->arena, AsyncCityTask);
-        car_sim_task_list_elem->type = AsyncTaskType::CarSim;
-        car_sim_task_list_elem->car_sim = car_sim_task;
-        DLLPushBack(city->task_list.first, city->task_list.last, car_sim_task_list_elem);
-
-        city->cars_creation_started = true;
-    }
-
-    /// car simulation rendering
-    if (city->cars_creation_done)
-    {
-        AgentSim* agent_sim = &city->car_sim;
-        F32 scale_factor = city->agent_scale_factor;
-        agent_sim_update(&city->car_sim, new_agent_coords, city->cesium.ecef_to_local, scale_factor);
-
-        Buffer<render::Model3DInstance> instance_buffer = buffer_alloc<render::Model3DInstance>(draw::draw_frame_arena_get(), agent_sim->agents_active->size);
-        for (U64 agent_idx = 0; agent_idx < agent_sim->agents_active->size; agent_idx += 1)
-        {
-            instance_buffer.data[agent_idx] = (*agent_sim->agents_active)[agent_idx].model_matrix;
-        }
-
-        // instance buffer offset alignment and assignment
-        render::BufferInfo instance_buffer_info = render::BufferInfo(instance_buffer, render::BufferType_Vertex | render::BufferType_StorageBuffer);
-        render::MappedHandle<void> camera_handle_void = render::mapped_handle_erased(camera_handle);
-        draw::CarInstanceDrawResult draw_result = draw::draw_car_instance_render(camera_handle_void, city->car_sim.meshes, city->car_sim.texture_handles, &instance_buffer_info);
-
-        if (draw_result.render_scheduled)
-        {
-            U32 instance_buffer_offset = draw_result.buffer_offset;
-            for (cesium::TileRenderData* tile = renderer->tile_to_show.first; tile; tile = tile->render_next)
-            {
-                bool map_tile_reference = tile->render_data.is_map_tile && (city_config->custom_geometry_enabled == false);
-                bool custom_geometry_reference = (tile->render_data.is_map_tile == false) && city_config->custom_geometry_enabled;
-
-                if (map_tile_reference || custom_geometry_reference)
+                if (tile->compute_scheduled == false || overlay_option_changed)
                 {
-                    render::agent_instance_compute_bucket_add(&instance_buffer_info, tile->render_data.vertex_buffer_handle, tile->render_data.index_buffer_handle,
-                                                              -city->car_sim.agent_center_offset.min, instance_buffer_offset);
+                    tile->compute_scheduled = draw::draw_road_intersection_compute(tile->render_data.vertex_buffer_handle, tile->render_data.index_buffer_handle, city->road.segment_buffer_handle,
+                                                                                   city->road.segment_node_buffer_handle, neta_overlay_option);
+                }
+            }
+            render::Handle colormap_handle = city->road.overlay_option_cur ? city->road.colormap_handle : city->road.zero_colormap_handle;
+
+            if (tile->render_data.is_map_tile && city_config->bbox_clipping_enabled)
+            {
+                F32 border_offset_lon_m = 50;
+                F32 border_offset_lat_m = 50;
+                CesiumGeospatial::Cartographic bbox_min_cartographic(glm::radians(city->bbox.min.x), glm::radians(city->bbox.min.y), 0);
+                CesiumGeospatial::Cartographic bbox_max_cartographic(glm::radians(city->bbox.max.x), glm::radians(city->bbox.max.y), 0);
+
+                glm::dvec3 bbox_min_ecef = CesiumGeospatial::Ellipsoid::WGS84.cartographicToCartesian(bbox_min_cartographic);
+                glm::dvec3 bbox_max_ecef = CesiumGeospatial::Ellipsoid::WGS84.cartographicToCartesian(bbox_max_cartographic);
+
+                glm::dvec4 bbox_min_local = tileset->ecef_to_local * glm::dvec4(bbox_min_ecef, 1.0);
+                glm::dvec4 bbox_max_local = tileset->ecef_to_local * glm::dvec4(bbox_max_ecef, 1.0);
+
+                border_offset_lon_m = Min((bbox_max_local.x - bbox_min_local.x) * 0.5, border_offset_lon_m);
+                border_offset_lat_m = Min((bbox_max_local.y - bbox_min_local.y) * 0.5, border_offset_lat_m);
+                tile->render_data.bbox_min = {.x = (F32)bbox_min_local.x + border_offset_lon_m, .y = (F32)bbox_min_local.y + border_offset_lat_m};
+                tile->render_data.bbox_max = {.x = (F32)bbox_max_local.x - border_offset_lon_m, .y = (F32)bbox_max_local.y - border_offset_lat_m};
+                tile->render_data.depth_bias = 100;
+                tile->render_data.height_offset = -tileset->height_offset;
+            }
+            tile->render_data.colormap_handle = colormap_handle;
+            tile->render_data.camera_handle = render::mapped_handle_erased(camera_handle);
+            render::model_3d_bucket_add(&tile->render_data);
+        }
+
+        if (city->cars_creation_started == false && city->osm_task_done)
+        {
+            Allocator* allocator = Allocator::create();
+            AgentSim* car_sim = &city->car_sim;
+            car_sim->allocator = allocator;
+            car_sim->asset_dir = push_str8_copy(allocator->arena, ctx->data_subdirs.data[dt_DataDirType::Assets]);
+            car_sim->texture_dir = push_str8_copy(allocator->arena, ctx->data_subdirs.data[dt_DataDirType::Texture]);
+            car_sim->agent_count = 100;
+            car_sim->max_agent_count = 10000;
+            CarSimBuildTask* car_sim_build_task = PushStruct(allocator->arena, CarSimBuildTask);
+            car_sim_build_task->car_sim = car_sim;
+            car_sim_build_task->network = city->osm_network;
+            async::AsyncTaskStatus<CarSimBuildTask>* car_sim_task = async::async_task_run(ctx->thread_pool, agent_sim_build, car_sim_build_task, S("Car Sim Task"));
+
+            AsyncCityTask* car_sim_task_list_elem = PushStruct(allocator->arena, AsyncCityTask);
+            car_sim_task_list_elem->type = AsyncTaskType::CarSim;
+            car_sim_task_list_elem->car_sim = car_sim_task;
+            DLLPushBack(city->task_list.first, city->task_list.last, car_sim_task_list_elem);
+
+            city->cars_creation_started = true;
+        }
+
+        /// car simulation rendering
+        if (city->cars_creation_done)
+        {
+            AgentSim* agent_sim = &city->car_sim;
+            F32 scale_factor = city->agent_scale_factor;
+            agent_sim_update(&city->car_sim, new_agent_coords, tileset->ecef_to_local, scale_factor);
+
+            Buffer<render::Model3DInstance> instance_buffer = buffer_alloc<render::Model3DInstance>(draw::draw_frame_arena_get(), agent_sim->agents_active->size);
+            for (U64 agent_idx = 0; agent_idx < agent_sim->agents_active->size; agent_idx += 1)
+            {
+                instance_buffer.data[agent_idx] = (*agent_sim->agents_active)[agent_idx].model_matrix;
+            }
+
+            // instance buffer offset alignment and assignment
+            render::BufferInfo instance_buffer_info = render::BufferInfo(instance_buffer, render::BufferType_Vertex | render::BufferType_StorageBuffer);
+            render::MappedHandle<void> camera_handle_void = render::mapped_handle_erased(camera_handle);
+            draw::CarInstanceDrawResult draw_result = draw::draw_car_instance_render(camera_handle_void, city->car_sim.meshes, city->car_sim.texture_handles, &instance_buffer_info);
+
+            if (draw_result.render_scheduled)
+            {
+                U32 instance_buffer_offset = draw_result.buffer_offset;
+                for (cesium::TileRenderData* tile = tileset->tile_to_show.first; tile; tile = tile->render_next)
+                {
+                    bool map_tile_reference = tile->render_data.is_map_tile && (city_config->custom_geometry_enabled == false);
+                    bool custom_geometry_reference = (tile->render_data.is_map_tile == false) && city_config->custom_geometry_enabled;
+
+                    if (map_tile_reference || custom_geometry_reference)
+                    {
+                        render::agent_instance_compute_bucket_add(&instance_buffer_info, tile->render_data.vertex_buffer_handle, tile->render_data.index_buffer_handle,
+                                                                  -city->car_sim.agent_center_offset.min, instance_buffer_offset);
+                    }
                 }
             }
         }
@@ -360,6 +391,7 @@ city_update(City* city, Buffer<city::Coordinate> new_agent_coords, async::Thread
 g_internal void
 city_release(City* city)
 {
+    Context* ctx = dt_ctx_get();
     if (city->road.arena)
     {
         road_destroy(&city->road);
@@ -368,9 +400,10 @@ city_release(City* city)
     {
         osm::osm_release(city->osm_network);
     }
-    if (city->cesium.task_processor)
+    cesium::TilesetRenderer* tileset = {};
+    if (ctx->tileset_pool->item_from_handle(city->tileset_handle, &tileset))
     {
-        cesium::tileset_renderer_destroy(&city->cesium);
+        cesium::tileset_renderer_destroy(tileset);
     }
     if (city->car_sim.allocator)
     {

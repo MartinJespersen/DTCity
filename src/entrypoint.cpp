@@ -109,7 +109,7 @@ dt_imgui_setup(vulkan::Context* vk_ctx, io::IO* io_ctx)
 }
 
 g_internal void
-imgui_debug_window(city::City* city, cesium::TilesetRenderer* renderer, async::ThreadPool* thread_pool)
+imgui_debug_window(city::City* city, async::ThreadPool* thread_pool)
 {
     Context* ctx = dt_ctx_get();
     ui::Camera* camera = resource_pool_item_from_idx(ctx->camera_container, city->camera_handle);
@@ -128,9 +128,13 @@ imgui_debug_window(city::City* city, cesium::TilesetRenderer* renderer, async::T
         ImGui::Text("Deletion Queue %d: %d active", i, asset_manager->deletion_queues[i].list_count);
     }
     ImGui::Text("Deletetion Queue Free List: %d active", asset_manager->deletion_queue_free_list_count);
-    ImGui::Text("Tileset Renderer Show: %d active", renderer->tiles_to_show_count);
-    ImGui::Text("Tileset Renderer Free List Count: %d", renderer->tiles_to_free_stack_count);
     ImGui::Text("ThreadPool pending tasks: %u", thread_pool->pending_task_count.load());
+    cesium::TilesetRenderer* tileset = {};
+    if (ctx->tileset_pool->item_from_handle(city->tileset_handle, &tileset))
+    {
+        ImGui::Text("Tileset Renderer Show: %d active", tileset->tiles_to_show_count);
+        ImGui::Text("Tileset Renderer Free List Count: %d", tileset->tiles_to_free_stack_count);
+    }
 
     // netascore status
     ImGui::Text("Netascore Status: ");
@@ -195,37 +199,39 @@ dt_main_loop(void* ptr)
     dt_imgui_setup(vk_ctx, io_ctx);
 
     // city building ////////////////////////////////////////////
-    const city::CityInfo cities_info_arr[] = {{.name = S("Aarhus"),
-                                               .lon = 10.291206,
-                                               .lat = 56.253108,
-                                               .bbox_width_meters = 5000,
-                                               .bbox_height_meters = 5000,
-                                               .tileset_path = S("file:///C:/ByModel/5km_6235_580/tileset.json"),
-                                               .bbox_clipping_enabled = true,
-                                               .custom_geometry_enabled = true},
-                                              {.name = S("Eskiltuna"),
-                                               .lon = 16.49952138067,
-                                               .lat = 59.36163877297,
-                                               .bbox_width_meters = 5000,
-                                               .bbox_height_meters = 5000,
-                                               .tileset_path = S("file:///C:/ByModel/eskiltuna/Totalstad_2025_q3/tileset.json")},
-                                              {.name = S("Berlin"), .lon = 8.532010538692882, .lat = 47.40024260563559, .bbox_width_meters = 5000, .bbox_height_meters = 5000}};
+    const city::AreaConfig cities_info_arr[] = {{.name = S("Aarhus"),
+                                                 .lon = 10.291206,
+                                                 .lat = 56.253108,
+                                                 .bbox_width_meters = 5000,
+                                                 .bbox_height_meters = 5000,
+                                                 .tileset_path = S("file:///C:/ByModel/5km_6235_580/tileset.json"),
+                                                 .bbox_clipping_enabled = true,
+                                                 .custom_geometry_enabled = true},
+                                                {.name = S("Eskiltuna"),
+                                                 .lon = 16.49952138067,
+                                                 .lat = 59.36163877297,
+                                                 .bbox_width_meters = 5000,
+                                                 .bbox_height_meters = 5000,
+                                                 .tileset_path = S("file:///C:/ByModel/eskiltuna/Totalstad_2025_q3/tileset.json")},
+                                                {.name = S("Berlin"), .lon = 8.532010538692882, .lat = 47.40024260563559, .bbox_width_meters = 5000, .bbox_height_meters = 5000}};
 
+    ctx->tileset_pool = ArrayResourcePool<cesium::TilesetRenderer>::create(ctx->arena_main_permanent, ArrayCount(cities_info_arr));
     Buffer<city::City> city_buf = buffer_alloc<city::City>(ctx->arena_main_permanent, ArrayCount(cities_info_arr));
     for (U32 i = 0; i < city_buf.size; ++i)
     {
-        const city::CityInfo* city_config = &cities_info_arr[i];
+        const city::AreaConfig* city_config = &cities_info_arr[i];
         city::City* city = city_buf[i];
 
         city->camera_handle = resource_pool_array_idx_get(ctx->camera_container);
         ui::Camera* camera = resource_pool_item_from_idx(ctx->camera_container, city->camera_handle);
         ui::camera_init(ctx->arena_main_permanent, camera);
+        city->tileset_handle = ctx->tileset_pool->handle_get();
 
         Rng2F64 bbox = util::wgs84_bbox_from_btm_right_corner(city_config->lon, city_config->lat, city_config->bbox_width_meters, city_config->bbox_height_meters);
         city::city_init(city, ctx->data_subdirs.data[dt_DataDirType::Cache]);
         city->bbox = bbox;
         city->tileset_url = city_config->tileset_path;
-        city::city_build(city, city_config, bbox, city_config->tileset_path, city_config->name);
+        city::city_build(city, bbox, city_config->tileset_path, city_config->name);
         ////////////////////////////////////////////////////////
     }
 
@@ -239,8 +245,10 @@ dt_main_loop(void* ptr)
     S32 cur_area_option = 0;
     S32 area_option = cur_area_option;
 
-    const city::CityInfo* city_info = &cities_info_arr[cur_area_option];
-    city::City* city = city_buf[cur_area_option];
+    const city::AreaConfig* area_config = &cities_info_arr[cur_area_option];
+    city::City* area = city_buf[cur_area_option];
+
+    city_area_streaming_begin(ctx->thread_pool, area, area_config);
     while (ctx->running)
     {
         dt_time_update(ctx->time);
@@ -280,12 +288,16 @@ dt_main_loop(void* ptr)
 
         if (cur_area_option != area_option)
         {
+            city_area_streaming_end(area);
+
             cur_area_option = area_option;
-            city = city_buf[cur_area_option];
-            city_info = &cities_info_arr[cur_area_option];
+            area = city_buf[cur_area_option];
+            area_config = &cities_info_arr[cur_area_option];
+
+            city_area_streaming_begin(ctx->thread_pool, area, area_config);
         }
 
-        ui::Camera* camera = resource_pool_item_from_idx(ctx->camera_container, city->camera_handle);
+        ui::Camera* camera = resource_pool_item_from_idx(ctx->camera_container, area->camera_handle);
         ImGuiIO& imgui_io = ImGui::GetIO();
         bool imgui_window_hovered = ImGui::IsWindowHovered(ImGuiHoveredFlags_AnyWindow);
         bool imgui_input_captured = imgui_io.WantCaptureMouse || imgui_io.WantCaptureKeyboard;
@@ -296,12 +308,16 @@ dt_main_loop(void* ptr)
         // pumped by city_update -> tileset_update_view
         for (U32 i = 0; i < city_buf.size; ++i)
         {
-            cesium::tileset_pump_async(&city_buf[i]->cesium);
+            cesium::TilesetRenderer* tileset = {};
+            if (ctx->tileset_pool->item_from_handle(area->tileset_handle, &tileset))
+            {
+                cesium::tileset_pump_async(tileset);
+            }
         }
-        city::city_update(city, new_agent_coords, ctx->thread_pool, neta_overlay_option, framebuffer_dim, city_info);
+        city::city_update(area, new_agent_coords, ctx->thread_pool, neta_overlay_option, framebuffer_dim, area_config);
 
         // #if BUILD_DEBUG
-        imgui_debug_window(city, &city->cesium, ctx->thread_pool);
+        imgui_debug_window(area, ctx->thread_pool);
         // #endif
 
         /////////////////////////////////////

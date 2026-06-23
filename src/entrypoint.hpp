@@ -35,6 +35,7 @@ struct Context
     io::IO* io;
     dt_Time* time;
     ResourcePool<ui::Camera>* camera_container;
+    ArrayResourcePool<cesium::TilesetRenderer>* tileset_pool;
 
     async::ThreadPool* thread_pool;
 };

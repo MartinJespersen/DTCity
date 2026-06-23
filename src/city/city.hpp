@@ -288,7 +288,7 @@ struct AsyncCityTaskList
     AsyncCityTask* last;
 };
 
-struct CityInfo
+struct AreaConfig
 {
     String8 name;
     F64 lon;
@@ -319,7 +319,7 @@ struct City
     AgentSim car_sim;
     F32 agent_scale_factor;
     Buildings buildings;
-    cesium::TilesetRenderer cesium;
+    ArrayResourcePoolHandle tileset_handle;
     neta::NetaState* neta_state;
     ResourcePoolHandle camera_handle;
 
@@ -372,9 +372,13 @@ road_create(City* city, Road* in_out_road, glm::dmat4& ecef_to_local, String8 ar
 g_internal Map<osm::EdgeId, RoadInfo>*
 road_info_from_edge_id(Arena* arena, osm::Network* network, Buffer<osm::RoadEdge> road_edge_buf, Map<S64, neta::EdgeList>* neta_edge_map);
 g_internal void
-city_build(City* city, const CityInfo* city_config, Rng2F64 bbox, String8 tileset_url, String8 area);
+city_build(City* city, Rng2F64 bbox, String8 tileset_url, String8 area);
 g_internal void
-city_update(City* city, Buffer<city::Coordinate> new_agent_coords, async::ThreadPool* thread_pool, RoadOverlayOption neta_overlay_option, Vec2U32 framebuffer_dim, const CityInfo* city_config);
+city_area_streaming_begin(async::ThreadPool* thread_pool, City* city, const AreaConfig* area_config);
+g_internal void
+city_area_streaming_end(City* city);
+g_internal void
+city_update(City* city, Buffer<city::Coordinate> new_agent_coords, async::ThreadPool* thread_pool, RoadOverlayOption neta_overlay_option, Vec2U32 framebuffer_dim, const AreaConfig* city_config);
 g_internal void
 city_init(City* city, String8 cache_path);
 g_internal void

@@ -1,5 +1,3 @@
-namespace
-{
 // Dynamic Array
 lib_internal void
 dynamic_array_init(U64 bytes_to_reserve)
@@ -310,4 +308,75 @@ resource_pool_item_free(ResourcePool<T>* container, ResourcePoolHandle item_hand
         item->gen_id += 1;
     }
 }
-} // namespace
+
+//////////////////////////////////////////////////////////////
+// Array Resource Pool
+template <typename T>
+ArrayResourcePool<T>*
+ArrayResourcePool<T>::create(Arena* arena, U32 capacity)
+{
+    ArrayResourcePool* pool = PushStruct(arena, ArrayResourcePool<T>);
+    pool->capacity = Max(capacity, 1);
+    pool->items = PushArray(arena, ArrayItemHeader<T>, capacity + 1);
+    for (U32 i = 1; i < capacity; i++)
+    {
+        pool->items[i].next = i + 1;
+    }
+    pool->free_list = 1;
+    return pool;
+}
+
+template <typename T>
+bool
+ArrayResourcePool<T>::item_from_handle(ArrayResourcePoolHandle item_handle, T** out_value)
+{
+    bool success = false;
+    ArrayItemHeader<T>* result = &this->items[0];
+    if (item_handle.idx > 0 && item_handle.idx <= this->capacity && this->items[item_handle.idx].in_use && this->items[item_handle.idx].gen_id == item_handle.gen_id)
+    {
+        result = &this->items[item_handle.idx];
+        success = true;
+    }
+    *out_value = &result->data;
+    return success;
+}
+
+template <typename T>
+ArrayResourcePoolHandle
+ArrayResourcePool<T>::handle_get()
+{
+    AssertAlways(this->free_list != 0);
+
+    U32 idx = this->free_list;
+
+    ArrayItemHeader<T>* item = &this->items[idx];
+    this->free_list = item->next;
+    item->in_use = true;
+    item->next = 0;
+
+    U32 gen_id = this->items[idx].gen_id;
+    ArrayResourcePoolHandle handle = {idx, gen_id};
+    return handle;
+}
+
+template <typename T>
+void
+ArrayResourcePool<T>::item_free(ArrayResourcePoolHandle item_handle)
+{
+    U32 item_idx = item_handle.idx;
+    if (item_handle.idx > 0 && item_handle.idx <= this->capacity)
+    {
+        ArrayItemHeader<T>* item = &this->items[item_idx];
+        if (item_handle.gen_id == item->gen_id)
+        {
+            item->next = this->free_list;
+            this->free_list = item_idx;
+            item->in_use = false;
+            item->gen_id += 1;
+        }
+        else
+        {
+            // TODO: Log
+        }
+    }
+}

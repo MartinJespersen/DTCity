@@ -900,7 +900,7 @@ tile_render_data_from_gltf(const CesiumGltf::Model& model, const glm::dmat4& ece
 //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 g_internal TilesetRendererCreateContext
-_tileset_renderer_create_context(Arena* arena, TilesetRenderer* renderer, async::ThreadPool* threads, F64 origin_longitude, F64 origin_latitude, F64 origin_height)
+_tileset_renderer_create_context(Allocator* allocator, TilesetRenderer* renderer, async::ThreadPool* threads, F64 origin_longitude, F64 origin_latitude, F64 origin_height)
 {
     // Register all tile content types
     Cesium3DTilesContent::registerAllTileContentTypes();
@@ -908,8 +908,7 @@ _tileset_renderer_create_context(Arena* arena, TilesetRenderer* renderer, async:
     renderer->tiles_to_free_mutex = os_rw_mutex_alloc();
 
     // Create task processor
-    DTCityTaskProcessor* task_processor = PushStructNoZero(arena, DTCityTaskProcessor);
-    new (task_processor) DTCityTaskProcessor(threads);
+    DTCityTaskProcessor* task_processor = allocator->place<DTCityTaskProcessor>(threads);
     renderer->task_processor = task_processor;
     std::shared_ptr<CesiumAsync::ITaskProcessor> task_processor_ref(renderer->task_processor, [](CesiumAsync::ITaskProcessor*) {});
 
@@ -917,8 +916,10 @@ _tileset_renderer_create_context(Arena* arena, TilesetRenderer* renderer, async:
     std::shared_ptr<CesiumAsync::IAssetAccessor> asset_accessor = std::make_shared<CesiumCurl::CurlAssetAccessor>();
 
     // Create async system
-    new (&renderer->async_system) CesiumAsync::AsyncSystem(task_processor_ref);
-    renderer->credit_system = new CesiumUtility::CreditSystem();
+    allocator->place(&renderer->async_system, task_processor_ref);
+
+    renderer->credit_system = allocator->place<CesiumUtility::CreditSystem>();
+
     std::shared_ptr<CesiumUtility::CreditSystem> credit_system_ref(renderer->credit_system, [](CesiumUtility::CreditSystem*) {});
 
     // Set up local coordinate system centered at the origin
@@ -1018,11 +1019,15 @@ _height_offset_sample_async(TilesetRenderer* renderer, CesiumGeospatial::Cartogr
 }
 
 g_internal void
-tileset_renderer_create(Arena* arena, TilesetRenderer* in_out_cesium, async::ThreadPool* threads, String8 url, F64 origin_longitude, F64 origin_latitude, F64 origin_height,
-                        bool custom_geometry_enabled)
+tileset_renderer_create(TilesetRenderer* in_out_cesium, async::ThreadPool* threads, String8 url, F64 origin_longitude, F64 origin_latitude, F64 origin_height, bool custom_geometry_enabled,
+                        U64 cache_byte_size)
 {
     // create terrain from cesium ion for non custom geometry outside the specified bounding box
-    ScratchScope scratch = ScratchScope(&arena, 1);
+    Assert(in_out_cesium);
+
+    in_out_cesium->allocator = Allocator::create();
+
+    ScratchScope scratch = ScratchScope(0, 0);
     String8 ion_access_token = {};
     if (env_vars_value_get(scratch.arena, S("CESIUM_ION_ACCESS_TOKEN"), &ion_access_token, 1))
     {
@@ -1041,11 +1046,10 @@ tileset_renderer_create(Arena* arena, TilesetRenderer* in_out_cesium, async::Thr
     }
 
     // setup tilesets
-    TilesetRendererCreateContext create_context = _tileset_renderer_create_context(arena, in_out_cesium, threads, origin_longitude, origin_latitude, origin_height);
+    TilesetRendererCreateContext create_context = _tileset_renderer_create_context(in_out_cesium->allocator, in_out_cesium, threads, origin_longitude, origin_latitude, origin_height);
     create_context.options.enableLodTransitionPeriod = false;
     create_context.options.lodTransitionLength = 1.0;
 
-    create_context.options.maximumCachedBytes = 512LL * 1024 * 1024;
     create_context.options.maximumSimultaneousTileLoads = 8;
     create_context.options.preloadSiblings = false;
     create_context.options.loadingDescendantLimit = 4;
@@ -1053,8 +1057,10 @@ tileset_renderer_create(Arena* arena, TilesetRenderer* in_out_cesium, async::Thr
     if (custom_geometry_enabled)
     {
         tileset_count = 2;
+        cache_byte_size = cache_byte_size >> 1; // divide by two
     }
-    create_context.renderer->tilesets = buffer_alloc<Cesium3DTilesSelection::Tileset*>(arena, tileset_count);
+    create_context.options.maximumCachedBytes = cache_byte_size;
+    create_context.renderer->tilesets = buffer_alloc<Cesium3DTilesSelection::Tileset*>(in_out_cesium->allocator->arena, tileset_count);
 
     bool is_map_tile = true;
     create_context.options.rendererOptions = is_map_tile;
@@ -1113,33 +1119,24 @@ tileset_renderer_free_tile_ressource(TilesetRenderer* renderer)
 g_internal void
 tileset_renderer_destroy(TilesetRenderer* renderer)
 {
-    if (renderer)
+    Assert(renderer);
+    // stop the recurring height sampler before tearing down the tilesets
+    renderer->height_sample_stop = true;
+
+    for (U32 i = 0; i < renderer->tilesets.size; ++i)
     {
-        // stop the recurring height sampler before tearing down the tilesets
-        renderer->height_sample_stop = true;
-
-        for (U32 i = 0; i < renderer->tilesets.size; ++i)
+        if (renderer->tilesets.data[i]->waitForAllLoadsToComplete(max_f32) == false)
         {
-            if (renderer->tilesets.data[i]->waitForAllLoadsToComplete(max_f32) == false)
-            {
-                DEBUG_LOG("Failed to wait for all tile loads to complete");
-            }
-
-            delete renderer->tilesets.data[i];
-            renderer->tilesets.data[i] = nullptr;
+            DEBUG_LOG("Failed to wait for all tile loads to complete");
         }
 
-        renderer->async_system.~AsyncSystem();
-
-        delete renderer->credit_system;
-        renderer->credit_system = nullptr;
-
-        ((DTCityTaskProcessor*)renderer->task_processor)->~DTCityTaskProcessor();
-        renderer->task_processor = nullptr;
+        delete renderer->tilesets.data[i];
+        renderer->tilesets.data[i] = nullptr;
     }
 
     tileset_renderer_free_tile_ressource(renderer);
     os_rw_mutex_release(renderer->tiles_to_free_mutex);
+    Allocator::destroy(renderer->allocator);
 }
 
 //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

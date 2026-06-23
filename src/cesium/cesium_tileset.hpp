@@ -51,6 +51,8 @@ struct TileRenderDataList
 
 struct TilesetRenderer
 {
+    Allocator* allocator;
+
     Buffer<Cesium3DTilesSelection::Tileset*> tilesets;
     CesiumAsync::ITaskProcessor* task_processor;
     CesiumUtility::CreditSystem* credit_system;
@@ -82,8 +84,8 @@ struct TilesetRendererCreateContext
 
 // Lifecycle
 g_internal void
-tileset_renderer_create(Arena* arena, TilesetRenderer* in_out_cesium, async::ThreadPool* threads, String8 url, F64 origin_longitude, F64 origin_latitude, F64 origin_height,
-                        bool custom_geometry_enabled);
+tileset_renderer_create(TilesetRenderer* in_out_cesium, async::ThreadPool* threads, String8 url, F64 origin_longitude, F64 origin_latitude, F64 origin_height, bool custom_geometry_enabled,
+                        U64 cache_byte_size);
 g_internal void
 tileset_renderer_destroy(TilesetRenderer* renderer);
 
