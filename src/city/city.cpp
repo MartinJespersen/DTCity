@@ -20,6 +20,7 @@ city_area_streaming_begin(async::ThreadPool* thread_pool, City* city, const Area
     Assert(area_config);
     Context* ctx = dt_ctx_get();
 
+    city->tileset_handle = ctx->tileset_pool->handle_get();
     cesium::TilesetRenderer* tileset = {};
     if (ctx->tileset_pool->item_from_handle(city->tileset_handle, &tileset))
     {
@@ -37,6 +38,7 @@ city_area_streaming_end(City* city)
     if (ctx->tileset_pool->item_from_handle(city->tileset_handle, &tileset))
     {
         cesium::tileset_renderer_destroy(tileset);
+        ctx->tileset_pool->item_free(city->tileset_handle);
     }
 }
 
@@ -61,9 +63,9 @@ city_build(City* city, Rng2F64 bbox, String8 tileset_url, String8 area)
     // cesium init
     Vec2F64 bbox_center = {.x = (bbox.min.x + bbox.max.x) * 0.5, .y = (bbox.min.y + bbox.max.y) * 0.5};
     CesiumGeospatial::Cartographic origin_cartographic(glm::radians(bbox_center.x), glm::radians(bbox_center.y), 0);
-    CesiumGeospatial::LocalHorizontalCoordinateSystem* local_coord = new CesiumGeospatial::LocalHorizontalCoordinateSystem(
-        origin_cartographic, CesiumGeospatial::LocalDirection::East, CesiumGeospatial::LocalDirection::North, CesiumGeospatial::LocalDirection::Up);
-    glm::dmat4 ecef_to_local = local_coord->getEcefToLocalTransformation();
+    CesiumGeospatial::LocalHorizontalCoordinateSystem local_coord =
+        CesiumGeospatial::LocalHorizontalCoordinateSystem(origin_cartographic, CesiumGeospatial::LocalDirection::East, CesiumGeospatial::LocalDirection::North, CesiumGeospatial::LocalDirection::Up);
+    glm::dmat4 ecef_to_local = local_coord.getEcefToLocalTransformation();
 
     // road init
     Road* road = &city->road;

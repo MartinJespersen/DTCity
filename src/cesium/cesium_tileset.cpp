@@ -900,38 +900,38 @@ tile_render_data_from_gltf(const CesiumGltf::Model& model, const glm::dmat4& ece
 //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 g_internal TilesetRendererCreateContext
-_tileset_renderer_create_context(Allocator* allocator, TilesetRenderer* renderer, async::ThreadPool* threads, F64 origin_longitude, F64 origin_latitude, F64 origin_height)
+_tileset_renderer_create_context(TilesetRenderer* tileset, async::ThreadPool* threads, F64 origin_longitude, F64 origin_latitude, F64 origin_height)
 {
     // Register all tile content types
     Cesium3DTilesContent::registerAllTileContentTypes();
 
-    renderer->tiles_to_free_mutex = os_rw_mutex_alloc();
+    tileset->tiles_to_free_mutex = os_rw_mutex_alloc();
 
     // Create task processor
-    DTCityTaskProcessor* task_processor = allocator->place<DTCityTaskProcessor>(threads);
-    renderer->task_processor = task_processor;
-    std::shared_ptr<CesiumAsync::ITaskProcessor> task_processor_ref(renderer->task_processor, [](CesiumAsync::ITaskProcessor*) {});
+    DTCityTaskProcessor* task_processor = tileset->allocator->place<DTCityTaskProcessor>(threads);
+    tileset->task_processor = task_processor;
+    std::shared_ptr<CesiumAsync::ITaskProcessor> task_processor_ref(tileset->task_processor, [](CesiumAsync::ITaskProcessor*) {});
 
     // Create asset accessor using CesiumCurl
     std::shared_ptr<CesiumAsync::IAssetAccessor> asset_accessor = std::make_shared<CesiumCurl::CurlAssetAccessor>();
 
     // Create async system
-    allocator->place(&renderer->async_system, task_processor_ref);
+    tileset->allocator->place(&tileset->async_system, task_processor_ref);
 
-    renderer->credit_system = allocator->place<CesiumUtility::CreditSystem>();
+    tileset->credit_system = tileset->allocator->place<CesiumUtility::CreditSystem>();
 
-    std::shared_ptr<CesiumUtility::CreditSystem> credit_system_ref(renderer->credit_system, [](CesiumUtility::CreditSystem*) {});
+    std::shared_ptr<CesiumUtility::CreditSystem> credit_system_ref(tileset->credit_system, [](CesiumUtility::CreditSystem*) {});
 
     // Set up local coordinate system centered at the origin
     CesiumGeospatial::Cartographic origin_cartographic(glm::radians(origin_longitude), glm::radians(origin_latitude), origin_height);
 
     CesiumGeospatial::LocalHorizontalCoordinateSystem local_coord_system(origin_cartographic, CesiumGeospatial::LocalDirection::East, CesiumGeospatial::LocalDirection::North,
                                                                          CesiumGeospatial::LocalDirection::Up);
-    renderer->ecef_to_local = local_coord_system.getEcefToLocalTransformation();
-    renderer->local_to_ecef = local_coord_system.getLocalToEcefTransformation();
+    tileset->ecef_to_local = local_coord_system.getEcefToLocalTransformation();
+    tileset->local_to_ecef = local_coord_system.getLocalToEcefTransformation();
 
     // Create prepare renderer resources (pass coordinate system for ECEF->local transforms)
-    auto prepare_renderer_resources = std::make_shared<DTCityPrepareRendererResources>(renderer->ecef_to_local, renderer);
+    auto prepare_renderer_resources = std::make_shared<DTCityPrepareRendererResources>(tileset->ecef_to_local, tileset);
 
     std::shared_ptr<spdlog::logger> logger = spdlog::default_logger();
     if (logger)
@@ -940,10 +940,8 @@ _tileset_renderer_create_context(Allocator* allocator, TilesetRenderer* renderer
         logger->flush_on(spdlog::level::warn);
     }
 
-    // Keep Cesium's default logger instead of overwriting it with nullptr.
-    Cesium3DTilesSelection::TilesetExternals externals{asset_accessor, prepare_renderer_resources, renderer->async_system, credit_system_ref, logger, nullptr};
+    Cesium3DTilesSelection::TilesetExternals externals{asset_accessor, prepare_renderer_resources, tileset->async_system, credit_system_ref, logger, nullptr};
 
-    // Create tileset options
     Cesium3DTilesSelection::TilesetOptions options;
     options.maximumScreenSpaceError = 16.0;
     options.maximumSimultaneousTileLoads = 20;
@@ -962,7 +960,7 @@ _tileset_renderer_create_context(Allocator* allocator, TilesetRenderer* renderer
         exit_with_error("Cesium load error: type=%s status=%u message=%s\n", load_type, (U32)details.statusCode, details.message.c_str());
     };
 
-    TilesetRendererCreateContext result = {renderer, externals, options};
+    TilesetRendererCreateContext result = {tileset, externals, options};
     return result;
 }
 
@@ -1019,13 +1017,13 @@ _height_offset_sample_async(TilesetRenderer* renderer, CesiumGeospatial::Cartogr
 }
 
 g_internal void
-tileset_renderer_create(TilesetRenderer* in_out_cesium, async::ThreadPool* threads, String8 url, F64 origin_longitude, F64 origin_latitude, F64 origin_height, bool custom_geometry_enabled,
+tileset_renderer_create(TilesetRenderer* tileset, async::ThreadPool* threads, String8 url, F64 origin_longitude, F64 origin_latitude, F64 origin_height, bool custom_geometry_enabled,
                         U64 cache_byte_size)
 {
     // create terrain from cesium ion for non custom geometry outside the specified bounding box
-    Assert(in_out_cesium);
+    Assert(tileset);
 
-    in_out_cesium->allocator = Allocator::create();
+    tileset->allocator = Allocator::create();
 
     ScratchScope scratch = ScratchScope(0, 0);
     String8 ion_access_token = {};
@@ -1046,7 +1044,7 @@ tileset_renderer_create(TilesetRenderer* in_out_cesium, async::ThreadPool* threa
     }
 
     // setup tilesets
-    TilesetRendererCreateContext create_context = _tileset_renderer_create_context(in_out_cesium->allocator, in_out_cesium, threads, origin_longitude, origin_latitude, origin_height);
+    TilesetRendererCreateContext create_context = _tileset_renderer_create_context(tileset, threads, origin_longitude, origin_latitude, origin_height);
     create_context.options.enableLodTransitionPeriod = false;
     create_context.options.lodTransitionLength = 1.0;
 
@@ -1060,11 +1058,12 @@ tileset_renderer_create(TilesetRenderer* in_out_cesium, async::ThreadPool* threa
         cache_byte_size = cache_byte_size >> 1; // divide by two
     }
     create_context.options.maximumCachedBytes = cache_byte_size;
-    create_context.renderer->tilesets = buffer_alloc<Cesium3DTilesSelection::Tileset*>(in_out_cesium->allocator->arena, tileset_count);
+    create_context.renderer->tilesets = buffer_alloc<Cesium3DTilesSelection::Tileset*>(tileset->allocator->arena, tileset_count);
 
     bool is_map_tile = true;
     create_context.options.rendererOptions = is_map_tile;
-    create_context.renderer->tilesets.data[0] = new Cesium3DTilesSelection::Tileset(create_context.externals, ion_terrain_asset_id, _std_string_from_str8(ion_access_token), create_context.options);
+    create_context.renderer->tilesets.data[0] =
+        tileset->allocator->place<Cesium3DTilesSelection::Tileset>(create_context.externals, ion_terrain_asset_id, _std_string_from_str8(ion_access_token), create_context.options);
     _ion_raster_overlay_example_add_if_present(create_context.renderer->tilesets.data[0]);
 
     // Create the tileset for custom geometry
@@ -1073,7 +1072,7 @@ tileset_renderer_create(TilesetRenderer* in_out_cesium, async::ThreadPool* threa
         is_map_tile = false;
         create_context.options.rendererOptions = is_map_tile;
         create_context.options.loadingDescendantLimit = 20;
-        create_context.renderer->tilesets.data[1] = new Cesium3DTilesSelection::Tileset(create_context.externals, (const char*)url.str, create_context.options);
+        create_context.renderer->tilesets.data[1] = tileset->allocator->place<Cesium3DTilesSelection::Tileset>(create_context.externals, (const char*)url.str, create_context.options);
         CesiumGeospatial::Cartographic center_position(glm::radians(origin_longitude), glm::radians(origin_latitude), 0.0);
         _height_offset_sample_async(create_context.renderer, center_position);
     }
@@ -1129,9 +1128,6 @@ tileset_renderer_destroy(TilesetRenderer* renderer)
         {
             DEBUG_LOG("Failed to wait for all tile loads to complete");
         }
-
-        delete renderer->tilesets.data[i];
-        renderer->tilesets.data[i] = nullptr;
     }
 
     tileset_renderer_free_tile_ressource(renderer);

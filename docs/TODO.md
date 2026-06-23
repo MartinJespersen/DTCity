@@ -1,9 +1,6 @@
 # Urgent changes
-* descriptor set idx run out when application is used for too long.
 * All vulkan load function should take in thread_ctx 
 * Some roads are not covered in NetAScore at certain LOD's.
-* Staged regression findings:
-  * Raster overlay upload failure can enqueue a command buffer without handles or done_loading_func.
 
 # Less urgent changes
 * Reconsider the number of descriptor pools (whether 1 is enough) and the descriptor numbers
@@ -17,6 +14,7 @@
 * Use new Allocator for C++ object in tileset_renderer
 * Simulation
   * Improve reconnection if connection is lost
+* Netascore task cause memory violation at shutdown due to arena being deallocated.
 * Out of device memory error. 
 * Are the amount of descriptor indices not deallocated? 
 * delete draw flush and related code

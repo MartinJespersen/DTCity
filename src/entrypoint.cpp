@@ -225,7 +225,6 @@ dt_main_loop(void* ptr)
         city->camera_handle = resource_pool_array_idx_get(ctx->camera_container);
         ui::Camera* camera = resource_pool_item_from_idx(ctx->camera_container, city->camera_handle);
         ui::camera_init(ctx->arena_main_permanent, camera);
-        city->tileset_handle = ctx->tileset_pool->handle_get();
 
         Rng2F64 bbox = util::wgs84_bbox_from_btm_right_corner(city_config->lon, city_config->lat, city_config->bbox_width_meters, city_config->bbox_height_meters);
         city::city_init(city, ctx->data_subdirs.data[dt_DataDirType::Cache]);
@@ -340,7 +339,6 @@ dt_main_loop(void* ptr)
             render::mapped_buffer_destroy(camera_item->data.mut_handles);
         }
     }
-    resource_pool_release(ctx->camera_container);
     for (U32 i = 0; i < city_buf.size; i += 1)
     {
         city::city_release(city_buf[i]);

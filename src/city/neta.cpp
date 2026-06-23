@@ -375,14 +375,18 @@ netascore_async_task_create(Arena* arena, NetaState* neta, Rng2F64 bbox)
     city::AsyncCityTask* neta_task = PushStruct(arena, city::AsyncCityTask);
     if (netascore_result.err)
     {
-        String8 netascore_api = push_str8f(neta->arena, "%.*snetascore", str8_varg(neta::mobilitylab_jobs_api_get()));
-
-        String8 target_srid_param = push_str8f(neta->arena, "target_srid=%d", target_srid);
-
         Arena* task_arena = arena_alloc();
-        async::HttpInfo* http_info = async::http_info_create(task_arena, HTTP_Method_Post, netascore_api, S("application/x-www-form-urlencoded"), {neta->task_state.mobility_api_key_header},
-                                                             {target_srid_param, neta->task_state.cache_bbox_str, S("output_format=GeoJSON")});
-        async::AsyncHttpTaskStateConfig<NetaTaskState> config = async::AsyncHttpTaskStateConfig<NetaTaskState>(neta::netascore_job_create_complete, &neta->task_state, 5, 1);
+        NetaTaskState* task_state = PushStruct(task_arena, NetaTaskState);
+        task_state->bbox_wgs84 = neta->task_state.bbox_wgs84;
+        task_state->cache_file_location = push_str8_copy(task_arena, neta->task_state.cache_file_location);
+        task_state->cache_bbox_str = push_str8_copy(task_arena, neta->task_state.cache_bbox_str);
+        task_state->mobility_api_key_header = push_str8_copy(task_arena, neta->task_state.mobility_api_key_header);
+
+        String8 netascore_api = push_str8f(task_arena, "%.*snetascore", str8_varg(neta::mobilitylab_jobs_api_get()));
+        String8 target_srid_param = push_str8f(task_arena, "target_srid=%d", target_srid);
+        async::HttpInfo* http_info = async::http_info_create(task_arena, HTTP_Method_Post, netascore_api, S("application/x-www-form-urlencoded"), {task_state->mobility_api_key_header},
+                                                             {target_srid_param, task_state->cache_bbox_str, S("output_format=GeoJSON")});
+        async::AsyncHttpTaskStateConfig<NetaTaskState> config = async::AsyncHttpTaskStateConfig<NetaTaskState>(neta::netascore_job_create_complete, task_state, 5, 1);
         async::AsyncHttpTaskCreateResult<NetaTaskState> result = async::async_http_task_run(task_arena, ctx->thread_pool, http_info, &config, S("Neta Task"));
         AssertAlways(result.async_result.has_error() == false);
 
