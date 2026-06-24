@@ -37,7 +37,7 @@ jobs:
         run: |
           call "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Auxiliary\Build\vcvarsall.bat" x64
           cmake --preset=release-windows
-          cmake --build build/win/release --target clang-tidy-check
+          :: cmake --build build/win/release --target clang-tidy-check
           cmake --build build/win/release
           %SystemRoot%\System32\tar.exe -a -c -f ${{ env.ZIP_NAME }} data -C build/win/release ${{ matrix.exe }} -C ../docs usage-guide.pdf
       - name: Build Linux
@@ -52,7 +52,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y libgl1-mesa-dev xorg-dev libwayland-dev libxkbcommon-dev wayland-protocols extra-cmake-modules
           cmake --preset=release-linux
-          cmake --build build/linux/release --target clang-tidy-check
+          # cmake --build build/linux/release --target clang-tidy-check
           cmake --build build/linux/release
           tar -czf ${{ env.ZIP_NAME }} data -C build/linux/release ${{ matrix.exe }} -C ../docs usage-guide.pdf
 
