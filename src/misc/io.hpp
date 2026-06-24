@@ -1,6 +1,9 @@
 #pragma once
-struct Context;
-struct io_IO
+
+namespace io
+{
+
+struct IO
 {
     Arena* arena;
 
@@ -14,7 +17,7 @@ struct io_IO
     S32 framebuffer_height;
 
     F64 scroll_x;
-    F64 scroll_y;
+    std::atomic<F64> scroll_y;
     B32 w_btn_clicked;
     B32 s_btn_clicked;
     B32 a_btn_clicked;
@@ -29,16 +32,18 @@ struct io_IO
 };
 
 static void
-io_input_state_update(io_IO* io);
+input_state_update(IO* io);
 static Vec2S32
-io_wait_for_valid_framebuffer_size(io_IO* io_ctx);
+wait_for_valid_framebuffer_size(IO* io_ctx);
 static void
-io_framebuffer_resize_callback(GLFWwindow* window, int width, int height);
-static io_IO*
-io_window_create(String8 app_name, U32 window_width, U32 window_height);
+framebuffer_resize_callback(GLFWwindow* window, int width, int height);
+static IO*
+window_create(String8 app_name, U32 window_width, U32 window_height);
 static void
-io_window_destroy(io_IO* io_ctx);
+window_destroy(IO* io_ctx);
 static void
-io_scroll_callback(GLFWwindow* window, double xoffset, double yoffset);
+scroll_callback(GLFWwindow* window, double xoffset, double yoffset);
 static void
-io_new_frame(io_IO* io_ctx);
+new_frame();
+
+} // namespace io

@@ -3,7 +3,7 @@
 
 template <typename T>
 Buffer<T>
-BufferAlloc(Arena* arena, U64 count)
+buffer_alloc(Arena* arena, U64 count)
 {
     Buffer<T> buffer = {0};
     buffer.data = PushArray(arena, T, count);
@@ -12,7 +12,7 @@ BufferAlloc(Arena* arena, U64 count)
 };
 
 template <typename T>
-static void
+lib_internal void
 BufferCopy(Buffer<T> dst, Buffer<T> src, U64 element_count_to_copy)
 {
     Assert(dst.size >= element_count_to_copy);
@@ -20,7 +20,7 @@ BufferCopy(Buffer<T> dst, Buffer<T> src, U64 element_count_to_copy)
 }
 
 template <typename T>
-static void
+lib_internal void
 BufferCopy(Buffer<T> dst, Buffer<T> src, U64 dst_offset, U64 src_offset, U64 size)
 {
     Assert(dst.size >= dst_offset + size);
@@ -28,76 +28,92 @@ BufferCopy(Buffer<T> dst, Buffer<T> src, U64 dst_offset, U64 src_offset, U64 siz
 }
 
 template <typename T>
-static void
+lib_internal void
 BufferItemRemove(Buffer<T>* in_out_buffer, U32 index)
 {
     Assert(index < in_out_buffer->size);
     U32 type_size = sizeof(T);
-    MemoryCopy(in_out_buffer->data + index, in_out_buffer->data + index + 1,
-               type_size * (in_out_buffer->size - index - 1));
+    MemoryCopy(in_out_buffer->data + index, in_out_buffer->data + index + 1, type_size * (in_out_buffer->size - index - 1));
     in_out_buffer->size--;
 }
 
 template <typename T>
-static void
-BufferAppend(Buffer<T> buffer, Buffer<T> buffer_append, U32 append_idx)
+lib_internal Buffer<T>
+buffer_arena_copy(Arena* arena, Buffer<T> buffer)
 {
-    Assert(buffer_append.size + append_idx <= buffer.size);
-    T* dst_ptr = buffer.data + append_idx;
-    MemoryCopy(dst_ptr, buffer_append.data, buffer_append.size * sizeof(T));
+    Buffer<T> new_buffer = buffer_alloc<T>(arena, buffer.size);
+    MemoryCopy(new_buffer.data, buffer.data, buffer.size * sizeof(T));
+    return new_buffer;
+}
+
+template <typename T>
+lib_internal Buffer<T>
+buffer_concat(Arena* arena, Buffer<T> a, Buffer<T> b)
+{
+    Buffer<T> result = buffer_alloc<T>(arena, a.size + b.size);
+    MemoryCopy(result.data, a.data, a.size * sizeof(T));
+    MemoryCopy(result.data + a.size, b.data, b.size * sizeof(T));
+    return result;
 }
 
 ////////////////////////////////
-static Buffer<String8>
+lib_internal Buffer<String8>
 Str8BufferFromCString(Arena* arena, std::initializer_list<const char*> strings)
 {
-    Buffer<String8> buffer = BufferAlloc<String8>(arena, strings.size());
+    Buffer<String8> buffer = buffer_alloc<String8>(arena, strings.size());
     U32 index = 0;
     for (const char* const* str = strings.begin(); str != strings.end(); ++str)
     {
-        buffer.data[index++] = PushStr8Copy(arena, str8_c_string(*str));
+        buffer.data[index++] = push_str8_copy(arena, str8_c_string(*str));
     }
     return buffer;
 }
 
-static String8
-Str8PathFromStr8List(Arena* arena, std::initializer_list<String8> strings)
+lib_internal String8
+str8_path_from_str8_list(Arena* arena, std::initializer_list<String8> strings)
 {
     String8List path_list = {0};
-    StringJoin join_params = {.sep = OS_PathDelimiter()};
+    StringJoin join_params = {.sep = os_path_delimiter()};
     for (const String8* str = strings.begin(); str != strings.end(); ++str)
     {
-        Str8ListPush(arena, &path_list, *str);
+        str8_list_push(arena, &path_list, *str);
     }
-    String8 result = Str8ListJoin(arena, &path_list, &join_params);
+    String8 result = str8_list_join(arena, &path_list, &join_params);
     return result;
 }
 
-static String8
+lib_internal String8
 CreatePathFromStrings(Arena* arena, Buffer<String8> path_elements)
 {
     String8List path_list = {0};
-    StringJoin join_params = {.sep = OS_PathDelimiter()};
+    StringJoin join_params = {.sep = os_path_delimiter()};
 
     // Step 1: Convert each char* to String8 and push to list
     for (U64 i = 0; i < path_elements.size; i++)
     {
         String8 part = path_elements.data[i];
-        Str8ListPush(arena, &path_list, part);
+        str8_list_push(arena, &path_list, part);
     }
 
-    String8 result = Str8ListJoin(arena, &path_list, &join_params);
+    String8 result = str8_list_join(arena, &path_list, &join_params);
     return result;
 }
 
-static Buffer<U8>
-io_file_read(Arena* arena, String8 filename)
+namespace io
+{
+
+lib_internal Buffer<U8>
+file_read(Arena* arena, String8 filename)
 {
     Buffer<U8> buffer = {0};
     FILE* file = fopen((const char*)filename.str, "rb");
+    defer(fclose(file));
+    Assert(file != nullptr);
     if (file == NULL)
     {
         DEBUG_LOG("failed to open file!");
+
+        return buffer;
     }
 
     fseek(file, 0, SEEK_END);
@@ -107,13 +123,14 @@ io_file_read(Arena* arena, String8 filename)
     buffer.data = PushArray(arena, U8, buffer.size);
     fread(buffer.data, sizeof(U8), buffer.size, file);
 
-    fclose(file);
     return buffer;
 }
 
+} // namespace io
+
 //~mgj: Strings functions
 
-static char**
+lib_internal char**
 CStrArrFromStr8Buffer(Arena* arena, Buffer<String8> buffer)
 {
     char** arr = PushArray(arena, char*, buffer.size);
@@ -123,4 +140,199 @@ CStrArrFromStr8Buffer(Arena* arena, Buffer<String8> buffer)
         arr[i] = (char*)buffer.data[i].str;
     }
     return arr;
+}
+
+//~mgj: ChunckList: safe T value in contigous Chunks usually for intermediate storage
+template <typename T>
+ChunkList<T>*
+chunk_list_create(Arena* arena, U64 capacity)
+{
+    ChunkList<T>* chunk = PushStruct(arena, ChunkList<T>);
+    chunk->capacity = capacity;
+    chunk->chunk_count = 0;
+    chunk->total_count = 0;
+
+    return chunk;
+}
+
+template <typename T>
+ChunkItem<T>*
+chunk_item_from_array(Arena* arena, T* values, U64 count)
+{
+    ChunkItem<T>* chunk = PushStruct(arena, ChunkItem<T>);
+    chunk->values = values;
+    chunk->count = count;
+    return chunk;
+}
+
+template <typename T>
+void
+chunk_list_insert(Arena* arena, ChunkList<T>* list, T& item)
+{
+    T* res = chunk_list_get_next(arena, list);
+    *res = item;
+}
+
+template <typename T>
+void
+chunk_list_insert_chunk(ChunkList<T>* list, ChunkItem<T>* chunk)
+{
+    SLLQueuePush(list->first, list->last, chunk);
+    list->chunk_count += 1;
+    list->total_count += chunk->count;
+}
+
+template <typename T>
+T*
+chunk_list_get_next(Arena* arena, ChunkList<T>* list)
+{
+    ChunkItem<T>* chunk = list->last;
+    if (!chunk || chunk->count >= list->capacity)
+    {
+        chunk = PushStruct(arena, ChunkItem<T>);
+        SLLQueuePush(list->first, list->last, chunk);
+        chunk->values = PushArray(arena, T, list->capacity);
+        list->chunk_count += 1;
+    }
+    T* item = &chunk->values[chunk->count++];
+    list->total_count++;
+    return item;
+}
+
+template <typename T>
+lib_internal Buffer<T>
+buffer_from_chunk_list(Arena* arena, ChunkList<T>* list)
+{
+    Buffer<T> buffer = buffer_alloc<T>(arena, list->total_count);
+    U64 offset = 0;
+    for (ChunkItem<T>* chunk = list->first; chunk; chunk = chunk->next)
+    {
+        MemoryCopy(buffer.data + offset, chunk->values, chunk->count * sizeof(T));
+        offset += chunk->count;
+    }
+    return buffer;
+}
+
+lib_internal String8
+str8_from_chunk_list(Arena* arena, ChunkList<U8>* list)
+{
+    String8 buffer = push_str8_fill_byte(arena, list->total_count, 0);
+    U64 offset = 0;
+    for (ChunkItem<U8>* chunk = list->first; chunk; chunk = chunk->next)
+    {
+        MemoryCopy(buffer.str + offset, chunk->values, chunk->count * sizeof(U8));
+        offset += chunk->count;
+    }
+    return buffer;
+}
+// Linked List Map
+lib_internal inline U64
+map_hash_u64(U64 x)
+{
+    prof_scope_marker;
+    String8 str = {.str = (U8*)&x, .size = sizeof(U64)};
+    U64 res = hash_u128_from_str8(str).u64[1];
+    return res;
+}
+
+lib_internal inline U64
+map_round_up_pow2_u64(U64 v)
+{
+    if (v <= 8)
+        return 8;
+    v -= 1;
+    v |= v >> 1;
+    v |= v >> 2;
+    v |= v >> 4;
+    v |= v >> 8;
+    v |= v >> 16;
+    v |= v >> 32;
+    return v + 1;
+}
+
+template <typename K, typename V>
+lib_internal Map<K, V>*
+map_create(Arena* arena, U64 capacity)
+{
+    using MapType = Map<K, V>;
+    Map<K, V>* map = PushStruct(arena, MapType);
+    map->arena = arena;
+    U64 actual_cap = map_round_up_pow2_u64(capacity);
+    using MapKeyValuePairList = MapChunkList<K, V>;
+    map->v = PushArray(arena, MapKeyValuePairList, actual_cap);
+    map->capacity = actual_cap;
+    return map;
+}
+
+template <typename K, typename V>
+lib_internal V*
+map_get(Map<K, V>* m, K key)
+{
+    U64 hash = map_hash_u64(key);
+    U64 index = hash % m->capacity;
+    MapChunkList<K, V>* chunk_list = &m->v[index];
+    MapChunk<K, V>* chunk = chunk_list->first;
+    while (chunk)
+    {
+        for (U64 i = 0; i < chunk->count; ++i)
+        {
+            if (chunk->v[i].key == key)
+                return &chunk->v[i].value;
+        }
+        chunk = chunk->next;
+    }
+    return nullptr;
+}
+
+template <typename K, typename V>
+lib_internal MapResult
+map_get(Map<K, V>* m, K key, V** out_value)
+{
+    V* value = map_get(m, key);
+    if (value)
+    {
+        *out_value = value;
+        return MapResult::Success;
+    }
+
+    *out_value = nullptr;
+    return MapResult::NotFound;
+}
+
+template <typename K, typename V>
+lib_internal V*
+map_insert(Map<K, V>* m, K key, V& value)
+{
+    using KeyPair = MapChunk<K, V>;
+
+    U64 hash = map_hash_u64((U64)key);
+    U64 index = hash % m->capacity;
+    MapChunkList<K, V>* chunk_list = &m->v[index];
+    MapChunk<K, V>* chunk = chunk_list->first;
+
+    // check if key is already present
+    for (; chunk; chunk = chunk->next)
+    {
+        for (U64 i = 0; i < chunk->count; ++i)
+        {
+            if (chunk->v[i].key == key)
+                return nullptr;
+        }
+    }
+
+    if (!chunk || chunk->count >= ArrayCount(chunk->v))
+    {
+        chunk = PushStruct(m->arena, KeyPair);
+        SLLQueuePush(chunk_list->first, chunk_list->last, chunk);
+        chunk_list->chunk_count += 1;
+    }
+
+    chunk = chunk_list->last;
+    U64 i = chunk->count;
+    chunk->v[i].key = key;
+    chunk->v[i].value = value;
+    chunk_list->total_count += 1;
+    chunk->count += 1;
+
+    return &chunk->v[i].value;
 }

@@ -11,6 +11,8 @@ graph TD
     city --> render
     city --> osm
     osm --> http
+    dt --> neta
+    neta --> osm
     city --> gltfw
 ```
 ## dt
@@ -34,6 +36,9 @@ Implements a job system using a thread safe FIFO queue. It is currently used by 
 
 ## gltfw
 Wrapper layer for loading glTF/glb files. 
+
+## neta
+Layer for extracting NetAScore and other related data from .geojson/.sqlite/.gpkg files.
 
 # Manual Memory Management
 One important difference between this project and an usual C++ project is in the way memory is managed. This project does heavy use of memory arenas which is an important concept to become familiar. The overall idea is to simplify memory management by decreasing the number of memory allocations by bundling smaller allocations together that has the same lifetime so that only a single deallocation is need. 

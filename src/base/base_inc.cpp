@@ -9,11 +9,11 @@
 
 #include "base_core.cpp"
 #include "base_profile.cpp"
-#include "base_arena.c"
+#include "base_arena.cpp"
+#include "base_allocator.cpp"
 #include "base_math.c"
 #include "base_random.cpp"
 #include "base_strings.cpp"
-#include "base_diagnostics.cpp"
 
 #include "base_thread_context.c"
 // #include "base_command_line.c"
@@ -21,3 +21,7 @@
 // #include "base_meta.c"
 // #include "base_entry_point.c"
 #include "container.cpp"
+#include "os_core/os_core_inc.cpp"
+#include "base_container.cpp"
+#include "cache.cpp"
+#include "base_lists.cpp"

@@ -1,9 +1,10 @@
 namespace wrapper
 {
 
-static osm_RoadNodeParseResult
+static osm::RoadNodeParseResult
 node_buffer_from_simd_json(Arena* arena, String8 json, U64 node_hashmap_size)
 {
+    prof_scope_marker;
     simdjson::ondemand::parser parser;
     simdjson::ondemand::document doc;
     simdjson::padded_string json_padded((char*)json.str, json.size);
@@ -11,13 +12,13 @@ node_buffer_from_simd_json(Arena* arena, String8 json, U64 node_hashmap_size)
     U32 error_num = 0;
     bool error_ret = false;
 
-    Buffer<osm_RoadNodeList> nodes = {};
+    Buffer<osm::RoadNodeList> nodes = {};
     if (error)
     {
         goto early_ret;
     }
 
-    nodes = BufferAlloc<osm_RoadNodeList>(arena, node_hashmap_size);
+    nodes = buffer_alloc<osm::RoadNodeList>(arena, node_hashmap_size);
     {
         simdjson::ondemand::array elements;
         error = doc["elements"].get(elements);
@@ -38,7 +39,7 @@ node_buffer_from_simd_json(Arena* arena, String8 json, U64 node_hashmap_size)
 
             if (node_key == "node")
             {
-                osm_RoadNode* node = PushStruct(arena, osm_RoadNode);
+                osm::WgsNode* node = PushStruct(arena, osm::WgsNode);
                 U64 id;
                 F64 lat, lon;
                 auto item_value = item.value();
@@ -64,11 +65,11 @@ early_ret:
         DEBUG_LOG("Error in node buffer parsing\n");
         error_ret = true;
     }
-    osm_RoadNodeParseResult res = {nodes, error_ret};
+    osm::RoadNodeParseResult res = {nodes, error_ret};
     return res;
 }
 
-static osm_WayParseResult
+static osm::WayParseResult
 way_buffer_from_simd_json(Arena* arena, String8 json)
 {
     simdjson::dom::parser parser;
@@ -78,7 +79,7 @@ way_buffer_from_simd_json(Arena* arena, String8 json)
     U32 error_num = 0;
     bool error_ret = false;
 
-    Buffer<osm_Way> way_buffer = {};
+    Buffer<osm::Way> way_buffer = {};
     U64 way_index = 0;
     U64 way_count = 0;
 
@@ -101,7 +102,7 @@ way_buffer_from_simd_json(Arena* arena, String8 json)
         }
     }
 
-    way_buffer = BufferAlloc<osm_Way>(arena, way_count);
+    way_buffer = buffer_alloc<osm::Way>(arena, way_count);
     for (auto elem : elements)
     {
         std::string_view elem_key;
@@ -114,7 +115,7 @@ way_buffer_from_simd_json(Arena* arena, String8 json)
         {
             // ~mgj: Insert into hashmap
             U64 way_id = elem["id"].get_uint64();
-            osm_Way* way = &way_buffer.data[way_index];
+            osm::Way* way = &way_buffer.data[way_index];
 
             way->id = way_id;
             // Get the nodes array and count elements
@@ -140,22 +141,22 @@ way_buffer_from_simd_json(Arena* arena, String8 json)
 
             // Reset and iterate again to store the tags
             tags_object = elem["tags"].get_object();
-            way->tags = BufferAlloc<osm_Tag>(arena, tag_count);
+            way->tags = buffer_alloc<osm::Tag>(arena, tag_count);
             U64 tag_cur_index = 0;
             for (auto tag : tags_object)
             {
                 // Get key and value as string_view
-                auto key_view = tag.value.get_string();
+
+                auto key_view = tag.key;
                 auto value_view = tag.value.get_string();
 
                 // Convert to String8
-                String8 temp_key = Str8((U8*)key_view.value().data(), key_view.value().size());
-                String8 temp_value =
-                    Str8((U8*)value_view.value().data(), value_view.value().size());
+                String8 temp_key = str8((U8*)key_view.data(), key_view.size());
+                String8 temp_value = str8((U8*)value_view.value().data(), value_view.value().size());
 
                 // Copy to arena
-                way->tags.data[tag_cur_index].key = PushStr8Copy(arena, temp_key);
-                way->tags.data[tag_cur_index].value = PushStr8Copy(arena, temp_value);
+                way->tags.data[tag_cur_index].key = push_str8_copy(arena, temp_key);
+                way->tags.data[tag_cur_index].value = push_str8_copy(arena, temp_value);
 
                 tag_cur_index++;
             }
@@ -170,7 +171,7 @@ early_ret:
         error_ret = true;
     }
 
-    osm_WayParseResult res = {way_buffer, error_ret};
+    osm::WayParseResult res = {way_buffer, error_ret};
     return res;
 }
 

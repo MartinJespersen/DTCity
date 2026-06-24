@@ -2,13 +2,8 @@
 
 struct dt_Time
 {
-    F32 delta_time_sec;
+    F64 delta_time_sec;
     U64 last_time_ms;
-};
-
-struct dt_Input
-{
-    osm_BoundingBox bbox;
 };
 
 enum dt_DataDirType
@@ -28,21 +23,21 @@ struct dt_DataDirPair
 
 struct Context
 {
+    String8List cmdline;
     B32 running;
     String8 cwd;
     String8 data_dir;
     Buffer<String8> data_subdirs;
 
-    Arena* arena_permanent;
+    Arena* arena_frame;
+    Arena* arena_main_permanent;
 
-    io_IO* io;
-    ui_Camera* camera;
+    io::IO* io;
     dt_Time* time;
-    city_Road* road;
-    city::CarSim* car_sim;
-    city::Buildings* buildings;
+    ResourcePool<ui::Camera>* camera_container;
+    ArrayResourcePool<cesium::TilesetRenderer>* tileset_pool;
 
-    async::Threads* thread_pool;
+    async::ThreadPool* thread_pool;
 };
 
 // ~mgj: Globals
@@ -55,14 +50,12 @@ dt_ctx_set(Context* ctx);
 static Context*
 dt_ctx_get();
 
-static dt_Input
-dt_interpret_input(int argc, char** argv);
 static OS_Handle
 dt_render_thread_start(void* ptr);
 static void
 dt_render_thread_join(OS_Handle thread_handle, void* ptr);
 static void
-dt_imgui_setup(VK_Context* vk_ctx, io_IO* io_ctx);
+dt_imgui_setup(vulkan::Context* vk_ctx, io::IO* io_ctx);
 static void
 dt_main_loop(void* ptr);
 

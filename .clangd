@@ -1,12 +1,14 @@
 If:
   PathMatch: .*
 CompileFlags:
-  CompilationDatabase: build
-  Add: [/FI../src/includes.hpp]
+  CompilationDatabase: build/win/debug
+  Remove: [-MDd]
+  Add: [/FI../../../src/includes.hpp]
+  Compiler: clang-cl
 
 Index:
   Background: Build
-  StandardLibrary: true
+  StandardLibrary: false
 
 Diagnostics:
   UnusedIncludes: None
@@ -15,13 +17,18 @@ Diagnostics:
     - tautological-pointer-compare
     - c99-designator
     - c++11-narrowing
+    - missing-designated-field-initializers
+    - missing-field-initializers
+    - unused-function
+    - drv_argument_not_allowed_with
+    - missing-braces
   ClangTidy:
     FastCheckFilter: Strict
 Hover:
   ShowAKA: true
 ---
 If:
-  PathMatch: (src\/third_party|src\/os_core|src\/http)\/.*
+  PathMatch: (src\/third_party\/os_core|src\/http)\/.*
 Diagnostics:
   Suppress: "*"
 CompileFlags:

@@ -36,14 +36,14 @@ struct Log
 ////////////////////////////////
 //~ mgj: Log Creation/Selection
 
-static Log*
+lib_internal Log*
 LogAlloc();
-static void
+lib_internal void
 LogRelease(Log* log);
 
-static void
+lib_internal void
 LogMsg(LogMsgKind kind, String8 string);
-static void
+lib_internal void
 LogMsgF(LogMsgKind kind, char* fmt, ...);
 #define LogInfo(s) LogMsg(LogMsgKind_Info, (s))
 #define LogInfoF(...) LogMsgF(LogMsgKind_Info, __VA_ARGS__)
@@ -54,9 +54,9 @@ LogMsgF(LogMsgKind kind, char* fmt, ...);
 #define LogInfoNamedBlockF(...)                                                                    \
     DeferLoop((LogInfoF(__VA_ARGS__), LogInfoF(":\n{\n")), LogInfoF("}\n"))
 
-static void
+lib_internal void
 LogScopeBegin();
-static LogScopeResult
+lib_internal LogScopeResult
 LogScopeEnd(Arena* arena);
 
 ////////////////////////////////
@@ -79,24 +79,24 @@ struct TCTX
 ////////////////////////////////
 // NOTE(allen): Thread Context Functions
 
-static void
+lib_internal void
 TCTX_InitAndEquip(TCTX* tctx);
-static void
+lib_internal void
 TCTX_Release();
-static TCTX*
+lib_internal TCTX*
 tctx_get_equipped();
 
-static Arena*
+lib_internal Arena*
 TCTX_ScratchGet(Arena** conflicts, U64 countt);
 
-static void
+lib_internal void
 tctx_set_thread_name(String8 name);
-static String8
+lib_internal String8
 tctx_get_thread_name();
 
-static void
+lib_internal void
 tctx_write_srcloc(char* file_name, U64 line_number);
-static void
+lib_internal void
 tctx_read_srcloc(char** file_name, U64* line_number);
 #define tctx_write_this_srcloc() tctx_write_srcloc(__FILE__, __LINE__)
 

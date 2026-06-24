@@ -1,0 +1,146 @@
+#version 450
+#extension GL_EXT_nonuniform_qualifier : require
+#extension GL_EXT_buffer_reference : require
+#extension GL_EXT_buffer_reference2 : require
+#extension GL_EXT_debug_printf: enable
+
+const uint CORNERS_COUNT = 4;
+const uint OPTION_COUNT = 5;
+
+struct RoadSegment {
+    uvec2 id;
+    vec2 positions[CORNERS_COUNT];
+    float options[OPTION_COUNT];
+};
+
+struct Bounds
+{
+    vec2 min;
+    vec2 max;
+};
+
+struct RoadSegmentNode {
+    Bounds bounds;
+    uint split_axis;
+    float split_value;
+    uint is_leaf;
+    uint data_0;
+    uint data_1;
+};
+
+struct Vertex {
+    float pos_x;
+    float pos_y;
+    float pos_z;
+    float overlay_option;
+    vec2 uv;
+    vec2 overlay_uv;
+    uvec2 id;
+};
+
+layout(std430, set = 0, binding = 0) readonly buffer RoadSegmentBuffer {
+    RoadSegment data[];
+} road_segments;
+
+layout(std430, set = 0, binding = 1) readonly buffer RoadSegmentNodeBuffer {
+    RoadSegmentNode data[];
+} road_node_segments;
+
+layout(std430, set = 0, binding = 2) buffer VertexBuffer {
+    Vertex data[];
+} vertices;
+
+layout(std430, set = 0, binding = 3) readonly buffer IndexBuffer {
+    uint data[];
+} indices;
+
+layout(push_constant) uniform PushConstants
+{
+    uint road_segment_buffer_size;
+    uint overlay_option_idx;
+} push_constants;
+
+layout(local_size_x = 256, local_size_y = 1, local_size_z = 1) in;
+
+bool is_face_inside_road_segment(vec2 road_corner_pos[CORNERS_COUNT], vec2 face_avg)
+{
+    bool all_positive = true;
+    bool all_negative = true;
+    for (int i = 0; i < CORNERS_COUNT; i++) {
+        vec2 edge = road_corner_pos[(i + 1) % CORNERS_COUNT] - road_corner_pos[i];
+        vec2 to_point = face_avg - road_corner_pos[i];
+        float cross_z = edge.x * to_point.y - edge.y * to_point.x;
+        if (cross_z <= 0.0) all_positive = false;
+        if (cross_z >= 0.0) all_negative = false;
+        if (!all_positive && !all_negative) return false;
+    }
+    return true;
+}
+
+bool in_bounds(Bounds bounds, vec2 pos)
+{
+    return pos.x >= bounds.min.x && pos.x <= bounds.max.x &&
+        pos.y >= bounds.min.y && pos.y <= bounds.max.y;
+}
+
+void main()
+{
+    uint index = gl_GlobalInvocationID.x;
+    uint base = index * 3;
+    if (base + 2 >= indices.data.length()) {
+        return;
+    }
+    uint v0_idx = indices.data[base];
+    uint v1_idx = indices.data[base + 1];
+    uint v2_idx = indices.data[base + 2];
+
+    vec3 v0 = vec3(vertices.data[v0_idx].pos_x, vertices.data[v0_idx].pos_y, vertices.data[v0_idx].pos_z);
+    vec3 v1 = vec3(vertices.data[v1_idx].pos_x, vertices.data[v1_idx].pos_y, vertices.data[v1_idx].pos_z);
+    vec3 v2 = vec3(vertices.data[v2_idx].pos_x, vertices.data[v2_idx].pos_y, vertices.data[v2_idx].pos_z);
+    vec3 pos_avg = (v0 + v1 + v2) / 3.0;
+
+    uint stack[64];
+    int stack_ptr = 0;
+    stack[stack_ptr++] = 0u;
+
+    while (stack_ptr > 0)
+    {
+        RoadSegmentNode cur = road_node_segments.data[stack[--stack_ptr]];
+
+        if (!in_bounds(cur.bounds, pos_avg.xy))
+            continue;
+
+        if (cur.is_leaf != 0u)
+        {
+            for (uint i = cur.data_0; i < cur.data_1; i++)
+            {
+                vec2 road_segment[CORNERS_COUNT] = road_segments.data[i].positions;
+                if (is_face_inside_road_segment(road_segment, pos_avg.xy))
+                {
+                    vertices.data[v0_idx].id = road_segments.data[i].id;
+                    vertices.data[v1_idx].id = road_segments.data[i].id;
+                    vertices.data[v2_idx].id = road_segments.data[i].id;
+
+                    vertices.data[v0_idx].overlay_option = road_segments.data[i].options[push_constants.overlay_option_idx];
+                    vertices.data[v1_idx].overlay_option = road_segments.data[i].options[push_constants.overlay_option_idx];
+                    vertices.data[v2_idx].overlay_option = road_segments.data[i].options[push_constants.overlay_option_idx];
+
+                    return;
+                }
+            }
+        }
+        else
+        {
+            if (pos_avg[cur.split_axis] < cur.split_value)
+            {
+                stack[stack_ptr++] = cur.data_1;
+                stack[stack_ptr++] = cur.data_0;
+            }
+            else
+            {
+                stack[stack_ptr++] = cur.data_0;
+                stack[stack_ptr++] = cur.data_1;
+            }
+        }
+    }
+}

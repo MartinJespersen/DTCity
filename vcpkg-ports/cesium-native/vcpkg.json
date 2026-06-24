@@ -1,0 +1,67 @@
+{
+  "name": "cesium-native",
+  "version-string": "0.56.0",
+  "description": "A set of geospatial 3D Tiles libraries for native applications",
+  "homepage": "https://github.com/CesiumGS/cesium-native",
+  "license": "Apache-2.0",
+  "features": {
+    "dependencies-only": {
+      "description": "install port's dependencies without the port"
+    }
+  },
+  "dependencies": [
+    {
+      "name": "vcpkg-cmake",
+      "host": true
+    },
+    {
+      "name": "vcpkg-cmake-config",
+      "host": true
+    },
+    "asyncplusplus",
+    "curl",
+    "doctest",
+    "expected-lite",
+    "fmt",
+    "glm",
+    "rapidjson",
+    "spdlog",
+    "stb",
+    "ada-url",
+    "draco",
+    {
+      "name": "ktx",
+      "default-features": false
+    },
+    "modp-base64",
+    "meshoptimizer",
+    "openssl",
+    "s2geometry",
+    "libjpeg-turbo",
+    "sqlite3",
+    "tinyxml2",
+    "libwebp",
+    "zlib-ng",
+    "picosha2",
+    "earcut-hpp",
+    "cpp-httplib",
+    "libmorton",
+    "zstd",
+    "spz",
+    "zlib",
+    {
+      "name": "blend2d",
+      "default-features": false,
+      "features": [
+        {
+          "name": "jit",
+          "platform": "!ios"
+        }
+      ]
+    },
+    {
+      "name": "asmjit",
+      "platform": "!ios"
+    }
+  ]
+}

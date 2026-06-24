@@ -1,68 +1,105 @@
 {
-  "version": 3,
+  "version": 2,
   "configurePresets": [
     {
-      "name": "debug-base",
-      "binaryDir": "${sourceDir}/build",
+      "name": "base",
+      "hidden": true,
       "cacheVariables": {
-        "CMAKE_TOOLCHAIN_FILE": "$env{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake",
+        "CMAKE_TOOLCHAIN_FILE": "$env{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake"
+      }
+    },
+    {
+      "name": "debug-base",
+      "hidden": true,
+      "inherits": "base",
+      "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Debug",
-        "ASAN_ENABLED": "ON",
         "BUILD_DEBUG": "ON"
       }
     },
     {
-      "name": "profile-base",
-      "binaryDir": "${sourceDir}/build",
+      "name": "release-base",
+      "hidden": true,
+      "inherits": "base",
+      "binaryDir": "${sourceDir}/build/release",
       "cacheVariables": {
-        "CMAKE_TOOLCHAIN_FILE": "$env{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake",
+        "CMAKE_BUILD_TYPE": "Release"
+      }
+    },
+    {
+      "name": "profile-base",
+      "hidden": true,
+      "inherits": "base",
+      "cacheVariables": {
         "CMAKE_BUILD_TYPE": "RelWithDebInfo",
         "TRACY_PROFILE_ENABLE": "ON"
       }
     },
     {
-      "name": "release-base",
-      "binaryDir": "${sourceDir}/build",
+      "name": "debug-windows",
+      "displayName": "Debug (Windows)",
+      "inherits": "debug-base",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build/win/debug",
       "cacheVariables": {
-        "CMAKE_TOOLCHAIN_FILE": "$env{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake",
-        "CMAKE_BUILD_TYPE": "Release"
+        "ASAN_ENABLED": "ON",
+        "VCPKG_TARGET_TRIPLET": "x64-windows-static-md",
+        "VCPKG_OVERLAY_TRIPLETS": "${sourceDir}/triplets"
+      }
+    },
+    {
+      "name": "debug-linux",
+      "displayName": "Debug (Linux)",
+      "inherits": "debug-base",
+      "generator": "Unix Makefiles",
+      "binaryDir": "${sourceDir}/build/linux/debug",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "VCPKG_TARGET_TRIPLET": "x64-linux"
       }
     },
     {
       "name": "release-windows",
+      "displayName": "Release (Windows)",
       "inherits": "release-base",
       "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build/win/release",
       "cacheVariables": {
         "VCPKG_TARGET_TRIPLET": "x64-windows-static-md"
       }
     },
     {
       "name": "release-linux",
+      "displayName": "Release (Linux)",
       "inherits": "release-base",
       "generator": "Unix Makefiles",
+      "binaryDir": "${sourceDir}/build/linux/release",
       "cacheVariables": {
         "VCPKG_TARGET_TRIPLET": "x64-linux-release"
       }
     },
     {
-      "name": "debug-windows",
-      "inherits": "debug-base",
-      "generator": "Ninja"
-    },
-    {
-      "name": "debug-linux",
-      "inherits": "debug-base",
-      "generator": "Unix Makefiles"
-    },
-    {
       "name": "profile-windows",
+      "displayName": "Profile (Windows)",
       "inherits": "profile-base",
-      "generator": "Ninja"
+      "binaryDir": "${sourceDir}/build/win/profile",
+      "generator": "Ninja",
+      "cacheVariables": {
+        "SHADER_DEBUG": "ON",
+        "ASAN_ENABLED": "OFF",
+        "VCPKG_TARGET_TRIPLET": "x64-windows-static-md",
+        "VCPKG_OVERLAY_TRIPLETS": "${sourceDir}/triplets"
+      }
     },
     {
       "name": "profile-linux",
+      "displayName": "Profile (Linux)",
       "inherits": "profile-base",
-      "generator": "Unix Makefiles"
+      "binaryDir": "${sourceDir}/build/linux/profile",
+      "generator": "Unix Makefiles",
+      "cacheVariables": {
+        "VCPKG_TARGET_TRIPLET": "x64-linux"
+      }
     }
   ]
 }

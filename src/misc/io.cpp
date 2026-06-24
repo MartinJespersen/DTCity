@@ -1,44 +1,46 @@
+namespace io
+{
+
 static void
-io_framebuffer_resize_callback(GLFWwindow* window, int width, int height)
+framebuffer_resize_callback(GLFWwindow* window, int width, int height)
 {
     (void)width;
     (void)height;
 
-    io_IO* io_ctx = reinterpret_cast<io_IO*>(glfwGetWindowUserPointer(window));
+    IO* io_ctx = reinterpret_cast<IO*>(glfwGetWindowUserPointer(window));
     io_ctx->framebuffer_resized = 1;
 }
 
-static io_IO*
-io_window_create(String8 app_name, U32 window_width, U32 window_height)
+static IO*
+window_create(String8 app_name, U32 window_width, U32 window_height)
 {
-    Arena* arena = ArenaAlloc();
-    io_IO* io_ctx = PushStruct(arena, io_IO);
+    Arena* arena = arena_alloc();
+    IO* io_ctx = PushStruct(arena, IO);
     io_ctx->arena = arena;
 
     glfwInit();
     glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
     glfwWindowHint(GLFW_RESIZABLE, GLFW_TRUE);
-    io_ctx->window =
-        glfwCreateWindow(window_width, window_height, (char*)app_name.str, nullptr, nullptr);
+    io_ctx->window = glfwCreateWindow(window_width, window_height, (char*)app_name.str, nullptr, nullptr);
     glfwSetWindowUserPointer(io_ctx->window, io_ctx);
-    glfwSetFramebufferSizeCallback(io_ctx->window, io_framebuffer_resize_callback);
-    glfwSetScrollCallback(io_ctx->window, io_scroll_callback);
+    glfwSetFramebufferSizeCallback(io_ctx->window, framebuffer_resize_callback);
+    glfwSetScrollCallback(io_ctx->window, scroll_callback);
 
     return io_ctx;
 }
 
 static void
-io_window_destroy(io_IO* io_ctx)
+window_destroy(IO* io_ctx)
 {
     glfwDestroyWindow(io_ctx->window);
     glfwTerminate();
-    ArenaRelease(io_ctx->arena);
+    arena_release(io_ctx->arena);
 }
 
 static void
-io_scroll_callback(GLFWwindow* window, double xoffset, double yoffset)
+scroll_callback(GLFWwindow* window, double xoffset, double yoffset)
 {
-    io_IO* io_ctx = (io_IO*)glfwGetWindowUserPointer(window);
+    IO* io_ctx = (IO*)glfwGetWindowUserPointer(window);
     io_ctx->scroll_x = xoffset;
     io_ctx->scroll_y = yoffset;
 }
@@ -50,8 +52,9 @@ io_scroll_callback(GLFWwindow* window, double xoffset, double yoffset)
 // to the correct value.
 
 static void
-io_input_state_update(io_IO* input)
+input_state_update(IO* input)
 {
+    prof_scope_marker;
     glfwPollEvents();
 
     S32 window_size_x;
@@ -69,8 +72,7 @@ io_input_state_update(io_IO* input)
     input->mouse_pos_cur_s64.x = floor(mouse_x);
     input->mouse_pos_cur_s64.y = floor(mouse_y);
 
-    input->mouse_left_clicked =
-        glfwGetMouseButton(input->window, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS;
+    input->mouse_left_clicked = glfwGetMouseButton(input->window, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS;
 
     // Button updates
     input->w_btn_clicked = glfwGetKey(input->window, GLFW_KEY_W) == GLFW_PRESS;
@@ -78,9 +80,7 @@ io_input_state_update(io_IO* input)
     input->a_btn_clicked = glfwGetKey(input->window, GLFW_KEY_A) == GLFW_PRESS;
     input->d_btn_clicked = glfwGetKey(input->window, GLFW_KEY_D) == GLFW_PRESS;
 
-    input->is_cursor_inside_win =
-        input->mouse_pos_cur.x >= 0 && input->mouse_pos_cur.x < input->window_size.x &&
-        input->mouse_pos_cur.y >= 0 && input->mouse_pos_cur.y < input->window_size.y;
+    input->is_cursor_inside_win = input->mouse_pos_cur.x >= 0 && input->mouse_pos_cur.x < input->window_size.x && input->mouse_pos_cur.y >= 0 && input->mouse_pos_cur.y < input->window_size.y;
     input->is_window_focused = glfwGetWindowAttrib(input->window, GLFW_FOCUSED) == GLFW_TRUE;
 
     // framebuffer update
@@ -96,7 +96,7 @@ io_input_state_update(io_IO* input)
 }
 
 static Vec2S32
-io_wait_for_valid_framebuffer_size(io_IO* io_ctx)
+wait_for_valid_framebuffer_size(IO* io_ctx)
 {
     // framebuffer update
     S32 framebuffer_width = 0;
@@ -112,9 +112,9 @@ io_wait_for_valid_framebuffer_size(io_IO* io_ctx)
 }
 
 static void
-io_new_frame(io_IO* io_ctx)
+new_frame()
 {
-    io_ctx->scroll_x = 0.0;
-    io_ctx->scroll_y = 0.0;
     ImGui_ImplGlfw_NewFrame();
 }
+
+} // namespace io

@@ -4,7 +4,6 @@ struct gltfw_Vertex3D
 {
     Vec3F32 pos;
     Vec2F32 uv;
-    Vec2U32 object_id;
 };
 
 struct gltfw_Sampler

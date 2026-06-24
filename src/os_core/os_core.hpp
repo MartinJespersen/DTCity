@@ -137,315 +137,312 @@ OS_ThreadFunctionType(void* ptr);
 ////////////////////////////////
 //~ rjf: Handle Type Functions (Helpers, Implemented Once)
 
-static OS_Handle
+lib_internal OS_Handle
 OS_HandleIsZero();
-static OS_Handle
+lib_internal OS_Handle
 OS_HandleFromPtr(void* ptr);
-static B32
+lib_internal B32
 OS_HandleMatch(OS_Handle a, OS_Handle b);
-static void
+lib_internal void
 os_handle_list_push(Arena* arena, OS_HandleList* handles, OS_Handle handle);
-static OS_HandleArray
+lib_internal OS_HandleArray
 os_handle_array_from_list(Arena* arena, OS_HandleList* list);
 
 ////////////////////////////////
 //~ rjf: Command Line Argc/Argv Helper (Helper, Implemented Once)
 
-static String8List
+lib_internal String8List
 os_string_list_from_argcv(Arena* arena, int argc, char** argv);
 
 ////////////////////////////////
 //~ rjf: Filesystem Helpers (Helpers, Implemented Once)
 
-static String8
+lib_internal String8
 os_data_from_file_path(Arena* arena, String8 path);
-static B32
+lib_internal B32
 os_write_data_to_file_path(String8 path, String8 data);
-static B32
+lib_internal B32
 os_write_data_list_to_file_path(String8 path, String8List list);
-static B32
-os_append_data_to_file_path(String8 path, String8 data);
-static OS_FileID
+lib_internal B32
+os_append_data_to_file_path(String8 path, String8 data, OS_AccessFlags additional_flags);
+lib_internal B32
+os_clear_directory(String8 path);
+lib_internal OS_FileID
 os_id_from_file_path(String8 path);
-static S64
+lib_internal S64
 os_file_id_compare(OS_FileID a, OS_FileID b);
-static String8
+lib_internal String8
 os_string_from_file_range(Arena* arena, OS_Handle file, Rng1U64 range);
 
 ////////////////////////////////
 //~ rjf: Process Launcher Helpers
 
-static OS_Handle
-os_cmd_line_launch(String8 string);
-static OS_Handle
-os_cmd_line_launchf(char* fmt, ...);
-
 ////////////////////////////////
 //~ rjf: @os_hooks System/Process Info (Implemented Per-OS)
 
-static OS_SystemInfo*
+lib_internal OS_SystemInfo*
 OS_GetSystemInfo();
-static OS_ProcessInfo*
+lib_internal OS_ProcessInfo*
 os_get_process_info();
-static String8
-OS_GetCurrentPath(Arena* arena);
-static U32
+lib_internal String8
+os_current_path_get(Arena* arena);
+lib_internal U32
 os_get_process_start_time_unix();
-static inline String8
-OS_PathDelimiter();
+lib_internal inline String8
+os_path_delimiter();
 
 ////////////////////////////////
 //~ rjf: @os_hooks Memory Allocation (Implemented Per-OS)
 
 //- rjf: basic
-static void*
+lib_internal void*
 os_reserve(U64 size);
-static B32
+lib_internal B32
 os_commit(void* ptr, U64 size);
-static void
+lib_internal void
 os_decommit(void* ptr, U64 size);
-static void
+lib_internal void
 os_release(void* ptr, U64 size);
 
 // - rjf: large pages
-static void*
+lib_internal void*
 os_reserve_large(U64 size);
-static B32
+lib_internal B32
 os_commit_large(void* ptr, U64 size);
 
 ////////////////////////////////
 //~ rjf: @os_hooks Thread Info (Implemented Per-OS)
 
-static U32
+lib_internal U32
 os_tid();
-static void
+lib_internal void
 os_set_thread_name(String8 string);
 
 ////////////////////////////////
 //~ rjf: @os_hooks Aborting (Implemented Per-OS)
 
-static void
+lib_internal void
 os_abort(S32 exit_code);
 
 ////////////////////////////////
 //~ rjf: @os_hooks File System (Implemented Per-OS)
 
 //- rjf: files
-static OS_Handle
+lib_internal OS_Handle
 os_file_open(OS_AccessFlags flags, String8 path);
-static void
+lib_internal void
 os_file_close(OS_Handle file);
-static U64
+lib_internal U64
 os_file_read(OS_Handle file, Rng1U64 rng, void* out_data);
-#define os_file_read_struct(f, off, ptr)                                                           \
-    OS_FileRead((f), r1u64((off), (off) + sizeof(*(ptr))), (ptr))
-static U64
-OS_FileWrite(OS_Handle file, Rng1U64 rng, void* data);
-static B32
+#define os_file_read_struct(f, off, ptr) OS_FileRead((f), r1u64((off), (off) + sizeof(*(ptr))), (ptr))
+lib_internal U64
+os_file_write(OS_Handle file, Rng1U64 rng, void* data);
+lib_internal B32
 os_file_set_times(OS_Handle file, DateTime time);
-static FileProperties
+lib_internal FileProperties
 os_properties_from_file(OS_Handle file);
-static OS_FileID
+lib_internal OS_FileID
 os_id_from_file(OS_Handle file);
-static B32
+lib_internal B32
 os_file_reserve_size(OS_Handle file, U64 size);
-static B32
+lib_internal B32
 os_delete_file_at_path(String8 path);
-static B32
+lib_internal B32
+os_delete_directory_at_path(String8 path);
+lib_internal B32
 os_copy_file_path(String8 dst, String8 src);
-static B32
+lib_internal B32
 os_move_file_path(String8 dst, String8 src);
-static String8
+lib_internal String8
 os_full_path_from_path(Arena* arena, String8 path);
-static B32
+lib_internal B32
 os_file_path_exists(String8 path);
-static B32
+lib_internal B32
 os_folder_path_exists(String8 path);
-static FileProperties
+lib_internal FileProperties
 os_properties_from_file_path(String8 path);
 
 //- rjf: file maps
-static OS_Handle
+lib_internal OS_Handle
 os_file_map_open(OS_AccessFlags flags, OS_Handle file);
-static void
+lib_internal void
 os_file_map_close(OS_Handle map);
-static void*
+lib_internal void*
 os_file_map_view_open(OS_Handle map, OS_AccessFlags flags, Rng1U64 range);
-static void
+lib_internal void
 os_file_map_view_close(OS_Handle map, void* ptr, Rng1U64 range);
 
 //- rjf: directory iteration
-static OS_FileIter*
+lib_internal OS_FileIter*
 os_file_iter_begin(Arena* arena, String8 path, OS_FileIterFlags flags);
-static B32
+lib_internal B32
 os_file_iter_next(Arena* arena, OS_FileIter* iter, OS_FileInfo* info_out);
-static void
+lib_internal void
 os_file_iter_end(OS_FileIter* iter);
 
 //- rjf: directory creation
-static B32
+lib_internal B32
 os_make_directory(String8 path);
+lib_internal B32
+os_make_parent_directory_if_missing(String8 file_path);
 
 ////////////////////////////////
 //~ rjf: @os_hooks Shared Memory (Implemented Per-OS)
 
-static OS_Handle
+lib_internal OS_Handle
 os_shared_memory_alloc(U64 size, String8 name);
-static OS_Handle
+lib_internal OS_Handle
 os_shared_memory_open(String8 name);
-static void
+lib_internal void
 os_shared_memory_close(OS_Handle handle);
-static void*
+lib_internal void*
 os_shared_memory_view_open(OS_Handle handle, Rng1U64 range);
-static void
+lib_internal void
 os_shared_memory_view_close(OS_Handle handle, void* ptr, Rng1U64 range);
 
 ////////////////////////////////
 //~ rjf: @os_hooks Time (Implemented Per-OS)
 
-static U64
+lib_internal U64
 os_now_microseconds();
-static U32
+lib_internal U32
 os_now_unix();
-static DateTime
+lib_internal DateTime
 os_now_universal_time();
-static DateTime
+lib_internal DateTime
 os_universal_time_from_local(DateTime* local_time);
-static DateTime
+lib_internal DateTime
 os_local_time_from_universal(DateTime* universal_time);
-static void
+lib_internal void
 os_sleep_milliseconds(U32 msec);
 
 ////////////////////////////////
 //~ rjf: @os_hooks Child Processes (Implemented Per-OS)
 
-static OS_Handle
+lib_internal OS_Handle
 os_process_launch(OS_ProcessLaunchParams* params);
-static B32
+lib_internal B32
 os_process_join(OS_Handle handle, U64 endt_us);
-static void
+lib_internal void
 os_process_detach(OS_Handle handle);
 
 ////////////////////////////////
 //~ rjf: @os_hooks Threads (Implemented Per-OS)
 
-static OS_Handle
+lib_internal OS_Handle
 OS_ThreadLaunch(OS_ThreadFunctionType* func, void* ptr, void* params);
-static B32
+lib_internal B32
 OS_ThreadJoin(OS_Handle handle, U64 endt_us);
-static void
+lib_internal void
 os_thread_detach(OS_Handle handle);
 
 ////////////////////////////////
 //~ rjf: @os_hooks Synchronization Primitives (Implemented Per-OS)
 
 //- rjf: recursive mutexes
-static OS_Handle
+lib_internal OS_Handle
 OS_MutexAlloc();
-static void
+lib_internal void
 OS_MutexRelease(OS_Handle mutex);
-static void
-OS_MutexTake(OS_Handle mutex);
-static void
-OS_MutexDrop(OS_Handle mutex);
+lib_internal void
+os_mutex_take(OS_Handle mutex);
+lib_internal void
+os_mutex_drop(OS_Handle mutex);
 
 //- rjf: reader/writer mutexes
-static OS_Handle
-OS_RWMutexAlloc();
-static void
-OS_RWMutexRelease(OS_Handle rw_mutex);
-static void
-OS_RWMutexTakeR(OS_Handle mutex);
-static void
-OS_RWMutexDropR(OS_Handle mutex);
-static void
-OS_RWMutexTakeW(OS_Handle mutex);
-static void
-OS_RWMutexDropW(OS_Handle mutex);
+lib_internal OS_Handle
+os_rw_mutex_alloc();
+lib_internal void
+os_rw_mutex_release(OS_Handle rw_mutex);
+lib_internal void
+os_rw_mutex_take_r(OS_Handle mutex);
+lib_internal void
+os_rw_mutex_drop_r(OS_Handle mutex);
+lib_internal void
+os_rw_mutex_take_w(OS_Handle mutex);
+lib_internal void
+os_rw_mutex_drop_w(OS_Handle mutex);
 
 //- rjf: condition variables
-static OS_Handle
+lib_internal OS_Handle
 os_condition_variable_alloc();
-static void
+lib_internal void
 os_condition_variable_release(OS_Handle cv);
 // returns false on timeout, true on signal, (max_wait_ms = max_U64) -> no timeout
-static B32
+lib_internal B32
 os_condition_variable_wait(OS_Handle cv, OS_Handle mutex, U64 endt_us);
-static B32
+lib_internal B32
 os_condition_variable_wait_rw_r(OS_Handle cv, OS_Handle mutex_rw, U64 endt_us);
-static B32
+lib_internal B32
 os_condition_variable_wait_rw_w(OS_Handle cv, OS_Handle mutex_rw, U64 endt_us);
-static void
+lib_internal void
 os_condition_variable_signal(OS_Handle cv);
-static void
+lib_internal void
 os_condition_variable_broadcast(OS_Handle cv);
 
 //- rjf: cross-process semaphores
-static OS_Handle
+lib_internal OS_Handle
 OS_SemaphoreAlloc(U32 initial_count, U32 max_count, String8 name);
-static void
+lib_internal void
 OS_SemaphoreRelease(OS_Handle semaphore);
-static OS_Handle
+lib_internal OS_Handle
 OS_SemaphoreOpen(String8 name);
-static void
+lib_internal void
 OS_SemaphoreClose(OS_Handle semaphore);
-static B32
+lib_internal B32
 OS_SemaphoreTake(OS_Handle semaphore, U64 endt_us);
-static void
+lib_internal void
 OS_SemaphoreDrop(OS_Handle semaphore);
 
 //- rjf: scope macros
-#define OS_MutexScope(mutex) DeferLoop(OS_MutexTake(mutex), OS_MutexDrop(mutex))
-#define OS_MutexScopeR(mutex) DeferLoop(OS_RWMutexTakeR(mutex), OS_RWMutexDropR(mutex))
-#define OS_MutexScopeW(mutex) DeferLoop(OS_RWMutexTakeW(mutex), OS_RWMutexDropW(mutex))
-#define OS_MutexScopeRWPromote(mutex)                                                              \
-    DeferLoop((OS_RWMutexDropR(mutex), OS_RWMutexTakeW(mutex)),                                    \
-              (OS_RWMutexDropW(mutex), OS_RWMutexTakeR(mutex)))
+#define os_mutex_scope(mutex) DeferLoop(os_mutex_take(mutex), os_mutex_drop(mutex))
+#define os_mutex_scope_r(mutex) DeferLoop(os_rw_mutex_take_r(mutex), os_rw_mutex_drop_r(mutex))
+#define os_mutex_scope_w(mutex) DeferLoop(os_rw_mutex_take_w(mutex), os_rw_mutex_drop_w(mutex))
+#define os_mutex_scope_rWPromote(mutex) DeferLoop((os_rw_mutex_drop_r(mutex), os_rw_mutex_take_w(mutex)), (os_rw_mutex_drop_w(mutex), os_rw_mutex_take_r(mutex)))
 
 ////////////////////////////////
 //~ rjf: @os_hooks Dynamically-Loaded Libraries (Implemented Per-OS)
 
-static OS_Handle
+lib_internal OS_Handle
 os_library_open(String8 path);
-static void
+lib_internal void
 os_library_close(OS_Handle lib);
-static VoidProc*
+lib_internal VoidProc*
 os_library_load_proc(OS_Handle lib, String8 name);
 
 ////////////////////////////////
 //~ rjf: @os_hooks Safe Calls (Implemented Per-OS)
 
-static void
+lib_internal void
 os_safe_call(OS_ThreadFunctionType* func, OS_ThreadFunctionType* fail_handler, void* ptr);
 
 ////////////////////////////////
 //~ rjf: @os_hooks GUIDs (Implemented Per-OS)
 
-static Guid
+lib_internal Guid
 os_make_guid();
 
 // ~mgj: OS Timer
-force_inline static U64
-OS_CpuTimerRead();
-force_inline static U64
+force_inline lib_internal U64
+os_cpu_timer_read();
+force_inline lib_internal U64
 OS_SystemTimerRead();
-force_inline static U64
+force_inline lib_internal U64
 OS_SystemTimerFreqGet();
 
+// ~mgj: @os_hooks OS Graphical Message
+g_internal void
+os_graphical_message(B32 error, String8 title, String8 message);
 //~ mgj: Entrypoint to the application from os layer
-void
+int
 App(int argc, char** argv);
 
-////////////////////////////////
-//~ rjf: @os_hooks Entry Points (Implemented Per-OS)
+// ~mgj: Cmdline
+g_internal String8List
+os_parse_cmd_line(Arena* arena, int argc, char** argv);
 
-// NOTE(rjf): The implementation of `os_core` will define low-level entry
-// points if BUILD_ENTRY_DEFINING_UNIT is defined to 1. These will call
-// into the standard codebase program entry points, named "entry_point".
-
-// #if BUILD_ENTRY_DEFINING_UNIT
-// raddbg_entry_point(entry_point);
-// static void entry_point(CmdLine *cmdline);
-// #endif
-
+g_internal String8
+os_arg_from_cmdline(Arena* arena, String8List* list, String8 arg_name);
+g_internal String8
+os_arg_from_cmdline(Arena* arena, String8List* list, String8 arg_name);
 #endif // OS_CORE_H

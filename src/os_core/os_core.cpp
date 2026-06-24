@@ -5,14 +5,14 @@
 //~ rjf: Handle Type Functions (Helpers, Implemented Once)
 
 #include "os_core/os_core.hpp"
-static OS_Handle
+lib_internal OS_Handle
 OS_HandleIsZero()
 {
     OS_Handle handle = {0};
     return handle;
 }
 
-static OS_Handle
+lib_internal OS_Handle
 OS_HandleFromPtr(void* ptr)
 {
     OS_Handle handle = {0};
@@ -20,13 +20,13 @@ OS_HandleFromPtr(void* ptr)
     return handle;
 }
 
-static B32
+lib_internal B32
 OS_HandleMatch(OS_Handle a, OS_Handle b)
 {
     return a.u64[0] == b.u64[0];
 }
 
-static void
+lib_internal void
 os_handle_list_push(Arena* arena, OS_HandleList* handles, OS_Handle handle)
 {
     OS_HandleNode* n = PushArray(arena, OS_HandleNode, 1);
@@ -35,7 +35,7 @@ os_handle_list_push(Arena* arena, OS_HandleList* handles, OS_Handle handle)
     handles->count += 1;
 }
 
-static OS_HandleArray
+lib_internal OS_HandleArray
 os_handle_array_from_list(Arena* arena, OS_HandleList* list)
 {
     OS_HandleArray result = {0};
@@ -52,14 +52,14 @@ os_handle_array_from_list(Arena* arena, OS_HandleList* list)
 ////////////////////////////////
 //~ rjf: Command Line Argc/Argv Helper (Helper, Implemented Once)
 
-static String8List
+lib_internal String8List
 os_string_list_from_argcv(Arena* arena, int argc, char** argv)
 {
     String8List result = {0};
     for (int i = 0; i < argc; i += 1)
     {
         String8 str = str8_c_string(argv[i]);
-        Str8ListPush(arena, &result, str);
+        str8_list_push(arena, &result, str);
     }
     return result;
 }
@@ -67,7 +67,7 @@ os_string_list_from_argcv(Arena* arena, int argc, char** argv)
 ////////////////////////////////
 //~ rjf: Filesystem Helpers (Helpers, Implemented Once)
 
-static String8
+lib_internal String8
 os_data_from_file_path(Arena* arena, String8 path)
 {
     OS_Handle file = os_file_open(OS_AccessFlag_Read | OS_AccessFlag_ShareRead, path);
@@ -77,7 +77,7 @@ os_data_from_file_path(Arena* arena, String8 path)
     return data;
 }
 
-static B32
+lib_internal B32
 os_write_data_to_file_path(String8 path, String8 data)
 {
     B32 good = 0;
@@ -85,13 +85,13 @@ os_write_data_to_file_path(String8 path, String8 data)
     if (!OS_HandleMatch(file, OS_HandleIsZero()))
     {
         good = 1;
-        OS_FileWrite(file, r1u64(0, data.size), data.str);
+        os_file_write(file, r1u64(0, data.size), data.str);
         os_file_close(file);
     }
     return good;
 }
 
-static B32
+lib_internal B32
 os_write_data_list_to_file_path(String8 path, String8List list)
 {
     B32 good = 0;
@@ -102,7 +102,7 @@ os_write_data_list_to_file_path(String8 path, String8List list)
         U64 off = 0;
         for (String8Node* n = list.first; n != 0; n = n->next)
         {
-            OS_FileWrite(file, r1u64(off, off + n->string.size), n->string.str);
+            os_file_write(file, r1u64(off, off + n->string.size), n->string.str);
             off += n->string.size;
         }
         os_file_close(file);
@@ -110,25 +110,73 @@ os_write_data_list_to_file_path(String8 path, String8List list)
     return good;
 }
 
-static B32
-os_append_data_to_file_path(String8 path, String8 data)
+lib_internal B32
+os_make_parent_directory_if_missing(String8 file_path)
+{
+    String8 dir = str8_chop_last_slash(file_path);
+    B32 good = 1;
+    if (dir.size > 0 && !os_folder_path_exists(dir))
+    {
+        good = os_make_directory(dir);
+    }
+    return good;
+}
+
+lib_internal B32
+os_append_data_to_file_path(String8 path, String8 data, OS_AccessFlags additional_flags)
 {
     B32 good = 0;
     if (data.size != 0)
     {
-        OS_Handle file = os_file_open(OS_AccessFlag_Write | OS_AccessFlag_Append, path);
+        OS_Handle file = os_file_open(OS_AccessFlag_Write | OS_AccessFlag_Append | additional_flags, path);
         if (!OS_HandleMatch(file, OS_HandleIsZero()))
         {
             good = 1;
             U64 pos = os_properties_from_file(file).size;
-            OS_FileWrite(file, r1u64(pos, pos + data.size), data.str);
+            os_file_write(file, r1u64(pos, pos + data.size), data.str);
             os_file_close(file);
         }
     }
     return good;
 }
 
-static OS_FileID
+lib_internal B32
+os_clear_directory(String8 path)
+{
+    if (!os_folder_path_exists(path))
+    {
+        return 0;
+    }
+
+    B32 good = 1;
+    Temp scratch = ScratchBegin(0, 0);
+    OS_FileIter* iter = os_file_iter_begin(scratch.arena, path, 0);
+    OS_FileInfo info = {0};
+    while (os_file_iter_next(scratch.arena, iter, &info))
+    {
+        String8 child_path = str8_path_from_str8_list(scratch.arena, {path, info.name});
+        B32 is_folder = !!(info.props.flags & FilePropertyFlag_IsFolder);
+        B32 is_link = !!(info.props.flags & FilePropertyFlag_IsLink);
+        if (is_folder && !is_link)
+        {
+            good = os_clear_directory(child_path) && good;
+            good = os_delete_directory_at_path(child_path) && good;
+        }
+        else if (is_folder)
+        {
+            good = os_delete_directory_at_path(child_path) && good;
+        }
+        else
+        {
+            good = os_delete_file_at_path(child_path) && good;
+        }
+    }
+    os_file_iter_end(iter);
+    ScratchEnd(scratch);
+    return good;
+}
+
+lib_internal OS_FileID
 os_id_from_file_path(String8 path)
 {
     OS_Handle file = os_file_open(OS_AccessFlag_Read | OS_AccessFlag_ShareRead, path);
@@ -137,14 +185,14 @@ os_id_from_file_path(String8 path)
     return id;
 }
 
-static S64
+lib_internal S64
 os_file_id_compare(OS_FileID a, OS_FileID b)
 {
     S64 cmp = MemoryCompare((void*)&a.v[0], (void*)&b.v[0], sizeof(a.v));
     return cmp;
 }
 
-static String8
+lib_internal String8
 os_string_from_file_range(Arena* arena, OS_Handle file, Rng1U64 range)
 {
     U64 pre_pos = arena_pos(arena);
@@ -161,98 +209,39 @@ os_string_from_file_range(Arena* arena, OS_Handle file, Rng1U64 range)
 }
 
 // ~mgj: Timers
-force_inline static U64
-OS_CpuTimerRead()
+force_inline lib_internal U64
+os_cpu_timer_read()
 {
     return __rdtsc();
 }
 
-////////////////////////////////
-//~ rjf: Process Launcher Helpers
+// ~mgj: Cmdline
 
-static OS_Handle
-os_cmd_line_launch(String8 string)
+lib_internal String8List
+os_parse_cmd_line(Arena* arena, int argc, char** argv)
 {
-    Temp scratch = ScratchBegin(0, 0);
-    U8 split_chars[] = {' '};
-    String8List parts = str8_split(scratch.arena, string, split_chars, ArrayCount(split_chars), 0);
-    OS_Handle handle = {0};
-    if (parts.node_count != 0)
+    String8List str_list = {};
+    for (int i = 0; i < argc; ++i)
     {
-        // rjf: unpack exe part
-        String8 exe = parts.first->string;
-        String8 exe_folder = str8_chop_last_slash(exe);
-        if (exe_folder.size == 0)
-        {
-            exe_folder = OS_GetCurrentPath(scratch.arena);
-        }
-
-        // rjf: find stdout delimiter
-        String8Node* stdout_delimiter_n = 0;
-        for (String8Node* n = parts.first; n != 0; n = n->next)
-        {
-            if (str8_match(n->string, Str8Lit(">"), 0))
-            {
-                stdout_delimiter_n = n;
-                break;
-            }
-        }
-
-        // rjf: read stdout path
-        String8 stdout_path = {0};
-        if (stdout_delimiter_n && stdout_delimiter_n->next)
-        {
-            stdout_path = stdout_delimiter_n->next->string;
-        }
-
-        // rjf: open stdout handle
-        OS_Handle stdout_handle = {0};
-        if (stdout_path.size != 0)
-        {
-            OS_Handle file = os_file_open(OS_AccessFlag_Write | OS_AccessFlag_Read, stdout_path);
-            os_file_close(file);
-            stdout_handle =
-                os_file_open(OS_AccessFlag_Write | OS_AccessFlag_Append | OS_AccessFlag_ShareRead |
-                                 OS_AccessFlag_ShareWrite | OS_AccessFlag_Inherited,
-                             stdout_path);
-        }
-
-        // rjf: form command line
-        String8List cmdline = {0};
-        for (String8Node* n = parts.first; n != stdout_delimiter_n && n != 0; n = n->next)
-        {
-            Str8ListPush(scratch.arena, &cmdline, n->string);
-        }
-
-        // rjf: launch
-        OS_ProcessLaunchParams params = {0};
-        params.cmd_line = cmdline;
-        params.path = exe_folder;
-        params.inherit_env = 1;
-        params.stdout_file = stdout_handle;
-        handle = os_process_launch(&params);
-
-        // rjf: close stdout handle
-        {
-            if (stdout_path.size != 0)
-            {
-                os_file_close(stdout_handle);
-            }
-        }
+        String8 arg = str8_c_string(argv[i]);
+        str8_list_push(arena, &str_list, arg);
     }
-    ScratchEnd(scratch);
-    return handle;
+    return str_list;
 }
 
-static OS_Handle
-os_cmd_line_launchf(char* fmt, ...)
+lib_internal String8
+os_arg_from_cmdline(Arena* arena, String8List* list, String8 arg_name)
 {
-    Temp scratch = ScratchBegin(0, 0);
-    va_list args;
-    va_start(args, fmt);
-    String8 string = push_str8fv(scratch.arena, fmt, args);
-    OS_Handle result = os_cmd_line_launch(string);
-    va_end(args);
-    ScratchEnd(scratch);
+    String8 result = {};
+    for (String8Node* n = list->first; n; n = n->next)
+    {
+        if (str8_match(arg_name, n->string, MatchFlag_CaseInsensitive | MatchFlag_RightSideSloppy))
+        {
+            U64 split_pos = str8_substr_find(n->string, str8_lit("="), 0, 0);
+            String8 value = split_pos < n->string.size ? str8_skip(n->string, split_pos + 1) : Str8Zero();
+            result = push_str8_copy(arena, value);
+            break;
+        }
+    }
     return result;
 }

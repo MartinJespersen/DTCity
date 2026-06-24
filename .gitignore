@@ -10,8 +10,10 @@ build
 */BROWSE.VC.DB*
 *.zip
 *.tar.gz
-*.geojson
 *.gpkg
+*.sqlite
+*.qmd
+*.tracy
 out
 .cache
 .venv
@@ -26,3 +28,6 @@ libs
 __cmake**
 nul
 .vs
+.claude
+vcpkg_installed/**
+.env

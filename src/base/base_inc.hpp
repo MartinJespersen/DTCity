@@ -4,26 +4,27 @@
 #ifndef BASE_INC_H
 #define BASE_INC_H
 
+#include <memory>
+#include <new>
+#include <utility>
+
 ////////////////////////////////
 //~ rjf: Base Includes
 #include "base_context_cracking.h"
 
-#include "base_diagnostics.hpp"
-
-DISABLE_WARNINGS_PUSH
 #include "base_core.hpp"
 #include "base_profile.hpp"
-#include "base_arena.h"
+#include "base_arena.hpp"
+#include "base_allocator.hpp"
 #include "base_math.h"
 #include "base_random.hpp"
 #include "base_strings.hpp"
 #include "base_thread_context.h"
-// #include "base_command_line.h"
-// #include "base_markup.h"
-// #include "base_meta.h"
-// #include "base_entry_point.h"
 #include "container.hpp"
 #include "os_core/os_core_inc.hpp"
-DISABLE_WARNINGS_POP
+#include "base_container.hpp"
+#include "cache.hpp"
+#include "base_lists.hpp"
+#include "debug_log.hpp"
 
 #endif // BASE_INC_H

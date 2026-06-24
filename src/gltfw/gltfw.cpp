@@ -1,7 +1,5 @@
-DISABLE_WARNINGS_PUSH
 #define CGLTF_IMPLEMENTATION
 #include "third_party/cgltf.h"
-DISABLE_WARNINGS_POP
 
 static CgltfNode*
 ChildrenNodesDepthFirstPreOrder(Arena* arena, CgltfNode** stack, CgltfNode* node)
@@ -36,7 +34,7 @@ ChildrenNodesDepthFirstPreOrder(Arena* arena, CgltfNode** stack, CgltfNode* node
     return next;
 }
 
-g_internal CgltfResult
+lib_internal CgltfResult
 gltfw_gltf_read(Arena* arena, String8 gltf_path, String8 root_node_name)
 {
     ScratchScope scratch = ScratchScope(&arena, 1);
@@ -55,7 +53,7 @@ gltfw_gltf_read(Arena* arena, String8 gltf_path, String8 root_node_name)
     // find root mesh from input argument
     for (U32 node_idx = 0; node_idx < data->nodes_count; node_idx += 1)
     {
-        if (CStrEqual(data->nodes[node_idx].name, (char*)root_node_name.str))
+        if (c_str_equal(data->nodes[node_idx].name, (char*)root_node_name.str))
         {
             root_node = &data->nodes[node_idx];
             break;
@@ -74,8 +72,7 @@ gltfw_gltf_read(Arena* arena, String8 gltf_path, String8 root_node_name)
     first_node->cur_child_index = 0;
     CgltfNode* node_stack = {0};
 
-    for (CgltfNode* cur_node = first_node; cur_node;
-         cur_node = ChildrenNodesDepthFirstPreOrder(scratch.arena, &node_stack, cur_node))
+    for (CgltfNode* cur_node = first_node; cur_node; cur_node = ChildrenNodesDepthFirstPreOrder(scratch.arena, &node_stack, cur_node))
     {
         cgltf_node* node = cur_node->node;
         cgltf_mesh* mesh = node->mesh;
@@ -111,8 +108,8 @@ gltfw_gltf_read(Arena* arena, String8 gltf_path, String8 root_node_name)
                 cgltf_accessor* accessor_indices = primitive->indices;
                 BufferNode* buffer_node = PushStruct(scratch.arena, BufferNode);
                 SLLQueuePush(buffer_node_list.first, buffer_node_list.last, buffer_node);
-                buffer_node->index_buffer = BufferAlloc<U32>(arena, accessor_indices->count);
-                buffer_node->vertex_buffer = BufferAlloc<gltfw_Vertex3D>(arena, expected_count);
+                buffer_node->index_buffer = buffer_alloc<U32>(arena, accessor_indices->count);
+                buffer_node->vertex_buffer = buffer_alloc<gltfw_Vertex3D>(arena, expected_count);
                 Buffer<gltfw_Vertex3D>* vertex_buffer = &buffer_node->vertex_buffer;
                 Buffer<U32>* index_buffer = &buffer_node->index_buffer;
                 for (U32 indice_idx = 0; indice_idx < accessor_indices->count; indice_idx++)
@@ -124,11 +121,9 @@ gltfw_gltf_read(Arena* arena, String8 gltf_path, String8 root_node_name)
                 for (U32 vertex_idx = 0; vertex_idx < vertex_buffer->size; vertex_idx++)
                 {
                     if (accessor_position)
-                        cgltf_accessor_read_float(accessor_position, vertex_idx,
-                                                  vertex_buffer->data[vertex_idx].pos.v, 3);
+                        cgltf_accessor_read_float(accessor_position, vertex_idx, vertex_buffer->data[vertex_idx].pos.v, 3);
                     if (accessor_uv)
-                        cgltf_accessor_read_float(accessor_uv, vertex_idx,
-                                                  vertex_buffer->data[vertex_idx].uv.v, 2);
+                        cgltf_accessor_read_float(accessor_uv, vertex_idx, vertex_buffer->data[vertex_idx].uv.v, 2);
                 }
             }
         }
@@ -148,31 +143,25 @@ gltfw_gltf_read(Arena* arena, String8 gltf_path, String8 root_node_name)
 
     U32 total_vertex_buffer_count = 0;
     U32 total_index_buffer_count = 0;
-    for (BufferNode* buffer_node = buffer_node_list.first; buffer_node;
-         buffer_node = buffer_node->next)
+    for (BufferNode* buffer_node = buffer_node_list.first; buffer_node; buffer_node = buffer_node->next)
     {
         total_vertex_buffer_count += buffer_node->vertex_buffer.size;
         total_index_buffer_count += buffer_node->index_buffer.size;
     }
 
-    Buffer<gltfw_Vertex3D> vertex_buffer =
-        BufferAlloc<gltfw_Vertex3D>(arena, total_vertex_buffer_count);
-    Buffer<U32> index_buffer = BufferAlloc<U32>(arena, total_index_buffer_count);
+    Buffer<gltfw_Vertex3D> vertex_buffer = buffer_alloc<gltfw_Vertex3D>(arena, total_vertex_buffer_count);
+    Buffer<U32> index_buffer = buffer_alloc<U32>(arena, total_index_buffer_count);
 
     U32 cur_vertex_buffer_idx = 0;
     U32 cur_index_buffer_idx = 0;
-    for (BufferNode* buffer_node = buffer_node_list.first; buffer_node;
-         buffer_node = buffer_node->next)
+    for (BufferNode* buffer_node = buffer_node_list.first; buffer_node; buffer_node = buffer_node->next)
     {
         for (U32 i = 0; i < buffer_node->index_buffer.size; ++i)
         {
-            buffer_node->index_buffer.data[i] =
-                buffer_node->index_buffer.data[i] + cur_index_buffer_idx;
+            buffer_node->index_buffer.data[i] = buffer_node->index_buffer.data[i] + cur_vertex_buffer_idx;
         }
-        BufferCopy(vertex_buffer, buffer_node->vertex_buffer, cur_vertex_buffer_idx, 0,
-                   buffer_node->vertex_buffer.size);
-        BufferCopy(index_buffer, buffer_node->index_buffer, cur_index_buffer_idx, 0,
-                   buffer_node->index_buffer.size);
+        BufferCopy(vertex_buffer, buffer_node->vertex_buffer, cur_vertex_buffer_idx, 0, buffer_node->vertex_buffer.size);
+        BufferCopy(index_buffer, buffer_node->index_buffer, cur_index_buffer_idx, 0, buffer_node->index_buffer.size);
 
         cur_vertex_buffer_idx += buffer_node->vertex_buffer.size;
         cur_index_buffer_idx += buffer_node->index_buffer.size;
@@ -213,11 +202,11 @@ gltfw_primitive_create(Arena* arena, cgltf_data* data, cgltf_primitive* in_prim)
     cgltf_material* material = in_prim->material;
     cgltf_pbr_metallic_roughness* pbr_material = &material->pbr_metallic_roughness;
     cgltf_texture_view* texture_view = &pbr_material->base_color_texture;
-    primitive->tex_idx = cgltf_texture_index(data, texture_view->texture);
+    primitive->tex_idx = (U32)cgltf_texture_index(data, texture_view->texture);
 
     cgltf_accessor* accessor_indices = in_prim->indices;
-    primitive->indices = BufferAlloc<U32>(arena, accessor_indices->count);
-    primitive->vertices = BufferAlloc<gltfw_Vertex3D>(arena, expected_count);
+    primitive->indices = buffer_alloc<U32>(arena, accessor_indices->count);
+    primitive->vertices = buffer_alloc<gltfw_Vertex3D>(arena, expected_count);
     for (U32 indice_idx = 0; indice_idx < accessor_indices->count; indice_idx++)
     {
         U32 index = (U32)cgltf_accessor_read_index(accessor_indices, indice_idx);
@@ -227,11 +216,9 @@ gltfw_primitive_create(Arena* arena, cgltf_data* data, cgltf_primitive* in_prim)
     for (U32 vertex_idx = 0; vertex_idx < primitive->vertices.size; vertex_idx++)
     {
         if (accessor_position)
-            cgltf_accessor_read_float(accessor_position, vertex_idx,
-                                      primitive->vertices.data[vertex_idx].pos.v, 3);
+            cgltf_accessor_read_float(accessor_position, vertex_idx, primitive->vertices.data[vertex_idx].pos.v, 3);
         if (accessor_uv)
-            cgltf_accessor_read_float(accessor_uv, vertex_idx,
-                                      primitive->vertices.data[vertex_idx].uv.v, 2);
+            cgltf_accessor_read_float(accessor_uv, vertex_idx, primitive->vertices.data[vertex_idx].uv.v, 2);
     }
 
     return primitive;
@@ -253,8 +240,7 @@ gltfw_primitives_read(Arena* arena, cgltf_data* data)
             first_node->cur_child_index = 0;
             CgltfNode* node_stack = {0};
 
-            for (CgltfNode* cur_node = first_node; cur_node;
-                 cur_node = ChildrenNodesDepthFirstPreOrder(scratch.arena, &node_stack, cur_node))
+            for (CgltfNode* cur_node = first_node; cur_node; cur_node = ChildrenNodesDepthFirstPreOrder(scratch.arena, &node_stack, cur_node))
             {
                 cgltf_node* node = cur_node->node;
                 cgltf_mesh* mesh = node->mesh;
@@ -263,8 +249,7 @@ gltfw_primitives_read(Arena* arena, cgltf_data* data)
                     for (U32 prim_idx = 0; prim_idx < mesh->primitives_count; ++prim_idx)
                     {
                         cgltf_primitive* primitive = &mesh->primitives[prim_idx];
-                        gltfw_Primitive* primitive_w =
-                            gltfw_primitive_create(arena, data, primitive);
+                        gltfw_Primitive* primitive_w = gltfw_primitive_create(arena, data, primitive);
                         SLLQueuePush(prim_list.first, prim_list.last, primitive_w);
                     }
                 }
@@ -277,7 +262,7 @@ gltfw_primitives_read(Arena* arena, cgltf_data* data)
 g_internal Buffer<gltfw_Texture>
 gltfw_textures_read(Arena* arena, cgltf_data* data)
 {
-    Buffer<gltfw_Texture> textures = BufferAlloc<gltfw_Texture>(arena, data->textures_count);
+    Buffer<gltfw_Texture> textures = buffer_alloc<gltfw_Texture>(arena, data->textures_count);
     for (U32 tex_idx = 0; tex_idx < textures.size; ++tex_idx)
     {
         gltfw_Texture* tex = &textures.data[tex_idx];
@@ -323,9 +308,6 @@ gltfw_glb_read(Arena* arena, String8 glb_path)
     ScratchScope scratch = ScratchScope(&arena, 1);
     cgltf_options options = {};
     cgltf_data* data = NULL;
-
-    cgltf_accessor* accessor_position = NULL;
-    cgltf_accessor* accessor_uv = NULL;
 
     options.memory.user_data = arena;
     options.memory.alloc_func = gltfw_alloc_func;

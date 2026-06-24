@@ -1,0 +1,5 @@
+- Netascore is a unidirectional property for a road segment
+
+Ways to go about displaying neta score:
+- Creating a new network seperate to osm
+- Relate osm nodes to node coordinates from .gpkg data

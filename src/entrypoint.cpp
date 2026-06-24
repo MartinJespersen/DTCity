@@ -1,11 +1,10 @@
-
 static Buffer<String8>
 dt_dir_create(Arena* arena, String8 parent, dt_DataDirPair* dirs, U32 count)
 {
-    Buffer<String8> buffer = BufferAlloc<String8>(arena, count);
+    Buffer<String8> buffer = buffer_alloc<String8>(arena, count);
     for (U32 i = 0; i < count; i++)
     {
-        String8 dir = Str8PathFromStr8List(arena, {parent, dirs[i].name});
+        String8 dir = str8_path_from_str8_list(arena, {parent, dirs[i].name});
         if (os_file_path_exists(dir) == false)
         {
             B32 dir_created = os_make_directory(dir);
@@ -41,15 +40,16 @@ static void
 dt_time_update(dt_Time* time)
 {
     U64 cur_time = os_now_microseconds();
-    time->delta_time_sec = (F32)(cur_time - time->last_time_ms) / 1'000'000.0;
+    F64 delta_time_us = (F64)(cur_time - time->last_time_ms);
+    time->delta_time_sec = delta_time_us / 1'000'000.0;
     time->last_time_ms = cur_time;
 }
 
 static OS_Handle
-dt_render_thread_start(Context* ctx, dt_Input* input)
+dt_render_thread_start(Context* ctx)
 {
     ctx->running = 1;
-    return OS_ThreadLaunch(dt_main_loop, input, NULL);
+    return OS_ThreadLaunch(dt_main_loop, NULL, NULL);
 }
 
 static void
@@ -67,7 +67,7 @@ CheckVkResult(VkResult result)
 }
 
 void
-ImguiSetup(VK_Context* vk_ctx, io_IO* io_ctx)
+dt_imgui_setup(vulkan::Context* vk_ctx, io::IO* io_ctx)
 {
     //~mgj: Initialize ImGui
     IMGUI_CHECKVERSION();
@@ -79,15 +79,13 @@ ImguiSetup(VK_Context* vk_ctx, io_IO* io_ctx)
 
     float main_scale = ImGui_ImplGlfw_GetContentScaleForMonitor(glfwGetPrimaryMonitor());
     ImGuiStyle& style = ImGui::GetStyle();
-    style.ScaleAllSizes(
-        main_scale); // Bake a fixed style scale. (until we have a solution for dynamic style
-                     // scaling, changing this requires resetting Style + calling this again)
+    style.ScaleAllSizes(main_scale); // Bake a fixed style scale. (until we have a solution for dynamic style
+                                     // scaling, changing this requires resetting Style + calling this again)
     style.FontScaleDpi = main_scale;
 
     ImGui_ImplVulkan_InitInfo init_info = {};
-    init_info.ApiVersion =
-        VK_API_VERSION_1_3; // Pass in your value of VkApplicationInfo::apiVersion, otherwise will
-                            // default to header version.
+    init_info.ApiVersion = VK_API_VERSION_1_3; // Pass in your value of VkApplicationInfo::apiVersion, otherwise will
+                                               // default to header version.
     init_info.Instance = vk_ctx->instance;
     init_info.PhysicalDevice = vk_ctx->physical_device;
     init_info.Device = vk_ctx->device;
@@ -100,168 +98,252 @@ ImguiSetup(VK_Context* vk_ctx, io_IO* io_ctx)
     init_info.Allocator = VK_NULL_HANDLE;
     init_info.PipelineInfoMain.RenderPass = VK_NULL_HANDLE;
     init_info.PipelineInfoMain.Subpass = 0;
-    init_info.PipelineInfoMain.PipelineRenderingCreateInfo = {
-        .sType = VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO_KHR,
-        .colorAttachmentCount = 1,
-        .pColorAttachmentFormats = &vk_ctx->swapchain_resources->color_format,
-        .depthAttachmentFormat = vk_ctx->swapchain_resources->depth_format};
+    init_info.PipelineInfoMain.PipelineRenderingCreateInfo = {.sType = VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO_KHR,
+                                                              .colorAttachmentCount = 1,
+                                                              .pColorAttachmentFormats = &vk_ctx->swapchain_resources->color_format,
+                                                              .depthAttachmentFormat = vk_ctx->swapchain_resources->depth_format};
     init_info.PipelineInfoMain.MSAASamples = VK_SAMPLE_COUNT_1_BIT;
     init_info.CheckVkResultFn = CheckVkResult;
     init_info.UseDynamicRendering = VK_TRUE;
     ImGui_ImplVulkan_Init(&init_info);
 }
 
-static dt_Input
-dt_interpret_input(int argc, char** argv)
+g_internal void
+imgui_debug_window(city::City* city, async::ThreadPool* thread_pool)
 {
-    dt_Input input = {};
-    osm_BoundingBox* bbox = &input.bbox;
-    F64* bbox_coords[4] = {&bbox->lon_btm_left, &bbox->lat_btm_left, &bbox->lon_top_right,
-                           &bbox->lat_top_right};
+    Context* ctx = dt_ctx_get();
+    ui::Camera* camera = resource_pool_item_from_idx(ctx->camera_container, city->camera_handle);
+    vulkan::AssetManager* asset_manager = vulkan::asset_manager_get();
+    const ImGuiViewport* viewport = ImGui::GetMainViewport();
+    F32 max_debug_window_width = ClampTop(720.0f, viewport->WorkSize.x * 0.6f);
+    ImGui::SetNextWindowPos(ImVec2(viewport->WorkPos.x, viewport->WorkPos.y + viewport->WorkSize.y), ImGuiCond_Always, ImVec2(0.0f, 1.0f));
+    ImGui::SetNextWindowSizeConstraints(ImVec2(0.0f, 0.0f), ImVec2(max_debug_window_width, FLT_MAX));
 
-    if (argc != 1 && argc != 5)
+    ImGui::Begin("Debug Info", nullptr, ImGuiWindowFlags_None);
+    ImGui::Text("FPS: %f", ImGui::GetIO().Framerate);
+    ImGui::Text("Textures:       %d active, %d free", asset_manager->texture_list.count, asset_manager->texture_free_list.count);
+    ImGui::Text("Buffers:        %d active, %d free", asset_manager->buffer_list.count, asset_manager->buffer_free_list.count);
+    for (U32 i = 0; i < ArrayCount(asset_manager->deletion_queues); i++)
     {
-        exit_with_error("Invalid number of command line arguments");
+        ImGui::Text("Deletion Queue %d: %d active", i, asset_manager->deletion_queues[i].list_count);
+    }
+    ImGui::Text("Deletetion Queue Free List: %d active", asset_manager->deletion_queue_free_list_count);
+    ImGui::Text("ThreadPool pending tasks: %u", thread_pool->pending_task_count.load());
+    cesium::TilesetRenderer* tileset = {};
+    if (ctx->tileset_pool->item_from_handle(city->tileset_handle, &tileset))
+    {
+        ImGui::Text("Tileset Renderer Show: %d active", tileset->tiles_to_show_count);
+        ImGui::Text("Tileset Renderer Free List Count: %d", tileset->tiles_to_free_stack_count);
     }
 
-    B8 use_default = true;
-    if (argc == 5)
+    // netascore status
+    ImGui::Text("Netascore Status: ");
+    if (city->neta_task_done)
     {
-        B8 is_input_malformed = false;
-        for (U32 i = 0; (i < (U64)argc) && (i < ArrayCount(bbox_coords)); ++i)
+        ImGui::Text("Ready");
+    }
+    else
+    {
+        ImGui::Text("Waiting...");
+    }
+
+    // osm status
+    ImGui::Text("Osm Status: ");
+    if (city->osm_task_done)
+    {
+        ImGui::Text("Ready");
+    }
+    else
+    {
+        ImGui::Text("Waiting...");
+    }
+
+    // camera location
+    ImGui::Text("Camera Position: %.2f, %.2f, %.2f", camera->position.x, camera->position.y, camera->position.z);
+
+    VmaBudget budgets[VK_MAX_MEMORY_HEAPS] = {};
+    vmaGetHeapBudgets(asset_manager->allocator, budgets);
+    vulkan::Context* vk_ctx = vulkan::ctx_get();
+    VkPhysicalDeviceMemoryProperties memory_properties = {};
+    vkGetPhysicalDeviceMemoryProperties(vk_ctx->physical_device, &memory_properties);
+    for (U32 i = 0; i < memory_properties.memoryHeapCount; i++)
+    {
+        B32 device_local = memory_properties.memoryHeaps[i].flags & VK_MEMORY_HEAP_DEVICE_LOCAL_BIT;
+        U64 budget_mb = budgets[i].budget / MB(1);
+        U64 usage_mb = budgets[i].usage / MB(1);
+        U64 free_mb = 0;
+        if (budgets[i].budget > budgets[i].usage)
         {
-            char* arg = argv[i + 1];
-            String8 arg_str = str8_c_string(arg);
-            F64 v = f64_from_str8(arg_str);
-            if (v == 0.0)
-            {
-                ERROR_LOG("Invalid input %s passed as cmd line argument\n", arg);
-                is_input_malformed = true;
-                break;
-            }
-            *bbox_coords[i] = v;
+            free_mb = (budgets[i].budget - budgets[i].usage) / MB(1);
         }
-
-        if (!is_input_malformed)
-        {
-            use_default = false;
-        }
+        ImGui::Text("Heap %u%s: %llu / %llu MB used, %llu MB free", i, device_local ? " device" : "", usage_mb, budget_mb, free_mb);
     }
 
-    if (argc == 1)
-    {
-        DEBUG_LOG("No command line arguments provided\n");
-        use_default = true;
-    }
-
-    if (use_default)
-    {
-        // Initialize default values
-        bbox->lon_btm_left = 9.213970;
-        bbox->lat_btm_left = 55.704686;
-        bbox->lon_top_right = 9.22868;
-        bbox->lat_top_right = 55.713671;
-        INFO_LOG("Using default values:\nlon_btm_left=%lf, lat_btm_left=%lf, lon_top_right=%lf, "
-                 "lat_top_right=%lf\n",
-                 bbox->lon_btm_left, bbox->lat_btm_left, bbox->lon_top_right, bbox->lat_top_right);
-    }
-    return input;
+    ImGui::End();
 }
 
 static void
 dt_main_loop(void* ptr)
 {
     ScratchScope scratch = ScratchScope(0, 0);
-    dt_Input* input = (dt_Input*)ptr;
 
     Context* ctx = dt_ctx_get();
-    io_IO* io_ctx = ctx->io;
+    io::IO* io_ctx = ctx->io;
     os_set_thread_name(str8_c_string("Entrypoint thread"));
+    AssertAlways(async::thread_pool_register_current_thread(ctx->thread_pool));
 
-    Rng2F32 utm_bb_coords = city::UtmFromBoundingBox(input->bbox);
-    printf("UTM Coordinates: %f %f %f %f\n", utm_bb_coords.min.x, utm_bb_coords.min.y,
-           utm_bb_coords.max.x, utm_bb_coords.max.y);
-    r_render_ctx_create(ctx->data_subdirs.data[dt_DataDirType::Shaders], io_ctx, ctx->thread_pool);
-    VK_Context* vk_ctx = VK_CtxGet();
-    ImguiSetup(vk_ctx, io_ctx);
+    draw::draw_init();
+    render::render_ctx_create(ctx->data_subdirs.data[dt_DataDirType::Shaders], io_ctx, ctx->thread_pool);
 
-    r_SamplerInfo sampler_info = {
-        .min_filter = R_Filter_Linear,
-        .mag_filter = R_Filter_Linear,
-        .mip_map_mode = R_MipMapMode_Linear,
-        .address_mode_u = R_SamplerAddressMode_Repeat,
-        .address_mode_v = R_SamplerAddressMode_Repeat,
-    };
+    vulkan::Context* vk_ctx = vulkan::ctx_get();
+    dt_imgui_setup(vk_ctx, io_ctx);
 
-    U64 node_hashmap_size = 100;
-    U64 way_hashmap_size = 100;
-    osm_structure_init(node_hashmap_size, way_hashmap_size, &input->bbox);
+    // city building ////////////////////////////////////////////
+    const city::AreaConfig cities_info_arr[] = {{.name = S("Aarhus"),
+                                                 .lon = 10.291206,
+                                                 .lat = 56.253108,
+                                                 .bbox_width_meters = 5000,
+                                                 .bbox_height_meters = 5000,
+                                                 .tileset_path = S("file:///C:/ByModel/5km_6235_580/tileset.json"),
+                                                 .bbox_clipping_enabled = true,
+                                                 .custom_geometry_enabled = true},
+                                                {.name = S("Eskiltuna"),
+                                                 .lon = 16.49952138067,
+                                                 .lat = 59.36163877297,
+                                                 .bbox_width_meters = 5000,
+                                                 .bbox_height_meters = 5000,
+                                                 .tileset_path = S("file:///C:/ByModel/eskiltuna/Totalstad_2025_q3/tileset.json")},
+                                                {.name = S("Zurich"), .lon = 8.532010538692882, .lat = 47.40024260563559, .bbox_width_meters = 5000, .bbox_height_meters = 5000}};
 
-    String8 cache_dir = ctx->data_subdirs.data[dt_DataDirType::Cache];
-    String8 texture_dir = ctx->data_subdirs.data[dt_DataDirType::Texture];
-    String8 asset_dir = ctx->data_subdirs.data[dt_DataDirType::Assets];
+    ctx->tileset_pool = ArrayResourcePool<cesium::TilesetRenderer>::create(ctx->arena_main_permanent, ArrayCount(cities_info_arr));
+    Buffer<city::City> city_buf = buffer_alloc<city::City>(ctx->arena_main_permanent, ArrayCount(cities_info_arr));
+    for (U32 i = 0; i < city_buf.size; ++i)
+    {
+        const city::AreaConfig* city_config = &cities_info_arr[i];
+        city::City* city = city_buf[i];
 
-    ctx->road =
-        city_road_create(texture_dir, cache_dir, &input->bbox, &sampler_info, osm_g_network);
-    city_Road* road = ctx->road;
+        city->camera_handle = resource_pool_array_idx_get(ctx->camera_container);
+        ui::Camera* camera = resource_pool_item_from_idx(ctx->camera_container, city->camera_handle);
+        ui::camera_init(ctx->arena_main_permanent, camera);
 
-    ui_camera_init(ctx->camera);
-    ctx->buildings = city::BuildingsCreate(cache_dir, texture_dir, ctx->road->road_height,
-                                           &input->bbox, &sampler_info, osm_g_network);
-    city::Buildings* buildings = ctx->buildings;
-    ctx->car_sim = city::CarSimCreate(asset_dir, texture_dir, 100, ctx->road);
-    city::CarSim* car_sim = ctx->car_sim;
+        Rng2F64 bbox = util::wgs84_bbox_from_btm_right_corner(city_config->lon, city_config->lat, city_config->bbox_width_meters, city_config->bbox_height_meters);
+        city::city_init(city, ctx->data_subdirs.data[dt_DataDirType::Cache]);
+        city->bbox = bbox;
+        city->tileset_url = city_config->tileset_path;
+        city::city_build(city, bbox, city_config->tileset_path, city_config->name);
+        ////////////////////////////////////////////////////////
+    }
 
+    async::WebsocketConnection ws_task_result = async::async_websocket_start(S("ws://127.0.0.1:8080/ws"));
+    if (ws_task_result.has_error())
+    {
+        ERROR_LOG("Error from websocket");
+    }
+
+    city::RoadOverlayOption neta_overlay_option = city::RoadOverlayOption_None;
+    S32 cur_area_option = 0;
+    S32 area_option = cur_area_option;
+
+    const city::AreaConfig* area_config = &cities_info_arr[cur_area_option];
+    city::City* area = city_buf[cur_area_option];
+
+    city_area_streaming_begin(ctx->thread_pool, area, area_config);
     while (ctx->running)
     {
         dt_time_update(ctx->time);
 
-        io_new_frame(io_ctx);
-        r_new_frame();
+        arena_clear(dt_ctx_get()->arena_frame);
+        io::new_frame();
+        render::new_frame();
+        draw::draw_new_frame();
         ImGui::NewFrame();
-        Vec2U32 framebuffer_dim = {.x = (U32)io_ctx->framebuffer_width,
-                                   .y = (U32)io_ctx->framebuffer_height};
+        async::thread_pool_main_thread_queue_drain(ctx->thread_pool);
 
+        String8List ws_msgs = ws_task_result.read(ctx->arena_frame);
+        Buffer<city::Coordinate> new_agent_coords = city::city_latest_coordinates_buffer_from_str8_list(ctx->arena_frame, &ws_msgs);
+        Vec2U32 framebuffer_dim = {(U32)io_ctx->framebuffer_width, (U32)io_ctx->framebuffer_height};
+
+        ImGui::Begin("Interaction", nullptr);
+
+        ImGui::SeparatorText("Area");
+        for (U32 i = 0; i < ArrayCount(cities_info_arr); i++)
         {
-            ui_camera_update(ctx->camera, ctx->io, ctx->time->delta_time_sec, framebuffer_dim);
-            U64 hovered_object_id = r_latest_hovered_object_id_get();
-            osm_WayNode* way_node = osm_way_find(hovered_object_id);
-
-            if (way_node)
-            {
-                osm_Way* way = &way_node->way;
-                bool open = true;
-                ImGui::Begin("Object Info", &open, ImGuiWindowFlags_AlwaysAutoResize);
-                for (U32 tag_idx = 0; tag_idx < way->tags.size; tag_idx += 1)
-                {
-                    osm_Tag* tag = &way->tags.data[tag_idx];
-                    ImGui::Text("%s: %s", (char*)tag->key.str, (char*)tag->value.str);
-                }
-                ImVec2 window_size = ImGui::GetWindowSize();
-                ImVec2 window_pos = ImVec2((F32)framebuffer_dim.x - window_size.x, 0);
-                ImGui::SetWindowPos(window_pos, ImGuiCond_Always);
-                ImGui::End();
-            }
+            ImGui::RadioButton((const char*)cities_info_arr[i].name.str, (int*)&area_option, (int)i);
         }
 
-        r_model_3d_draw(road->handles, true);
-        r_model_3d_draw(buildings->roof_model_handles, false);
-        r_model_3d_draw(buildings->facade_model_handles, false);
+        ImGui::SeparatorText("Netascore");
+        ImGui::SetWindowPos(ImVec2(0, 0));
 
-        Buffer<r_Model3DInstance> instance_buffer =
-            CarUpdate(vk_ctx->draw_frame_arena, car_sim, ctx->time->delta_time_sec);
-        r_BufferInfo car_instance_buffer_info =
-            r_buffer_info_from_template_buffer(instance_buffer, R_BufferType_Vertex);
-        VK_Model3DInstanceDraw(car_sim->texture_handle, car_sim->vertex_handle,
-                               car_sim->index_handle, &car_instance_buffer_info);
+        for (U32 i = 0; i < city::RoadOverlayOption_Count; i++)
+        {
+            ImGui::RadioButton(city::road_overlay_option_strs[i], (int*)&neta_overlay_option, (int)i);
+        }
 
-        r_render_frame(framebuffer_dim, &io_ctx->framebuffer_resized, ctx->camera,
-                       io_ctx->mouse_pos_cur_s64);
+        ImGui::SeparatorText("Agent Size");
+        city::City* selected_city = city_buf[area_option];
+        ImGui::SliderFloat("Scale", &selected_city->agent_scale_factor, 0.01f, 1.0f, "%.3f");
+
+        ImGui::End();
+
+        if (cur_area_option != area_option)
+        {
+            city_area_streaming_end(area);
+
+            cur_area_option = area_option;
+            area = city_buf[cur_area_option];
+            area_config = &cities_info_arr[cur_area_option];
+
+            city_area_streaming_begin(ctx->thread_pool, area, area_config);
+        }
+
+        ui::Camera* camera = resource_pool_item_from_idx(ctx->camera_container, area->camera_handle);
+        ImGuiIO& imgui_io = ImGui::GetIO();
+        bool imgui_window_hovered = ImGui::IsWindowHovered(ImGuiHoveredFlags_AnyWindow);
+        bool imgui_input_captured = imgui_io.WantCaptureMouse || imgui_io.WantCaptureKeyboard;
+        bool world_camera_enable = !imgui_window_hovered && !imgui_input_captured;
+        ui::camera_update(camera, ctx->io, ctx->time->delta_time_sec, vec_2s32(io_ctx->framebuffer_width, io_ctx->framebuffer_height), vk_ctx->current_frame, world_camera_enable);
+        // keep inactive cities' tilesets making progress so their raster overlay
+        // tile providers finish creating in the background; the active city is
+        // pumped by city_update -> tileset_update_view
+        for (U32 i = 0; i < city_buf.size; ++i)
+        {
+            cesium::TilesetRenderer* tileset = {};
+            if (ctx->tileset_pool->item_from_handle(area->tileset_handle, &tileset))
+            {
+                cesium::tileset_pump_async(tileset);
+            }
+        }
+        city::city_update(area, new_agent_coords, ctx->thread_pool, neta_overlay_option, framebuffer_dim, area_config);
+
+        // #if BUILD_DEBUG
+        imgui_debug_window(area, ctx->thread_pool);
+        // #endif
+
+        /////////////////////////////////////
+
+        draw::draw_flush();
+        render::render_frame(framebuffer_dim, &io_ctx->framebuffer_resized, io_ctx->mouse_pos_cur_s64);
+
+        ImGui::EndFrame();
+        Debug_Frame_End();
     }
-    r_gpu_work_done_wait();
-
-    city::road_destroy(ctx->road);
-    city::car_sim_destroy(ctx->car_sim);
-    city::building_destroy(ctx->buildings);
-    r_render_ctx_destroy();
+    while (thread_pool_has_pending_work(ctx->thread_pool))
+    {
+    }
+    render::gpu_work_done_wait();
+    for (U32 i = 0; i < ctx->camera_container->size; ++i)
+    {
+        ItemHeader<ui::Camera>* camera_item = &ctx->camera_container->items[i];
+        if (camera_item->in_use)
+        {
+            render::mapped_buffer_destroy(camera_item->data.mut_handles);
+        }
+    }
+    for (U32 i = 0; i < city_buf.size; i += 1)
+    {
+        city::city_release(city_buf[i]);
+    }
+    render::gpu_work_done_wait();
+    draw::draw_release();
+    render::render_ctx_destroy();
 }

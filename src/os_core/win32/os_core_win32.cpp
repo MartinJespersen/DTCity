@@ -8,12 +8,12 @@
 
 typedef HRESULT
 W32_SetThreadDescription_Type(HANDLE hThread, PCWSTR lpThreadDescription);
-static W32_SetThreadDescription_Type* w32_SetThreadDescription_func = 0;
+lib_internal W32_SetThreadDescription_Type* w32_SetThreadDescription_func = 0;
 
 ////////////////////////////////
 //~ rjf: File Info Conversion Helpers
 
-static FilePropertyFlags
+lib_internal FilePropertyFlags
 os_w32_file_property_flags_from_dwFileAttributes(DWORD dwFileAttributes)
 {
     FilePropertyFlags flags = 0;
@@ -21,24 +21,26 @@ os_w32_file_property_flags_from_dwFileAttributes(DWORD dwFileAttributes)
     {
         flags |= FilePropertyFlag_IsFolder;
     }
+    if (dwFileAttributes & FILE_ATTRIBUTE_REPARSE_POINT)
+    {
+        flags |= FilePropertyFlag_IsLink;
+    }
     return flags;
 }
 
-static void
-os_w32_file_properties_from_attribute_data(FileProperties* properties,
-                                           WIN32_FILE_ATTRIBUTE_DATA* attributes)
+lib_internal void
+os_w32_file_properties_from_attribute_data(FileProperties* properties, WIN32_FILE_ATTRIBUTE_DATA* attributes)
 {
     properties->size = Compose64Bit(attributes->nFileSizeHigh, attributes->nFileSizeLow);
     os_w32_dense_time_from_file_time(&properties->created, &attributes->ftCreationTime);
     os_w32_dense_time_from_file_time(&properties->modified, &attributes->ftLastWriteTime);
-    properties->flags =
-        os_w32_file_property_flags_from_dwFileAttributes(attributes->dwFileAttributes);
+    properties->flags = os_w32_file_property_flags_from_dwFileAttributes(attributes->dwFileAttributes);
 }
 
 ////////////////////////////////
 //~ rjf: Time Conversion Helpers
 
-static void
+lib_internal void
 os_w32_date_time_from_system_time(DateTime* out, SYSTEMTIME* in)
 {
     out->year = in->wYear;
@@ -51,7 +53,7 @@ os_w32_date_time_from_system_time(DateTime* out, SYSTEMTIME* in)
     out->msec = in->wMilliseconds;
 }
 
-static void
+lib_internal void
 os_w32_system_time_from_date_time(SYSTEMTIME* out, DateTime* in)
 {
     out->wYear = (WORD)(in->year);
@@ -63,7 +65,7 @@ os_w32_system_time_from_date_time(SYSTEMTIME* out, DateTime* in)
     out->wMilliseconds = in->msec;
 }
 
-static void
+lib_internal void
 os_w32_dense_time_from_file_time(DenseTime* out, FILETIME* in)
 {
     SYSTEMTIME systime = {0};
@@ -73,7 +75,7 @@ os_w32_dense_time_from_file_time(DenseTime* out, FILETIME* in)
     *out = dense_time_from_date_time(date_time);
 }
 
-static U32
+lib_internal U32
 os_w32_sleep_ms_from_endt_us(U64 endt_us)
 {
     U32 sleep_ms = 0;
@@ -93,7 +95,7 @@ os_w32_sleep_ms_from_endt_us(U64 endt_us)
     return sleep_ms;
 }
 
-static U32
+lib_internal U32
 os_w32_unix_time_from_file_time(FILETIME file_time)
 {
     U64 win32_time = ((U64)file_time.dwHighDateTime << 32) | file_time.dwLowDateTime;
@@ -108,7 +110,7 @@ os_w32_unix_time_from_file_time(FILETIME file_time)
 ////////////////////////////////
 //~ rjf: Entity Functions
 
-static OS_W32_Entity*
+lib_internal OS_W32_Entity*
 os_w32_entity_alloc(OS_W32_EntityKind kind)
 {
     OS_W32_Entity* result = 0;
@@ -130,7 +132,7 @@ os_w32_entity_alloc(OS_W32_EntityKind kind)
     return result;
 }
 
-static void
+lib_internal void
 os_w32_entity_release(OS_W32_Entity* entity)
 {
     entity->kind = OS_W32_EntityKind_Null;
@@ -142,7 +144,7 @@ os_w32_entity_release(OS_W32_Entity* entity)
 ////////////////////////////////
 //~ rjf: Thread Entry Point
 
-static DWORD
+lib_internal DWORD
 os_w32_thread_entry_point(void* ptr)
 {
     OS_W32_Entity* entity = (OS_W32_Entity*)ptr;
@@ -158,20 +160,20 @@ os_w32_thread_entry_point(void* ptr)
 ////////////////////////////////
 //~ rjf: @os_hooks System/Process Info (Implemented Per-OS)
 
-static OS_SystemInfo*
+lib_internal OS_SystemInfo*
 OS_GetSystemInfo()
 {
     return &os_w32_state.system_info;
 }
 
-static OS_ProcessInfo*
+lib_internal OS_ProcessInfo*
 os_get_process_info()
 {
     return &os_w32_state.process_info;
 }
 
-static String8
-OS_GetCurrentPath(Arena* arena)
+lib_internal String8
+os_current_path_get(Arena* arena)
 {
     Temp scratch = ScratchBegin(&arena, 1);
     DWORD length = GetCurrentDirectoryW(0, 0);
@@ -182,7 +184,7 @@ OS_GetCurrentPath(Arena* arena)
     return name;
 }
 
-static U32
+lib_internal U32
 os_get_process_start_time_unix()
 {
     HANDLE handle = GetCurrentProcess();
@@ -197,10 +199,10 @@ os_get_process_start_time_unix()
     return 0;
 }
 
-static inline String8
-OS_PathDelimiter()
+lib_internal inline String8
+os_path_delimiter()
 {
-    return Str8Lit("\\");
+    return str8_lit("\\");
 }
 
 ////////////////////////////////
@@ -208,27 +210,27 @@ OS_PathDelimiter()
 
 //- rjf: basic
 
-static void*
+lib_internal void*
 os_reserve(U64 size)
 {
     void* result = VirtualAlloc(0, size, MEM_RESERVE, PAGE_READWRITE);
     return result;
 }
 
-static B32
+lib_internal B32
 os_commit(void* ptr, U64 size)
 {
     B32 result = (VirtualAlloc(ptr, size, MEM_COMMIT, PAGE_READWRITE) != 0);
     return result;
 }
 
-static void
+lib_internal void
 os_decommit(void* ptr, U64 size)
 {
     VirtualFree(ptr, size, MEM_DECOMMIT);
 }
 
-static void
+lib_internal void
 os_release(void* ptr, U64 size)
 {
     // NOTE(rjf): size not used - not necessary on Windows, but necessary for
@@ -238,16 +240,15 @@ os_release(void* ptr, U64 size)
 
 //- rjf: large pages
 
-static void*
+lib_internal void*
 os_reserve_large(U64 size)
 {
     // we commit on reserve because windows
-    void* result =
-        VirtualAlloc(0, size, MEM_RESERVE | MEM_COMMIT | MEM_LARGE_PAGES, PAGE_READWRITE);
+    void* result = VirtualAlloc(0, size, MEM_RESERVE | MEM_COMMIT | MEM_LARGE_PAGES, PAGE_READWRITE);
     return result;
 }
 
-static B32
+lib_internal B32
 os_commit_large(void* ptr, U64 size)
 {
     return 1;
@@ -256,14 +257,14 @@ os_commit_large(void* ptr, U64 size)
 ////////////////////////////////
 //~ rjf: @os_hooks Thread Info (Implemented Per-OS)
 
-static U32
+lib_internal U32
 os_tid()
 {
     DWORD id = GetCurrentThreadId();
     return (U32)id;
 }
 
-static void
+lib_internal void
 os_set_thread_name(String8 name)
 {
     Temp scratch = ScratchBegin(0, 0);
@@ -271,13 +272,13 @@ os_set_thread_name(String8 name)
     // rjf: windows 10 style
     if (w32_SetThreadDescription_func)
     {
-        String16 name16 = Str16From8(scratch.arena, name);
+        String16 name16 = str16_from_8(scratch.arena, name);
         w32_SetThreadDescription_func(GetCurrentThread(), (WCHAR*)name16.str);
     }
 
     // rjf: raise-exception style
     {
-        String8 name_copy = PushStr8Copy(scratch.arena, name);
+        String8 name_copy = push_str8_copy(scratch.arena, name);
 #pragma pack(push, 8)
         typedef struct THREADNAME_INFO THREADNAME_INFO;
         struct THREADNAME_INFO
@@ -311,7 +312,7 @@ os_set_thread_name(String8 name)
 ////////////////////////////////
 //~ rjf: @os_hooks Aborting (Implemented Per-OS)
 
-static void
+lib_internal void
 os_abort(S32 exit_code)
 {
     ExitProcess(exit_code);
@@ -322,12 +323,12 @@ os_abort(S32 exit_code)
 
 //- rjf: files
 
-static OS_Handle
+lib_internal OS_Handle
 os_file_open(OS_AccessFlags flags, String8 path)
 {
     OS_Handle result = {0};
     Temp scratch = ScratchBegin(0, 0);
-    String16 path16 = Str16From8(scratch.arena, path);
+    String16 path16 = str16_from_8(scratch.arena, path);
     DWORD access_flags = 0;
     DWORD share_mode = 0;
     DWORD creation_disposition = OPEN_EXISTING;
@@ -365,8 +366,7 @@ os_file_open(OS_AccessFlags flags, String8 path)
     {
         security_attributes.bInheritHandle = 1;
     }
-    HANDLE file = CreateFileW((WCHAR*)path16.str, access_flags, share_mode, &security_attributes,
-                              creation_disposition, FILE_ATTRIBUTE_NORMAL, 0);
+    HANDLE file = CreateFileW((WCHAR*)path16.str, access_flags, share_mode, &security_attributes, creation_disposition, FILE_ATTRIBUTE_NORMAL, 0);
     if (file != INVALID_HANDLE_VALUE)
     {
         result.u64[0] = (U64)file;
@@ -375,7 +375,7 @@ os_file_open(OS_AccessFlags flags, String8 path)
     return result;
 }
 
-static void
+lib_internal void
 os_file_close(OS_Handle file)
 {
     if (OS_HandleMatch(file, OS_HandleIsZero()))
@@ -387,7 +387,7 @@ os_file_close(OS_Handle file)
     (void)result;
 }
 
-static U64
+lib_internal U64
 os_file_read(OS_Handle file, Rng1U64 rng, void* out_data)
 {
     if (OS_HandleMatch(file, OS_HandleIsZero()))
@@ -426,8 +426,8 @@ os_file_read(OS_Handle file, Rng1U64 rng, void* out_data)
     return total_read_size;
 }
 
-static U64
-OS_FileWrite(OS_Handle file, Rng1U64 rng, void* data)
+lib_internal U64
+os_file_write(OS_Handle file, Rng1U64 rng, void* data)
 {
     if (OS_HandleMatch(file, OS_HandleIsZero()))
     {
@@ -461,7 +461,7 @@ OS_FileWrite(OS_Handle file, Rng1U64 rng, void* data)
     return src_off;
 }
 
-static B32
+lib_internal B32
 os_file_set_time(OS_Handle file, DateTime time)
 {
     if (OS_HandleMatch(file, OS_HandleIsZero()))
@@ -473,12 +473,11 @@ os_file_set_time(OS_Handle file, DateTime time)
     SYSTEMTIME system_time = {0};
     os_w32_system_time_from_date_time(&system_time, &time);
     FILETIME file_time = {0};
-    result = (SystemTimeToFileTime(&system_time, &file_time) &&
-              SetFileTime(handle, &file_time, &file_time, &file_time));
+    result = (SystemTimeToFileTime(&system_time, &file_time) && SetFileTime(handle, &file_time, &file_time, &file_time));
     return result;
 }
 
-static FileProperties
+lib_internal FileProperties
 os_properties_from_file(OS_Handle file)
 {
     if (OS_HandleMatch(file, OS_HandleIsZero()))
@@ -502,7 +501,7 @@ os_properties_from_file(OS_Handle file)
     return props;
 }
 
-static OS_FileID
+lib_internal OS_FileID
 os_id_from_file(OS_Handle file)
 {
     if (OS_HandleMatch(file, OS_HandleIsZero()))
@@ -523,7 +522,7 @@ os_id_from_file(OS_Handle file)
     return result;
 }
 
-static B32
+lib_internal B32
 os_file_reserve_size(OS_Handle file, U64 size)
 {
     HANDLE handle = (HANDLE)file.u64[0];
@@ -532,49 +531,58 @@ os_file_reserve_size(OS_Handle file, U64 size)
     alloc_info.AllocationSize.LowPart = size & max_U32;
     alloc_info.AllocationSize.HighPart = (size >> 32) & max_U32;
 
-    BOOL is_reserved =
-        SetFileInformationByHandle(handle, FileAllocationInfo, &alloc_info, sizeof(alloc_info));
+    BOOL is_reserved = SetFileInformationByHandle(handle, FileAllocationInfo, &alloc_info, sizeof(alloc_info));
     return is_reserved;
 }
 
-static B32
+lib_internal B32
 os_delete_file_at_path(String8 path)
 {
     Temp scratch = ScratchBegin(0, 0);
-    String16 path16 = Str16From8(scratch.arena, path);
+    String16 path16 = str16_from_8(scratch.arena, path);
     B32 result = DeleteFileW((WCHAR*)path16.str);
     ScratchEnd(scratch);
     return result;
 }
 
-static B32
+lib_internal B32
+os_delete_directory_at_path(String8 path)
+{
+    Temp scratch = ScratchBegin(0, 0);
+    String16 path16 = str16_from_8(scratch.arena, path);
+    B32 result = RemoveDirectoryW((WCHAR*)path16.str);
+    ScratchEnd(scratch);
+    return result;
+}
+
+lib_internal B32
 os_copy_file_path(String8 dst, String8 src)
 {
     Temp scratch = ScratchBegin(0, 0);
-    String16 dst16 = Str16From8(scratch.arena, dst);
-    String16 src16 = Str16From8(scratch.arena, src);
+    String16 dst16 = str16_from_8(scratch.arena, dst);
+    String16 src16 = str16_from_8(scratch.arena, src);
     B32 result = CopyFileW((WCHAR*)src16.str, (WCHAR*)dst16.str, 0);
     ScratchEnd(scratch);
     return result;
 }
 
-static B32
+lib_internal B32
 os_move_file_path(String8 dst, String8 src)
 {
     Temp scratch = ScratchBegin(0, 0);
-    String16 dst16 = Str16From8(scratch.arena, dst);
-    String16 src16 = Str16From8(scratch.arena, src);
+    String16 dst16 = str16_from_8(scratch.arena, dst);
+    String16 src16 = str16_from_8(scratch.arena, src);
     B32 result = MoveFileW((WCHAR*)src16.str, (WCHAR*)dst16.str);
     ScratchEnd(scratch);
     return result;
 }
 
-static String8
+lib_internal String8
 os_full_path_from_path(Arena* arena, String8 path)
 {
     Temp scratch = ScratchBegin(&arena, 1);
     DWORD buffer_size = Max(MAX_PATH, path.size * 2) + 1;
-    String16 path16 = Str16From8(scratch.arena, path);
+    String16 path16 = str16_from_8(scratch.arena, path);
     WCHAR* buffer = PushArrayNoZero(scratch.arena, WCHAR, buffer_size);
     DWORD path16_size = GetFullPathNameW((WCHAR*)path16.str, buffer_size, buffer, NULL);
     if (path16_size > buffer_size)
@@ -589,35 +597,34 @@ os_full_path_from_path(Arena* arena, String8 path)
     return full_path;
 }
 
-static B32
+lib_internal B32
 os_file_path_exists(String8 path)
 {
     Temp scratch = ScratchBegin(0, 0);
-    String16 path16 = Str16From8(scratch.arena, path);
+    String16 path16 = str16_from_8(scratch.arena, path);
     DWORD attributes = GetFileAttributesW((WCHAR*)path16.str);
-    B32 exists =
-        (attributes != INVALID_FILE_ATTRIBUTES) && !!(~attributes & FILE_ATTRIBUTE_DIRECTORY);
+    B32 exists = (attributes != INVALID_FILE_ATTRIBUTES) && !!(~attributes & FILE_ATTRIBUTE_DIRECTORY);
     ScratchEnd(scratch);
     return exists;
 }
 
-static B32
+lib_internal B32
 os_folder_path_exists(String8 path)
 {
     Temp scratch = ScratchBegin(0, 0);
-    String16 path16 = Str16From8(scratch.arena, path);
+    String16 path16 = str16_from_8(scratch.arena, path);
     DWORD attributes = GetFileAttributesW((WCHAR*)path16.str);
     B32 exists = (attributes != INVALID_FILE_ATTRIBUTES) && (attributes & FILE_ATTRIBUTE_DIRECTORY);
     ScratchEnd(scratch);
     return exists;
 }
 
-static FileProperties
+lib_internal FileProperties
 os_properties_from_file_path(String8 path)
 {
     WIN32_FIND_DATAW find_data = {0};
     Temp scratch = ScratchBegin(0, 0);
-    String16 path16 = Str16From8(scratch.arena, path);
+    String16 path16 = str16_from_8(scratch.arena, path);
     HANDLE handle = FindFirstFileW((WCHAR*)path16.str, &find_data);
     FileProperties props = {0};
     if (handle != INVALID_HANDLE_VALUE)
@@ -633,11 +640,9 @@ os_properties_from_file_path(String8 path)
         WCHAR buffer[512] = {0};
         DWORD length = GetLogicalDriveStringsW(sizeof(buffer), buffer);
         U64 last_slash_pos = 0;
-        for (; last_slash_pos < path.size;
-             last_slash_pos =
-                 FindSubstr8(path, Str8Lit("/"), last_slash_pos + 1, MatchFlag_SlashInsensitive))
+        for (; last_slash_pos < path.size; last_slash_pos = str8_substr_find(path, str8_lit("/"), last_slash_pos + 1, MatchFlag_SlashInsensitive))
             ;
-        String8 path_trimmed = Str8Prefix(path, last_slash_pos);
+        String8 path_trimmed = str8_prefix(path, last_slash_pos);
         for (U64 off = 0; off < (U64)length;)
         {
             String16 next_drive_string_16 = str16_cstring((U16*)buffer + off);
@@ -659,7 +664,7 @@ os_properties_from_file_path(String8 path)
 
 //- rjf: file maps
 
-static OS_Handle
+lib_internal OS_Handle
 os_file_map_open(OS_AccessFlags flags, OS_Handle file)
 {
     OS_Handle map = {0};
@@ -704,7 +709,7 @@ os_file_map_open(OS_AccessFlags flags, OS_Handle file)
     return map;
 }
 
-static void
+lib_internal void
 os_file_map_close(OS_Handle map)
 {
     HANDLE handle = (HANDLE)map.u64[0];
@@ -712,7 +717,7 @@ os_file_map_close(OS_Handle map)
     (void)result;
 }
 
-static void*
+lib_internal void*
 os_file_map_view_open(OS_Handle map, OS_AccessFlags flags, Rng1U64 range)
 {
     HANDLE handle = (HANDLE)map.u64[0];
@@ -756,7 +761,7 @@ os_file_map_view_open(OS_Handle map, OS_AccessFlags flags, Rng1U64 range)
     return result;
 }
 
-static void
+lib_internal void
 os_file_map_view_close(OS_Handle map, void* ptr, Rng1U64 range)
 {
     BOOL result = UnmapViewOfFile(ptr);
@@ -765,12 +770,12 @@ os_file_map_view_close(OS_Handle map, void* ptr, Rng1U64 range)
 
 //- rjf: directory iteration
 
-static OS_FileIter*
+lib_internal OS_FileIter*
 os_file_iter_begin(Arena* arena, String8 path, OS_FileIterFlags flags)
 {
     Temp scratch = ScratchBegin(&arena, 1);
-    String8 path_with_wildcard = PushStr8Cat(scratch.arena, path, Str8Lit("\\*"));
-    String16 path16 = Str16From8(scratch.arena, path_with_wildcard);
+    String8 path_with_wildcard = str8_concat(scratch.arena, path, str8_lit("\\*"));
+    String16 path16 = str16_from_8(scratch.arena, path_with_wildcard);
     OS_FileIter* iter = PushArray(arena, OS_FileIter, 1);
     iter->flags = flags;
     OS_W32_FileIter* w32_iter = (OS_W32_FileIter*)iter->memory;
@@ -786,7 +791,7 @@ os_file_iter_begin(Arena* arena, String8 path, OS_FileIterFlags flags)
             off += next_drive_string_16.size + 1;
             String8 next_drive_string = str8_from_16(arena, next_drive_string_16);
             next_drive_string = str8_chop_last_slash(next_drive_string);
-            Str8ListPush(scratch.arena, &drive_strings, next_drive_string);
+            str8_list_push(scratch.arena, &drive_strings, next_drive_string);
         }
         w32_iter->drive_strings = str8_array_from_list(arena, &drive_strings);
         w32_iter->drive_strings_iter_idx = 0;
@@ -799,7 +804,7 @@ os_file_iter_begin(Arena* arena, String8 path, OS_FileIterFlags flags)
     return iter;
 }
 
-static B32
+lib_internal B32
 os_file_iter_next(Arena* arena, OS_FileIter* iter, OS_FileInfo* info_out)
 {
     B32 result = 0;
@@ -854,14 +859,10 @@ os_file_iter_next(Arena* arena, OS_FileIter* iter, OS_FileInfo* info_out)
                     if (usable_file)
                     {
                         info_out->name = str8_from_16(arena, str16_cstring((U16*)file_name));
-                        info_out->props.size = (U64)w32_iter->find_data.nFileSizeLow |
-                                               (((U64)w32_iter->find_data.nFileSizeHigh) << 32);
-                        os_w32_dense_time_from_file_time(&info_out->props.created,
-                                                         &w32_iter->find_data.ftCreationTime);
-                        os_w32_dense_time_from_file_time(&info_out->props.modified,
-                                                         &w32_iter->find_data.ftLastWriteTime);
-                        info_out->props.flags =
-                            os_w32_file_property_flags_from_dwFileAttributes(attributes);
+                        info_out->props.size = (U64)w32_iter->find_data.nFileSizeLow | (((U64)w32_iter->find_data.nFileSizeHigh) << 32);
+                        os_w32_dense_time_from_file_time(&info_out->props.created, &w32_iter->find_data.ftCreationTime);
+                        os_w32_dense_time_from_file_time(&info_out->props.modified, &w32_iter->find_data.ftLastWriteTime);
+                        info_out->props.flags = os_w32_file_property_flags_from_dwFileAttributes(attributes);
                         result = 1;
                         if (!FindNextFileW(w32_iter->handle, &w32_iter->find_data))
                         {
@@ -895,7 +896,7 @@ os_file_iter_next(Arena* arena, OS_FileIter* iter, OS_FileInfo* info_out)
     return result;
 }
 
-static void
+lib_internal void
 os_file_iter_end(OS_FileIter* iter)
 {
     OS_W32_FileIter* w32_iter = (OS_W32_FileIter*)iter->memory;
@@ -909,12 +910,12 @@ os_file_iter_end(OS_FileIter* iter)
 
 //- rjf: directory creation
 
-static B32
+lib_internal B32
 os_make_directory(String8 path)
 {
     B32 result = 0;
     Temp scratch = ScratchBegin(0, 0);
-    String16 name16 = Str16From8(scratch.arena, path);
+    String16 name16 = str16_from_8(scratch.arena, path);
     WIN32_FILE_ATTRIBUTE_DATA attributes = {0};
     GetFileAttributesExW((WCHAR*)name16.str, GetFileExInfoStandard, &attributes);
     if (attributes.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)
@@ -932,49 +933,46 @@ os_make_directory(String8 path)
 ////////////////////////////////
 //~ rjf: @os_hooks Shared Memory (Implemented Per-OS)
 
-static OS_Handle
+lib_internal OS_Handle
 os_shared_memory_alloc(U64 size, String8 name)
 {
     Temp scratch = ScratchBegin(0, 0);
-    String16 name16 = Str16From8(scratch.arena, name);
-    HANDLE file = CreateFileMappingW(INVALID_HANDLE_VALUE, 0, PAGE_READWRITE,
-                                     (U32)((size & 0xffffffff00000000) >> 32),
-                                     (U32)((size & 0x00000000ffffffff)), (WCHAR*)name16.str);
+    String16 name16 = str16_from_8(scratch.arena, name);
+    HANDLE file = CreateFileMappingW(INVALID_HANDLE_VALUE, 0, PAGE_READWRITE, (U32)((size & 0xffffffff00000000) >> 32), (U32)((size & 0x00000000ffffffff)), (WCHAR*)name16.str);
     OS_Handle result = {(U64)file};
     ScratchEnd(scratch);
     return result;
 }
 
-static OS_Handle
+lib_internal OS_Handle
 os_shared_memory_open(String8 name)
 {
     Temp scratch = ScratchBegin(0, 0);
-    String16 name16 = Str16From8(scratch.arena, name);
+    String16 name16 = str16_from_8(scratch.arena, name);
     HANDLE file = OpenFileMappingW(FILE_MAP_ALL_ACCESS, 0, (WCHAR*)name16.str);
     OS_Handle result = {(U64)file};
     ScratchEnd(scratch);
     return result;
 }
 
-static void
+lib_internal void
 os_shared_memory_close(OS_Handle handle)
 {
     HANDLE file = (HANDLE)(handle.u64[0]);
     CloseHandle(file);
 }
 
-static void*
+lib_internal void*
 os_shared_memory_view_open(OS_Handle handle, Rng1U64 range)
 {
     HANDLE file = (HANDLE)(handle.u64[0]);
     U64 offset = range.min;
     U64 size = range.max - range.min;
-    void* ptr = MapViewOfFile(file, FILE_MAP_ALL_ACCESS, (U32)((offset & 0xffffffff00000000) >> 32),
-                              (U32)((offset & 0x00000000ffffffff)), size);
+    void* ptr = MapViewOfFile(file, FILE_MAP_ALL_ACCESS, (U32)((offset & 0xffffffff00000000) >> 32), (U32)((offset & 0x00000000ffffffff)), size);
     return ptr;
 }
 
-static void
+lib_internal void
 os_shared_memory_view_close(OS_Handle handle, void* ptr, Rng1U64 range)
 {
     UnmapViewOfFile(ptr);
@@ -983,7 +981,7 @@ os_shared_memory_view_close(OS_Handle handle, void* ptr, Rng1U64 range)
 ////////////////////////////////
 //~ rjf: @os_hooks Time (Implemented Per-OS)
 
-static U64
+lib_internal U64
 os_now_microseconds()
 {
     U64 result = 0;
@@ -995,7 +993,7 @@ os_now_microseconds()
     return result;
 }
 
-static U32
+lib_internal U32
 os_now_unix()
 {
     FILETIME file_time;
@@ -1004,7 +1002,7 @@ os_now_unix()
     return unix_time;
 }
 
-static DateTime
+lib_internal DateTime
 os_now_universal_time()
 {
     SYSTEMTIME systime = {0};
@@ -1014,7 +1012,7 @@ os_now_universal_time()
     return result;
 }
 
-static DateTime
+lib_internal DateTime
 os_universal_time_from_local(DateTime* date_time)
 {
     SYSTEMTIME systime = {0};
@@ -1029,7 +1027,7 @@ os_universal_time_from_local(DateTime* date_time)
     return result;
 }
 
-static DateTime
+lib_internal DateTime
 os_local_time_from_universal(DateTime* date_time)
 {
     SYSTEMTIME systime = {0};
@@ -1044,7 +1042,7 @@ os_local_time_from_universal(DateTime* date_time)
     return result;
 }
 
-static void
+lib_internal void
 os_sleep_milliseconds(U32 msec)
 {
     Sleep(msec);
@@ -1053,7 +1051,7 @@ os_sleep_milliseconds(U32 msec)
 ////////////////////////////////
 //~ rjf: @os_hooks Child Processes (Implemented Per-OS)
 
-static OS_Handle
+lib_internal OS_Handle
 os_process_launch(OS_ProcessLaunchParams* params)
 {
     OS_Handle result = {0};
@@ -1063,10 +1061,10 @@ os_process_launch(OS_ProcessLaunchParams* params)
     String8 cmd = {0};
     {
         StringJoin join_params = {0};
-        join_params.pre = Str8Lit("\"");
-        join_params.sep = Str8Lit("\" \"");
-        join_params.post = Str8Lit("\"");
-        cmd = Str8ListJoin(scratch.arena, &params->cmd_line, &join_params);
+        join_params.pre = str8_lit("\"");
+        join_params.sep = str8_lit("\" \"");
+        join_params.post = str8_lit("\"");
+        cmd = str8_list_join(scratch.arena, &params->cmd_line, &join_params);
     }
 
     //- rjf: form environment
@@ -1074,8 +1072,8 @@ os_process_launch(OS_ProcessLaunchParams* params)
     String8 env = {0};
     {
         StringJoin join_params2 = {0};
-        join_params2.sep = Str8Lit("\0");
-        join_params2.post = Str8Lit("\0");
+        join_params2.sep = str8_lit("\0");
+        join_params2.post = str8_lit("\0");
         String8List all_opts = params->env;
         if (params->inherit_env != 0)
         {
@@ -1084,12 +1082,11 @@ os_process_launch(OS_ProcessLaunchParams* params)
                 MemoryZeroStruct(&all_opts);
                 for (String8Node* n = params->env.first; n != 0; n = n->next)
                 {
-                    Str8ListPush(scratch.arena, &all_opts, n->string);
+                    str8_list_push(scratch.arena, &all_opts, n->string);
                 }
-                for (String8Node* n = os_w32_state.process_info.environment.first; n != 0;
-                     n = n->next)
+                for (String8Node* n = os_w32_state.process_info.environment.first; n != 0; n = n->next)
                 {
-                    Str8ListPush(scratch.arena, &all_opts, n->string);
+                    str8_list_push(scratch.arena, &all_opts, n->string);
                 }
             }
             else
@@ -1099,17 +1096,17 @@ os_process_launch(OS_ProcessLaunchParams* params)
         }
         if (use_null_env_arg == 0)
         {
-            env = Str8ListJoin(scratch.arena, &all_opts, &join_params2);
+            env = str8_list_join(scratch.arena, &all_opts, &join_params2);
         }
     }
 
     //- rjf: utf-8 -> utf-16
-    String16 cmd16 = Str16From8(scratch.arena, cmd);
-    String16 dir16 = Str16From8(scratch.arena, params->path);
+    String16 cmd16 = str16_from_8(scratch.arena, cmd);
+    String16 dir16 = str16_from_8(scratch.arena, params->path);
     String16 env16 = {0};
     if (use_null_env_arg == 0)
     {
-        env16 = Str16From8(scratch.arena, env);
+        env16 = str16_from_8(scratch.arena, env);
     }
 
     //- rjf: determine creation flags
@@ -1144,9 +1141,7 @@ os_process_launch(OS_ProcessLaunchParams* params)
         inherit_handles = 1;
     }
     PROCESS_INFORMATION process_info = {0};
-    if (CreateProcessW(0, (WCHAR*)cmd16.str, 0, 0, inherit_handles, creation_flags,
-                       use_null_env_arg ? 0 : (WCHAR*)env16.str, (WCHAR*)dir16.str, &startup_info,
-                       &process_info))
+    if (CreateProcessW(0, (WCHAR*)cmd16.str, 0, 0, inherit_handles, creation_flags, use_null_env_arg ? 0 : (WCHAR*)env16.str, (WCHAR*)dir16.str, &startup_info, &process_info))
     {
         result.u64[0] = (U64)process_info.hProcess;
         CloseHandle(process_info.hThread);
@@ -1156,7 +1151,7 @@ os_process_launch(OS_ProcessLaunchParams* params)
     return result;
 }
 
-static B32
+lib_internal B32
 os_process_join(OS_Handle handle, U64 endt_us)
 {
     HANDLE process = (HANDLE)(handle.u64[0]);
@@ -1165,7 +1160,7 @@ os_process_join(OS_Handle handle, U64 endt_us)
     return (result == WAIT_OBJECT_0);
 }
 
-static void
+lib_internal void
 os_process_detach(OS_Handle handle)
 {
     HANDLE process = (HANDLE)(handle.u64[0]);
@@ -1175,19 +1170,18 @@ os_process_detach(OS_Handle handle)
 ////////////////////////////////
 //~ rjf: @os_hooks Threads (Implemented Per-OS)
 
-static OS_Handle
+lib_internal OS_Handle
 OS_ThreadLaunch(OS_ThreadFunctionType* func, void* ptr, void* params)
 {
     OS_W32_Entity* entity = os_w32_entity_alloc(OS_W32_EntityKind_Thread);
     entity->thread.func = func;
     entity->thread.ptr = ptr;
-    entity->thread.handle =
-        CreateThread(0, 0, os_w32_thread_entry_point, entity, 0, &entity->thread.tid);
+    entity->thread.handle = CreateThread(0, 0, os_w32_thread_entry_point, entity, 0, &entity->thread.tid);
     OS_Handle result = {IntFromPtr(entity)};
     return result;
 }
 
-static B32
+lib_internal B32
 OS_ThreadJoin(OS_Handle handle, U64 endt_us)
 {
     DWORD sleep_ms = os_w32_sleep_ms_from_endt_us(endt_us);
@@ -1202,7 +1196,7 @@ OS_ThreadJoin(OS_Handle handle, U64 endt_us)
     return (wait_result == WAIT_OBJECT_0);
 }
 
-static void
+lib_internal void
 os_thread_detach(OS_Handle thread)
 {
     OS_W32_Entity* entity = (OS_W32_Entity*)PtrFromInt(thread.u64[0]);
@@ -1218,7 +1212,7 @@ os_thread_detach(OS_Handle thread)
 
 //- rjf: mutexes
 
-static OS_Handle
+lib_internal OS_Handle
 OS_MutexAlloc()
 {
     OS_W32_Entity* entity = os_w32_entity_alloc(OS_W32_EntityKind_Mutex);
@@ -1227,22 +1221,22 @@ OS_MutexAlloc()
     return result;
 }
 
-static void
+lib_internal void
 OS_MutexRelease(OS_Handle mutex)
 {
     OS_W32_Entity* entity = (OS_W32_Entity*)PtrFromInt(mutex.u64[0]);
     os_w32_entity_release(entity);
 }
 
-static void
-OS_MutexTake(OS_Handle mutex)
+lib_internal void
+os_mutex_take(OS_Handle mutex)
 {
     OS_W32_Entity* entity = (OS_W32_Entity*)PtrFromInt(mutex.u64[0]);
     EnterCriticalSection(&entity->mutex);
 }
 
-static void
-OS_MutexDrop(OS_Handle mutex)
+lib_internal void
+os_mutex_drop(OS_Handle mutex)
 {
     OS_W32_Entity* entity = (OS_W32_Entity*)PtrFromInt(mutex.u64[0]);
     LeaveCriticalSection(&entity->mutex);
@@ -1250,8 +1244,8 @@ OS_MutexDrop(OS_Handle mutex)
 
 //- rjf: reader/writer mutexes
 
-static OS_Handle
-OS_RWMutexAlloc()
+lib_internal OS_Handle
+os_rw_mutex_alloc()
 {
     OS_W32_Entity* entity = os_w32_entity_alloc(OS_W32_EntityKind_RWMutex);
     InitializeSRWLock(&entity->rw_mutex);
@@ -1259,36 +1253,36 @@ OS_RWMutexAlloc()
     return result;
 }
 
-static void
-OS_RWMutexRelease(OS_Handle rw_mutex)
+lib_internal void
+os_rw_mutex_release(OS_Handle rw_mutex)
 {
     OS_W32_Entity* entity = (OS_W32_Entity*)PtrFromInt(rw_mutex.u64[0]);
     os_w32_entity_release(entity);
 }
 
-static void
-OS_RWMutexTakeR(OS_Handle rw_mutex)
+lib_internal void
+os_rw_mutex_take_r(OS_Handle rw_mutex)
 {
     OS_W32_Entity* entity = (OS_W32_Entity*)PtrFromInt(rw_mutex.u64[0]);
     AcquireSRWLockShared(&entity->rw_mutex);
 }
 
-static void
-OS_RWMutexDropR(OS_Handle rw_mutex)
+lib_internal void
+os_rw_mutex_drop_r(OS_Handle rw_mutex)
 {
     OS_W32_Entity* entity = (OS_W32_Entity*)PtrFromInt(rw_mutex.u64[0]);
     ReleaseSRWLockShared(&entity->rw_mutex);
 }
 
-static void
-OS_RWMutexTakeW(OS_Handle rw_mutex)
+lib_internal void
+os_rw_mutex_take_w(OS_Handle rw_mutex)
 {
     OS_W32_Entity* entity = (OS_W32_Entity*)PtrFromInt(rw_mutex.u64[0]);
     AcquireSRWLockExclusive(&entity->rw_mutex);
 }
 
-static void
-OS_RWMutexDropW(OS_Handle rw_mutex)
+lib_internal void
+os_rw_mutex_drop_w(OS_Handle rw_mutex)
 {
     OS_W32_Entity* entity = (OS_W32_Entity*)PtrFromInt(rw_mutex.u64[0]);
     ReleaseSRWLockExclusive(&entity->rw_mutex);
@@ -1296,7 +1290,7 @@ OS_RWMutexDropW(OS_Handle rw_mutex)
 
 //- rjf: condition variables
 
-static OS_Handle
+lib_internal OS_Handle
 os_condition_variable_alloc()
 {
     OS_W32_Entity* entity = os_w32_entity_alloc(OS_W32_EntityKind_ConditionVariable);
@@ -1305,14 +1299,14 @@ os_condition_variable_alloc()
     return result;
 }
 
-static void
+lib_internal void
 os_condition_variable_release(OS_Handle cv)
 {
     OS_W32_Entity* entity = (OS_W32_Entity*)PtrFromInt(cv.u64[0]);
     os_w32_entity_release(entity);
 }
 
-static B32
+lib_internal B32
 os_condition_variable_wait(OS_Handle cv, OS_Handle mutex, U64 endt_us)
 {
     U32 sleep_ms = os_w32_sleep_ms_from_endt_us(endt_us);
@@ -1326,7 +1320,7 @@ os_condition_variable_wait(OS_Handle cv, OS_Handle mutex, U64 endt_us)
     return result;
 }
 
-static B32
+lib_internal B32
 os_condition_variable_wait_rw_r(OS_Handle cv, OS_Handle mutex_rw, U64 endt_us)
 {
     U32 sleep_ms = os_w32_sleep_ms_from_endt_us(endt_us);
@@ -1335,13 +1329,12 @@ os_condition_variable_wait_rw_r(OS_Handle cv, OS_Handle mutex_rw, U64 endt_us)
     {
         OS_W32_Entity* entity = (OS_W32_Entity*)PtrFromInt(cv.u64[0]);
         OS_W32_Entity* mutex_entity = (OS_W32_Entity*)PtrFromInt(mutex_rw.u64[0]);
-        result = SleepConditionVariableSRW(&entity->cv, &mutex_entity->rw_mutex, sleep_ms,
-                                           CONDITION_VARIABLE_LOCKMODE_SHARED);
+        result = SleepConditionVariableSRW(&entity->cv, &mutex_entity->rw_mutex, sleep_ms, CONDITION_VARIABLE_LOCKMODE_SHARED);
     }
     return result;
 }
 
-static B32
+lib_internal B32
 os_condition_variable_wait_rw_w(OS_Handle cv, OS_Handle mutex_rw, U64 endt_us)
 {
     U32 sleep_ms = os_w32_sleep_ms_from_endt_us(endt_us);
@@ -1355,14 +1348,14 @@ os_condition_variable_wait_rw_w(OS_Handle cv, OS_Handle mutex_rw, U64 endt_us)
     return result;
 }
 
-static void
+lib_internal void
 os_condition_variable_signal(OS_Handle cv)
 {
     OS_W32_Entity* entity = (OS_W32_Entity*)PtrFromInt(cv.u64[0]);
     WakeConditionVariable(&entity->cv);
 }
 
-static void
+lib_internal void
 os_condition_variable_broadcast(OS_Handle cv)
 {
     OS_W32_Entity* entity = (OS_W32_Entity*)PtrFromInt(cv.u64[0]);
@@ -1371,43 +1364,43 @@ os_condition_variable_broadcast(OS_Handle cv)
 
 //- rjf: cross-process semaphores
 
-static OS_Handle
+lib_internal OS_Handle
 OS_SemaphoreAlloc(U32 initial_count, U32 max_count, String8 name)
 {
     Temp scratch = ScratchBegin(0, 0);
-    String16 name16 = Str16From8(scratch.arena, name);
+    String16 name16 = str16_from_8(scratch.arena, name);
     HANDLE handle = CreateSemaphoreW(0, initial_count, max_count, (WCHAR*)name16.str);
     OS_Handle result = {(U64)handle};
     ScratchEnd(scratch);
     return result;
 }
 
-static void
+lib_internal void
 OS_SemaphoreRelease(OS_Handle semaphore)
 {
     HANDLE handle = (HANDLE)semaphore.u64[0];
     CloseHandle(handle);
 }
 
-static OS_Handle
+lib_internal OS_Handle
 OS_SemaphoreOpen(String8 name)
 {
     Temp scratch = ScratchBegin(0, 0);
-    String16 name16 = Str16From8(scratch.arena, name);
+    String16 name16 = str16_from_8(scratch.arena, name);
     HANDLE handle = OpenSemaphoreW(SEMAPHORE_ALL_ACCESS, 0, (WCHAR*)name16.str);
     OS_Handle result = {(U64)handle};
     ScratchEnd(scratch);
     return result;
 }
 
-static void
+lib_internal void
 OS_SemaphoreClose(OS_Handle semaphore)
 {
     HANDLE handle = (HANDLE)semaphore.u64[0];
     CloseHandle(handle);
 }
 
-static B32
+lib_internal B32
 OS_SemaphoreTake(OS_Handle semaphore, U64 endt_us)
 {
     U32 sleep_ms = os_w32_sleep_ms_from_endt_us(endt_us);
@@ -1417,7 +1410,7 @@ OS_SemaphoreTake(OS_Handle semaphore, U64 endt_us)
     return result;
 }
 
-static void
+lib_internal void
 OS_SemaphoreDrop(OS_Handle semaphore)
 {
     HANDLE handle = (HANDLE)semaphore.u64[0];
@@ -1427,29 +1420,29 @@ OS_SemaphoreDrop(OS_Handle semaphore)
 ////////////////////////////////
 //~ rjf: @os_hooks Dynamically-Loaded Libraries (Implemented Per-OS)
 
-static OS_Handle
+lib_internal OS_Handle
 os_library_open(String8 path)
 {
     Temp scratch = ScratchBegin(0, 0);
-    String16 path16 = Str16From8(scratch.arena, path);
+    String16 path16 = str16_from_8(scratch.arena, path);
     HMODULE mod = LoadLibraryW((LPCWSTR)path16.str);
     OS_Handle result = {(U64)mod};
     ScratchEnd(scratch);
     return result;
 }
 
-static VoidProc*
+lib_internal VoidProc*
 os_library_load_proc(OS_Handle lib, String8 name)
 {
     Temp scratch = ScratchBegin(0, 0);
     HMODULE mod = (HMODULE)lib.u64[0];
-    name = PushStr8Copy(scratch.arena, name);
+    name = push_str8_copy(scratch.arena, name);
     VoidProc* result = (VoidProc*)GetProcAddress(mod, (LPCSTR)name.str);
     ScratchEnd(scratch);
     return result;
 }
 
-static void
+lib_internal void
 os_library_close(OS_Handle lib)
 {
     HMODULE mod = (HMODULE)lib.u64[0];
@@ -1459,7 +1452,7 @@ os_library_close(OS_Handle lib)
 ////////////////////////////////
 //~ rjf: @os_hooks Safe Calls (Implemented Per-OS)
 
-static void
+lib_internal void
 os_safe_call(OS_ThreadFunctionType* func, OS_ThreadFunctionType* fail_handler, void* ptr)
 {
     __try
@@ -1479,7 +1472,7 @@ os_safe_call(OS_ThreadFunctionType* func, OS_ThreadFunctionType* fail_handler, v
 ////////////////////////////////
 //~ rjf: @os_hooks GUIDs (Implemented Per-OS)
 
-static Guid
+lib_internal Guid
 os_make_guid()
 {
     Guid result;
@@ -1497,7 +1490,7 @@ os_make_guid()
 }
 
 // ~mgj: Timer Reads
-force_inline static U64
+force_inline lib_internal U64
 OS_SystemTimerFreqGet()
 {
     LARGE_INTEGER Freq;
@@ -1505,12 +1498,23 @@ OS_SystemTimerFreqGet()
     return Freq.QuadPart;
 }
 
-force_inline static U64
+force_inline lib_internal U64
 OS_SystemTimerRead()
 {
     LARGE_INTEGER Value;
     QueryPerformanceCounter(&Value);
     return Value.QuadPart;
+}
+
+// ~mgj: @os_hooks Graphical Message
+lib_internal void
+os_graphical_message(B32 error, String8 title, String8 message)
+{
+    Temp scratch = ScratchBegin(0, 0);
+    String16 title16 = str16_from_8(scratch.arena, title);
+    String16 message16 = str16_from_8(scratch.arena, message);
+    MessageBoxW(0, (WCHAR*)message16.str, (WCHAR*)title16.str, MB_OK | (!!error * MB_ICONERROR));
+    ScratchEnd(scratch);
 }
 
 ////////////////////////////////
@@ -1520,9 +1524,9 @@ OS_SystemTimerRead()
 #undef OS_WINDOWS // shlwapi uses its own OS_WINDOWS include inside
 #include <shlwapi.h>
 
-static B32 win32_g_is_quiet = 0;
+lib_internal B32 win32_g_is_quiet = 0;
 
-static HRESULT WINAPI
+lib_internal HRESULT WINAPI
 win32_dialog_callback(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam, LONG_PTR data)
 {
     if (msg == TDN_HYPERLINK_CLICKED)
@@ -1532,7 +1536,7 @@ win32_dialog_callback(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam, LONG_PT
     return S_OK;
 }
 
-static LONG WINAPI
+lib_internal LONG WINAPI
 win32_exception_filter(EXCEPTION_POINTERS* exception_ptrs)
 {
     if (win32_g_is_quiet)
@@ -1540,7 +1544,7 @@ win32_exception_filter(EXCEPTION_POINTERS* exception_ptrs)
         ExitProcess(1);
     }
 
-    static volatile LONG first = 0;
+    lib_internal volatile LONG first = 0;
     if (InterlockedCompareExchange(&first, 1, 0) != 0)
     {
         // prevent failures in other threads to popup same message box
@@ -1554,45 +1558,33 @@ win32_exception_filter(EXCEPTION_POINTERS* exception_ptrs)
     int buflen = 0;
 
     DWORD exception_code = exception_ptrs->ExceptionRecord->ExceptionCode;
-    buflen += wnsprintfW(buffer + buflen, ArrayCount(buffer) - buflen,
-                         L"A fatal exception (code 0x%x) occurred. The process is terminating.\n",
-                         exception_code);
+    buflen += wnsprintfW(buffer + buflen, ArrayCount(buffer) - buflen, L"A fatal exception (code 0x%x) occurred. The process is terminating.\n", exception_code);
 
     // load dbghelp dynamically just in case if it is missing
     HMODULE dbghelp = LoadLibraryA("dbghelp.dll");
     if (dbghelp)
     {
         DWORD(WINAPI * dbg_SymSetOptions)(DWORD SymOptions);
-        BOOL(WINAPI * dbg_SymInitializeW)(HANDLE hProcess, PCWSTR UserSearchPath,
-                                          BOOL fInvadeProcess);
-        BOOL(WINAPI * dbg_StackWalk64)(DWORD MachineType, HANDLE hProcess, HANDLE hThread,
-                                       LPSTACKFRAME64 StackFrame, PVOID ContextRecord,
-                                       PREAD_PROCESS_MEMORY_ROUTINE64 ReadMemoryRoutine,
-                                       PFUNCTION_TABLE_ACCESS_ROUTINE64 FunctionTableAccessRoutine,
-                                       PGET_MODULE_BASE_ROUTINE64 GetModuleBaseRoutine,
-                                       PTRANSLATE_ADDRESS_ROUTINE64 TranslateAddress);
+        BOOL(WINAPI * dbg_SymInitializeW)(HANDLE hProcess, PCWSTR UserSearchPath, BOOL fInvadeProcess);
+        BOOL(WINAPI * dbg_StackWalk64)(DWORD MachineType, HANDLE hProcess, HANDLE hThread, LPSTACKFRAME64 StackFrame, PVOID ContextRecord, PREAD_PROCESS_MEMORY_ROUTINE64 ReadMemoryRoutine,
+                                       PFUNCTION_TABLE_ACCESS_ROUTINE64 FunctionTableAccessRoutine, PGET_MODULE_BASE_ROUTINE64 GetModuleBaseRoutine, PTRANSLATE_ADDRESS_ROUTINE64 TranslateAddress);
         PVOID(WINAPI * dbg_SymFunctionTableAccess64)(HANDLE hProcess, DWORD64 AddrBase);
         DWORD64(WINAPI * dbg_SymGetModuleBase64)(HANDLE hProcess, DWORD64 qwAddr);
-        BOOL(WINAPI * dbg_SymFromAddrW)(HANDLE hProcess, DWORD64 Address, PDWORD64 Displacement,
-                                        PSYMBOL_INFOW Symbol);
-        BOOL(WINAPI * dbg_SymGetLineFromAddrW64)(HANDLE hProcess, DWORD64 dwAddr,
-                                                 PDWORD pdwDisplacement, PIMAGEHLP_LINEW64 Line);
-        BOOL(WINAPI * dbg_SymGetModuleInfoW64)(HANDLE hProcess, DWORD64 qwAddr,
-                                               PIMAGEHLP_MODULEW64 ModuleInfo);
+        BOOL(WINAPI * dbg_SymFromAddrW)(HANDLE hProcess, DWORD64 Address, PDWORD64 Displacement, PSYMBOL_INFOW Symbol);
+        BOOL(WINAPI * dbg_SymGetLineFromAddrW64)(HANDLE hProcess, DWORD64 dwAddr, PDWORD pdwDisplacement, PIMAGEHLP_LINEW64 Line);
+        BOOL(WINAPI * dbg_SymGetModuleInfoW64)(HANDLE hProcess, DWORD64 qwAddr, PIMAGEHLP_MODULEW64 ModuleInfo);
 
         *(FARPROC*)&dbg_SymSetOptions = GetProcAddress(dbghelp, "SymSetOptions");
         *(FARPROC*)&dbg_SymInitializeW = GetProcAddress(dbghelp, "SymInitializeW");
         *(FARPROC*)&dbg_StackWalk64 = GetProcAddress(dbghelp, "StackWalk64");
-        *(FARPROC*)&dbg_SymFunctionTableAccess64 =
-            GetProcAddress(dbghelp, "SymFunctionTableAccess64");
+        *(FARPROC*)&dbg_SymFunctionTableAccess64 = GetProcAddress(dbghelp, "SymFunctionTableAccess64");
         *(FARPROC*)&dbg_SymGetModuleBase64 = GetProcAddress(dbghelp, "SymGetModuleBase64");
         *(FARPROC*)&dbg_SymFromAddrW = GetProcAddress(dbghelp, "SymFromAddrW");
         *(FARPROC*)&dbg_SymGetLineFromAddrW64 = GetProcAddress(dbghelp, "SymGetLineFromAddrW64");
         *(FARPROC*)&dbg_SymGetModuleInfoW64 = GetProcAddress(dbghelp, "SymGetModuleInfoW64");
 
-        if (dbg_SymSetOptions && dbg_SymInitializeW && dbg_StackWalk64 &&
-            dbg_SymFunctionTableAccess64 && dbg_SymGetModuleBase64 && dbg_SymFromAddrW &&
-            dbg_SymGetLineFromAddrW64 && dbg_SymGetModuleInfoW64)
+        if (dbg_SymSetOptions && dbg_SymInitializeW && dbg_StackWalk64 && dbg_SymFunctionTableAccess64 && dbg_SymGetModuleBase64 && dbg_SymFromAddrW && dbg_SymGetLineFromAddrW64 &&
+            dbg_SymGetModuleInfoW64)
         {
             HANDLE process = GetCurrentProcess();
             HANDLE thread = GetCurrentThread();
@@ -1602,8 +1594,7 @@ win32_exception_filter(EXCEPTION_POINTERS* exception_ptrs)
             GetModuleFileNameW(NULL, module_path, ArrayCount(module_path));
             PathRemoveFileSpecW(module_path);
 
-            dbg_SymSetOptions(SYMOPT_EXACT_SYMBOLS | SYMOPT_FAIL_CRITICAL_ERRORS |
-                              SYMOPT_LOAD_LINES | SYMOPT_UNDNAME);
+            dbg_SymSetOptions(SYMOPT_EXACT_SYMBOLS | SYMOPT_FAIL_CRITICAL_ERRORS | SYMOPT_LOAD_LINES | SYMOPT_UNDNAME);
             if (dbg_SymInitializeW(process, module_path, TRUE))
             {
                 // check that raddbg.pdb file is good
@@ -1619,11 +1610,10 @@ win32_exception_filter(EXCEPTION_POINTERS* exception_ptrs)
 
                 if (!raddbg_pdb_valid)
                 {
-                    buflen +=
-                        wnsprintfW(buffer + buflen, sizeof(buffer) - buflen,
-                                   L"\nThe PDB debug information file for this executable is not "
-                                   L"valid or was "
-                                   L"not found. Please rebuild binary to get the call stack.\n");
+                    buflen += wnsprintfW(buffer + buflen, sizeof(buffer) - buflen,
+                                         L"\nThe PDB debug information file for this executable is not "
+                                         L"valid or was "
+                                         L"not found. Please rebuild binary to get the call stack.\n");
                 }
                 else
                 {
@@ -1654,14 +1644,11 @@ win32_exception_filter(EXCEPTION_POINTERS* exception_ptrs)
                         const U32 max_frames = 32;
                         if (idx == max_frames)
                         {
-                            buflen +=
-                                wnsprintfW(buffer + buflen, ArrayCount(buffer) - buflen, L"...");
+                            buflen += wnsprintfW(buffer + buflen, ArrayCount(buffer) - buflen, L"...");
                             break;
                         }
 
-                        if (!dbg_StackWalk64(image_type, process, thread, &frame, context, 0,
-                                             dbg_SymFunctionTableAccess64, dbg_SymGetModuleBase64,
-                                             0))
+                        if (!dbg_StackWalk64(image_type, process, thread, &frame, context, 0, dbg_SymFunctionTableAccess64, dbg_SymGetModuleBase64, 0))
                         {
                             break;
                         }
@@ -1675,24 +1662,18 @@ win32_exception_filter(EXCEPTION_POINTERS* exception_ptrs)
                         if (idx == 0)
                         {
 #if BUILD_CONSOLE_INTERFACE
-                            buflen +=
-                                wnsprintfW(buffer + buflen, ArrayCount(buffer) - buflen,
-                                           L"\nCreate a new issue with this report at %S.\n\n",
-                                           BUILD_ISSUES_LINK_STRING_LITERAL);
+                            buflen += wnsprintfW(buffer + buflen, ArrayCount(buffer) - buflen, L"\nCreate a new issue with this report at %S.\n\n", BUILD_ISSUES_LINK_STRING_LITERAL);
 #else
                             buflen += wnsprintfW(buffer + buflen, ArrayCount(buffer) - buflen,
                                                  L"\nPress Ctrl+C to copy this text to clipboard, "
                                                  L"then create a new issue at\n"
                                                  L"<a href=\"%S\">%S</a>\n\n",
-                                                 BUILD_ISSUES_LINK_STRING_LITERAL,
-                                                 BUILD_ISSUES_LINK_STRING_LITERAL);
+                                                 BUILD_ISSUES_LINK_STRING_LITERAL, BUILD_ISSUES_LINK_STRING_LITERAL);
 #endif
-                            buflen += wnsprintfW(buffer + buflen, ArrayCount(buffer) - buflen,
-                                                 L"Call stack:\n");
+                            buflen += wnsprintfW(buffer + buflen, ArrayCount(buffer) - buflen, L"Call stack:\n");
                         }
 
-                        buflen += wnsprintfW(buffer + buflen, ArrayCount(buffer) - buflen,
-                                             L"%u. [0x%I64x]", idx + 1, address);
+                        buflen += wnsprintfW(buffer + buflen, ArrayCount(buffer) - buflen, L"%u. [0x%I64x]", idx + 1, address);
 
                         struct
                         {
@@ -1706,19 +1687,15 @@ win32_exception_filter(EXCEPTION_POINTERS* exception_ptrs)
                         DWORD64 displacement = 0;
                         if (dbg_SymFromAddrW(process, address, &displacement, &symbol.info))
                         {
-                            buflen += wnsprintfW(buffer + buflen, ArrayCount(buffer) - buflen,
-                                                 L" %s +%u", symbol.info.Name, (DWORD)displacement);
+                            buflen += wnsprintfW(buffer + buflen, ArrayCount(buffer) - buflen, L" %s +%u", symbol.info.Name, (DWORD)displacement);
 
                             IMAGEHLP_LINEW64 line = {0};
                             line.SizeOfStruct = sizeof(line);
 
                             DWORD line_displacement = 0;
-                            if (dbg_SymGetLineFromAddrW64(process, address, &line_displacement,
-                                                          &line))
+                            if (dbg_SymGetLineFromAddrW64(process, address, &line_displacement, &line))
                             {
-                                buflen += wnsprintfW(
-                                    buffer + buflen, ArrayCount(buffer) - buflen, L", %s line %u",
-                                    PathFindFileNameW(line.FileName), line.LineNumber);
+                                buflen += wnsprintfW(buffer + buflen, ArrayCount(buffer) - buflen, L", %s:%u", PathFindFileNameW(line.FileName), line.LineNumber);
                             }
                         }
                         else
@@ -1727,8 +1704,7 @@ win32_exception_filter(EXCEPTION_POINTERS* exception_ptrs)
                             module.SizeOfStruct = sizeof(module);
                             if (dbg_SymGetModuleInfoW64(process, address, &module))
                             {
-                                buflen += wnsprintfW(buffer + buflen, ArrayCount(buffer) - buflen,
-                                                     L" %s", module.ModuleName);
+                                buflen += wnsprintfW(buffer + buflen, ArrayCount(buffer) - buflen, L" %s", module.ModuleName);
                             }
                         }
 
@@ -1739,8 +1715,7 @@ win32_exception_filter(EXCEPTION_POINTERS* exception_ptrs)
         }
     }
 
-    buflen += wnsprintfW(buffer + buflen, ArrayCount(buffer) - buflen, L"\nVersion: %S%S",
-                         BUILD_VERSION_STRING_LITERAL, BUILD_GIT_HASH_STRING_LITERAL_APPEND);
+    buflen += wnsprintfW(buffer + buflen, ArrayCount(buffer) - buflen, L"\nVersion: %S%S", BUILD_VERSION_STRING_LITERAL, BUILD_GIT_HASH_STRING_LITERAL_APPEND);
     (void)buflen;
 
 #if BUILD_CONSOLE_INTERFACE
@@ -1764,7 +1739,7 @@ win32_exception_filter(EXCEPTION_POINTERS* exception_ptrs)
 #undef OS_WINDOWS // shlwapi uses its own OS_WINDOWS include inside
 #define OS_WINDOWS 1
 
-static void
+lib_internal int
 w32_entry_point_caller(int argc, WCHAR** wargv)
 {
     SetUnhandledExceptionFilter(&win32_exception_filter);
@@ -1773,8 +1748,7 @@ w32_entry_point_caller(int argc, WCHAR** wargv)
     // in all SDKs
     {
         HMODULE module = LoadLibraryA("kernel32.dll");
-        w32_SetThreadDescription_func =
-            (W32_SetThreadDescription_Type*)GetProcAddress(module, "SetThreadDescription");
+        w32_SetThreadDescription_func = (W32_SetThreadDescription_Type*)GetProcAddress(module, "SetThreadDescription");
         FreeLibrary(module);
     }
 
@@ -1827,21 +1801,18 @@ w32_entry_point_caller(int argc, WCHAR** wargv)
     }
 
     //- rjf: extract arguments
-    ArenaParams params = {
-        .reserve_size = MB(1), .commit_size = KB(32), .flags = arena_default_flags};
-    Arena* args_arena = ArenaAlloc(&params);
+    ArenaParams params = {.reserve_size = MB(1), .commit_size = KB(32), .flags = arena_default_flags};
+    Arena* args_arena = arena_alloc(&params);
     char** argv = PushArray(args_arena, char*, argc);
     for (int i = 0; i < argc; i += 1)
     {
         String16 arg16 = str16_cstring((U16*)wargv[i]);
         String8 arg8 = str8_from_16(args_arena, arg16);
-        if (str8_match(arg8, Str8Lit("--quiet"), MatchFlag_CaseInsensitive) ||
-            str8_match(arg8, Str8Lit("-quiet"), MatchFlag_CaseInsensitive))
+        if (str8_match(arg8, str8_lit("--quiet"), MatchFlag_CaseInsensitive) || str8_match(arg8, str8_lit("-quiet"), MatchFlag_CaseInsensitive))
         {
             win32_g_is_quiet = 1;
         }
-        if (str8_match(arg8, Str8Lit("--large_pages"), MatchFlag_CaseInsensitive) ||
-            str8_match(arg8, Str8Lit("-large_pages"), MatchFlag_CaseInsensitive))
+        if (str8_match(arg8, str8_lit("--large_pages"), MatchFlag_CaseInsensitive) || str8_match(arg8, str8_lit("-large_pages"), MatchFlag_CaseInsensitive))
         {
             arena_default_flags = ArenaFlag_LargePages;
             arena_default_reserve_size = Max(MB(64), os_w32_state.system_info.large_page_size);
@@ -1855,7 +1826,7 @@ w32_entry_point_caller(int argc, WCHAR** wargv)
     TCTX_InitAndEquip(&tctx);
 
     //- rjf: set up dynamically-alloc'd state
-    Arena* arena = ArenaAlloc();
+    Arena* arena = arena_alloc();
     {
         os_w32_state.arena = arena;
         {
@@ -1864,7 +1835,7 @@ w32_entry_point_caller(int argc, WCHAR** wargv)
             DWORD size = MAX_COMPUTERNAME_LENGTH + 1;
             if (GetComputerNameA((char*)buffer, &size))
             {
-                info->machine_name = PushStr8Copy(arena, Str8(buffer, size));
+                info->machine_name = push_str8_copy(arena, str8(buffer, size));
             }
         }
     }
@@ -1877,10 +1848,10 @@ w32_entry_point_caller(int argc, WCHAR** wargv)
             DWORD length = GetModuleFileNameW(0, (WCHAR*)buffer, size);
             String8 name8 = str8_from_16(scratch.arena, str16(buffer, length));
             String8 name_chopped = str8_chop_last_slash(name8);
-            info->binary_path = PushStr8Copy(arena, name_chopped);
+            info->binary_path = push_str8_copy(arena, name_chopped);
             ScratchEnd(scratch);
         }
-        info->initial_path = OS_GetCurrentPath(arena);
+        info->initial_path = os_current_path_get(arena);
         {
             Temp scratch = ScratchBegin(0, 0);
             U64 size = KB(32);
@@ -1906,7 +1877,7 @@ w32_entry_point_caller(int argc, WCHAR** wargv)
                     {
                         String16 string16 = str16((U16*)this_proc_env + start_idx, idx - start_idx);
                         String8 string = str8_from_16(arena, string16);
-                        Str8ListPush(arena, &info->environment, string);
+                        str8_list_push(arena, &info->environment, string);
                         start_idx = idx + 1;
                     }
                 }
@@ -1914,24 +1885,22 @@ w32_entry_point_caller(int argc, WCHAR** wargv)
         }
     }
     //- rjf: set up entity storage InitializeCriticalSection(&os_w32_state.entity_mutex);
-    os_w32_state.entity_arena = ArenaAlloc();
+    os_w32_state.entity_arena = arena_alloc();
     InitializeCriticalSection(&os_w32_state.entity_mutex);
 
-    App(argc, argv);
+    return App(argc, argv);
 }
 
 #if BUILD_CONSOLE_INTERFACE
 int
 wmain(int argc, WCHAR** argv)
 {
-    w32_entry_point_caller(argc, argv);
-    return 0;
+    return w32_entry_point_caller(argc, argv);
 }
 #else
 int
 wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPWSTR lpCmdLine, int nShowCmd)
 {
-    w32_entry_point_caller(__argc, __wargv);
-    return 0;
+    return w32_entry_point_caller(__argc, __wargv);
 }
 #endif
