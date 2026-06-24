@@ -57,7 +57,7 @@ RUN --mount=type=cache,target=/opt/vcpkg/downloads \
     cmake --preset release-linux -DVCPKG_INSTALLED_DIR=/app/vcpkg_installed
 
 # Build the project
-RUN cmake --build build/release
+RUN cmake --build build/linux/release
 
 # Runtime stage
 FROM ubuntu:24.04 AS runtime
@@ -68,7 +68,7 @@ RUN apt-get update && apt-get install -y \
 
 # Copy built application from builder
 RUN mkdir -p /app && mkdir -p /app/data
-COPY --from=builder /app/build/release/city /app
+COPY --from=builder /app/build/linux/release/city /app
 COPY --from=builder /app/data /app/data
 
 # Set working directory

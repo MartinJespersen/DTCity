@@ -2746,6 +2746,11 @@ env_vars_from_env_file(Arena* arena)
     String8 env_file_path = {};
     // add .env to each candidate path and keep the first file that exists
     StringJoin join_params = {.sep = os_path_delimiter()};
+    PathStyle current_path_style = path_style_from_str8(current_path);
+    if (current_path_style == PathStyle_UnixAbsolute)
+    {
+        join_params.pre = os_path_delimiter();
+    }
     for (U32 i = 0; i < candidate_parent_paths.size; ++i)
     {
         String8List candidate_path = candidate_parent_paths.data[candidate_parent_paths.size - i - 1];

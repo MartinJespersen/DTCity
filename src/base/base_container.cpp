@@ -162,7 +162,7 @@ ArenaArray<T>::ArenaArray(U64 max_capacity) noexcept
 }
 
 template <typename T>
-ArenaArray<T>::~ArenaArray<T>()
+ArenaArray<T>::~ArenaArray()
 {
     arena_release(_arena);
 }
@@ -171,7 +171,7 @@ template <typename T>
 void
 ArenaArray<T>::release(ArenaArray<T>* arr) noexcept
 {
-    ~ArenaArray(arr->_arena);
+    arr->~ArenaArray();
 }
 
 template <typename T>

@@ -213,7 +213,7 @@ dt_main_loop(void* ptr)
                                                  .bbox_width_meters = 5000,
                                                  .bbox_height_meters = 5000,
                                                  .tileset_path = S("file:///C:/ByModel/eskiltuna/Totalstad_2025_q3/tileset.json")},
-                                                {.name = S("Berlin"), .lon = 8.532010538692882, .lat = 47.40024260563559, .bbox_width_meters = 5000, .bbox_height_meters = 5000}};
+                                                {.name = S("Zurich"), .lon = 8.532010538692882, .lat = 47.40024260563559, .bbox_width_meters = 5000, .bbox_height_meters = 5000}};
 
     ctx->tileset_pool = ArrayResourcePool<cesium::TilesetRenderer>::create(ctx->arena_main_permanent, ArrayCount(cities_info_arr));
     Buffer<city::City> city_buf = buffer_alloc<city::City>(ctx->arena_main_permanent, ArrayCount(cities_info_arr));
@@ -262,7 +262,6 @@ dt_main_loop(void* ptr)
         String8List ws_msgs = ws_task_result.read(ctx->arena_frame);
         Buffer<city::Coordinate> new_agent_coords = city::city_latest_coordinates_buffer_from_str8_list(ctx->arena_frame, &ws_msgs);
         Vec2U32 framebuffer_dim = {(U32)io_ctx->framebuffer_width, (U32)io_ctx->framebuffer_height};
-        printf("Number of new agent coords: %llu", new_agent_coords.size);
 
         ImGui::Begin("Interaction", nullptr);
 

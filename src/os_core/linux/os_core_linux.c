@@ -144,7 +144,7 @@ os_get_process_info()
 }
 
 lib_internal String8
-OS_GetCurrentPath(Arena* arena)
+os_current_path_get(Arena* arena)
 {
     char* cwdir = getcwd(0, 0);
     String8 string = push_str8_copy(arena, str8_c_string(cwdir));
@@ -1481,7 +1481,7 @@ main(int argc, char** argv)
 
             // rjf: grab initial directory
             {
-                info->initial_path = OS_GetCurrentPath(os_lnx_state.arena);
+                info->initial_path = os_current_path_get(os_lnx_state.arena);
             }
 
             // rjf: grab home directory
