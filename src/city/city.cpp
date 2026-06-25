@@ -304,7 +304,6 @@ city_update(City* city, Buffer<city::Coordinate> new_agent_coords, async::Thread
                                                                                    city->road.segment_node_buffer_handle, neta_overlay_option);
                 }
             }
-            render::Handle colormap_handle = city->road.overlay_option_cur ? city->road.colormap_handle : city->road.zero_colormap_handle;
 
             if (tile->render_data.is_map_tile && city_config->bbox_clipping_enabled)
             {
@@ -326,7 +325,8 @@ city_update(City* city, Buffer<city::Coordinate> new_agent_coords, async::Thread
                 tile->render_data.depth_bias = 100;
                 tile->render_data.height_offset = -tileset->height_offset;
             }
-            tile->render_data.colormap_handle = colormap_handle;
+            tile->render_data.colormap_handle = city->road.colormap_handle;
+            tile->render_data.colormap_enabled = city->road.overlay_option_cur != 0;
             tile->render_data.camera_handle = render::mapped_handle_erased(camera_handle);
             render::model_3d_bucket_add(&tile->render_data);
         }
@@ -438,7 +438,9 @@ road_build(async::ThreadInfo info, async::AsyncTaskStatus<RoadBuildTask>* status
 
     road->road_info_map = city::road_info_from_edge_id(road->arena, network, network->edge_structure.edges, neta_edge_map);
 
-    road->colormap_handle = render::colormap_load_sync(thread_ctx, &road->colormap_sampler, g_colormap_inferno, sizeof(g_colormap_inferno));
+    Buffer<U8> colormap_buffer = Buffer<U8>((U8*)g_colormap_inferno, sizeof(g_colormap_inferno));
+    render::BufferInfo colormap_buffer_info = render::BufferInfo(colormap_buffer, render::BufferType_StorageBuffer);
+    road->colormap_handle = render::buffer_load_sync(thread_ctx, &colormap_buffer_info, S("colormap_buffer"));
     ////////////////////////////////////////
     // build road buffers
     road->road_build_result = city::road_segment_build(road->arena, network, network->edge_structure.edges, road->default_road_width, road->road_height, road->ecef_to_local, road->road_info_map);
@@ -473,7 +475,6 @@ road_destroy(Road* road)
     render::handle_destroy(road->road_build_result.vertex_buffer_handle);
     render::handle_destroy(road->road_build_result.index_buffer_handle);
     render::handle_destroy(road->colormap_handle);
-    render::handle_destroy(road->zero_colormap_handle);
     render::handle_destroy_deferred(road->segment_buffer_handle);
     render::handle_destroy_deferred(road->segment_node_buffer_handle);
 
@@ -1777,21 +1778,9 @@ road_create(City* city, Road* in_out_road, glm::dmat4& ecef_to_local, String8 ar
     in_out_road->road_height = 10.0f;
     in_out_road->default_road_width = 2.0f;
 
-    constexpr U64 colormap_byte_size = 256ULL * 3 * sizeof(F32);
-    U8* zero_arr = PushArray(city->arena, U8, colormap_byte_size);
-
-    in_out_road->colormap_sampler = {
-        .min_filter = render::Filter_Linear,
-        .mag_filter = render::Filter_Linear,
-        .mip_map_mode = render::MipMapMode_Linear,
-        .address_mode_u = render::SamplerAddressMode_MirroredRepeat,
-        .address_mode_v = render::SamplerAddressMode_ClampToEdge,
-    };
     U64 node_hashmap_size = 1000;
     U64 way_hashmap_size = 100;
     city->osm_network = osm::osm_init(node_hashmap_size, way_hashmap_size, ctx->data_subdirs.data[dt_DataDirType::Cache], area, bbox_cache_str);
-
-    in_out_road->zero_colormap_handle = render::colormap_load_async(&in_out_road->colormap_sampler, zero_arr, colormap_byte_size);
 }
 
 g_internal Map<osm::EdgeId, RoadInfo>*

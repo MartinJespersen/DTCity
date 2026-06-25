@@ -6,9 +6,10 @@ namespace vulkan
 struct Model3dPushConstants
 {
     U32 tex_idx;
-    U32 colormap_idx;
     U32 overlay_tex_idx;
     U32 overlay_enabled;
+    U64 colormap_address;
+    U32 colormap_len;
     F32 overlay_translation_x;
     F32 overlay_translation_y;
     F32 overlay_scale_x;

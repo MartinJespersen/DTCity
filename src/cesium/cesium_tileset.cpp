@@ -1049,8 +1049,9 @@ tileset_renderer_create(TilesetRenderer* tileset, async::ThreadPool* threads, St
     create_context.options.lodTransitionLength = 1.0;
 
     create_context.options.maximumSimultaneousTileLoads = 8;
-    create_context.options.preloadSiblings = false;
+    create_context.options.preloadSiblings = true;
     create_context.options.loadingDescendantLimit = 4;
+    create_context.options.forbidHoles = true;
     U32 tileset_count = 1;
     if (custom_geometry_enabled)
     {

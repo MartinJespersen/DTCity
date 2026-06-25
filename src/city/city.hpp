@@ -152,9 +152,7 @@ struct Road
     ////////////////////////////////
     // Graphics API
 
-    render::Handle zero_colormap_handle;
     render::Handle colormap_handle;
-    render::SamplerInfo colormap_sampler;
     U32 current_handle_idx;
     bool new_vertex_handle_loading;
     RoadOverlayOption overlay_option_cur;

@@ -7,6 +7,7 @@ struct BufferAllocation
 {
     VkBuffer buffer;
     VmaAllocation allocation;
+    VkDeviceAddress device_address;
     U32 size;
 };
 
@@ -321,16 +322,10 @@ g_internal B32
 texture_cmd_record_with_stb(VkCommandBuffer cmd, TextureHandle* tex, ::Buffer<U8> tex_buf);
 g_internal B32
 texture_gpu_upload_cmd_recording(VkCommandBuffer cmd, render::Handle tex_handle, ::Buffer<U8> tex_buf);
-g_internal void
-colormap_texture_cmd_record(VkCommandBuffer cmd, TextureHandle* tex, Buffer<U8> buf);
 
 //~mgj: Loading Thread Functions
 static void
 buffer_loading_thread(void* data, render::ThreadWorkerCmdCtx* thread_input);
-static void
-colormap_loading_thread(void* data, render::ThreadWorkerCmdCtx* thread_input);
-g_internal void
-colormap_loading_thread(render::Handle handle, render::ColorMapLoadingInfo* colormap_info, render::ThreadWorkerCmdCtx* thread_input);
 
 g_internal void
 texture_loading_from_path_thread(void* data, render::ThreadWorkerCmdCtx* thread_input);

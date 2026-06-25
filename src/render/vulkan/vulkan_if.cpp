@@ -463,42 +463,6 @@ texture_load_sync(render::SamplerInfo* sampler_info, TextureUploadData* tex_data
     return handle;
 }
 
-static render::Handle
-colormap_load_async(render::SamplerInfo* sampler_info, const U8* colormap_data, U64 colormap_size)
-{
-    render::ThreadWorkerCmdCtx* thread_ctx = render::thread_ctx_create();
-
-    // ~mgj: make input ready for colormap loading on thread
-    render::ColorMapLoadingInfo* colormap_load_info = PushStruct(thread_ctx->arena, render::ColorMapLoadingInfo);
-    colormap_load_info->colormap_data = colormap_data;
-    colormap_load_info->colormap_size = colormap_size;
-
-    render::Handle handle = render::texture_handle_create(sampler_info);
-    render::handle_list_push(thread_ctx, handle);
-    thread_ctx->user_data = colormap_load_info;
-    thread_ctx->loading_func = vulkan::colormap_loading_thread;
-
-    async::WorkerItem item = async::WorkerItem(thread_ctx, vulkan::thread_main);
-    async::thread_pool_push(thread_ctx->thread_pool, &item);
-
-    return handle;
-}
-
-g_internal render::Handle
-colormap_load_sync(render::ThreadWorkerCmdCtx* thread_ctx, render::SamplerInfo* sampler_info, const U8* colormap_data, U64 colormap_size)
-{
-    render::ColorMapLoadingInfo* colormap_load_info = PushStruct(thread_ctx->arena, render::ColorMapLoadingInfo);
-    colormap_load_info->colormap_data = colormap_data;
-    colormap_load_info->colormap_size = colormap_size;
-
-    render::Handle handle = render::texture_handle_create(sampler_info);
-    render::handle_list_push(thread_ctx, handle);
-
-    vulkan::colormap_loading_thread(handle, colormap_load_info, thread_ctx);
-
-    return handle;
-}
-
 g_internal void
 handle_destroy(render::Handle handle)
 {
@@ -767,7 +731,7 @@ model_3d_bucket_add(render::Model3DPipelineData* pipeline_input)
     render::AssetItem<vulkan::BufferHandle>* asset_vertex_buffer = 0;
     render::AssetItem<vulkan::BufferHandle>* asset_index_buffer = 0;
     render::AssetItem<vulkan::TextureHandle>* asset_base_texture = 0;
-    render::AssetItem<vulkan::TextureHandle>* asset_colormap = 0;
+    render::AssetItem<vulkan::BufferHandle>* asset_colormap = 0;
     render::AssetItem<vulkan::TextureHandle>* overlay_tex = 0;
 
     B32 overlay_tex_loaded = render::is_resource_loaded(pipeline_input->overlay_texture_handle, &overlay_tex);
@@ -787,9 +751,13 @@ model_3d_bucket_add(render::Model3DPipelineData* pipeline_input)
         Rng2F32 bbox = {pipeline_input->bbox_min, pipeline_input->bbox_max};
         vulkan::Model3dPushConstants push_constants = {};
         push_constants.tex_idx = asset_base_texture->item.descriptor_set_idx;
-        push_constants.colormap_idx = asset_colormap->item.descriptor_set_idx;
         push_constants.overlay_tex_idx = overlay_tex_loaded ? overlay_tex->item.descriptor_set_idx : 0;
         push_constants.overlay_enabled = overlay_enabled;
+        if (pipeline_input->colormap_enabled)
+        {
+            push_constants.colormap_address = asset_colormap->item.buffer_alloc.device_address;
+            push_constants.colormap_len = asset_colormap->item.buffer_alloc.size / (3 * sizeof(F32));
+        }
         push_constants.overlay_translation_x = pipeline_input->overlay_translation.x;
         push_constants.overlay_translation_y = pipeline_input->overlay_translation.y;
         push_constants.overlay_scale_x = pipeline_input->overlay_scale.x;

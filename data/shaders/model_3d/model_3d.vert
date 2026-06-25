@@ -1,4 +1,5 @@
 #version 450
+#extension GL_EXT_shader_explicit_arithmetic_types_int64 : require
 
 layout(location = 0) in vec3 in_position;
 layout(location = 1) in float in_overlay_option;
@@ -26,6 +27,8 @@ layout(push_constant) uniform constants
     uint colormap_tex_idx;
     uint overlay_tex_idx;
     uint overlay_enabled;
+    uint64_t colormap_address;
+    uint colormap_len;
     float overlay_translation_x;
     float overlay_translation_y;
     float overlay_scale_x;

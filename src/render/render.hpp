@@ -232,6 +232,7 @@ struct Model3DPipelineData
     Handle index_buffer_handle;
     Handle texture_handle;
     Handle overlay_texture_handle;
+    B32 colormap_enabled;
     Handle colormap_handle;
     MappedHandle<void> camera_handle;
 
@@ -396,11 +397,6 @@ g_internal Handle
 texture_handle_create(SamplerInfo* sampler_info);
 g_internal Handle
 texture_load_async(SamplerInfo* sampler_info, String8 texture_path);
-
-static render::Handle
-colormap_load_async(render::SamplerInfo* sampler_info, const U8* colormap_data, U64 colormap_size);
-g_internal render::Handle
-colormap_load_sync(render::ThreadWorkerCmdCtx* thread_ctx, render::SamplerInfo* sampler_info, const U8* colormap_data, U64 colormap_size);
 
 g_internal Handle
 texture_load_sync(render::SamplerInfo* sampler_info, TextureUploadData* tex_data, void* cmd);
