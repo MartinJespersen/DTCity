@@ -459,7 +459,7 @@ physical_device_pick(Context* vk_ctx)
             DEBUG_LOG("Name of device: %s\nDevice Type: %d\n", properties.deviceName, properties.deviceType);
             vk_ctx->physical_device = devices[i];
             vk_ctx->physical_device_properties = properties;
-            vk_ctx->msaa_samples = max_usable_sample_count_get(devices[i]);
+            vk_ctx->msaa_samples = Min(VK_SAMPLE_COUNT_4_BIT, max_usable_sample_count_get(devices[i]));
             vk_ctx->queue_family_indices = queue_family_indices_from_bit_fields(familyIndexBits);
             break;
         }

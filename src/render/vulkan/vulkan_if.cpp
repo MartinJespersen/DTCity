@@ -221,9 +221,11 @@ render_ctx_destroy()
 static void
 render_frame(Vec2U32 framebuffer_dim, B32* in_out_framebuffer_resized, Vec2S64 mouse_cursor_pos)
 {
+    prof_scope_marker;
     ScratchScope scratch = ScratchScope(0, 0);
     vulkan::Context* vk_ctx = vulkan::ctx_get();
 
+    prof_frame_marker;
     if (framebuffer_dim.x == 0 || framebuffer_dim.y == 0)
     {
         vk_ctx->mapped_handle_list = {};
@@ -327,7 +329,6 @@ render_frame(Vec2U32 framebuffer_dim, B32* in_out_framebuffer_resized, Vec2S64 m
     presentInfo.pResults = nullptr; // Optional
 
     VkResult result = vkQueuePresentKHR(vk_ctx->present_queue, &presentInfo);
-    prof_frame_marker; // end of frame is assumed to be here
     if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR || *in_out_framebuffer_resized)
     {
         *in_out_framebuffer_resized = 0;

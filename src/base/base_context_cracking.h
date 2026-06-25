@@ -137,6 +137,10 @@
 #define MEMORY_DEBUG 0
 #endif
 
+#if defined(BUILD_DEBUG)
+#define GRACEFUL_SHUTDOWN 1
+#endif
+
 ////////////////////////////////
 //~ rjf: Build Option Cracking
 
@@ -156,9 +160,7 @@
 #define BUILD_VERSION_PATCH 0
 #endif
 
-#define BUILD_VERSION_STRING_LITERAL                                                               \
-    Stringify(BUILD_VERSION_MAJOR) "." Stringify(BUILD_VERSION_MINOR) "." Stringify(               \
-        BUILD_VERSION_PATCH)
+#define BUILD_VERSION_STRING_LITERAL Stringify(BUILD_VERSION_MAJOR) "." Stringify(BUILD_VERSION_MINOR) "." Stringify(BUILD_VERSION_PATCH)
 #if BUILD_DEBUG
 #define BUILD_MODE_STRING_LITERAL_APPEND " [Debug]"
 #else
@@ -182,10 +184,8 @@
 #define BUILD_ISSUES_LINK_STRING_LITERAL "https://github.com/MartinJespersen/DTCity/issues"
 #endif
 
-#define BUILD_TITLE_STRING_LITERAL                                                                 \
-    BUILD_TITLE " (" BUILD_VERSION_STRING_LITERAL " " BUILD_RELEASE_PHASE_STRING_LITERAL           \
-                ") - " __DATE__                                                                    \
-                "" BUILD_GIT_HASH_STRING_LITERAL_APPEND BUILD_MODE_STRING_LITERAL_APPEND
+#define BUILD_TITLE_STRING_LITERAL                                                                                                                                                                     \
+    BUILD_TITLE " (" BUILD_VERSION_STRING_LITERAL " " BUILD_RELEASE_PHASE_STRING_LITERAL ") - " __DATE__ "" BUILD_GIT_HASH_STRING_LITERAL_APPEND BUILD_MODE_STRING_LITERAL_APPEND
 
 ////////////////////////////////
 //~ rjf: Zero All Undefined Options
@@ -237,10 +237,10 @@
 //~ rjf: Unsupported Errors
 
 #if ARCH_X86
-# error You tried to build in x86 (32 bit) mode, but currently, only building in x64 (64 bit) mode is supported.
+#error You tried to build in x86 (32 bit) mode, but currently, only building in x64 (64 bit) mode is supported.
 #endif
 #if !ARCH_X64
-# error You tried to build with an unsupported architecture. Currently, only building in x64 mode is supported.
+#error You tried to build with an unsupported architecture. Currently, only building in x64 mode is supported.
 #endif
 
 #endif // BASE_CONTEXT_CRACKING_H

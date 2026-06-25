@@ -327,6 +327,7 @@ dt_main_loop(void* ptr)
         ImGui::EndFrame();
         Debug_Frame_End();
     }
+#if GRACEFUL_SHUTDOWN
     while (thread_pool_has_pending_work(ctx->thread_pool))
     {
     }
@@ -346,4 +347,5 @@ dt_main_loop(void* ptr)
     render::gpu_work_done_wait();
     draw::draw_release();
     render::render_ctx_destroy();
+#endif
 }

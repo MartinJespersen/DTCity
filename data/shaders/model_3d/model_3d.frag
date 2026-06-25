@@ -29,25 +29,39 @@ layout(push_constant) uniform constants
 
 void main()
 {
-    bool inside_bbox = in_position_xy.x > PushConstants.bbox_min.x && in_position_xy.x < PushConstants.bbox_max.x &&
-            in_position_xy.y > PushConstants.bbox_min.y && in_position_xy.y < PushConstants.bbox_max.y;
-    if (inside_bbox)
-    {
-        discard;
-    }
+    // bool inside_bbox = in_position_xy.x > PushConstants.bbox_min.x && in_position_xy.x < PushConstants.bbox_max.x &&
+    //         in_position_xy.y > PushConstants.bbox_min.y && in_position_xy.y < PushConstants.bbox_max.y;
+    // if (inside_bbox)
+    // {
+    //     discard;
+    // }
 
-    vec4 base_color = texture(texture_sampler[nonuniformEXT(PushConstants.base_tex)], in_uv);
-    vec4 surface_color = vec4(mix(vec3(1, 0, 0), base_color.xyz, base_color.w), 1);
+    vec4 base_color = texture(texture_sampler[PushConstants.base_tex], in_uv);
+
+    vec4 surface_color;
+
     if (PushConstants.overlay_enabled != 0u)
     {
-        vec2 overlay_uv = in_overlay_uv * vec2(PushConstants.overlay_scale_x, PushConstants.overlay_scale_y) +
-                vec2(PushConstants.overlay_translation_x, PushConstants.overlay_translation_y);
-        vec4 overlay_color = texture(texture_sampler[nonuniformEXT(PushConstants.overlay_tex_idx)], overlay_uv);
+        vec2 overlay_uv =
+            in_overlay_uv * vec2(PushConstants.overlay_scale_x, PushConstants.overlay_scale_y) +
+            vec2(PushConstants.overlay_translation_x, PushConstants.overlay_translation_y);
+
+        vec4 overlay_color =
+            texture(texture_sampler[PushConstants.overlay_tex_idx], overlay_uv);
+
         surface_color = mix(base_color, overlay_color, overlay_color.a);
     }
+    else
+    {
+        surface_color = vec4(mix(vec3(1, 0, 0), base_color.xyz, base_color.w), 1.0);
+    }
 
-    vec4 road_color = texture(texture_sampler[nonuniformEXT(PushConstants.colormap_tex_idx)], vec2(in_overlay_option, 1.0));
-    out_color = vec4(mix(surface_color.xyz, road_color.xyz, in_overlay_option), 1.0);
+    // vec4 road_color =
+    //     texture(texture_sampler[PushConstants.colormap_tex_idx],
+    //             vec2(in_overlay_option, 1.0));
 
+    // out_color = vec4(mix(surface_color.xyz, road_color.xyz, in_overlay_option), 1.0);
+    out_color = vec4(surface_color.xyz, 1);
     out_object_id = in_object_id;
+
 }
