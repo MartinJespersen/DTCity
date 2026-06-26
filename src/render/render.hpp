@@ -186,15 +186,6 @@ struct BufferInfo
     copy_to_arena(Arena* arena);
 };
 
-enum class PipelineLayoutType
-{
-    Invalid,
-    Model3D,
-    Model3DInstance,
-    Blend3D_Tex,
-    Blend3D_ColorMap
-};
-
 template <typename T>
 struct AssetItem
 {
@@ -218,12 +209,6 @@ struct AssetItemList
 struct TextureLoadingInfo
 {
     String8 tex_path;
-};
-
-struct ColorMapLoadingInfo
-{
-    const U8* colormap_data;
-    U64 colormap_size;
 };
 
 enum class TilePipelineBits
@@ -424,7 +409,7 @@ g_internal void
 blend_3d_draw(Blend3DPipelineData pipeline_input);
 
 static void
-model_3d_bucket_add(render::Model3DPipelineData* pipeline_input);
+tile_pipeline_add(render::Model3DPipelineData* pipeline_input);
 g_internal bool
 agent_instance_render_bucket_add(render::MappedHandle<void> camera_handle, Buffer<render::MeshHandlePair> meshes, Buffer<render::Handle> texture_handles, render::BufferInfo* instance_buffer_info,
                                  U32 instance_buffer_offset);

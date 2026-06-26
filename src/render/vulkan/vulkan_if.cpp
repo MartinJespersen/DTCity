@@ -723,7 +723,7 @@ road_intersection_compute_add(Handle vertex_buffer_handle, Handle index_buffer_h
 }
 
 static void
-model_3d_bucket_add(render::Model3DPipelineData* pipeline_input)
+tile_pipeline_add(render::Model3DPipelineData* pipeline_input)
 {
     vulkan::Context* vk_ctx = vulkan::ctx_get();
     vulkan::RenderFrame* render_frame = vk_ctx->render_frame;

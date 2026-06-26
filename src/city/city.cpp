@@ -142,6 +142,22 @@ _cache_and_parse_osm_json(async::ThreadPool* thread_pool, Road* road, osm::Netwo
 }
 
 g_internal void
+_tile_pipeline_add(cesium::TileRenderData* tile, City* city, render::MappedHandle<ui::CameraUniformBuffer> camera_handle)
+{
+    if (city->road.overlay_option_cur != 0)
+    {
+        tile->render_data.pipeline_bits |= render::TilePipelineBits::ColormapEnabled;
+    }
+    else
+    {
+        tile->render_data.pipeline_bits &= ~render::TilePipelineBits::ColormapEnabled;
+    }
+    tile->render_data.colormap_handle = city->road.colormap_handle;
+    tile->render_data.camera_handle = render::mapped_handle_erased(camera_handle);
+    render::tile_pipeline_add(&tile->render_data);
+}
+
+g_internal void
 city_update(City* city, Buffer<city::Coordinate> new_agent_coords, async::ThreadPool* thread_pool, RoadOverlayOption neta_overlay_option, Vec2U32 framebuffer_dim, const AreaConfig* city_config)
 {
     prof_scope_marker;
@@ -314,18 +330,7 @@ city_update(City* city, Buffer<city::Coordinate> new_agent_coords, async::Thread
                     tile->render_data.height_offset = -tileset->height_offset;
                 }
 
-                // TODO: the below is duplicate code
-                if (city->road.overlay_option_cur != 0)
-                {
-                    tile->render_data.pipeline_bits |= render::TilePipelineBits::ColormapEnabled;
-                }
-                else
-                {
-                    tile->render_data.pipeline_bits &= ~render::TilePipelineBits::ColormapEnabled;
-                }
-                tile->render_data.colormap_handle = city->road.colormap_handle;
-                tile->render_data.camera_handle = render::mapped_handle_erased(camera_handle);
-                render::model_3d_bucket_add(&tile->render_data);
+                _tile_pipeline_add(tile, city, camera_handle);
             }
         }
 
@@ -335,18 +340,8 @@ city_update(City* city, Buffer<city::Coordinate> new_agent_coords, async::Thread
             B32 is_custom_tile = has_flag(tile->render_data.pipeline_bits, render::TilePipelineBits::IsMapTile) == false;
             if (is_custom_tile)
             {
-                if (city->road.overlay_option_cur != 0)
-                {
-                    tile->render_data.pipeline_bits |= render::TilePipelineBits::ColormapEnabled;
-                }
-                else
-                {
-                    tile->render_data.pipeline_bits &= ~render::TilePipelineBits::ColormapEnabled;
-                }
-                tile->render_data.colormap_handle = city->road.colormap_handle;
-                tile->render_data.camera_handle = render::mapped_handle_erased(camera_handle);
                 tile->render_data.pipeline_bits |= render::TilePipelineBits::OverwriteDepth;
-                render::model_3d_bucket_add(&tile->render_data);
+                _tile_pipeline_add(tile, city, camera_handle);
             }
         }
 

@@ -3,17 +3,17 @@
 namespace draw
 {
 
-struct Model3DNode
+struct TilePipelineNode
 {
-    Model3DNode* next;
+    TilePipelineNode* next;
     render::Model3DPipelineData pipeline_input;
     render::Handle colormap_handle;
 };
 
-struct Model3DNodeList
+struct TilePipelineList
 {
-    Model3DNode* first;
-    Model3DNode* last;
+    TilePipelineNode* first;
+    TilePipelineNode* last;
 };
 
 struct Blend3DNode
@@ -58,40 +58,6 @@ struct DrawFrame
     RoadIntersectionList road_intersection_list;
 };
 
-// when a task is completed, the fence count is decremented
-enum class DrawType
-{
-    None,
-    BBox3d
-};
-
-struct AsyncDrawFence
-{
-    std::atomic<U32> count;
-    DrawType type;
-    union
-    {
-        render::BBoxDraw bbox_draw;
-    };
-};
-
-struct AsyncDrawFenceNode
-{
-    AsyncDrawFenceNode* next;
-    AsyncDrawFence v;
-};
-struct AsyncDrawFenceList
-{
-    AsyncDrawFenceNode* first;
-    AsyncDrawFenceNode* last;
-};
-
-struct AsyncFenceHandle
-{
-    AsyncDrawFence* ptr;
-    U64 gen_id;
-};
-
 struct CarInstanceDrawResult
 {
     bool render_scheduled;
@@ -103,10 +69,6 @@ struct Draw
     // reset every frame
     Arena* frame_arena;
     DrawFrame* frame;
-
-    // persisted across frames
-    AsyncDrawFenceList async_draw_list;
-    AsyncDrawFenceNode* async_draw_free_list;
 };
 
 g_internal void
