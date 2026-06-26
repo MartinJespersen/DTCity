@@ -348,7 +348,10 @@ class DTCityPrepareRendererResources : public Cesium3DTilesSelection::IPrepareRe
             }
             for (TileRenderData* data = render_data_list->first; data; data = data->next)
             {
-                data->render_data.is_map_tile = is_map_tile;
+                if (is_map_tile)
+                {
+                    data->render_data.pipeline_bits |= render::TilePipelineBits::IsMapTile;
+                }
                 render::handle_list_push(thread_ctx, data->render_data.vertex_buffer_handle);
                 render::handle_list_push(thread_ctx, data->render_data.index_buffer_handle);
                 render::Handle null_texture_handle = render::texture_zero_handle_get();
@@ -815,7 +818,10 @@ tile_render_data_from_gltf(const CesiumGltf::Model& model, const glm::dmat4& ece
             }
         }
         render_data->render_data.index_count = index_count;
-        render_data->render_data.has_overlay_uv = has_overlay_uv;
+        if (has_overlay_uv)
+        {
+            render_data->render_data.pipeline_bits |= render::TilePipelineBits::OverlayEnabled;
+        }
 
         // Second pass: copy and merge vertices/indices
         U32 vertex_offset = 0;

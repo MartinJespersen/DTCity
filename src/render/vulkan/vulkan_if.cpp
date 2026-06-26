@@ -741,19 +741,21 @@ model_3d_bucket_add(render::Model3DPipelineData* pipeline_input)
     B32 colormap_loaded = render::is_resource_loaded(pipeline_input->colormap_handle, &asset_colormap);
 
     B32 overlay_enabled = false;
-    if (vertex_loaded && index_loaded && base_texture_loaded && colormap_loaded)
+    B32 colormap_enabled = has_flag(pipeline_input->pipeline_bits, render::TilePipelineBits::ColormapEnabled);
+    B32 colormap_ready = colormap_loaded || colormap_enabled == false;
+    if (vertex_loaded && index_loaded && base_texture_loaded && colormap_ready)
     {
-        if (pipeline_input->has_overlay_uv && pipeline_input->overlay_texture_coordinate_id == 0 && render::is_handle_zero(pipeline_input->overlay_texture_handle) == false)
+        B32 overlay_uv_enabled = has_flag(pipeline_input->pipeline_bits, render::TilePipelineBits::OverlayEnabled);
+        if (overlay_uv_enabled && pipeline_input->overlay_texture_coordinate_id == 0 && render::is_handle_zero(pipeline_input->overlay_texture_handle) == false)
         {
             overlay_enabled = overlay_tex_loaded;
         }
 
-        Rng2F32 bbox = {pipeline_input->bbox_min, pipeline_input->bbox_max};
         vulkan::Model3dPushConstants push_constants = {};
         push_constants.tex_idx = asset_base_texture->item.descriptor_set_idx;
         push_constants.overlay_tex_idx = overlay_tex_loaded ? overlay_tex->item.descriptor_set_idx : 0;
         push_constants.overlay_enabled = overlay_enabled;
-        if (pipeline_input->colormap_enabled)
+        if (colormap_enabled)
         {
             push_constants.colormap_address = asset_colormap->item.buffer_alloc.device_address;
             push_constants.colormap_len = asset_colormap->item.buffer_alloc.size / (3 * sizeof(F32));
@@ -762,10 +764,6 @@ model_3d_bucket_add(render::Model3DPipelineData* pipeline_input)
         push_constants.overlay_translation_y = pipeline_input->overlay_translation.y;
         push_constants.overlay_scale_x = pipeline_input->overlay_scale.x;
         push_constants.overlay_scale_y = pipeline_input->overlay_scale.y;
-        push_constants.bbox_min_x = bbox.min.x;
-        push_constants.bbox_min_y = bbox.min.y;
-        push_constants.bbox_max_x = bbox.max.x;
-        push_constants.bbox_max_y = bbox.max.y;
         push_constants.height_offset = pipeline_input->height_offset;
 
         vulkan::Model3DNode* node = PushStruct(vk_ctx->render_frame_arena, vulkan::Model3DNode);
@@ -774,9 +772,8 @@ model_3d_bucket_add(render::Model3DPipelineData* pipeline_input)
         node->push_constants = push_constants;
         node->index_count = pipeline_input->index_count;
         node->index_buffer_offset = pipeline_input->index_offset;
-        node->depth_write_per_draw_enabled = false;
-        node->depth_bias = pipeline_input->depth_bias;
         node->camera_handle = pipeline_input->camera_handle;
+        node->overwrite_depth = has_flag(pipeline_input->pipeline_bits, TilePipelineBits::OverwriteDepth);
 
         SLLQueuePush(render_frame->model_3D_list.first, render_frame->model_3D_list.last, node);
     }

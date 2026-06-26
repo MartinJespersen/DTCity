@@ -995,11 +995,14 @@ u64_array_bsearch(U64* arr, U64 count, U64 value);
 
 // Bitmask enum class
 
-template <typename Enum>
-inline constexpr bool enable_bitmask = false;
+constexpr bool
+enable_bitmask(...)
+{
+    return false;
+}
 
 template <typename Enum>
-concept BitmaskEnum = std::is_enum_v<Enum> && enable_bitmask<Enum>;
+concept BitmaskEnum = std::is_enum_v<Enum> && enable_bitmask(Enum{});
 
 template <BitmaskEnum Enum>
 constexpr Enum

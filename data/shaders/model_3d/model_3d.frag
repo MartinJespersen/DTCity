@@ -30,8 +30,6 @@ layout(push_constant) uniform constants
     float overlay_translation_y;
     float overlay_scale_x;
     float overlay_scale_y;
-    vec2 bbox_min;
-    vec2 bbox_max;
     float height_offset;
 } PushConstants;
 

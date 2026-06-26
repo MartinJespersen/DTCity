@@ -226,30 +226,40 @@ struct ColorMapLoadingInfo
     U64 colormap_size;
 };
 
+enum class TilePipelineBits
+{
+    ColormapEnabled = 1 << 0,
+    OverlayEnabled = 1 << 1,
+    IsMapTile = 1 << 2,
+    OverwriteDepth = 1 << 3
+};
+
+constexpr bool
+enable_bitmask(TilePipelineBits)
+{
+    return true;
+}
+
 struct Model3DPipelineData
 {
     Handle vertex_buffer_handle;
     Handle index_buffer_handle;
     Handle texture_handle;
     Handle overlay_texture_handle;
-    B32 colormap_enabled;
     Handle colormap_handle;
+
     MappedHandle<void> camera_handle;
 
     Vec2F32 overlay_translation;
     Vec2F32 overlay_scale;
     S32 overlay_texture_coordinate_id;
-    B32 has_overlay_uv;
 
     U64 index_count;
     U32 index_offset;
 
-    Vec2F32 bbox_min;
-    Vec2F32 bbox_max;
-
-    B32 is_map_tile;
     F32 height_offset;
-    F32 depth_bias;
+
+    TilePipelineBits pipeline_bits;
 };
 
 struct Model3DPipelineDataNode

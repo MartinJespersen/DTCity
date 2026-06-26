@@ -320,10 +320,11 @@ enum WriteType
 };
 
 g_internal void
-draw_indexed_separate_depth_and_color_calls(VkCommandBuffer cmd_buffer, U32 index_offset, U32 index_count)
+draw_indexed_separate_depth_and_color_calls(VkCommandBuffer cmd_buffer, U32 index_offset, U32 index_count, VkCompareOp depth_compare_op)
 {
     VkBool32 color_write_enabled[4] = {VK_TRUE, VK_TRUE, VK_TRUE, VK_TRUE};
     VkBool32 color_write_disabled[4] = {};
+    vkCmdSetDepthCompareOp(cmd_buffer, depth_compare_op);
     for (WriteType write_type = (WriteType)0; write_type < WriteType_Count; write_type = (WriteType)(write_type + 1))
     {
         if (write_type == WriteType_Color)
@@ -390,22 +391,23 @@ model_3d_rendering()
         };
 
         cmd_push_descriptor_set_khr(cmd_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, model_3D_pipeline->pipeline_layout, 0, ArrayCount(push_writes), push_writes);
-        vkCmdSetDepthBias(cmd_buffer, node->depth_bias, 0, 0);
+        vkCmdSetDepthBias(cmd_buffer, 0, 0, 0);
         vkCmdPushConstants(cmd_buffer, model_3D_pipeline->pipeline_layout, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(Model3dPushConstants), &node->push_constants);
         vkCmdBindDescriptorSets(cmd_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, model_3D_pipeline->pipeline_layout, 1, ArrayCount(descriptor_sets), descriptor_sets, 0, NULL);
         vkCmdBindVertexBuffers(cmd_buffer, 0, 1, &node->vertex_alloc.buffer, offsets);
         vkCmdBindIndexBuffer(cmd_buffer, node->index_alloc.buffer, 0, VK_INDEX_TYPE_UINT32);
+        vkCmdSetDepthWriteEnable(cmd_buffer, VK_TRUE);
         VkBool32 color_write_enabled[4] = {VK_TRUE, VK_TRUE, VK_TRUE, VK_TRUE};
-        if (node->depth_write_per_draw_enabled)
+        if (node->overwrite_depth)
         {
-            draw_indexed_separate_depth_and_color_calls(cmd_buffer, node->index_buffer_offset, node->index_count);
+            vkCmdSetDepthCompareOp(cmd_buffer, VK_COMPARE_OP_ALWAYS);
         }
         else
         {
-            vkCmdSetDepthWriteEnable(cmd_buffer, VK_TRUE);
-            cmd_set_color_write_enable_ext(cmd_buffer, ArrayCount(color_write_enabled), color_write_enabled);
-            vkCmdDrawIndexed(cmd_buffer, node->index_count, 1, node->index_buffer_offset, 0, 0);
+            vkCmdSetDepthCompareOp(cmd_buffer, VK_COMPARE_OP_LESS);
         }
+        cmd_set_color_write_enable_ext(cmd_buffer, ArrayCount(color_write_enabled), color_write_enabled);
+        vkCmdDrawIndexed(cmd_buffer, node->index_count, 1, node->index_buffer_offset, 0, 0);
     }
 }
 
@@ -462,7 +464,7 @@ blend_3d_rendering()
         vkCmdBindIndexBuffer(cmd_buffer, node->index_alloc.buffer, 0, VK_INDEX_TYPE_UINT32);
 
         U32 index_count = node->index_alloc.size / sizeof(U32);
-        draw_indexed_separate_depth_and_color_calls(cmd_buffer, 0, index_count);
+        draw_indexed_separate_depth_and_color_calls(cmd_buffer, 0, index_count, VK_COMPARE_OP_LESS);
     }
 }
 

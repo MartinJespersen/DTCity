@@ -11,16 +11,9 @@
 * tile transform might need to be passed to shader as a uniform buffer
 
 # features
-* Simulation
-  * Improve reconnection if connection is lost
-* Netascore task cause memory violation at shutdown due to arena being deallocated.
-* Out of device memory error. 
-* Are the amount of descriptor indices not deallocated? 
 * delete draw flush and related code
-* Vulkan current_frame should be used exclusively in render::render_frame function (PERFORMANCE).
 * record asset lifetimes similar to how debug events are done at the moment to be sure everything related to asset lifetimes are handled on the same thread.
 * Use a list of fences for draw and compute calls that waits for asynchrounously loaded assets
-* Make it possible to alloc and dealloc whole city
 * Osm data visualizer should not be affected by netascore not showing
 * It should be possible to switch between cities in the editor
 * Use the OSM data for showing data about buildings
@@ -28,9 +21,6 @@
 * simplify render interface (a little too verbose at the moment)
 * Logging should be improved to not always print to console 
   * Create memory viewer
-<!--* 3D assets 
-  * Bicycles -->
-* 
 * 3D geometry
   <!--* include LOD2 geometry-->
   * Improve tile queue to avoid too many glitches

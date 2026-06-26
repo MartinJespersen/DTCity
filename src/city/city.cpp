@@ -294,6 +294,7 @@ city_update(City* city, Buffer<city::Coordinate> new_agent_coords, async::Thread
     {
         cesium::tileset_update_view(tileset, camera, framebuffer_dim, ctx->time->delta_time_sec);
 
+        // always drawn tiles
         for (cesium::TileRenderData* tile = tileset->tile_to_show.first; tile; tile = tile->render_next)
         {
             if (city->road_building_done)
@@ -305,30 +306,48 @@ city_update(City* city, Buffer<city::Coordinate> new_agent_coords, async::Thread
                 }
             }
 
-            if (tile->render_data.is_map_tile && city_config->bbox_clipping_enabled)
+            B32 is_map_tile = has_flag(tile->render_data.pipeline_bits, render::TilePipelineBits::IsMapTile);
+            if (is_map_tile)
             {
-                F32 border_offset_lon_m = 50;
-                F32 border_offset_lat_m = 50;
-                CesiumGeospatial::Cartographic bbox_min_cartographic(glm::radians(city->bbox.min.x), glm::radians(city->bbox.min.y), 0);
-                CesiumGeospatial::Cartographic bbox_max_cartographic(glm::radians(city->bbox.max.x), glm::radians(city->bbox.max.y), 0);
+                if (city_config->bbox_clipping_enabled)
+                {
+                    tile->render_data.height_offset = -tileset->height_offset;
+                }
 
-                glm::dvec3 bbox_min_ecef = CesiumGeospatial::Ellipsoid::WGS84.cartographicToCartesian(bbox_min_cartographic);
-                glm::dvec3 bbox_max_ecef = CesiumGeospatial::Ellipsoid::WGS84.cartographicToCartesian(bbox_max_cartographic);
-
-                glm::dvec4 bbox_min_local = tileset->ecef_to_local * glm::dvec4(bbox_min_ecef, 1.0);
-                glm::dvec4 bbox_max_local = tileset->ecef_to_local * glm::dvec4(bbox_max_ecef, 1.0);
-
-                border_offset_lon_m = Min((bbox_max_local.x - bbox_min_local.x) * 0.5, border_offset_lon_m);
-                border_offset_lat_m = Min((bbox_max_local.y - bbox_min_local.y) * 0.5, border_offset_lat_m);
-                tile->render_data.bbox_min = {.x = (F32)bbox_min_local.x + border_offset_lon_m, .y = (F32)bbox_min_local.y + border_offset_lat_m};
-                tile->render_data.bbox_max = {.x = (F32)bbox_max_local.x - border_offset_lon_m, .y = (F32)bbox_max_local.y - border_offset_lat_m};
-                tile->render_data.depth_bias = 100;
-                tile->render_data.height_offset = -tileset->height_offset;
+                // TODO: the below is duplicate code
+                if (city->road.overlay_option_cur != 0)
+                {
+                    tile->render_data.pipeline_bits |= render::TilePipelineBits::ColormapEnabled;
+                }
+                else
+                {
+                    tile->render_data.pipeline_bits &= ~render::TilePipelineBits::ColormapEnabled;
+                }
+                tile->render_data.colormap_handle = city->road.colormap_handle;
+                tile->render_data.camera_handle = render::mapped_handle_erased(camera_handle);
+                render::model_3d_bucket_add(&tile->render_data);
             }
-            tile->render_data.colormap_handle = city->road.colormap_handle;
-            tile->render_data.colormap_enabled = city->road.overlay_option_cur != 0;
-            tile->render_data.camera_handle = render::mapped_handle_erased(camera_handle);
-            render::model_3d_bucket_add(&tile->render_data);
+        }
+
+        // draw custom tiles
+        for (cesium::TileRenderData* tile = tileset->tile_to_show.first; tile; tile = tile->render_next)
+        {
+            B32 is_custom_tile = has_flag(tile->render_data.pipeline_bits, render::TilePipelineBits::IsMapTile) == false;
+            if (is_custom_tile)
+            {
+                if (city->road.overlay_option_cur != 0)
+                {
+                    tile->render_data.pipeline_bits |= render::TilePipelineBits::ColormapEnabled;
+                }
+                else
+                {
+                    tile->render_data.pipeline_bits &= ~render::TilePipelineBits::ColormapEnabled;
+                }
+                tile->render_data.colormap_handle = city->road.colormap_handle;
+                tile->render_data.camera_handle = render::mapped_handle_erased(camera_handle);
+                tile->render_data.pipeline_bits |= render::TilePipelineBits::OverwriteDepth;
+                render::model_3d_bucket_add(&tile->render_data);
+            }
         }
 
         if (city->cars_creation_started == false && city->osm_task_done)
@@ -376,8 +395,9 @@ city_update(City* city, Buffer<city::Coordinate> new_agent_coords, async::Thread
                 U32 instance_buffer_offset = draw_result.buffer_offset;
                 for (cesium::TileRenderData* tile = tileset->tile_to_show.first; tile; tile = tile->render_next)
                 {
-                    bool map_tile_reference = tile->render_data.is_map_tile && (city_config->custom_geometry_enabled == false);
-                    bool custom_geometry_reference = (tile->render_data.is_map_tile == false) && city_config->custom_geometry_enabled;
+                    B32 is_map_tile = has_flag(tile->render_data.pipeline_bits, render::TilePipelineBits::IsMapTile);
+                    bool map_tile_reference = is_map_tile && (city_config->custom_geometry_enabled == false);
+                    bool custom_geometry_reference = (is_map_tile == false) && city_config->custom_geometry_enabled;
 
                     if (map_tile_reference || custom_geometry_reference)
                     {

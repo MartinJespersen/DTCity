@@ -161,7 +161,9 @@ model_3d_pipeline_create(Context* vk_ctx, String8 shader_path)
 
     VkPipelineShaderStageCreateInfo shader_stages[] = {vert_shader_stage_info.info, frag_shader_stage_info.info};
 
-    VkDynamicState dynamicStates[] = {VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR, VK_DYNAMIC_STATE_DEPTH_WRITE_ENABLE, VK_DYNAMIC_STATE_COLOR_WRITE_ENABLE_EXT, VK_DYNAMIC_STATE_DEPTH_BIAS};
+    VkDynamicState dynamicStates[] = {
+        VK_DYNAMIC_STATE_VIEWPORT,  VK_DYNAMIC_STATE_SCISSOR, VK_DYNAMIC_STATE_DEPTH_WRITE_ENABLE, VK_DYNAMIC_STATE_DEPTH_COMPARE_OP, VK_DYNAMIC_STATE_COLOR_WRITE_ENABLE_EXT,
+        VK_DYNAMIC_STATE_DEPTH_BIAS};
 
     VkPipelineDynamicStateCreateInfo dynamic_state{};
     dynamic_state.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
@@ -307,7 +309,8 @@ blend_3d_pipeline_create(String8 shader_path)
 
     VkPipelineShaderStageCreateInfo shader_stages[] = {vert_shader_stage_info.info, frag_shader_stage_info.info};
 
-    VkDynamicState dynamicStates[] = {VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR, VK_DYNAMIC_STATE_DEPTH_WRITE_ENABLE, VK_DYNAMIC_STATE_COLOR_WRITE_ENABLE_EXT};
+    VkDynamicState dynamicStates[] = {VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR, VK_DYNAMIC_STATE_DEPTH_WRITE_ENABLE, VK_DYNAMIC_STATE_DEPTH_COMPARE_OP,
+                                      VK_DYNAMIC_STATE_COLOR_WRITE_ENABLE_EXT};
 
     VkPipelineDynamicStateCreateInfo dynamic_state{};
     dynamic_state.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;

@@ -11,13 +11,11 @@ enum class ExtensionType
     Http
 };
 
-} // namespace async
-
-template <>
-inline constexpr bool enable_bitmask<async::ExtensionType> = true;
-
-namespace async
+constexpr bool
+enable_bitmask(ExtensionType)
 {
+    return true;
+}
 
 template <typename T>
 struct AsyncTaskStatus

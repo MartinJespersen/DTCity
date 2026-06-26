@@ -14,22 +14,17 @@ struct Model3dPushConstants
     F32 overlay_translation_y;
     F32 overlay_scale_x;
     F32 overlay_scale_y;
-    F32 bbox_min_x;
-    F32 bbox_min_y;
-    F32 bbox_max_x;
-    F32 bbox_max_y;
     F32 height_offset;
 };
 
 struct Model3DNode
 {
     Model3DNode* next;
-    B32 depth_write_per_draw_enabled;
+    B32 overwrite_depth;
     BufferAllocation index_alloc;
     U32 index_buffer_offset;
     U32 index_count;
     BufferAllocation vertex_alloc;
-    F32 depth_bias;
     Model3dPushConstants push_constants;
     render::MappedHandle<void> camera_handle;
 };

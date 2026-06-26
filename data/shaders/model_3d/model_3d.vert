@@ -24,7 +24,6 @@ layout(set = 0, binding = 0) uniform UBO_Camera
 layout(push_constant) uniform constants
 {
     uint base_tex;
-    uint colormap_tex_idx;
     uint overlay_tex_idx;
     uint overlay_enabled;
     uint64_t colormap_address;
@@ -33,8 +32,6 @@ layout(push_constant) uniform constants
     float overlay_translation_y;
     float overlay_scale_x;
     float overlay_scale_y;
-    vec2 bbox_min;
-    vec2 bbox_max;
     float height_offset;
 } PushConstants;
 
