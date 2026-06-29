@@ -77,8 +77,16 @@ static PFN_vkCmdBeginDebugUtilsLabelEXT cmd_begin_debug_utils_label_ext = VK_NUL
 static PFN_vkCmdEndDebugUtilsLabelEXT cmd_end_debug_utils_label_ext = VK_NULL_HANDLE;
 
 #if BUILD_DEBUG
-#define CMD_BEGIN_DEBUG_UTILS_LABEL_EXT(cmd, n) cmd_begin_debug_utils_label_ext(cmd, n)
-#define CMD_END_DEBUG_UTILS_LABEL_EXT(cmd) cmd_end_debug_utils_label_ext(cmd)
+#define CMD_BEGIN_DEBUG_UTILS_LABEL_EXT(cmd, n)  \
+    if (cmd_begin_debug_utils_label_ext)         \
+    {                                            \
+        cmd_begin_debug_utils_label_ext(cmd, n); \
+    }
+#define CMD_END_DEBUG_UTILS_LABEL_EXT(cmd)  \
+    if (cmd_end_debug_utils_label_ext)      \
+    {                                       \
+        cmd_end_debug_utils_label_ext(cmd); \
+    }
 #else
 #define CMD_BEGIN_DEBUG_UTILS_LABEL_EXT(cmd, n)
 #define CMD_END_DEBUG_UTILS_LABEL_EXT(cmd)

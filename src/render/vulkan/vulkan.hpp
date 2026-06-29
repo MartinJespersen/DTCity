@@ -167,7 +167,7 @@ struct Context
     static const U32 HEIGHT = 600;
 
 #if BUILD_DEBUG
-    static const U8 enable_validation_layers = 1;
+    static const U8 enable_validation_layers = 0;
     static const U8 enable_gpu_assisted_validation = 0;
 #else
     static const U8 enable_validation_layers = 0;

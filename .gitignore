@@ -25,6 +25,7 @@ compile_commands.json
 libs
 !tools/**
 **/*.glb
+!**/bike.glb
 __cmake**
 nul
 .vs

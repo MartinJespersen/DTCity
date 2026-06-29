@@ -16,7 +16,6 @@
   * std::construct_at and std::destroy_at could be used instead of what is done at the moment.
 * Tesselation could be used in tile pipeline for road colormap overlays
 * delete draw flush and related code
-* record asset lifetimes similar to how debug events are done at the moment to be sure everything related to asset lifetimes are handled on the same thread.
 * Use a list of fences for draw and compute calls that waits for asynchrounously loaded assets
 * Osm data visualizer should not be affected by netascore not showing
 * It should be possible to switch between cities in the editor
@@ -34,6 +33,7 @@
   * Make clang work as compiler
   * Make app work on MACOS
 * Create visualizer for arena allocations
+* Enable anisotropy on samplers?
 
 # Debug Log Suggestions
 * arena: alloc, push, pop and releases

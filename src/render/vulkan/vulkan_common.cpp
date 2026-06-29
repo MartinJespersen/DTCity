@@ -341,12 +341,20 @@ logical_device_create(Arena* arena, Context* vk_ctx)
         queueCreateInfos[i] = queueCreateInfo;
     }
 
+    VkPhysicalDeviceFeatures supported_device_features = {};
+    vkGetPhysicalDeviceFeatures(vk_ctx->physical_device, &supported_device_features);
+    if (!supported_device_features.shaderInt64)
+    {
+        exit_with_error("Selected Vulkan physical device does not support shaderInt64");
+    }
+
     VkPhysicalDeviceFeatures deviceFeatures{};
     deviceFeatures.samplerAnisotropy = VK_TRUE;
     deviceFeatures.sampleRateShading = VK_TRUE;
     deviceFeatures.tessellationShader = VK_TRUE;
     deviceFeatures.geometryShader = VK_TRUE;
     deviceFeatures.fillModeNonSolid = VK_TRUE;
+    deviceFeatures.shaderInt64 = VK_TRUE;
 
     VkPhysicalDeviceBufferDeviceAddressFeatures buffer_device_address_features{};
     buffer_device_address_features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_BUFFER_DEVICE_ADDRESS_FEATURES;
@@ -427,6 +435,14 @@ logical_device_create(Arena* arena, Context* vk_ctx)
 #if BUILD_DEBUG
     cmd_begin_debug_utils_label_ext = (PFN_vkCmdBeginDebugUtilsLabelEXT)vkGetDeviceProcAddr(vk_ctx->device, "vkCmdBeginDebugUtilsLabelEXT");
     cmd_end_debug_utils_label_ext = (PFN_vkCmdEndDebugUtilsLabelEXT)vkGetDeviceProcAddr(vk_ctx->device, "vkCmdEndDebugUtilsLabelEXT");
+    if (!cmd_begin_debug_utils_label_ext)
+    {
+        cmd_begin_debug_utils_label_ext = (PFN_vkCmdBeginDebugUtilsLabelEXT)vkGetInstanceProcAddr(vk_ctx->instance, "vkCmdBeginDebugUtilsLabelEXT");
+    }
+    if (!cmd_end_debug_utils_label_ext)
+    {
+        cmd_end_debug_utils_label_ext = (PFN_vkCmdEndDebugUtilsLabelEXT)vkGetInstanceProcAddr(vk_ctx->instance, "vkCmdEndDebugUtilsLabelEXT");
+    }
 #endif
 }
 
