@@ -129,6 +129,14 @@ enum Tex2DFormat
     Tex2DFormat_RGBA32,
     Tex2DFormat_COUNT,
 };
+// Pipeline
+
+enum class DepthCompare
+{
+    LessOrEqual,
+    Always,
+    Equal,
+};
 
 // ~mgj: Sampler
 enum MipMapMode
@@ -213,10 +221,12 @@ struct TextureLoadingInfo
 
 enum class TilePipelineBits
 {
-    ColormapEnabled = 1 << 0,
-    OverlayEnabled = 1 << 1,
-    IsMapTile = 1 << 2,
-    OverwriteDepth = 1 << 3
+    None = 0,
+    ColorDisable = 1 << 0,
+    DepthWriteDisable = 1 << 1,
+    OverlayEnabled = 1 << 2,
+    IsMapTile = 1 << 3,
+    ColormapEnable = 1 << 4
 };
 
 constexpr bool
@@ -225,7 +235,7 @@ enable_bitmask(TilePipelineBits)
     return true;
 }
 
-struct Model3DPipelineData
+struct TilePipelineData
 {
     Handle vertex_buffer_handle;
     Handle index_buffer_handle;
@@ -245,18 +255,19 @@ struct Model3DPipelineData
     F32 height_offset;
 
     TilePipelineBits pipeline_bits;
+    DepthCompare depth_test_compare;
 };
 
-struct Model3DPipelineDataNode
+struct TilePipelineDataNode
 {
-    Model3DPipelineData handles;
-    Model3DPipelineDataNode* next;
+    TilePipelineData handles;
+    TilePipelineDataNode* next;
 };
 
-struct Model3DPipelineDataList
+struct TilePipelineDataList
 {
-    Model3DPipelineDataNode* first;
-    Model3DPipelineDataNode* last;
+    TilePipelineDataNode* first;
+    TilePipelineDataNode* last;
 };
 
 struct Blend3DPipelineData
@@ -409,7 +420,7 @@ g_internal void
 blend_3d_draw(Blend3DPipelineData pipeline_input);
 
 static void
-tile_pipeline_add(render::Model3DPipelineData* pipeline_input);
+tile_pipeline_add(render::TilePipelineData* pipeline_input);
 g_internal bool
 agent_instance_render_bucket_add(render::MappedHandle<void> camera_handle, Buffer<render::MeshHandlePair> meshes, Buffer<render::Handle> texture_handles, render::BufferInfo* instance_buffer_info,
                                  U32 instance_buffer_offset);

@@ -374,7 +374,7 @@ model_3d_rendering()
     VkDescriptorSet descriptor_sets[1] = {vk_ctx->bindless_descriptor_set};
 
     VkDeviceSize offsets[] = {0};
-    for (Model3DNode* node = render_frame->model_3D_list.first; node; node = node->next)
+    for (TilePipelineNode* node = render_frame->model_3D_list.first; node; node = node->next)
     {
         render::Handle camera_handle = node->camera_handle.buffer[vk_ctx->current_frame]->handle;
         render::AssetItem<BufferHandle>* camera_buffer_handle = asset_manager_buffer_item_get(camera_handle);
@@ -392,21 +392,39 @@ model_3d_rendering()
 
         cmd_push_descriptor_set_khr(cmd_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, model_3D_pipeline->pipeline_layout, 0, ArrayCount(push_writes), push_writes);
         vkCmdSetDepthBias(cmd_buffer, 0, 0, 0);
-        vkCmdPushConstants(cmd_buffer, model_3D_pipeline->pipeline_layout, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(Model3dPushConstants), &node->push_constants);
+        vkCmdPushConstants(cmd_buffer, model_3D_pipeline->pipeline_layout, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(TilePipelinePushConstants), &node->push_constants);
         vkCmdBindDescriptorSets(cmd_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, model_3D_pipeline->pipeline_layout, 1, ArrayCount(descriptor_sets), descriptor_sets, 0, NULL);
         vkCmdBindVertexBuffers(cmd_buffer, 0, 1, &node->vertex_alloc.buffer, offsets);
         vkCmdBindIndexBuffer(cmd_buffer, node->index_alloc.buffer, 0, VK_INDEX_TYPE_UINT32);
         vkCmdSetDepthWriteEnable(cmd_buffer, VK_TRUE);
-        VkBool32 color_write_enabled[4] = {VK_TRUE, VK_TRUE, VK_TRUE, VK_TRUE};
-        if (node->overwrite_depth)
+        // type of depth compare
+        switch (node->depth_compare)
         {
-            vkCmdSetDepthCompareOp(cmd_buffer, VK_COMPARE_OP_ALWAYS);
+            case render::DepthCompare::LessOrEqual: vkCmdSetDepthCompareOp(cmd_buffer, VK_COMPARE_OP_LESS_OR_EQUAL); break;
+            case render::DepthCompare::Equal: vkCmdSetDepthCompareOp(cmd_buffer, VK_COMPARE_OP_EQUAL); break;
+            case render::DepthCompare::Always: vkCmdSetDepthCompareOp(cmd_buffer, VK_COMPARE_OP_ALWAYS); break;
+            default: vkCmdSetDepthCompareOp(cmd_buffer, VK_COMPARE_OP_LESS); break;
+        }
+        // color write?
+        if (has_flag(node->pipeline_bits, render::TilePipelineBits::ColorDisable))
+        {
+            VkBool32 color_write_disabled[4] = {};
+            cmd_set_color_write_enable_ext(cmd_buffer, ArrayCount(color_write_disabled), color_write_disabled);
         }
         else
         {
-            vkCmdSetDepthCompareOp(cmd_buffer, VK_COMPARE_OP_LESS);
+            VkBool32 color_write_enabled[4] = {VK_TRUE, VK_TRUE, VK_TRUE, VK_TRUE};
+            cmd_set_color_write_enable_ext(cmd_buffer, ArrayCount(color_write_enabled), color_write_enabled);
         }
-        cmd_set_color_write_enable_ext(cmd_buffer, ArrayCount(color_write_enabled), color_write_enabled);
+        // depth write?
+        if (has_flag(node->pipeline_bits, render::TilePipelineBits::DepthWriteDisable))
+        {
+            vkCmdSetDepthWriteEnable(cmd_buffer, VK_FALSE);
+        }
+        else
+        {
+            vkCmdSetDepthWriteEnable(cmd_buffer, VK_TRUE);
+        }
         vkCmdDrawIndexed(cmd_buffer, node->index_count, 1, node->index_buffer_offset, 0, 0);
     }
 }

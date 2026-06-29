@@ -383,7 +383,7 @@ texture_handle_create(SamplerInfo* sampler_info)
     VkSamplerCreateInfo sampler_create_info = {};
     vulkan::sampler_create_info_from_sampler_info(sampler_info, &sampler_create_info);
     sampler_create_info.anisotropyEnable = VK_TRUE;
-    sampler_create_info.maxAnisotropy = (F32)vk_ctx->msaa_samples;
+    sampler_create_info.maxAnisotropy = 4;
     VkSampler vk_sampler = vulkan::sampler_create(vk_ctx->device, &sampler_create_info);
 
     // ~mgj: Assign values to texture
@@ -725,7 +725,7 @@ road_intersection_compute_add(Handle vertex_buffer_handle, Handle index_buffer_h
 }
 
 static void
-tile_pipeline_add(render::Model3DPipelineData* pipeline_input)
+tile_pipeline_add(render::TilePipelineData* pipeline_input)
 {
     vulkan::Context* vk_ctx = vulkan::ctx_get();
     vulkan::RenderFrame* render_frame = vk_ctx->render_frame;
@@ -743,7 +743,7 @@ tile_pipeline_add(render::Model3DPipelineData* pipeline_input)
     B32 colormap_loaded = render::is_resource_loaded(pipeline_input->colormap_handle, &asset_colormap);
 
     B32 overlay_enabled = false;
-    B32 colormap_enabled = has_flag(pipeline_input->pipeline_bits, render::TilePipelineBits::ColormapEnabled);
+    B32 colormap_enabled = has_flag(pipeline_input->pipeline_bits, render::TilePipelineBits::ColormapEnable);
     B32 colormap_ready = colormap_loaded || colormap_enabled == false;
     if (vertex_loaded && index_loaded && base_texture_loaded && colormap_ready)
     {
@@ -753,7 +753,7 @@ tile_pipeline_add(render::Model3DPipelineData* pipeline_input)
             overlay_enabled = overlay_tex_loaded;
         }
 
-        vulkan::Model3dPushConstants push_constants = {};
+        vulkan::TilePipelinePushConstants push_constants = {};
         push_constants.tex_idx = asset_base_texture->item.descriptor_set_idx;
         push_constants.overlay_tex_idx = overlay_tex_loaded ? overlay_tex->item.descriptor_set_idx : 0;
         push_constants.overlay_enabled = overlay_enabled;
@@ -768,14 +768,15 @@ tile_pipeline_add(render::Model3DPipelineData* pipeline_input)
         push_constants.overlay_scale_y = pipeline_input->overlay_scale.y;
         push_constants.height_offset = pipeline_input->height_offset;
 
-        vulkan::Model3DNode* node = PushStruct(vk_ctx->render_frame_arena, vulkan::Model3DNode);
+        vulkan::TilePipelineNode* node = PushStruct(vk_ctx->render_frame_arena, vulkan::TilePipelineNode);
         node->vertex_alloc = asset_vertex_buffer->item.buffer_alloc;
         node->index_alloc = asset_index_buffer->item.buffer_alloc;
         node->push_constants = push_constants;
         node->index_count = pipeline_input->index_count;
         node->index_buffer_offset = pipeline_input->index_offset;
         node->camera_handle = pipeline_input->camera_handle;
-        node->overwrite_depth = has_flag(pipeline_input->pipeline_bits, TilePipelineBits::OverwriteDepth);
+        node->pipeline_bits = pipeline_input->pipeline_bits;
+        node->depth_compare = pipeline_input->depth_test_compare;
 
         SLLQueuePush(render_frame->model_3D_list.first, render_frame->model_3D_list.last, node);
     }

@@ -16,11 +16,11 @@ enum RoadSegmentCornerCoord
     RoadSegmentCornerCoord_Count
 };
 
-#define ROAD_OVERLAY_OPTIONS                                                                                                                                                                           \
-    X(None, "None")                                                                                                                                                                                    \
-    X(Bikeability_ft, "Bikeability_ft")                                                                                                                                                                \
-    X(Bikeability_tf, "Bikeability_tf")                                                                                                                                                                \
-    X(Walkability_tf, "Walkability_tf")                                                                                                                                                                \
+#define ROAD_OVERLAY_OPTIONS            \
+    X(None, "None")                     \
+    X(Bikeability_ft, "Bikeability_ft") \
+    X(Bikeability_tf, "Bikeability_tf") \
+    X(Walkability_tf, "Walkability_tf") \
     X(Walkability_ft, "Walkability_ft")
 
 enum RoadOverlayOption : U32
@@ -237,8 +237,8 @@ struct Buildings
     String8 roof_texture_path;
     String8 facade_texture_path;
 
-    render::Model3DPipelineData roof_model_handles;
-    render::Model3DPipelineData facade_model_handles;
+    render::TilePipelineData roof_model_handles;
+    render::TilePipelineData facade_model_handles;
 };
 
 enum class AsyncTaskType : U32

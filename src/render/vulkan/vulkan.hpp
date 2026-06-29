@@ -3,7 +3,7 @@
 namespace vulkan
 {
 
-struct Model3dPushConstants
+struct TilePipelinePushConstants
 {
     U32 tex_idx;
     U32 overlay_tex_idx;
@@ -17,15 +17,16 @@ struct Model3dPushConstants
     F32 height_offset;
 };
 
-struct Model3DNode
+struct TilePipelineNode
 {
-    Model3DNode* next;
-    B32 overwrite_depth;
+    TilePipelineNode* next;
+    render::DepthCompare depth_compare;
+    render::TilePipelineBits pipeline_bits;
     BufferAllocation index_alloc;
     U32 index_buffer_offset;
     U32 index_count;
     BufferAllocation vertex_alloc;
-    Model3dPushConstants push_constants;
+    TilePipelinePushConstants push_constants;
     render::MappedHandle<void> camera_handle;
 };
 
@@ -68,10 +69,10 @@ struct CarInstanceRenderNode
     U32 instance_buffer_offset;
 };
 
-struct Model3DNodeList
+struct TilePipelineList
 {
-    Model3DNode* first;
-    Model3DNode* last;
+    TilePipelineNode* first;
+    TilePipelineNode* last;
 };
 
 struct CarInstanceComputeNodeList
@@ -142,7 +143,7 @@ struct RoadIntersectionList
 
 struct RenderFrame
 {
-    Model3DNodeList model_3D_list;
+    TilePipelineList model_3D_list;
     CarInstanceCompute car_instance_compute_list;
     CarInstanceRender car_instance_render_list;
     Blend3DList blend_3d_list;

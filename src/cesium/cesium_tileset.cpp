@@ -1067,9 +1067,8 @@ tileset_renderer_create(TilesetRenderer* tileset, async::ThreadPool* threads, St
     create_context.options.enableLodTransitionPeriod = false;
     create_context.options.lodTransitionLength = 1.0;
 
-    create_context.options.maximumSimultaneousTileLoads = 8;
     create_context.options.preloadSiblings = true;
-    create_context.options.loadingDescendantLimit = 4;
+    create_context.options.loadingDescendantLimit = 20;
     create_context.options.forbidHoles = true;
     U32 tileset_count = 1;
     if (custom_geometry_enabled)
@@ -1206,6 +1205,7 @@ _tileset_renderer_active_resources_release(TilesetRenderer* renderer)
 g_internal void
 tileset_renderer_free_list_empty(TilesetRenderer* renderer)
 {
+    prof_scope_marker;
     while (1)
     {
         TileRenderDataList* tile_data = 0;
@@ -1306,44 +1306,47 @@ tileset_update_view(TilesetRenderer* renderer, ui::Camera* camera, Vec2U32 viewp
     // Update the tileset view
     std::vector<Cesium3DTilesSelection::ViewState> views = {view_state};
     tileset_renderer_free_list_empty(renderer);
-    for (U32 i = 0; i < renderer->tilesets.size; ++i)
     {
-        const Cesium3DTilesSelection::ViewUpdateResult& result = renderer->tilesets.data[i]->updateViewGroup(renderer->tilesets.data[i]->getDefaultViewGroup(), views, (F32)delta_time);
-        renderer->tilesets.data[i]->loadTiles();
-
-        for (const Cesium3DTilesSelection::Tile* tile : result.tilesToRenderThisFrame)
+        prof_scope_marker_named("tile load loop");
+        for (U32 i = 0; i < renderer->tilesets.size; ++i)
         {
-            if (tile->getState() != Cesium3DTilesSelection::TileLoadState::Done)
+            const Cesium3DTilesSelection::ViewUpdateResult& result = renderer->tilesets.data[i]->updateViewGroup(renderer->tilesets.data[i]->getDefaultViewGroup(), views, (F32)delta_time);
+            renderer->tilesets.data[i]->loadTiles();
+
+            for (const Cesium3DTilesSelection::Tile* tile : result.tilesToRenderThisFrame)
             {
-                continue;
-            }
-
-            const Cesium3DTilesSelection::TileContent& content = tile->getContent();
-            const Cesium3DTilesSelection::TileRenderContent* render_content = content.getRenderContent();
-
-            if (!render_content)
-            {
-                continue;
-            }
-
-            void* renderer_resources = render_content->getRenderResources();
-            if (!renderer_resources)
-                continue;
-
-            TileRenderDataList* render_data = static_cast<TileRenderDataList*>(renderer_resources);
-            if (!render_data)
-            {
-                continue;
-            }
-
-            if (render_data->tile_is_loaded)
-            {
-                prof_scope_marker_named("tileset_update_view:schedule_loaded_tiles");
-                _tile_render_data_overlay_apply(render_data);
-                for (TileRenderData* render_data_node = render_data->first; render_data_node; render_data_node = render_data_node->next)
+                if (tile->getState() != Cesium3DTilesSelection::TileLoadState::Done)
                 {
-                    SLLQueuePush_N(renderer->tile_to_show.first, renderer->tile_to_show.last, render_data_node, render_next);
-                    renderer->tiles_to_show_count++;
+                    continue;
+                }
+
+                const Cesium3DTilesSelection::TileContent& content = tile->getContent();
+                const Cesium3DTilesSelection::TileRenderContent* render_content = content.getRenderContent();
+
+                if (!render_content)
+                {
+                    continue;
+                }
+
+                void* renderer_resources = render_content->getRenderResources();
+                if (!renderer_resources)
+                    continue;
+
+                TileRenderDataList* render_data = static_cast<TileRenderDataList*>(renderer_resources);
+                if (!render_data)
+                {
+                    continue;
+                }
+
+                if (render_data->tile_is_loaded)
+                {
+                    prof_scope_marker_named("tileset_update_view:schedule_loaded_tiles");
+                    _tile_render_data_overlay_apply(render_data);
+                    for (TileRenderData* render_data_node = render_data->first; render_data_node; render_data_node = render_data_node->next)
+                    {
+                        SLLQueuePush_N(renderer->tile_to_show.first, renderer->tile_to_show.last, render_data_node, render_next);
+                        renderer->tiles_to_show_count++;
+                    }
                 }
             }
         }

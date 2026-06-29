@@ -6,7 +6,7 @@ namespace draw
 struct TilePipelineNode
 {
     TilePipelineNode* next;
-    render::Model3DPipelineData pipeline_input;
+    render::TilePipelineData pipeline_input;
     render::Handle colormap_handle;
 };
 

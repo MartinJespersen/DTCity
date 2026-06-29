@@ -149,11 +149,11 @@ _tile_pipeline_add(cesium::TileRenderData* tile, City* city, render::MappedHandl
 {
     if (city->road.overlay_option_cur != 0)
     {
-        tile->render_data.pipeline_bits |= render::TilePipelineBits::ColormapEnabled;
+        tile->render_data.pipeline_bits |= render::TilePipelineBits::ColormapEnable;
     }
     else
     {
-        tile->render_data.pipeline_bits &= ~render::TilePipelineBits::ColormapEnabled;
+        tile->render_data.pipeline_bits &= ~render::TilePipelineBits::ColormapEnable;
     }
     tile->render_data.colormap_handle = city->road.colormap_handle;
     tile->render_data.camera_handle = render::mapped_handle_erased(camera_handle);
@@ -337,13 +337,25 @@ city_update(City* city, Buffer<city::Coordinate> new_agent_coords, async::Thread
             }
         }
 
-        // draw custom tiles
+        // custom tile depth only with depth compare always
         for (cesium::TileRenderData* tile = tileset->tile_to_show.first; tile; tile = tile->render_next)
         {
             B32 is_custom_tile = has_flag(tile->render_data.pipeline_bits, render::TilePipelineBits::IsMapTile) == false;
             if (is_custom_tile)
             {
-                tile->render_data.pipeline_bits |= render::TilePipelineBits::OverwriteDepth;
+                tile->render_data.pipeline_bits |= render::TilePipelineBits::ColorDisable;
+                tile->render_data.depth_test_compare = render::DepthCompare::Always;
+                _tile_pipeline_add(tile, city, camera_handle);
+            }
+        }
+        // draw custom tiles with depth diabled but color enabled
+        for (cesium::TileRenderData* tile = tileset->tile_to_show.first; tile; tile = tile->render_next)
+        {
+            B32 is_custom_tile = has_flag(tile->render_data.pipeline_bits, render::TilePipelineBits::IsMapTile) == false;
+            if (is_custom_tile)
+            {
+                tile->render_data.pipeline_bits &= (~render::TilePipelineBits::ColorDisable);
+                tile->render_data.depth_test_compare = render::DepthCompare::LessOrEqual;
                 _tile_pipeline_add(tile, city, camera_handle);
             }
         }

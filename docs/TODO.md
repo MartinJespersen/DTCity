@@ -33,7 +33,6 @@
   * Make clang work as compiler
   * Make app work on MACOS
 * Create visualizer for arena allocations
-* Enable anisotropy on samplers?
 
 # Debug Log Suggestions
 * arena: alloc, push, pop and releases

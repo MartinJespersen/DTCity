@@ -18,7 +18,7 @@ struct TileRenderData
     TileRenderData* next;
     TileRenderData* render_next;
 
-    render::Model3DPipelineData render_data;
+    render::TilePipelineData render_data;
 
     bool compute_scheduled;
 };
