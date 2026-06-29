@@ -4,6 +4,7 @@ g_internal Network*
 osm_init(U64 node_hashmap_size, U64 way_hashmap_size, String8 cache_path, String8 area, String8 bbox_cache_str)
 {
     Arena* arena = arena_alloc();
+    Debug_SetName(arena, "OSM network arena");
     Buffer<NodeList> node_hashmap = buffer_alloc<NodeList>(arena, node_hashmap_size);
     Buffer<WayList> way_hashmap = buffer_alloc<WayList>(arena, way_hashmap_size);
     Map<NodeId, EcefLocation>* ecef_location_map = map_create<NodeId, EcefLocation>(arena, node_hashmap_size);

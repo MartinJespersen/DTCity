@@ -25,6 +25,5 @@
 #include "base_container.hpp"
 #include "cache.hpp"
 #include "base_lists.hpp"
-#include "debug_log.hpp"
 
 #endif // BASE_INC_H

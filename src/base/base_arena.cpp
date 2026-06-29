@@ -1,9 +1,6 @@
 // Copyright (c) 2024 Epic Games Tools
 // Licensed under the MIT license (https://opensource.org/license/mit/)
 
-////////////////////////////////
-//~ rjf: Arena Functions
-
 //- rjf: arena creation/destruction
 
 lib_internal Arena*
@@ -66,6 +63,8 @@ arena_alloc(ArenaParams* params)
     arena->free_size = 0;
     arena->free_last = 0;
 #endif
+    Debug_ArenaCreate_Push(arena, arena->cmt);
+    Debug_SetName(arena, "<unnamed>");
     return arena;
 }
 
@@ -85,6 +84,7 @@ arena_release(Arena* arena)
     for (Arena *n = arena->current, *prev = 0; n != 0; n = prev)
     {
         prev = n->prev;
+        Debug_ArenaRelease_Push(n);
         os_release(n, n->res);
     }
 }
@@ -94,7 +94,6 @@ arena_release(Arena* arena)
 lib_internal void*
 arena_push(Arena* arena, U64 size, U64 align)
 {
-    Debug_Allocation_Push(arena, size);
     Arena* current = arena->current;
     U64 pos_pre = align_pow2(current->pos, align);
     U64 pos_pst = pos_pre + size;
@@ -136,6 +135,7 @@ arena_push(Arena* arena, U64 size, U64 align)
             }
             ArenaParams params = {.reserve_size = res_size, .commit_size = cmt_size, .flags = current->flags};
             new_block = arena_alloc(&params);
+            Debug_SetName(new_block, "arena chain block");
         }
 
         new_block->base_pos = current->base_pos + current->res;
@@ -168,6 +168,7 @@ arena_push(Arena* arena, U64 size, U64 align)
             os_commit(cmt_ptr, cmt_size);
         }
         current->cmt = cmt_pst_clamped;
+        Debug_PageAllocation_Push(arena, current->cmt);
     }
 
     // rjf: push onto current block
@@ -200,7 +201,7 @@ arena_pos(Arena* arena)
 }
 
 lib_internal void
-ArenaPopTo(Arena* arena, U64 pos)
+arena_pop_to(Arena* arena, U64 pos)
 {
     U64 big_pos = ClampBot(ARENA_HEADER_SIZE, pos);
     Arena* current = arena->current;
@@ -213,6 +214,15 @@ ArenaPopTo(Arena* arena, U64 pos)
         arena->free_size += current->res_size;
         SLLStackPush_N(arena->free_last, current, prev);
         AsanPoisonMemoryRegion((U8*)current + ARENA_HEADER_SIZE, current->res_size - ARENA_HEADER_SIZE);
+        if (!(current->flags & ArenaFlag_LargePages) && current->cmt > current->cmt_size)
+        {
+            U64 decommit_pos = current->cmt_size;
+            U64 decommit_size = current->cmt - decommit_pos;
+            void* decommit_ptr = (U8*)current + decommit_pos;
+            os_decommit(decommit_ptr, decommit_size);
+            current->cmt = decommit_pos;
+            Debug_PageRelease_Push(current, current->cmt);
+        }
     }
 #else
     for (Arena* prev = 0; current->base_pos >= big_pos; current = prev)
@@ -225,6 +235,18 @@ ArenaPopTo(Arena* arena, U64 pos)
     U64 new_pos = big_pos - current->base_pos;
     AssertAlways(new_pos <= current->pos);
     AsanPoisonMemoryRegion((U8*)current + new_pos, (current->pos - new_pos));
+    if (!(current->flags & ArenaFlag_LargePages))
+    {
+        U64 decommit_pos = align_pow2(new_pos, current->cmt_size);
+        if (current->cmt > decommit_pos)
+        {
+            U64 decommit_size = current->cmt - decommit_pos;
+            void* decommit_ptr = (U8*)current + decommit_pos;
+            os_decommit(decommit_ptr, decommit_size);
+            current->cmt = decommit_pos;
+            Debug_PageRelease_Push(current, current->cmt);
+        }
+    }
     current->pos = new_pos;
 }
 
@@ -233,7 +255,7 @@ ArenaPopTo(Arena* arena, U64 pos)
 lib_internal void
 arena_clear(Arena* arena)
 {
-    ArenaPopTo(arena, 0);
+    arena_pop_to(arena, 0);
 }
 
 lib_internal void
@@ -245,7 +267,7 @@ arena_pop(Arena* arena, U64 amt)
     {
         pos_new = pos_old - amt;
     }
-    ArenaPopTo(arena, pos_new);
+    arena_pop_to(arena, pos_new);
 }
 
 //- rjf: temporary arena scopes
@@ -261,5 +283,5 @@ temp_begin(Arena* arena)
 lib_internal void
 temp_end(Temp temp)
 {
-    ArenaPopTo(temp.arena, temp.pos);
+    arena_pop_to(temp.arena, temp.pos);
 }

@@ -1,6 +1,6 @@
 # Urgent changes
 * All vulkan load function should take in thread_ctx 
-* Some roads are not covered in NetAScore at certain LOD's.
+* validation layer: vkCmdBlitImage2(): THREADING ERROR : object of type VkCommandPool is simultaneously used in current thread 35788 and thread 17432
 
 # Less urgent changes
 * Reconsider the number of descriptor pools (whether 1 is enough) and the descriptor numbers
@@ -11,6 +11,10 @@
 * tile transform might need to be passed to shader as a uniform buffer
 
 # features
+* For Cpp Allocator
+  * Should work on arrays and initializer lists as well
+  * std::construct_at and std::destroy_at could be used instead of what is done at the moment.
+* Tesselation could be used in tile pipeline for road colormap overlays
 * delete draw flush and related code
 * record asset lifetimes similar to how debug events are done at the moment to be sure everything related to asset lifetimes are handled on the same thread.
 * Use a list of fences for draw and compute calls that waits for asynchrounously loaded assets
@@ -29,7 +33,7 @@
 * Make application work on arm arhitecture 
   * Make clang work as compiler
   * Make app work on MACOS
-* Memory handling with shared pointer might not be the way to go for http 
+* Create visualizer for arena allocations
 
 # Debug Log Suggestions
 * arena: alloc, push, pop and releases

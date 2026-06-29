@@ -7,6 +7,7 @@ city_init(City* city, String8 cache_path)
     ScratchScope scratch = ScratchScope(0, 0);
 
     Arena* arena = arena_alloc();
+    Debug_SetName(arena, "city arena");
     city->cache_path = push_str8_copy(arena, cache_path);
     city->arena = arena;
     city->agent_scale_factor = 1.0f;
@@ -39,6 +40,7 @@ city_area_streaming_end(City* city)
     {
         cesium::tileset_renderer_destroy(tileset);
         ctx->tileset_pool->item_free(city->tileset_handle);
+        city->tileset_handle = {};
     }
 }
 
@@ -74,6 +76,7 @@ city_build(City* city, Rng2F64 bbox, String8 tileset_url, String8 area)
 
     // init neta layer
     Arena* arena = arena_alloc();
+    Debug_SetName(arena, "city neta arena");
     city->neta_state = PushStruct(arena, neta::NetaState);
     neta::NetaState* neta_state = city->neta_state;
     neta_state->arena = arena;
@@ -125,14 +128,14 @@ _cache_and_parse_osm_json(async::ThreadPool* thread_pool, Road* road, osm::Netwo
             async::http_info_create(osm_network->arena, HTTP_Method_Post, path, S("application/x-www-form-urlencoded"), {S("User-Agent: DTCity/0.1"), S("Accept: application/json")}, {});
         http_info->body = push_str8_copy(osm_network->arena, body);
         async::AsyncHttpTaskStateConfig<osm::Network> config = async::AsyncHttpTaskStateConfig<osm::Network>(osm::fetch_osm_data_and_parse, osm_network, 3, 1);
-        async::AsyncHttpTaskCreateResult<osm::Network> http_task_result = async::async_http_task_run(thread_pool, http_info, &config, S("Osm Task"));
+        async::AsyncHttpTaskCreateResult<osm::Network> http_task_result = async::async_http_task_run(thread_pool, http_info, &config, "Osm Task");
         AssertAlways(http_task_result.async_result.has_error() == false);
 
         osm_task->osm = http_task_result.task_state;
     }
     else
     {
-        async::AsyncTaskStatus<osm::Network>* osm_task_cached = async::async_task_run(thread_pool, osm::parse_osm_data, osm_network, S("Osm Task Http Cached"));
+        async::AsyncTaskStatus<osm::Network>* osm_task_cached = async::async_task_run(thread_pool, osm::parse_osm_data, osm_network, "Osm Task Http Cached");
         osm_task->osm = osm_task_cached;
     }
 
@@ -233,7 +236,7 @@ city_update(City* city, Buffer<city::Coordinate> new_agent_coords, async::Thread
         RoadBuildTask* road_build_task = PushStruct(city->arena, RoadBuildTask);
         road_build_task->road = &city->road;
         road_build_task->network = city->osm_network;
-        async::AsyncTaskStatus<RoadBuildTask>* road_building_task = async::async_task_run(thread_pool, road_build, road_build_task, S("Road Building Task"));
+        async::AsyncTaskStatus<RoadBuildTask>* road_building_task = async::async_task_run(thread_pool, road_build, road_build_task, "Road Building Task");
         AsyncCityTask* road_task_list_elem = PushStruct(city->arena, AsyncCityTask);
         road_task_list_elem->type = AsyncTaskType::Road;
         road_task_list_elem->road = road_building_task;
@@ -348,6 +351,7 @@ city_update(City* city, Buffer<city::Coordinate> new_agent_coords, async::Thread
         if (city->cars_creation_started == false && city->osm_task_done)
         {
             Allocator* allocator = Allocator::create();
+            Debug_SetName(tileset->allocator->arena, "Cesium Tileset Allocator arena");
             AgentSim* car_sim = &city->car_sim;
             car_sim->allocator = allocator;
             car_sim->asset_dir = push_str8_copy(allocator->arena, ctx->data_subdirs.data[dt_DataDirType::Assets]);
@@ -357,7 +361,7 @@ city_update(City* city, Buffer<city::Coordinate> new_agent_coords, async::Thread
             CarSimBuildTask* car_sim_build_task = PushStruct(allocator->arena, CarSimBuildTask);
             car_sim_build_task->car_sim = car_sim;
             car_sim_build_task->network = city->osm_network;
-            async::AsyncTaskStatus<CarSimBuildTask>* car_sim_task = async::async_task_run(ctx->thread_pool, agent_sim_build, car_sim_build_task, S("Car Sim Task"));
+            async::AsyncTaskStatus<CarSimBuildTask>* car_sim_task = async::async_task_run(ctx->thread_pool, agent_sim_build, car_sim_build_task, "Car Sim Task");
 
             AsyncCityTask* car_sim_task_list_elem = PushStruct(allocator->arena, AsyncCityTask);
             car_sim_task_list_elem->type = AsyncTaskType::CarSim;
@@ -1219,6 +1223,7 @@ buildings_create(String8 cache_path, String8 texture_path, Rng2F64 bbox)
 
     ScratchScope scratch = ScratchScope(0, 0);
     Arena* arena = arena_alloc();
+    Debug_SetName(arena, "city buildings arena");
     Buildings* buildings = PushStruct(arena, Buildings);
     buildings->cache_file_name = push_str8_copy(arena, S("openapi_node_ways_buildings.json"));
 
@@ -1789,6 +1794,7 @@ road_create(City* city, Road* in_out_road, glm::dmat4& ecef_to_local, String8 ar
     Context* ctx = dt_ctx_get();
 
     in_out_road->arena = arena_alloc();
+    Debug_SetName(in_out_road->arena, "city road network arena");
     in_out_road->ecef_to_local = ecef_to_local;
     in_out_road->road_height = 10.0f;
     in_out_road->default_road_width = 2.0f;

@@ -288,6 +288,8 @@ dt_main_loop(void* ptr)
         if (cur_area_option != area_option)
         {
             city_area_streaming_end(area);
+            Debug_Frame_End();
+            Debug_Memory_Snapshot_Dump();
 
             cur_area_option = area_option;
             area = city_buf[cur_area_option];
@@ -308,7 +310,8 @@ dt_main_loop(void* ptr)
         for (U32 i = 0; i < city_buf.size; ++i)
         {
             cesium::TilesetRenderer* tileset = {};
-            if (ctx->tileset_pool->item_from_handle(area->tileset_handle, &tileset))
+            city::City* city = city_buf[i];
+            if (ctx->tileset_pool->item_from_handle(city->tileset_handle, &tileset))
             {
                 cesium::tileset_pump_async(tileset);
             }
@@ -347,5 +350,7 @@ dt_main_loop(void* ptr)
     render::gpu_work_done_wait();
     draw::draw_release();
     render::render_ctx_destroy();
+    Debug_Frame_End();
+    Debug_Memory_Snapshot_Dump();
 #endif
 }

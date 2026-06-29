@@ -1001,6 +1001,7 @@ static SwapchainResources*
 swapchain_create(Context* vk_ctx, SwapChainSupportDetails* swapchain_info, VkExtent2D swapchain_extent)
 {
     Arena* arena = arena_alloc();
+    Debug_SetName(arena, "vulkan bootstrap arena");
     SwapchainResources* swapchain_resources = PushStruct(arena, SwapchainResources);
     swapchain_resources->arena = arena;
 

@@ -282,10 +282,10 @@ _async_http_configure(Arena* arena, CurlContext* curl_ctx, HttpInfo* http_info, 
 
 template <typename T>
 g_internal AsyncHttpTaskCreateResult<T>
-async_http_task_run(Arena* arena, ThreadPool* thread_pool, HttpInfo* http_info, AsyncHttpTaskStateConfig<T>* config, String8 task_name);
+async_http_task_run(Arena* arena, ThreadPool* thread_pool, HttpInfo* http_info, AsyncHttpTaskStateConfig<T>* config, const char* task_name);
 
 template <typename T>
 g_internal AsyncHttpTaskCreateResult<T>
-async_http_task_run(ThreadPool* thread_pool, HttpInfo* http_info, AsyncHttpTaskStateConfig<T>* config, String8 task_name);
+async_http_task_run(ThreadPool* thread_pool, HttpInfo* http_info, AsyncHttpTaskStateConfig<T>* config, const char* task_name);
 
 } // namespace async

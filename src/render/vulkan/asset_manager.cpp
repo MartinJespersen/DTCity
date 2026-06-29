@@ -465,6 +465,7 @@ asset_manager_create(VkPhysicalDevice physical_device, VkDevice device, VkInstan
                      VkDescriptorPool desc_pool)
 {
     Arena* arena = arena_alloc();
+    Debug_SetName(arena, "vulkan asset manager arena");
     AssetManager* asset_manager = PushStruct(arena, AssetManager);
     asset_manager->arena = arena;
     asset_manager->total_size = total_size_in_bytes;
@@ -874,6 +875,7 @@ static AssetManagerCmdQueue*
 asset_manager_cmd_queue_create()
 {
     Arena* arena = arena_alloc();
+    Debug_SetName(arena, "vulkan asset command queue arena");
     AssetManagerCmdQueue* cmd_queue = PushStruct(arena, AssetManagerCmdQueue);
     cmd_queue->arena = arena;
     cmd_queue->mutex = OS_MutexAlloc();
@@ -948,6 +950,7 @@ static AssetManagerCmdList*
 asset_manager_cmd_list_create()
 {
     Arena* arena = arena_alloc();
+    Debug_SetName(arena, "vulkan asset command list arena");
     AssetManagerCmdList* cmd_list = PushStruct(arena, AssetManagerCmdList);
     cmd_list->arena = arena;
     return cmd_list;

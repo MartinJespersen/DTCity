@@ -9,6 +9,7 @@ dynamic_array_init(U64 bytes_to_reserve)
     arena_params.commit_size = arena_default_commit_size;
     arena_params.flags = arena_default_flags;
     Arena* arena = arena_alloc(&arena_params);
+    Debug_SetName(arena, "dynamic array pool arena");
     g_dynamic_array_pool = PushStruct(arena, DynamicArrayPool);
     g_dynamic_array_pool->mutex = OS_MutexAlloc();
     g_dynamic_array_pool->arena = arena;
@@ -155,6 +156,7 @@ ArenaArray<T>::ArenaArray(U64 max_capacity) noexcept
     arena_params.commit_size = KB(4);
     arena_params.flags = ArenaFlag_NoChain;
     Arena* arena = arena_alloc(&arena_params);
+    Debug_SetName(arena, "fixed dynamic array arena");
     this->_arena = arena;
     this->_arr = (T*)((U8*)arena + arena_pos(arena));
     this->_capacity = (reserve_arr_byte_size - ARENA_HEADER_SIZE) / element_byte_size;
@@ -209,6 +211,7 @@ resource_pool_init(U64 reserve_element_size)
         arena_params.commit_size = KB(4);
         arena_params.flags = ArenaFlag_NoChain;
         Arena* arena = arena_alloc(&arena_params);
+        Debug_SetName(arena, "resource pool arena");
         container = PushStruct(arena, ResourcePool<T>);
         container->arena = arena;
         container->items = (ItemHeader<T>*)((U8*)arena + arena_pos(arena));
@@ -225,6 +228,7 @@ resource_pool_init(U64 reserve_element_size)
         free_list_arena_params.commit_size = KB(4);
         free_list_arena_params.flags = ArenaFlag_NoChain;
         container->arena_free_list = arena_alloc(&free_list_arena_params);
+        Debug_SetName(container->arena_free_list, "resource pool free list arena");
         container->free_list = (ResourcePoolHandle*)((U8*)container->arena_free_list + arena_pos(container->arena_free_list));
     }
 

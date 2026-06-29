@@ -77,6 +77,7 @@ render_ctx_create(String8 shader_path, io::IO* io_ctx, async::ThreadPool* thread
     ScratchScope scratch = ScratchScope(0, 0);
 
     Arena* arena = arena_alloc();
+    Debug_SetName(arena, "vulkan context arena");
 
     vulkan::Context* vk_ctx = PushStruct(arena, vulkan::Context);
     vulkan::ctx_set(vk_ctx);
@@ -151,6 +152,7 @@ render_ctx_create(String8 shader_path, io::IO* io_ctx, async::ThreadPool* thread
     null_texture_create(vk_ctx);
 
     vk_ctx->render_frame_arena = arena_alloc();
+    Debug_SetName(vk_ctx->render_frame_arena, "vulkan render frame arena");
     vk_ctx->model_3D_pipeline = vulkan::model_3d_pipeline_create(vk_ctx, shader_path);
     vk_ctx->car_instance_pipeline = vulkan::car_instance_pipeline_create(vk_ctx, shader_path);
     vk_ctx->blend_3d_pipeline = vulkan::blend_3d_pipeline_create(shader_path);

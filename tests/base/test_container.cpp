@@ -82,6 +82,7 @@ TEST_CASE("Array Resource Pool Reuses Freed Slot")
     };
 
     Arena* arena = arena_alloc();
+    Debug_SetName(arena, "test container arena");
     defer(arena_release(arena));
 
     ArrayResourcePool<TestObject>* pool = ArrayResourcePool<TestObject>::create(arena, 2);

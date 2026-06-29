@@ -333,7 +333,7 @@ class DTCityPrepareRendererResources : public Cesium3DTilesSelection::IPrepareRe
         render::thread_cmd_buffer_record(thread_ctx);
         defer({ render::thread_cmd_buffer_end(thread_ctx); });
 
-        TileRenderDataList* render_data_list = tile_render_data_from_gltf(*model, ecef_to_local_transform, transform, tileLoadResult.glTFUpAxis, thread_ctx);
+        TileRenderDataList* render_data_list = tile_render_data_from_gltf(*model, ecef_to_local_transform, transform, tileLoadResult.glTFUpAxis, thread_ctx, tile_set_renderer);
         {
             auto stub_func = [](void* data, render::ThreadWorkerCmdCtx* thread_input)
             {
@@ -388,10 +388,13 @@ class DTCityPrepareRendererResources : public Cesium3DTilesSelection::IPrepareRe
         if (!render_data_list)
             return;
 
-        os_mutex_scope_w(tile_set_renderer->tiles_to_free_mutex)
+        if (_tileset_renderer_tile_resource_untrack(tile_set_renderer, render_data_list))
         {
-            SLLStackPush(tile_set_renderer->tiles_to_free_stack, render_data_list);
-            tile_set_renderer->tiles_to_free_stack_count++;
+            os_mutex_scope_w(tile_set_renderer->tiles_to_free_mutex)
+            {
+                SLLStackPush(tile_set_renderer->tiles_to_free_stack, render_data_list);
+                tile_set_renderer->tiles_to_free_stack_count++;
+            }
         }
     }
 
@@ -404,7 +407,7 @@ class DTCityPrepareRendererResources : public Cesium3DTilesSelection::IPrepareRe
         render::ThreadWorkerCmdCtx* thread_ctx = render::thread_ctx_create();
         render::thread_cmd_buffer_record(thread_ctx);
         defer({ render::thread_cmd_buffer_end(thread_ctx); });
-        render::BBoxDraw* raster_tile = render_raster_tile_record(thread_ctx, &tile_info);
+        render::BBoxDraw* raster_tile = render_raster_tile_record(thread_ctx, &tile_info, tile_set_renderer);
 
         return raster_tile;
     }
@@ -429,9 +432,13 @@ class DTCityPrepareRendererResources : public Cesium3DTilesSelection::IPrepareRe
         render::BBoxDraw* result = static_cast<render::BBoxDraw*>(pMainThreadResult ? pMainThreadResult : pLoadThreadResult);
         if (result)
         {
-            Assert(render::is_handle_zero(result->tex) == false);
-            render::handle_destroy_deferred(result->tex);
-            arena_release(result->arena);
+            RasterRenderResource* resource = (RasterRenderResource*)result;
+            if (_tileset_renderer_raster_resource_untrack(tile_set_renderer, resource))
+            {
+                Assert(render::is_handle_zero(result->tex) == false);
+                render::handle_destroy_deferred(result->tex);
+                arena_release(result->arena);
+            }
         }
     }
 
@@ -575,17 +582,21 @@ sampler_info_from_cesium_sampler(const CesiumGltf::Sampler& sampler)
 //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 g_internal render::BBoxDraw*
-render_raster_tile_record(render::ThreadWorkerCmdCtx* thread_input, RasterTileInfo* tile_info)
+render_raster_tile_record(render::ThreadWorkerCmdCtx* thread_input, RasterTileInfo* tile_info, TilesetRenderer* renderer)
 {
     ScratchScope scratch = ScratchScope(0, 0);
     Arena* raster_arena = arena_alloc();
-    render::BBoxDraw* result = PushStruct(raster_arena, render::BBoxDraw);
+    Debug_SetName(raster_arena, "cesium raster overlay arena");
+    RasterRenderResource* resource = PushStruct(raster_arena, RasterRenderResource);
+    render::BBoxDraw* result = &resource->draw;
     result->arena = raster_arena;
+    _tileset_renderer_raster_resource_track(renderer, resource);
 
     render::SamplerInfo sampler_info = _raster_sampler_info_get(tile_info->renderer_options);
     render::TextureUploadData texture_upload = {};
     if (!_raster_texture_upload_data_prepare(scratch.arena, tile_info->image, &texture_upload))
     {
+        _tileset_renderer_raster_resource_untrack(renderer, resource);
         arena_release(raster_arena);
         return nullptr;
     }
@@ -605,13 +616,15 @@ render_raster_tile_record(render::ThreadWorkerCmdCtx* thread_input, RasterTileIn
 
 g_internal TileRenderDataList*
 tile_render_data_from_gltf(const CesiumGltf::Model& model, const glm::dmat4& ecef_to_local, const glm::dmat4& tile_transform, CesiumGeometry::Axis gltf_up_axis,
-                           render::ThreadWorkerCmdCtx* thread_input)
+                           render::ThreadWorkerCmdCtx* thread_input, TilesetRenderer* renderer)
 {
     prof_scope_marker;
     ScratchScope scratch = ScratchScope(0, 0);
     Arena* tile_arena = arena_alloc();
+    Debug_SetName(tile_arena, "cesium tile arena");
     TileRenderDataList* tile_render_data_list = PushStruct(tile_arena, TileRenderDataList);
     tile_render_data_list->arena = tile_arena;
+    _tileset_renderer_tile_resource_track(renderer, tile_render_data_list);
     glm::dmat4 gltf_to_zup = CesiumGeometry::Transforms::getUpAxisTransform(gltf_up_axis, CesiumGeometry::Axis::Z);
 
     struct PrimitiveNode
@@ -1030,7 +1043,7 @@ tileset_renderer_create(TilesetRenderer* tileset, async::ThreadPool* threads, St
     Assert(tileset);
 
     tileset->allocator = Allocator::create();
-
+    Debug_SetName(tileset->allocator->arena, "Cesium Tileset Allocator arena");
     ScratchScope scratch = ScratchScope(0, 0);
     String8 ion_access_token = {};
     if (env_vars_value_get(scratch.arena, S("CESIUM_ION_ACCESS_TOKEN"), &ion_access_token, 1))
@@ -1086,7 +1099,112 @@ tileset_renderer_create(TilesetRenderer* tileset, async::ThreadPool* threads, St
 }
 
 g_internal void
-tileset_renderer_free_tile_ressource(TilesetRenderer* renderer)
+_tileset_renderer_free_handles(TileRenderDataList* list)
+{
+    for (TileRenderData* render_data = list->first; render_data; render_data = render_data->next)
+    {
+        render::handle_destroy_deferred(render_data->render_data.vertex_buffer_handle);
+        render::handle_destroy_deferred(render_data->render_data.index_buffer_handle);
+        render::Handle null_texture_handle = render::texture_zero_handle_get();
+        if (render_data->render_data.texture_handle.u64 != null_texture_handle.u64 || render_data->render_data.texture_handle.gen_id != null_texture_handle.gen_id ||
+            render_data->render_data.texture_handle.type != null_texture_handle.type)
+        {
+            render::handle_destroy_deferred(render_data->render_data.texture_handle);
+        }
+        render::handle_destroy_deferred(render_data->render_data.overlay_texture_handle);
+    }
+    arena_release(list->arena);
+}
+
+g_internal void
+_tileset_renderer_tile_resource_track(TilesetRenderer* renderer, TileRenderDataList* list)
+{
+    os_mutex_scope_w(renderer->tiles_to_free_mutex)
+    {
+        SLLStackPush_N(renderer->active_tile_resource_first, list, active_next);
+    }
+}
+
+g_internal B32
+_tileset_renderer_tile_resource_untrack(TilesetRenderer* renderer, TileRenderDataList* list)
+{
+    B32 result = false;
+    os_mutex_scope_w(renderer->tiles_to_free_mutex)
+    {
+        TileRenderDataList** prev_next = &renderer->active_tile_resource_first;
+        for (TileRenderDataList* node = renderer->active_tile_resource_first; node; node = node->active_next)
+        {
+            if (node == list)
+            {
+                *prev_next = node->active_next;
+                node->active_next = 0;
+                result = true;
+                break;
+            }
+            prev_next = &node->active_next;
+        }
+    }
+    return result;
+}
+
+g_internal void
+_tileset_renderer_raster_resource_track(TilesetRenderer* renderer, RasterRenderResource* resource)
+{
+    os_mutex_scope_w(renderer->tiles_to_free_mutex)
+    {
+        SLLStackPush_N(renderer->active_raster_resource_first, resource, active_next);
+    }
+}
+
+g_internal B32
+_tileset_renderer_raster_resource_untrack(TilesetRenderer* renderer, RasterRenderResource* resource)
+{
+    B32 result = false;
+    os_mutex_scope_w(renderer->tiles_to_free_mutex)
+    {
+        RasterRenderResource** prev_next = &renderer->active_raster_resource_first;
+        for (RasterRenderResource* node = renderer->active_raster_resource_first; node; node = node->active_next)
+        {
+            if (node == resource)
+            {
+                *prev_next = node->active_next;
+                node->active_next = 0;
+                result = true;
+                break;
+            }
+            prev_next = &node->active_next;
+        }
+    }
+    return result;
+}
+
+g_internal void
+_tileset_renderer_active_resources_release(TilesetRenderer* renderer)
+{
+    while (renderer->active_tile_resource_first)
+    {
+        TileRenderDataList* tile_resource = renderer->active_tile_resource_first;
+        renderer->active_tile_resource_first = tile_resource->active_next;
+        tile_resource->active_next = 0;
+        _tileset_renderer_free_handles(tile_resource);
+    }
+
+    while (renderer->active_raster_resource_first)
+    {
+        RasterRenderResource* raster_resource = renderer->active_raster_resource_first;
+        renderer->active_raster_resource_first = raster_resource->active_next;
+        raster_resource->active_next = 0;
+        render::BBoxDraw* draw = &raster_resource->draw;
+        if (render::is_handle_zero(draw->tex) == false)
+        {
+            render::handle_destroy_deferred(draw->tex);
+        }
+        arena_release(draw->arena);
+    }
+}
+
+g_internal void
+tileset_renderer_free_list_empty(TilesetRenderer* renderer)
 {
     while (1)
     {
@@ -1106,19 +1224,7 @@ tileset_renderer_free_tile_ressource(TilesetRenderer* renderer)
             break;
         }
 
-        for (TileRenderData* render_data = tile_data->first; render_data; render_data = render_data->next)
-        {
-            render::handle_destroy_deferred(render_data->render_data.vertex_buffer_handle);
-            render::handle_destroy_deferred(render_data->render_data.index_buffer_handle);
-            render::Handle null_texture_handle = render::texture_zero_handle_get();
-            if (render_data->render_data.texture_handle.u64 != null_texture_handle.u64 || render_data->render_data.texture_handle.gen_id != null_texture_handle.gen_id ||
-                render_data->render_data.texture_handle.type != null_texture_handle.type)
-            {
-                render::handle_destroy_deferred(render_data->render_data.texture_handle);
-            }
-            render::handle_destroy_deferred(render_data->render_data.overlay_texture_handle);
-        }
-        arena_release(tile_data->arena);
+        _tileset_renderer_free_handles(tile_data);
     }
 }
 
@@ -1137,9 +1243,14 @@ tileset_renderer_destroy(TilesetRenderer* renderer)
         }
     }
 
-    tileset_renderer_free_tile_ressource(renderer);
-    os_rw_mutex_release(renderer->tiles_to_free_mutex);
+    renderer->async_system.dispatchMainThreadTasks();
     Allocator::destroy(renderer->allocator);
+
+    tileset_renderer_free_list_empty(renderer);
+    _tileset_renderer_active_resources_release(renderer);
+    os_rw_mutex_release(renderer->tiles_to_free_mutex);
+    Assert(renderer->tiles_to_free_stack_count == 0);
+    MemoryZeroStruct(renderer);
 }
 
 //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -1155,7 +1266,7 @@ tileset_pump_async(TilesetRenderer* renderer)
         return;
 
     renderer->async_system.dispatchMainThreadTasks();
-    tileset_renderer_free_tile_ressource(renderer);
+    tileset_renderer_free_list_empty(renderer);
 }
 
 g_internal void
@@ -1194,7 +1305,7 @@ tileset_update_view(TilesetRenderer* renderer, ui::Camera* camera, Vec2U32 viewp
     renderer->tiles_to_show_count = 0;
     // Update the tileset view
     std::vector<Cesium3DTilesSelection::ViewState> views = {view_state};
-    tileset_renderer_free_tile_ressource(renderer);
+    tileset_renderer_free_list_empty(renderer);
     for (U32 i = 0; i < renderer->tilesets.size; ++i)
     {
         const Cesium3DTilesSelection::ViewUpdateResult& result = renderer->tilesets.data[i]->updateViewGroup(renderer->tilesets.data[i]->getDefaultViewGroup(), views, (F32)delta_time);

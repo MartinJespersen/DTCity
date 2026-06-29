@@ -134,6 +134,7 @@ _curl_ctx_create(Arena* arena)
 {
     CurlContext* curl_ctx = PushStruct(arena, CurlContext);
     curl_ctx->arena = arena_alloc();
+    Debug_SetName(curl_ctx->arena, "async HTTP curl arena");
 
     // curl library inits
     async_http_global_init();
@@ -480,7 +481,7 @@ _http_main(ThreadInfo thread_info, AsyncTaskStatus<T>* task_status)
 
 template <typename T>
 g_internal AsyncHttpTaskCreateResult<T>
-async_http_task_run(Arena* arena, ThreadPool* thread_pool, HttpInfo* http_info, AsyncHttpTaskStateConfig<T>* config, String8 task_name)
+async_http_task_run(Arena* arena, ThreadPool* thread_pool, HttpInfo* http_info, AsyncHttpTaskStateConfig<T>* config, const char* task_name)
 {
     AsyncHttpTaskCreateResult<T> result = {};
     AsyncHttpTaskState<T>* http_ctx = PushStruct(arena, AsyncHttpTaskState<T>);
@@ -524,9 +525,10 @@ async_http_task_run(Arena* arena, ThreadPool* thread_pool, HttpInfo* http_info, 
 
 template <typename T>
 g_internal AsyncHttpTaskCreateResult<T>
-async_http_task_run(ThreadPool* thread_pool, HttpInfo* http_info, AsyncHttpTaskStateConfig<T>* config, String8 task_name)
+async_http_task_run(ThreadPool* thread_pool, HttpInfo* http_info, AsyncHttpTaskStateConfig<T>* config, const char* task_name)
 {
     Arena* task_arena = arena_alloc();
+    Debug_SetName(task_arena, task_name);
     AsyncHttpTaskCreateResult<T> result = async_http_task_run(task_arena, thread_pool, http_info, config, task_name);
     return result;
 }

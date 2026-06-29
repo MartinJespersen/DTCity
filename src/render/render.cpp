@@ -7,6 +7,7 @@ thread_ctx_create()
 {
     Context* ctx = dt_ctx_get();
     Arena* arena = arena_alloc();
+    Debug_SetName(arena, "render thread command arena");
     Assert(arena);
     render::ThreadWorkerCmdCtx* thread_input = PushStruct(arena, render::ThreadWorkerCmdCtx);
     thread_input->arena = arena;

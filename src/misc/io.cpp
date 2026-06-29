@@ -15,6 +15,7 @@ static IO*
 window_create(String8 app_name, U32 window_width, U32 window_height)
 {
     Arena* arena = arena_alloc();
+    Debug_SetName(arena, "IO context arena");
     IO* io_ctx = PushStruct(arena, IO);
     io_ctx->arena = arena;
 

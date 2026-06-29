@@ -1803,6 +1803,7 @@ w32_entry_point_caller(int argc, WCHAR** wargv)
     //- rjf: extract arguments
     ArenaParams params = {.reserve_size = MB(1), .commit_size = KB(32), .flags = arena_default_flags};
     Arena* args_arena = arena_alloc(&params);
+    Debug_SetName(args_arena, "win32 argv arena");
     char** argv = PushArray(args_arena, char*, argc);
     for (int i = 0; i < argc; i += 1)
     {
@@ -1827,6 +1828,7 @@ w32_entry_point_caller(int argc, WCHAR** wargv)
 
     //- rjf: set up dynamically-alloc'd state
     Arena* arena = arena_alloc();
+    Debug_SetName(arena, "win32 OS state arena");
     {
         os_w32_state.arena = arena;
         {
@@ -1886,6 +1888,7 @@ w32_entry_point_caller(int argc, WCHAR** wargv)
     }
     //- rjf: set up entity storage InitializeCriticalSection(&os_w32_state.entity_mutex);
     os_w32_state.entity_arena = arena_alloc();
+    Debug_SetName(os_w32_state.entity_arena, "win32 OS entity arena");
     InitializeCriticalSection(&os_w32_state.entity_mutex);
 
     return App(argc, argv);

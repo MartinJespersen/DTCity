@@ -66,6 +66,7 @@ lib_internal ArenaFlags arena_default_flags = 0;
 //~ rjf: Arena Functions
 
 //- rjf: arena creation/destruction
+
 lib_internal Arena*
 arena_alloc(ArenaParams* params);
 
@@ -81,7 +82,7 @@ arena_push(Arena* arena, U64 size, U64 align);
 lib_internal U64
 arena_pos(Arena* arena);
 lib_internal void
-ArenaPopTo(Arena* arena, U64 pos);
+arena_pop_to(Arena* arena, U64 pos);
 
 //- rjf: arena push/pop helpers
 lib_internal void

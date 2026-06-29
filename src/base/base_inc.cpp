@@ -7,6 +7,7 @@
 #undef MARKUP_LAYER_COLOR
 #define MARKUP_LAYER_COLOR 0.20f, 0.60f, 0.80f
 
+#include "debug_forward_ref.hpp"
 #include "base_core.cpp"
 #include "base_profile.cpp"
 #include "base_arena.cpp"

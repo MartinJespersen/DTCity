@@ -112,7 +112,7 @@ struct ScratchScope
     }
     ~ScratchScope()
     {
-        ArenaPopTo(this->arena, this->pos);
+        arena_pop_to(this->arena, this->pos);
     }
 
     Arena* arena;

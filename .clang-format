@@ -5,7 +5,7 @@ IndentWidth: 4
 
 # Place function return type on a separate line
 AlwaysBreakAfterReturnType: All
-
+AlignEscapedNewlines: Left
 # Align parameters
 # AlignAfterOpenBracket: Align
 

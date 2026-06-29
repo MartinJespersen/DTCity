@@ -40,6 +40,7 @@ struct TileRasterOverlayAttachment
 struct TileRenderDataList
 {
     TileRenderDataList* next;
+    TileRenderDataList* active_next;
     Arena* arena;
     bool tile_is_loaded;
 
@@ -47,6 +48,12 @@ struct TileRenderDataList
     TileRenderData* last;
 
     TileRasterOverlayAttachment* raster_overlay_first;
+};
+
+struct RasterRenderResource
+{
+    render::BBoxDraw draw;
+    RasterRenderResource* active_next;
 };
 
 struct TilesetRenderer
@@ -71,6 +78,8 @@ struct TilesetRenderer
     OS_Handle tiles_to_free_mutex;
     TileRenderDataList* tiles_to_free_stack;
     U32 tiles_to_free_stack_count;
+    TileRenderDataList* active_tile_resource_first;
+    RasterRenderResource* active_raster_resource_first;
     TileRenderDataList tile_to_show;
     U32 tiles_to_show_count;
 };
@@ -98,9 +107,23 @@ tileset_update_view(TilesetRenderer* renderer, ui::Camera* camera, Vec2U32 viewp
 // Helper to convert cesium glTF to render data
 g_internal TileRenderDataList*
 tile_render_data_from_gltf(const CesiumGltf::Model& model, const glm::dmat4& ecef_to_local, const glm::dmat4& tile_transform, CesiumGeometry::Axis gltf_up_axis,
-                           render::ThreadWorkerCmdCtx* thread_input);
+                           render::ThreadWorkerCmdCtx* thread_input, TilesetRenderer* renderer);
 
 g_internal render::BBoxDraw*
-render_raster_tile_record(render::ThreadWorkerCmdCtx* thread_input, RasterTileInfo* tile_info);
+render_raster_tile_record(render::ThreadWorkerCmdCtx* thread_input, RasterTileInfo* tile_info, TilesetRenderer* renderer);
 
+g_internal void
+_tileset_renderer_free_handles(TileRenderDataList* list);
+
+g_internal void
+_tileset_renderer_tile_resource_track(TilesetRenderer* renderer, TileRenderDataList* list);
+
+g_internal B32
+_tileset_renderer_tile_resource_untrack(TilesetRenderer* renderer, TileRenderDataList* list);
+
+g_internal void
+_tileset_renderer_raster_resource_track(TilesetRenderer* renderer, RasterRenderResource* resource);
+
+g_internal B32
+_tileset_renderer_raster_resource_untrack(TilesetRenderer* renderer, RasterRenderResource* resource);
 } // namespace cesium

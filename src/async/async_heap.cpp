@@ -58,6 +58,7 @@ g_internal Heap<T>*
 async_heap_alloc()
 {
     Arena* arena = arena_alloc();
+    Debug_SetName(arena, "async heap arena");
     Heap<T>* heap = PushStruct(arena, Heap<T>);
     heap->mutex = os_rw_mutex_alloc();
     heap->buffer.arena = arena;

@@ -96,26 +96,30 @@ async_task_is_done(AsyncTaskStatus<T>* task)
 
 template <typename T>
 g_internal AsyncTaskStatus<T>*
-async_task_run(ThreadPool* thread_pool, WorkerTaskFunc<T> func, T* data, String8 task_name, S64 us_delay)
+async_task_run(ThreadPool* thread_pool, WorkerTaskFunc<T> func, T* data, const char* task_name, S64 us_delay)
 {
     Arena* task_arena = arena_alloc();
-    AsyncTaskStatus<T>* task_status = _async_task_status_create<T>(task_arena, thread_pool, task_name, data);
+    Debug_SetName(task_arena, task_name);
+    String8 task_name_str8 = str8_c_string(task_name);
+    AsyncTaskStatus<T>* task_status = _async_task_status_create<T>(task_arena, thread_pool, task_name_str8, data);
     return async_task_run(task_status, thread_pool, func, us_delay);
 }
 
 template <typename T>
 g_internal AsyncTaskStatus<T>*
-async_task_run(Arena* arena, ThreadPool* thread_pool, WorkerTaskFunc<T> func, T* data, String8 task_name, S64 us_delay)
+async_task_run(Arena* arena, ThreadPool* thread_pool, WorkerTaskFunc<T> func, T* data, const char* task_name, S64 us_delay)
 {
-    AsyncTaskStatus<T>* task_status = _async_task_status_create<T>(arena, thread_pool, task_name, data);
+    String8 task_name_str8 = str8_c_string(task_name);
+    AsyncTaskStatus<T>* task_status = _async_task_status_create<T>(arena, thread_pool, task_name_str8, data);
     return async_task_run(task_status, thread_pool, func, us_delay);
 }
 
 template <typename T>
 g_internal AsyncTaskStatus<T>*
-async_task_with_ext_run(Arena* arena, ThreadPool* thread_pool, WorkerTaskFunc<T> func, T* data, String8 task_name, S64 us_delay, ExtensionType ext_type, void* ext)
+async_task_with_ext_run(Arena* arena, ThreadPool* thread_pool, WorkerTaskFunc<T> func, T* data, const char* task_name, S64 us_delay, ExtensionType ext_type, void* ext)
 {
-    AsyncTaskStatus<T>* task_status = _async_task_status_create<T>(arena, thread_pool, task_name, data);
+    String8 task_name_str8 = str8_c_string(task_name);
+    AsyncTaskStatus<T>* task_status = _async_task_status_create<T>(arena, thread_pool, task_name_str8, data);
     task_status->ext_type = ext_type;
 
     if (has_flag(ext_type, ExtensionType::Http) || (ext != 0))

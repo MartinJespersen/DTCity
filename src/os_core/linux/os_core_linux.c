@@ -1411,7 +1411,9 @@ main(int argc, char** argv)
 
         //- rjf: set up dynamically allocated state
         os_lnx_state.arena = arena_alloc();
+        Debug_SetName(os_lnx_state.arena, "linux OS state arena");
         os_lnx_state.entity_arena = arena_alloc();
+        Debug_SetName(os_lnx_state.entity_arena, "linux OS entity arena");
         pthread_mutex_init(&os_lnx_state.entity_mutex, 0);
 
         //- rjf: grab dynamically allocated system info

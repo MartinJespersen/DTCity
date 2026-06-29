@@ -7,9 +7,11 @@ ctx_create(io::IO* io_ctx)
     ScratchScope scratch = ScratchScope(0, 0);
     //~mgj: app context setup
     Arena* app_arena = (Arena*)arena_alloc();
+    Debug_SetName(app_arena, "app arena");
     Context* ctx = PushStruct(app_arena, Context);
     ctx->arena_main_permanent = app_arena;
     ctx->arena_frame = arena_alloc();
+    Debug_SetName(ctx->arena_frame, "app frame arena");
     ctx->io = PushStruct(app_arena, io::IO);
 
     ctx->camera_container = resource_pool_init<ui::Camera>(10);

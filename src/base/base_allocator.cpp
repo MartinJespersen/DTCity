@@ -71,7 +71,7 @@ Allocator::pop_to(U64 count)
     {
         AssertAlways(destructor_count == 0);
     }
-    ArenaPopTo(arena, count);
+    arena_pop_to(arena, count);
 }
 
 void

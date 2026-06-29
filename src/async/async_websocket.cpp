@@ -58,10 +58,12 @@ g_internal WebsocketConnection
 async_websocket_start(String8 url)
 {
     Arena* session_arena = arena_alloc();
+    Debug_SetName(session_arena, "websocket session arena");
     AsyncWebsocketSession* ws_session = PushStruct(session_arena, AsyncWebsocketSession);
     ws_session->arena = session_arena;
     ws_session->msg_rw_mutex = os_rw_mutex_alloc();
     ws_session->msg_arena = arena_alloc();
+    Debug_SetName(ws_session->msg_arena, "websocket message arena");
     async_http_global_init();
     ws_session->curl_ctx = _curl_ctx_create(session_arena);
     ws_session->http_info = async::http_info_create(session_arena, HTTP_Method_None, url, {}, {}, {});

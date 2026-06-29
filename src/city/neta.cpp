@@ -376,6 +376,7 @@ netascore_async_task_create(Arena* arena, NetaState* neta, Rng2F64 bbox)
     if (netascore_result.err)
     {
         Arena* task_arena = arena_alloc();
+        Debug_SetName(task_arena, "neta HTTP task arena");
         NetaTaskState* task_state = PushStruct(task_arena, NetaTaskState);
         task_state->bbox_wgs84 = neta->task_state.bbox_wgs84;
         task_state->cache_file_location = push_str8_copy(task_arena, neta->task_state.cache_file_location);
@@ -387,7 +388,7 @@ netascore_async_task_create(Arena* arena, NetaState* neta, Rng2F64 bbox)
         async::HttpInfo* http_info = async::http_info_create(task_arena, HTTP_Method_Post, netascore_api, S("application/x-www-form-urlencoded"), {task_state->mobility_api_key_header},
                                                              {target_srid_param, task_state->cache_bbox_str, S("output_format=GeoJSON")});
         async::AsyncHttpTaskStateConfig<NetaTaskState> config = async::AsyncHttpTaskStateConfig<NetaTaskState>(neta::netascore_job_create_complete, task_state, 5, 1);
-        async::AsyncHttpTaskCreateResult<NetaTaskState> result = async::async_http_task_run(task_arena, ctx->thread_pool, http_info, &config, S("Neta Task"));
+        async::AsyncHttpTaskCreateResult<NetaTaskState> result = async::async_http_task_run(task_arena, ctx->thread_pool, http_info, &config, "Neta Task");
         AssertAlways(result.async_result.has_error() == false);
 
         neta_task->type = city::AsyncTaskType::Neta;

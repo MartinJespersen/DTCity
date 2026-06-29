@@ -9,6 +9,7 @@ draw_init()
     if (!g_draw_ctx.frame_arena)
     {
         g_draw_ctx.frame_arena = arena_alloc();
+        Debug_SetName(g_draw_ctx.frame_arena, "draw frame arena");
     }
 }
 

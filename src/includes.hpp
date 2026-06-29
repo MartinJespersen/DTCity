@@ -6,6 +6,7 @@
 #include <cstdlib>
 #include <cstring>
 
+#include "debug_forward_ref.hpp"
 // helper diagnostics
 #include "diagnostics.hpp"
 
@@ -36,6 +37,7 @@ DISABLE_WARNINGS_PUSH
 #include "base/base_inc.hpp"
 #include "os_core/os_core_inc.hpp"
 DISABLE_WARNINGS_POP
+#include "debug_log.hpp"
 
 #if (BUILD_DEBUG)
 #define SIMDJSON_DEVELOPMENT_CHECKS 1
