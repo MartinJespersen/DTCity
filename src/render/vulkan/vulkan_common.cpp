@@ -243,8 +243,8 @@ surface_create(Context* vk_ctx, io::IO* io)
 
     U32 glfw_extension_count = 0;
     const char** glfw_extensions = glfwGetRequiredInstanceExtensions(&glfw_extension_count);
-    DEBUG_LOG("GLFW platform: %d\n", glfwGetPlatform());
-    DEBUG_LOG("GLFW required Vulkan instance extensions (%u)\n", glfw_extension_count);
+    INFO_LOG("GLFW platform: %d\n", glfwGetPlatform());
+    INFO_LOG("GLFW required Vulkan instance extensions (%u)\n", glfw_extension_count);
     for (U32 i = 0; i < glfw_extension_count; i++)
     {
         DEBUG_LOG("  %s\n", glfw_extensions[i]);
@@ -472,7 +472,7 @@ physical_device_pick(Context* vk_ctx)
             VkPhysicalDeviceProperties properties{};
             vkGetPhysicalDeviceProperties(devices[i], &properties);
 
-            DEBUG_LOG("Name of device: %s\nDevice Type: %d\n", properties.deviceName, properties.deviceType);
+            INFO_LOG("Name of device: %s\nDevice Type: %d\n", properties.deviceName, properties.deviceType);
             vk_ctx->physical_device = devices[i];
             vk_ctx->physical_device_properties = properties;
             vk_ctx->msaa_samples = Min(VK_SAMPLE_COUNT_4_BIT, max_usable_sample_count_get(devices[i]));
