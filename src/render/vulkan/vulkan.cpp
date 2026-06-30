@@ -508,6 +508,7 @@ static void
 command_buffer_record(U32 image_index, U32 current_frame, Vec2S64 mouse_cursor_pos)
 {
     prof_scope_marker;
+
     Temp scratch = ScratchBegin(0, 0);
 
     Context* vk_ctx = ctx_get();
@@ -822,6 +823,8 @@ command_buffer_record(U32 image_index, U32 current_frame, Vec2S64 mouse_cursor_p
 g_internal void
 mapped_buffers_update()
 {
+    prof_scope_marker;
+
     vulkan::Context* vk_ctx = vulkan::ctx_get();
     for (LinkedListNode<MappedHandleTransfer>* m_handle_transfer = vk_ctx->mapped_handle_list.first; m_handle_transfer; m_handle_transfer = m_handle_transfer->next)
     {

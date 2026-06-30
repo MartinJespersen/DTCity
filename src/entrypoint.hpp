@@ -3,7 +3,6 @@
 struct dt_Time
 {
     F64 delta_time_sec;
-    U64 last_time_ms;
 };
 
 enum dt_DataDirType

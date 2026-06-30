@@ -20,7 +20,7 @@ camera_init(Arena* arena, Camera* camera)
 }
 
 static void
-camera_update(Camera* camera, io::IO* input, F64 time, Vec2S32 extent, U32 current_frame_idx, bool enable)
+camera_update(Camera* camera, io::IO* input, F64 time, Vec2S32 extent, bool enable)
 {
     F32 mouse_sensitivity = 0.1f;
     F32 scroll_sensitivity = 0.2f;

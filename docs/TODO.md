@@ -11,6 +11,7 @@
 * tile transform might need to be passed to shader as a uniform buffer
 
 # features
+* Simplify render pipeline with timeline semaphores
 * For Cpp Allocator
   * Should work on arrays and initializer lists as well
   * std::construct_at and std::destroy_at could be used instead of what is done at the moment.
@@ -33,6 +34,7 @@
   * Make clang work as compiler
   * Make app work on MACOS
 * Create visualizer for arena allocations
+* Make shader bin directory be build specific (so that recompilation is triggered if other build type is used)
 
 # Debug Log Suggestions
 * arena: alloc, push, pop and releases

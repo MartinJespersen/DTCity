@@ -33,16 +33,16 @@ dt_ctx_get()
 static void
 dt_time_init(dt_Time* time)
 {
-    time->last_time_ms = os_now_microseconds();
 }
 
 static void
-dt_time_update(dt_Time* time)
+dt_time_update(io::IO* io, dt_Time* time)
 {
-    U64 cur_time = os_now_microseconds();
-    F64 delta_time_us = (F64)(cur_time - time->last_time_ms);
-    time->delta_time_sec = delta_time_us / 1'000'000.0;
-    time->last_time_ms = cur_time;
+    constexpr F64 min_refresh_rate = 30.0;
+    constexpr F64 max_refresh_rate = 144.0;
+
+    F64 refresh_rate = Clamp(min_refresh_rate, (F64)io->frame_rate.load(), max_refresh_rate);
+    time->delta_time_sec = 1.0 / refresh_rate;
 }
 
 static OS_Handle
@@ -121,6 +121,7 @@ imgui_debug_window(city::City* city, async::ThreadPool* thread_pool)
 
     ImGui::Begin("Debug Info", nullptr, ImGuiWindowFlags_None);
     ImGui::Text("FPS: %f", ImGui::GetIO().Framerate);
+    ImGui::Text("VSync FPS: %d", ctx->io->frame_rate.load());
     ImGui::Text("Textures:       %d active, %d free", asset_manager->texture_list.count, asset_manager->texture_free_list.count);
     ImGui::Text("Buffers:        %d active, %d free", asset_manager->buffer_list.count, asset_manager->buffer_free_list.count);
     for (U32 i = 0; i < ArrayCount(asset_manager->deletion_queues); i++)
@@ -250,7 +251,7 @@ dt_main_loop(void* ptr)
     city_area_streaming_begin(ctx->thread_pool, area, area_config);
     while (ctx->running)
     {
-        dt_time_update(ctx->time);
+        dt_time_update(ctx->io, ctx->time);
 
         arena_clear(dt_ctx_get()->arena_frame);
         io::new_frame();
@@ -303,7 +304,7 @@ dt_main_loop(void* ptr)
         bool imgui_window_hovered = ImGui::IsWindowHovered(ImGuiHoveredFlags_AnyWindow);
         bool imgui_input_captured = imgui_io.WantCaptureMouse || imgui_io.WantCaptureKeyboard;
         bool world_camera_enable = !imgui_window_hovered && !imgui_input_captured;
-        ui::camera_update(camera, ctx->io, ctx->time->delta_time_sec, vec_2s32(io_ctx->framebuffer_width, io_ctx->framebuffer_height), vk_ctx->current_frame, world_camera_enable);
+        ui::camera_update(camera, ctx->io, ctx->time->delta_time_sec, vec_2s32(io_ctx->framebuffer_width, io_ctx->framebuffer_height), world_camera_enable);
         // keep inactive cities' tilesets making progress so their raster overlay
         // tile providers finish creating in the background; the active city is
         // pumped by city_update -> tileset_update_view

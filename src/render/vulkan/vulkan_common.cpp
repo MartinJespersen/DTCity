@@ -1125,6 +1125,8 @@ swapchain_cleanup(VkDevice device, SwapchainResources* swapchain_resources)
 static void
 swapchain_recreate(Vec2U32 framebuffer_dim)
 {
+    prof_scope_marker;
+
     Context* vk_ctx = ctx_get();
     ScratchScope scratch = ScratchScope(0, 0);
 

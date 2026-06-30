@@ -441,6 +441,8 @@ deletion_queue_empty(DeletionQueue* queue)
 g_internal void
 deletion_queue_empty_next()
 {
+    prof_scope_marker;
+
     AssetManager* asset_manager = asset_manager_get();
     U64 next_frame = (asset_manager->deletion_queue_idx + 1) % ArrayCount(asset_manager->deletion_queues);
     DeletionQueue* queue = &asset_manager->deletion_queues[next_frame];

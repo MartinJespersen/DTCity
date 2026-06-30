@@ -264,7 +264,11 @@ render_frame(Vec2U32 framebuffer_dim, B32* in_out_framebuffer_resized, Vec2S64 m
         vulkan::deletion_queue_empty_next();
         vulkan::mapped_buffers_update();
 
-        VkResult result = vkAcquireNextImageKHR(vk_ctx->device, vk_ctx->swapchain_resources->swapchain, UINT64_MAX, image_available_semaphore, VK_NULL_HANDLE, &image_idx);
+        VkResult result = {};
+        {
+            prof_scope_marker_named("Acquire Next Image");
+            result = vkAcquireNextImageKHR(vk_ctx->device, vk_ctx->swapchain_resources->swapchain, UINT64_MAX, image_available_semaphore, VK_NULL_HANDLE, &image_idx);
+        }
 
         if (result == VK_ERROR_OUT_OF_DATE_KHR || *in_out_framebuffer_resized)
         {
@@ -281,6 +285,7 @@ render_frame(Vec2U32 framebuffer_dim, B32* in_out_framebuffer_resized, Vec2S64 m
     VkFence image_in_flight_fence = swapchain_resources->image_in_flight_fences.data[image_idx];
     if (image_in_flight_fence != VK_NULL_HANDLE)
     {
+        prof_scope_marker_named("Wait For Fences");
         VK_CHECK_RESULT(vkWaitForFences(vk_ctx->device, 1, &image_in_flight_fence, VK_TRUE, UINT64_MAX));
     }
     swapchain_resources->image_in_flight_fences.data[image_idx] = *in_flight_fence;

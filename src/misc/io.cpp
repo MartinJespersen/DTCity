@@ -94,6 +94,11 @@ input_state_update(IO* input)
         input->framebuffer_width = framebuffer_width;
         input->framebuffer_height = framebuffer_height;
     }
+
+    GLFWmonitor* monitor = glfwGetPrimaryMonitor();
+    const GLFWvidmode* mode = glfwGetVideoMode(monitor);
+    S32 refresh_rate = mode->refreshRate;
+    input->frame_rate.store(refresh_rate);
 }
 
 static Vec2S32

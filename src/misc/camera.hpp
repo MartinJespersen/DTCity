@@ -43,7 +43,7 @@ struct Camera
 g_internal void
 camera_init(Arena* arena, Camera* camera);
 static void
-camera_update(Camera* camera, io::IO* input, F64 time, Vec2S32 extent, U32 current_frame_idx, bool enable);
+camera_update(Camera* camera, io::IO* input, F64 time, Vec2S32 extent, bool enable);
 
 g_internal void
 _camera_uniform_buffer_update(ui::Camera* camera, render::MappedHandle<CameraUniformBuffer> mut_handle, Vec2U32 screen_res);

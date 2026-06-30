@@ -29,6 +29,9 @@ struct IO
     // GLFW types
     GLFWwindow* window;
     B32 framebuffer_resized;
+
+    // frame rate
+    std::atomic<S32> frame_rate;
 };
 
 static void

@@ -1,3 +1,5 @@
+#define STB_IMAGE_RESIZE_IMPLEMENTATION
+#include "third_party/stb_image_resize2.h"
 namespace cesium
 {
 
@@ -62,12 +64,15 @@ _raster_sampler_info_get(const std::any& renderer_options)
 }
 
 g_internal bool
-_raster_texture_upload_data_prepare(Arena* arena, const CesiumGltf::ImageAsset& image, render::TextureUploadData* out_texture_upload)
+_cesium_image_rgba8_prepare(Arena* arena, const CesiumGltf::ImageAsset& image, U8** out_data, U32* out_data_byte_count)
 {
-    if (!out_texture_upload)
+    if (!out_data || !out_data_byte_count)
     {
         return false;
     }
+
+    *out_data = 0;
+    *out_data_byte_count = 0;
 
     if (image.width <= 0 || image.height <= 0 || image.channels <= 0 || image.pixelData.empty())
     {
@@ -150,6 +155,26 @@ _raster_texture_upload_data_prepare(Arena* arena, const CesiumGltf::ImageAsset& 
             DEBUG_LOG("Unsupported Cesium raster image channel count: %d", image.channels);
             return false;
         }
+    }
+
+    *out_data = dst;
+    *out_data_byte_count = dst_byte_count;
+    return true;
+}
+
+g_internal bool
+_raster_texture_upload_data_prepare(Arena* arena, const CesiumGltf::ImageAsset& image, render::TextureUploadData* out_texture_upload)
+{
+    if (!out_texture_upload)
+    {
+        return false;
+    }
+
+    U8* dst = 0;
+    U32 dst_byte_count = 0;
+    if (!_cesium_image_rgba8_prepare(arena, image, &dst, &dst_byte_count))
+    {
+        return false;
     }
 
     *out_texture_upload = render::TextureUploadData::init(dst, (U32)image.width, (U32)image.height, 4, 1, dst_byte_count);
@@ -895,18 +920,16 @@ tile_render_data_from_gltf(const CesiumGltf::Model& model, const glm::dmat4& ece
                 sampler_info = sampler_info_from_cesium_sampler(model.samplers[texture.sampler]);
             }
 
-            const std::byte* bytes = image.pixelData.data();
-            U32 byte_count = (U32)image.pixelData.size();
-            AssertAlways(byte_count);
-            U8* tex_buffer = PushArray(tile_render_data_list->arena, U8, byte_count);
-            MemoryCopy(tex_buffer, (U8*)bytes, byte_count);
-            U32 width = image.width;
-            U32 height = image.height;
-            U32 channels = image.channels;                 // e.g., 4 for RGBA
-            U32 bytes_per_channel = image.bytesPerChannel; // typically 1
+            U8* tex_buffer = 0;
+            U32 byte_count = 0;
+            U32 width = (U32)image.width;
+            U32 height = (U32)image.height;
 
-            render::TextureUploadData tex_data = render::TextureUploadData::init(tex_buffer, (U32)width, (U32)height, channels, bytes_per_channel, byte_count);
-            render_data->render_data.texture_handle = render::texture_load_sync(&sampler_info, &tex_data, thread_input->cmd_buffer);
+            if (_cesium_image_rgba8_prepare(tile_render_data_list->arena, image, &tex_buffer, &byte_count))
+            {
+                render::TextureUploadData tex_data = render::TextureUploadData::init(tex_buffer, width, height, 4, 1, byte_count);
+                render_data->render_data.texture_handle = render::texture_load_sync(&sampler_info, &tex_data, thread_input->cmd_buffer);
+            }
         }
     }
 
