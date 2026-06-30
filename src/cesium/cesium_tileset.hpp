@@ -74,14 +74,14 @@ struct TilesetRenderer
     // set by tileset_renderer_destroy to end the recurring height_offset sampling loop
     B32 height_sample_stop;
 
-    // tiles to render list
-    OS_Handle tiles_to_free_mutex;
+    // tiles access from main thread
     TileRenderDataList* tiles_to_free_stack;
     U32 tiles_to_free_stack_count;
-    TileRenderDataList* active_tile_resource_first;
-    RasterRenderResource* active_raster_resource_first;
     TileRenderDataList tile_to_show;
     U32 tiles_to_show_count;
+
+    TileRenderDataList* active_tile_resource_first;
+    RasterRenderResource* active_raster_resource_first;
 };
 
 struct TilesetRendererCreateContext
@@ -107,10 +107,10 @@ tileset_update_view(TilesetRenderer* renderer, ui::Camera* camera, Vec2U32 viewp
 // Helper to convert cesium glTF to render data
 g_internal TileRenderDataList*
 tile_render_data_from_gltf(const CesiumGltf::Model& model, const glm::dmat4& ecef_to_local, const glm::dmat4& tile_transform, CesiumGeometry::Axis gltf_up_axis,
-                           render::ThreadWorkerCmdCtx* thread_input, TilesetRenderer* renderer);
+                           render::ThreadWorkerCmdCtx* thread_input);
 
-g_internal render::BBoxDraw*
-render_raster_tile_record(render::ThreadWorkerCmdCtx* thread_input, RasterTileInfo* tile_info, TilesetRenderer* renderer);
+g_internal RasterRenderResource*
+render_raster_tile_record(render::ThreadWorkerCmdCtx* thread_input, RasterTileInfo* tile_info);
 
 g_internal void
 _tileset_renderer_free_handles(TileRenderDataList* list);

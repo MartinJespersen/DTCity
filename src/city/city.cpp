@@ -337,26 +337,30 @@ city_update(City* city, Buffer<city::Coordinate> new_agent_coords, async::Thread
             }
         }
 
-        // custom tile depth only with depth compare always
-        for (cesium::TileRenderData* tile = tileset->tile_to_show.first; tile; tile = tile->render_next)
+        // custom tile draw
         {
-            B32 is_custom_tile = has_flag(tile->render_data.pipeline_bits, render::TilePipelineBits::IsMapTile) == false;
-            if (is_custom_tile)
+            prof_scope_marker_named("custom tile draw scope");
+            // custom tile depth only with depth compare always
+            for (cesium::TileRenderData* tile = tileset->tile_to_show.first; tile; tile = tile->render_next)
             {
-                tile->render_data.pipeline_bits |= render::TilePipelineBits::ColorDisable;
-                tile->render_data.depth_test_compare = render::DepthCompare::Always;
-                _tile_pipeline_add(tile, city, camera_handle);
+                B32 is_custom_tile = has_flag(tile->render_data.pipeline_bits, render::TilePipelineBits::IsMapTile) == false;
+                if (is_custom_tile)
+                {
+                    tile->render_data.pipeline_bits |= render::TilePipelineBits::ColorDisable;
+                    tile->render_data.depth_test_compare = render::DepthCompare::Always;
+                    _tile_pipeline_add(tile, city, camera_handle);
+                }
             }
-        }
-        // draw custom tiles with depth diabled but color enabled
-        for (cesium::TileRenderData* tile = tileset->tile_to_show.first; tile; tile = tile->render_next)
-        {
-            B32 is_custom_tile = has_flag(tile->render_data.pipeline_bits, render::TilePipelineBits::IsMapTile) == false;
-            if (is_custom_tile)
+            // draw custom tiles with depth diabled but color enabled
+            for (cesium::TileRenderData* tile = tileset->tile_to_show.first; tile; tile = tile->render_next)
             {
-                tile->render_data.pipeline_bits &= (~render::TilePipelineBits::ColorDisable);
-                tile->render_data.depth_test_compare = render::DepthCompare::LessOrEqual;
-                _tile_pipeline_add(tile, city, camera_handle);
+                B32 is_custom_tile = has_flag(tile->render_data.pipeline_bits, render::TilePipelineBits::IsMapTile) == false;
+                if (is_custom_tile)
+                {
+                    tile->render_data.pipeline_bits &= (~render::TilePipelineBits::ColorDisable);
+                    tile->render_data.depth_test_compare = render::DepthCompare::LessOrEqual;
+                    _tile_pipeline_add(tile, city, camera_handle);
+                }
             }
         }
 
@@ -386,6 +390,7 @@ city_update(City* city, Buffer<city::Coordinate> new_agent_coords, async::Thread
         /// car simulation rendering
         if (city->cars_creation_done)
         {
+            prof_scope_marker_named("Car update scope");
             AgentSim* agent_sim = &city->car_sim;
             F32 scale_factor = city->agent_scale_factor;
             agent_sim_update(&city->car_sim, new_agent_coords, tileset->ecef_to_local, scale_factor);
