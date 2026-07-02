@@ -26,7 +26,7 @@ city_area_streaming_begin(async::ThreadPool* thread_pool, City* city, const Area
     if (ctx->tileset_pool->item_from_handle(city->tileset_handle, &tileset))
     {
         Vec2F64 bbox_center = {.x = (city->bbox.min.x + city->bbox.max.x) * 0.5, .y = (city->bbox.min.y + city->bbox.max.y) * 0.5};
-        cesium::tileset_renderer_create(tileset, thread_pool, city->tileset_url, bbox_center.x, bbox_center.y, 0.0, area_config->custom_geometry_enabled, MB(512));
+        cesium::tileset_renderer_create(tileset, thread_pool, city->tileset_url, bbox_center.x, bbox_center.y, 0.0, area_config->custom_geometry_enabled, MB(256));
     }
 }
 
@@ -164,6 +164,7 @@ g_internal void
 city_update(City* city, Buffer<city::Coordinate> new_agent_coords, async::ThreadPool* thread_pool, RoadOverlayOption neta_overlay_option, Vec2U32 framebuffer_dim, const AreaConfig* city_config)
 {
     prof_scope_marker;
+    ScratchScope scratch = ScratchScope(0, 0);
     Context* ctx = dt_ctx_get();
     ui::Camera* camera = resource_pool_item_from_idx(ctx->camera_container, city->camera_handle);
     // TODO: vulkan current frame should not be used directly
@@ -311,7 +312,7 @@ city_update(City* city, Buffer<city::Coordinate> new_agent_coords, async::Thread
     cesium::TilesetRenderer* tileset = {};
     if (ctx->tileset_pool->item_from_handle(city->tileset_handle, &tileset))
     {
-        cesium::tileset_update_view(tileset, camera, framebuffer_dim, ctx->time->delta_time_sec);
+        cesium::tileset_update_view(tileset, camera, framebuffer_dim, ctx->time->time_delta_constant_sec);
 
         // always drawn tiles
         for (cesium::TileRenderData* tile = tileset->tile_to_show.first; tile; tile = tile->render_next)
@@ -391,18 +392,25 @@ city_update(City* city, Buffer<city::Coordinate> new_agent_coords, async::Thread
         if (city->cars_creation_done)
         {
             prof_scope_marker_named("Car update scope");
-            AgentSim* agent_sim = &city->car_sim;
             F32 scale_factor = city->agent_scale_factor;
-            agent_sim_update(&city->car_sim, new_agent_coords, tileset->ecef_to_local, scale_factor);
+            agent_sim_update(&city->car_sim, new_agent_coords, tileset->ecef_to_local, scale_factor, ctx->io->frame_count);
 
-            Buffer<render::Model3DInstance> instance_buffer = buffer_alloc<render::Model3DInstance>(draw::draw_frame_arena_get(), agent_sim->agents_active->size);
+            ChunkList<render::Transform>* transform_list = chunk_list_create<render::Transform>(scratch.arena, 100);
+            AgentSim* agent_sim = &city->car_sim;
+            S64 frame_rate = ctx->io->frame_rate.load();
             for (U64 agent_idx = 0; agent_idx < agent_sim->agents_active->size; agent_idx += 1)
             {
-                instance_buffer.data[agent_idx] = (*agent_sim->agents_active)[agent_idx].model_matrix;
+                Agent* agent = &(*agent_sim->agents_active)[agent_idx];
+
+                if (((S64)ctx->io->frame_count - (S64)agent->latest_update_frame) < (frame_rate * 2)) // Do not add agent after 2 seconds
+                {
+                    chunk_list_insert(scratch.arena, transform_list, agent->model_matrix);
+                }
             }
 
+            Buffer<render::Transform> transform_buffer = buffer_from_chunk_list(draw::draw_frame_arena_get(), transform_list);
             // instance buffer offset alignment and assignment
-            render::BufferInfo instance_buffer_info = render::BufferInfo(instance_buffer, render::BufferType_Vertex | render::BufferType_StorageBuffer);
+            render::BufferInfo instance_buffer_info = render::BufferInfo(transform_buffer, render::BufferType_Vertex | render::BufferType_StorageBuffer);
             render::MappedHandle<void> camera_handle_void = render::mapped_handle_erased(camera_handle);
             draw::CarInstanceDrawResult draw_result = draw::draw_car_instance_render(camera_handle_void, city->car_sim.meshes, city->car_sim.texture_handles, &instance_buffer_info);
 
@@ -1126,66 +1134,8 @@ agent_sim_destroy(AgentSim* car_sim)
     Allocator::destroy(car_sim->allocator);
 }
 
-g_internal Buffer<render::Model3DInstance>
-agent_sim_update(Arena* arena, AgentSim* car, osm::Network* network, F64 time_delta, glm::dmat4& ecef_to_local, F32 scale_factor)
-{
-    prof_scope_marker;
-    Buffer<render::Model3DInstance> instance_buffer = buffer_alloc<render::Model3DInstance>(arena, car->cars.size);
-
-    render::Model3DInstance* instance;
-    city::Car* car_info;
-
-    F32 car_speed_default = 5.0f; // m/s
-    for (U32 agent_idx = 0; agent_idx < car->cars.size; agent_idx++)
-    {
-        instance = &instance_buffer.data[agent_idx];
-        car_info = &car->cars.data[agent_idx];
-
-        Vec3F64 new_pos_3d = add_3f64(car_info->cur_pos_ecef, scale_3f64(scale_3f64(car_info->dir, car_speed_default), time_delta));
-
-        // find out whether target has been reached
-        Vec3F64 src_to_target = sub_3f64(car_info->target_loc.pos, car_info->source_loc.pos);
-        F64 dist_src_to_target = length_3f64(src_to_target);
-        Vec3F64 src_to_new_pos = sub_3f64(new_pos_3d, car_info->source_loc.pos);
-        F64 dist_src_to_new_pos = length_3f64(src_to_new_pos);
-
-        // At start up we reset the car's position if target has been by passed by 2 meters
-        if ((dist_src_to_new_pos - dist_src_to_target) > 2.0)
-        {
-            new_pos_3d = car_info->target_loc.pos;
-        }
-
-        // Check if the car has reached its destination. If so, find new destination and
-        // direction.
-        if (dist_src_to_new_pos > dist_src_to_target)
-        {
-            osm::Node* node = osm::random_neighbour_node_get(network, car_info->target_loc.id);
-            osm::EcefLocation new_target_loc = osm::location_get(network, node->id);
-            Vec3F64 new_dir = normalize_3f64(sub_3f64(new_target_loc.pos, new_pos_3d));
-            car_info->dir = new_dir;
-            car_info->source_loc = car_info->target_loc;
-            car_info->target_loc = new_target_loc;
-        }
-
-        glm::dvec3 z_up = glm::dvec3(0.0f, 0.0f, 1.0f);
-        glm::dvec3 dir = glm::normalize(glm::dvec3(ecef_to_local * glm::dvec4(car_info->dir.x, car_info->dir.y, car_info->dir.z, 0.0)));
-        glm::dvec3 x_basis = -dir;
-
-        glm::dvec3 z_basis = glm::cross(x_basis, z_up);
-        glm::dvec3 y_basis = glm::cross(z_basis, x_basis);
-
-        instance->x_basis = glm::vec4(glm::dvec4(x_basis, 0.0f)) * scale_factor;
-        instance->y_basis = glm::vec4(glm::dvec4(y_basis, 0.0f)) * scale_factor;
-        instance->z_basis = glm::vec4(glm::dvec4(z_basis, 0.0f)) * scale_factor;
-        instance->w_basis = glm::vec4(ecef_to_local * glm::dvec4(new_pos_3d.x, new_pos_3d.y, new_pos_3d.z, 1.0));
-
-        car_info->cur_pos_ecef = new_pos_3d;
-    }
-    return instance_buffer;
-}
-
 g_internal void
-agent_sim_update(AgentSim* agent_sim, Buffer<Coordinate> coord_buffer, glm::dmat4& ecef_to_local, F32 scale_factor)
+agent_sim_update(AgentSim* agent_sim, Buffer<Coordinate> coord_buffer, glm::dmat4& ecef_to_local, F32 scale_factor, U64 cur_frame)
 {
     prof_scope_marker;
 
@@ -1195,6 +1145,7 @@ agent_sim_update(AgentSim* agent_sim, Buffer<Coordinate> coord_buffer, glm::dmat
     for (U32 agent_idx = 0; agent_idx < coord_buffer.size; agent_idx++)
     {
         Coordinate* coord = &coord_buffer.data[agent_idx];
+
         glm::dvec3 ecef_coord = util::ecef_from_wgs84(coord->lon, coord->lat);
         Agent* agent = {};
         AgentMapItem* agent_ptr = {};
@@ -1229,6 +1180,8 @@ agent_sim_update(AgentSim* agent_sim, Buffer<Coordinate> coord_buffer, glm::dmat
         agent->model_matrix.y_basis = glm::vec4(glm::dvec4(y_basis, 0.0f)) * scale_factor;
         agent->model_matrix.z_basis = glm::vec4(glm::dvec4(z_basis, 0.0f)) * scale_factor;
         agent->model_matrix.w_basis = glm::vec4(ecef_to_local * glm::dvec4(ecef_coord, 1.0));
+
+        agent->latest_update_frame = cur_frame;
     }
 }
 // ~mgj: Buildings

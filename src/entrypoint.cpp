@@ -38,11 +38,17 @@ dt_time_init(dt_Time* time)
 static void
 dt_time_update(io::IO* io, dt_Time* time)
 {
-    constexpr F64 min_refresh_rate = 30.0;
-    constexpr F64 max_refresh_rate = 144.0;
+    constexpr F64 min_refresh_rate = 10.0;
+    constexpr F64 max_refresh_rate = 250.0;
+
+    U64 prev_timestamp = time->frame_timestamp_ms;
+    time->frame_timestamp_ms = (F64)os_now_microseconds();
+    U64 time_delta_ms = time->frame_timestamp_ms - prev_timestamp;
+
+    time->frame_timestamp_delta_ms = Clamp(1'000'000 / max_refresh_rate, (F64)time_delta_ms, 1'000'000 / min_refresh_rate);
 
     F64 refresh_rate = Clamp(min_refresh_rate, (F64)io->frame_rate.load(), max_refresh_rate);
-    time->delta_time_sec = 1.0 / refresh_rate;
+    time->time_delta_constant_sec = 1.0 / refresh_rate;
 }
 
 static OS_Handle
@@ -254,7 +260,7 @@ dt_main_loop(void* ptr)
         dt_time_update(ctx->io, ctx->time);
 
         arena_clear(dt_ctx_get()->arena_frame);
-        io::new_frame();
+        io::new_frame(ctx->io);
         render::new_frame();
         draw::draw_new_frame();
         ImGui::NewFrame();
@@ -304,7 +310,7 @@ dt_main_loop(void* ptr)
         bool imgui_window_hovered = ImGui::IsWindowHovered(ImGuiHoveredFlags_AnyWindow);
         bool imgui_input_captured = imgui_io.WantCaptureMouse || imgui_io.WantCaptureKeyboard;
         bool world_camera_enable = !imgui_window_hovered && !imgui_input_captured;
-        ui::camera_update(camera, ctx->io, ctx->time->delta_time_sec, vec_2s32(io_ctx->framebuffer_width, io_ctx->framebuffer_height), world_camera_enable);
+        ui::camera_update(camera, ctx->io, ctx->time->frame_timestamp_delta_ms / 1'000'000, vec_2s32(io_ctx->framebuffer_width, io_ctx->framebuffer_height), world_camera_enable);
         // keep inactive cities' tilesets making progress so their raster overlay
         // tile providers finish creating in the background; the active city is
         // pumped by city_update -> tileset_update_view

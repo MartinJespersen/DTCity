@@ -118,9 +118,10 @@ wait_for_valid_framebuffer_size(IO* io_ctx)
 }
 
 static void
-new_frame()
+new_frame(io::IO* io)
 {
     ImGui_ImplGlfw_NewFrame();
+    io->frame_count += 1;
 }
 
 } // namespace io

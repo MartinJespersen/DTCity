@@ -11,12 +11,12 @@ unused(T&&...)
 #define UNUSED(...) unused(__VA_ARGS__)
 
 #if defined(BUILD_DEBUG)
-#define DEBUG_LOG(message, ...)                                                                                                                                                                        \
-    do                                                                                                                                                                                                 \
-    {                                                                                                                                                                                                  \
-        printf("File %s:%d ", __FILE__, __LINE__);                                                                                                                                                     \
-        fprintf(stdout, message __VA_OPT__(, __VA_ARGS__));                                                                                                                                            \
-        printf("\n");                                                                                                                                                                                  \
+#define DEBUG_LOG(message, ...)                             \
+    do                                                      \
+    {                                                       \
+        printf("File %s:%d ", __FILE__, __LINE__);          \
+        fprintf(stdout, message __VA_OPT__(, __VA_ARGS__)); \
+        printf("\n");                                       \
     } while (0)
 #else
 #define DEBUG_LOG(message, ...) unused(message __VA_OPT__(, __VA_ARGS__))
@@ -35,13 +35,19 @@ unused(T&&...)
 #define DEBUG_FUNC(f)
 #endif
 
-#define ERROR_LOG(message, ...) fprintf(stderr, message __VA_OPT__(, __VA_ARGS__))
+#define ERROR_LOG(message, ...)                             \
+    do                                                      \
+    {                                                       \
+        fprintf(stderr, message __VA_OPT__(, __VA_ARGS__)); \
+        fprintf(stderr, "\n");                              \
+    } while (0)
 
-#define INFO_LOG(message, ...)                                                                                                                                                                         \
-    {                                                                                                                                                                                                  \
-        fprintf(stdout, message __VA_OPT__(, __VA_ARGS__));                                                                                                                                            \
-        printf("\n");                                                                                                                                                                                  \
-    }
+#define INFO_LOG(message, ...)                              \
+    do                                                      \
+    {                                                       \
+        fprintf(stdout, message __VA_OPT__(, __VA_ARGS__)); \
+        fprintf(stdout, "\n");                              \
+    } while (0)
 
 // warning helpers /////////////////////////////////////////////
 // Push: disable all warnings
@@ -50,8 +56,8 @@ unused(T&&...)
 #elif COMPILER_CLANG
 #define DISABLE_WARNINGS_PUSH _Pragma("clang diagnostic push") _Pragma("clang diagnostic ignored \"-Weverything\"")
 #elif COMPILER_GCC
-#define DISABLE_WARNINGS_PUSH                                                                                                                                                                          \
-    _Pragma("GCC diagnostic push") _Pragma("GCC diagnostic ignored \"-Wall\"") _Pragma("GCC diagnostic ignored \"-Wextra\"") _Pragma("GCC diagnostic ignored \"-Wunused-variable\"")                   \
+#define DISABLE_WARNINGS_PUSH                                                                                                                                                        \
+    _Pragma("GCC diagnostic push") _Pragma("GCC diagnostic ignored \"-Wall\"") _Pragma("GCC diagnostic ignored \"-Wextra\"") _Pragma("GCC diagnostic ignored \"-Wunused-variable\"") \
         _Pragma("GCC diagnostic ignored \"-Wimplicit-fallthrough\"")
 #else
 #define DISABLE_WARNINGS_PUSH

@@ -190,9 +190,10 @@ struct Agent
 {
     glm::dvec3 ecef_coord;
     glm::dvec3 ecef_dir;
+    U64 latest_update_frame;
 
     // rendering
-    render::Model3DInstance model_matrix;
+    render::Transform model_matrix;
 };
 
 struct AgentMapItem
@@ -352,10 +353,8 @@ g_internal void
 agents_create(AgentSim* car_sim, osm::Network* network);
 g_internal void
 agent_sim_destroy(AgentSim* car_sim);
-g_internal Buffer<render::Model3DInstance>
-agent_sim_update(Arena* arena, AgentSim* car, osm::Network* network, F64 time_delta, glm::dmat4& ecef_to_local, F32 scale_factor);
 g_internal void
-agent_sim_update(AgentSim* agent_sim, Buffer<Coordinate> coord_buffer, glm::dmat4& ecef_to_local, F32 scale_factor);
+agent_sim_update(AgentSim* agent_sim, Buffer<Coordinate> coord_buffer, glm::dmat4& ecef_to_local, F32 scale_factor, U64 cur_frame);
 // ~mgj: HTTP and caching
 g_internal String8
 str8_from_bbox(Arena* arena, Rng2F64 bbox);

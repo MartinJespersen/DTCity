@@ -1132,7 +1132,25 @@ _buffer_allocation_create(VkDeviceSize size, VkBufferUsageFlags buffer_usage, Vm
     bufferInfo.usage = buffer_usage;
     bufferInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
 
-    VK_CHECK_RESULT(vmaCreateBuffer(asset_manager->allocator, &bufferInfo, vma_info, &buffer.buffer, &buffer.allocation, alloc_info));
+    VkResult create_result = vmaCreateBuffer(asset_manager->allocator, &bufferInfo, vma_info, &buffer.buffer, &buffer.allocation, alloc_info);
+    if (create_result != VK_SUCCESS)
+    {
+        VmaBudget budgets[VK_MAX_MEMORY_HEAPS] = {};
+        vmaGetHeapBudgets(asset_manager->allocator, budgets);
+        for (U32 heap_idx = 0; heap_idx < VK_MAX_MEMORY_HEAPS; heap_idx += 1)
+        {
+            if (budgets[heap_idx].budget || budgets[heap_idx].usage)
+            {
+                ERROR_LOG("VMA heap %u: usage=%llu budget=%llu allocation_bytes=%llu block_bytes=%llu", heap_idx, (U64)budgets[heap_idx].usage, (U64)budgets[heap_idx].budget,
+                          (U64)budgets[heap_idx].statistics.allocationBytes, (U64)budgets[heap_idx].statistics.blockBytes);
+            }
+        }
+        ERROR_LOG("Failed to create buffer: result=%d size=%llu usage=0x%x alloc_usage=%d alloc_flags=0x%x required_flags=0x%x preferred_flags=0x%x", create_result, (U64)size, (U32)buffer_usage,
+                  (S32)vma_info->usage, (U32)vma_info->flags, (U32)vma_info->requiredFlags, (U32)vma_info->preferredFlags);
+        Trap();
+        exit(EXIT_FAILURE);
+    }
+
     buffer.size = (U32)size;
     if (buffer_usage & VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT)
     {

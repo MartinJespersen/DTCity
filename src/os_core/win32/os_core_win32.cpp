@@ -1595,7 +1595,26 @@ win32_exception_filter(EXCEPTION_POINTERS* exception_ptrs)
             PathRemoveFileSpecW(module_path);
 
             dbg_SymSetOptions(SYMOPT_EXACT_SYMBOLS | SYMOPT_FAIL_CRITICAL_ERRORS | SYMOPT_LOAD_LINES | SYMOPT_UNDNAME);
+
+            B32 symbols_ready = 0;
             if (dbg_SymInitializeW(process, module_path, TRUE))
+            {
+                symbols_ready = 1;
+            }
+            else
+            {
+                DWORD sym_initialize_error = GetLastError();
+                if (sym_initialize_error == ERROR_INVALID_PARAMETER)
+                {
+                    symbols_ready = 1;
+                }
+                else
+                {
+                    buflen += wnsprintfW(buffer + buflen, ArrayCount(buffer) - buflen, L"\nFailed to initialize debug symbols. SymInitializeW failed with error %u.\n", sym_initialize_error);
+                }
+            }
+
+            if (symbols_ready)
             {
                 // check that raddbg.pdb file is good
                 B32 raddbg_pdb_valid = 0;

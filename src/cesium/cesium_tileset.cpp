@@ -308,7 +308,7 @@ _ion_raster_overlay_example_add_if_present(Cesium3DTilesSelection::Tileset* tile
     };
 
     CesiumRasterOverlays::RasterOverlayOptions overlay_options = {};
-    overlay_options.maximumSimultaneousTileLoads = 20;
+    overlay_options.maximumSimultaneousTileLoads = 6;
     overlay_options.maximumTextureSize = 2048;
     overlay_options.maximumScreenSpaceError = 2.0;
     overlay_options.rendererOptions = sampler_info;
@@ -983,8 +983,8 @@ _tileset_renderer_create_context(TilesetRenderer* tileset, async::ThreadPool* th
 
     Cesium3DTilesSelection::TilesetOptions options;
     options.maximumScreenSpaceError = 16.0;
-    options.maximumSimultaneousTileLoads = 20;
-    options.loadingDescendantLimit = 20;
+    options.maximumSimultaneousTileLoads = 6;
+    options.loadingDescendantLimit = 6;
     options.loadErrorCallback = [](const Cesium3DTilesSelection::TilesetLoadFailureDetails& details)
     {
         const char* load_type = "Unknown";
@@ -1087,8 +1087,8 @@ tileset_renderer_create(TilesetRenderer* tileset, async::ThreadPool* threads, St
     create_context.options.enableLodTransitionPeriod = false;
     create_context.options.lodTransitionLength = 1.0;
 
-    create_context.options.preloadSiblings = true;
-    create_context.options.loadingDescendantLimit = 20;
+    create_context.options.preloadSiblings = false;
+    create_context.options.loadingDescendantLimit = 6;
     create_context.options.forbidHoles = true;
     U32 tileset_count = 1;
     if (custom_geometry_enabled)
@@ -1110,7 +1110,7 @@ tileset_renderer_create(TilesetRenderer* tileset, async::ThreadPool* threads, St
     {
         is_map_tile = false;
         create_context.options.rendererOptions = is_map_tile;
-        create_context.options.loadingDescendantLimit = 20;
+        create_context.options.loadingDescendantLimit = 6;
         create_context.renderer->tilesets.data[1] = tileset->allocator->place<Cesium3DTilesSelection::Tileset>(create_context.externals, (const char*)url.str, create_context.options);
         CesiumGeospatial::Cartographic center_position(glm::radians(origin_longitude), glm::radians(origin_latitude), 0.0);
         _height_offset_sample_async(create_context.renderer, center_position);
@@ -1130,7 +1130,6 @@ _tileset_renderer_free_handles(TileRenderDataList* list)
         {
             render::handle_destroy_deferred(render_data->render_data.texture_handle);
         }
-        render::handle_destroy_deferred(render_data->render_data.overlay_texture_handle);
     }
     arena_release(list->arena);
 }
@@ -1294,7 +1293,7 @@ tileset_update_view(TilesetRenderer* renderer, ui::Camera* camera, Vec2U32 viewp
     glm::dvec3 camera_up_ecef = glm::normalize(glm::dvec3(local_to_ecef * glm::dvec4(camera_up_local, 0.0)));
 
     // Compute unflipped projection matrix for Cesium (without Vulkan Y-flip)
-    F64 aspect_ratio = (F64)viewport_size.x / (F64)viewport_size.y;
+    F64 aspect_ratio = Max(1, (F64)viewport_size.x) / Max(1.0, (F64)viewport_size.y);
     F64 fov_rad = glm::radians((F64)camera->fov);
 
     // Use the position/direction/up ViewState constructor

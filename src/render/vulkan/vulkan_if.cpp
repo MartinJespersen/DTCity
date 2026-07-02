@@ -228,17 +228,17 @@ render_frame(Vec2U32 framebuffer_dim, B32* in_out_framebuffer_resized, Vec2S64 m
     vulkan::Context* vk_ctx = vulkan::ctx_get();
 
     prof_frame_marker;
-    if (framebuffer_dim.x == 0 || framebuffer_dim.y == 0)
-    {
-        vk_ctx->mapped_handle_list = {};
-        return;
-    }
-    vmaSetCurrentFrameIndex(vk_ctx->asset_manager->allocator, vk_ctx->current_frame);
-
-    defer({ vk_ctx->current_frame = (vk_ctx->current_frame + 1) % MAX_FRAMES_IN_FLIGHT; });
-
     vulkan::asset_manager_execute_cmds();
     vulkan::asset_manager_cmd_done_check();
+
+    vmaSetCurrentFrameIndex(vk_ctx->asset_manager->allocator, vk_ctx->current_frame);
+
+    // delete everyting in the deletion queue as all the command using its ressource have
+    // finished execution at this point
+    vulkan::deletion_queue_empty_next();
+    vulkan::mapped_buffers_update();
+
+    defer({ vk_ctx->current_frame = (vk_ctx->current_frame + 1) % MAX_FRAMES_IN_FLIGHT; });
 
     vulkan::SwapchainResources* swapchain_resources = vk_ctx->swapchain_resources;
     if (!swapchain_resources)
@@ -258,11 +258,6 @@ render_frame(Vec2U32 framebuffer_dim, B32* in_out_framebuffer_resized, Vec2S64 m
             VkResult fence_result = vkWaitForFences(vk_ctx->device, 1, in_flight_fence, VK_TRUE, UINT64_MAX);
             VK_CHECK_RESULT(fence_result);
         }
-
-        // delete everyting in the deletion queue as all the command using its ressource have
-        // finished execution at this point
-        vulkan::deletion_queue_empty_next();
-        vulkan::mapped_buffers_update();
 
         VkResult result = {};
         {

@@ -30,8 +30,9 @@ struct IO
     GLFWwindow* window;
     B32 framebuffer_resized;
 
-    // frame rate
+    // frames
     std::atomic<S32> frame_rate;
+    U64 frame_count;
 };
 
 static void
@@ -47,6 +48,6 @@ window_destroy(IO* io_ctx);
 static void
 scroll_callback(GLFWwindow* window, double xoffset, double yoffset);
 static void
-new_frame();
+new_frame(io::IO* io);
 
 } // namespace io

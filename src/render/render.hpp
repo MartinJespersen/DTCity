@@ -296,7 +296,7 @@ struct Vertex3DBlend
     Vec2F32 blend_factor;
 };
 
-struct Model3DInstance
+struct Transform
 {
     glm::vec4 x_basis;
     glm::vec4 y_basis;

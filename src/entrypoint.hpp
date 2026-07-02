@@ -2,7 +2,9 @@
 
 struct dt_Time
 {
-    F64 delta_time_sec;
+    F64 time_delta_constant_sec;
+    F64 frame_timestamp_delta_ms;
+    U64 frame_timestamp_ms;
 };
 
 enum dt_DataDirType

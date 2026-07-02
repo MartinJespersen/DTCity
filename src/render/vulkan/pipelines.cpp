@@ -24,10 +24,10 @@ car_instance_pipeline_create(Context* vk_ctx, String8 shader_path)
     vertex_input_info.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
 
     U32 uv_offset = (U32)offsetof(render::TileVertex, uv);
-    U32 x_basis_offset = (U32)offsetof(render::Model3DInstance, x_basis);
-    U32 y_basis_offset = (U32)offsetof(render::Model3DInstance, y_basis);
-    U32 z_basis_offset = (U32)offsetof(render::Model3DInstance, z_basis);
-    U32 w_basis_offset = (U32)offsetof(render::Model3DInstance, w_basis);
+    U32 x_basis_offset = (U32)offsetof(render::Transform, x_basis);
+    U32 y_basis_offset = (U32)offsetof(render::Transform, y_basis);
+    U32 z_basis_offset = (U32)offsetof(render::Transform, z_basis);
+    U32 w_basis_offset = (U32)offsetof(render::Transform, w_basis);
 
     VkVertexInputAttributeDescription attr_desc[] = {
         {.location = 0, .binding = 0, .format = VK_FORMAT_R32G32B32_SFLOAT},
@@ -38,7 +38,7 @@ car_instance_pipeline_create(Context* vk_ctx, String8 shader_path)
         {.location = 5, .binding = 1, .format = VK_FORMAT_R32G32B32A32_SFLOAT, .offset = w_basis_offset},
     };
     VkVertexInputBindingDescription input_desc[] = {{.binding = 0, .stride = sizeof(render::TileVertex), .inputRate = VK_VERTEX_INPUT_RATE_VERTEX},
-                                                    {.binding = 1, .stride = sizeof(render::Model3DInstance), .inputRate = VK_VERTEX_INPUT_RATE_INSTANCE}};
+                                                    {.binding = 1, .stride = sizeof(render::Transform), .inputRate = VK_VERTEX_INPUT_RATE_INSTANCE}};
 
     vertex_input_info.vertexBindingDescriptionCount = ArrayCount(input_desc);
     vertex_input_info.vertexAttributeDescriptionCount = ArrayCount(attr_desc);

@@ -52,7 +52,7 @@ void main()
     }
     else
     {
-        surface_color = vec4(mix(vec3(1, 0, 0), base_color.xyz, base_color.w), 1.0);
+        surface_color = vec4(mix(vec3(0, 0, 0), base_color.xyz, base_color.w), 1.0);
     }
 
     vec4 road_color = vec4(0, 0, 0, 1);
