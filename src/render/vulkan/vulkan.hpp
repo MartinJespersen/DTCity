@@ -162,6 +162,12 @@ struct MappedHandleTransfer
     render::MappedHandle<void> mapped_handle;
 };
 
+struct TimelineSemaphore
+{
+    VkSemaphore semaphore;
+    U64 count;
+};
+
 struct Context
 {
     static const U32 WIDTH = 800;
@@ -194,7 +200,6 @@ struct Context
     VkCommandPool command_pool;
     Buffer<VkCommandBuffer> command_buffers;
 
-    Buffer<VkFence> in_flight_fences;
     U64 current_frame;
 
     VkFormat object_id_format;
@@ -223,6 +228,10 @@ struct Context
 
     // ~mgj: Profiling
     TracyVkCtx tracy_ctx[render::MAX_FRAMES_IN_FLIGHT];
+
+    // sync objects
+    TimelineSemaphore in_flight_fence_sem;
+    Buffer<VkSemaphore> image_available_semaphores;
 
     // ~mgj: Rendering
     Arena* render_frame_arena;

@@ -92,7 +92,8 @@ render_ctx_create(String8 shader_path, io::IO* io_ctx, async::ThreadPool* thread
     }
 
     const char* device_extensions[] = {VK_KHR_SWAPCHAIN_EXTENSION_NAME,           VK_KHR_DYNAMIC_RENDERING_EXTENSION_NAME, VK_EXT_COLOR_WRITE_ENABLE_EXTENSION_NAME,
-                                       VK_EXT_DESCRIPTOR_INDEXING_EXTENSION_NAME, VK_KHR_PUSH_DESCRIPTOR_EXTENSION_NAME,   VK_EXT_MEMORY_BUDGET_EXTENSION_NAME};
+                                       VK_EXT_DESCRIPTOR_INDEXING_EXTENSION_NAME, VK_KHR_PUSH_DESCRIPTOR_EXTENSION_NAME,   VK_EXT_MEMORY_BUDGET_EXTENSION_NAME,
+                                       VK_KHR_TIMELINE_SEMAPHORE_EXTENSION_NAME};
     vk_ctx->device_extensions = buffer_alloc<String8>(vk_ctx->arena, ArrayCount(device_extensions));
     for (U32 i = 0; i < ArrayCount(device_extensions); i++)
     {
@@ -137,8 +138,6 @@ render_ctx_create(String8 shader_path, io::IO* io_ctx, async::ThreadPool* thread
 
     vulkan::command_buffers_create(vk_ctx);
 
-    vulkan::sync_objects_create(vk_ctx);
-
     vulkan::profile_buffers_create(vk_ctx);
 
     // ~mgj: Drawing (TODO: Move out of vulkan context to own module)
@@ -158,6 +157,25 @@ render_ctx_create(String8 shader_path, io::IO* io_ctx, async::ThreadPool* thread
     vk_ctx->blend_3d_pipeline = vulkan::blend_3d_pipeline_create(shader_path);
     vk_ctx->road_intersection_pipeline = vulkan::road_intersection_pipeline_create(shader_path);
     vk_ctx->car_height_calculate_pipeline = vulkan::car_instance_compute_pipeline_create(shader_path);
+
+    // sync objects
+    VkSemaphoreTypeCreateInfo type_create_info{VK_STRUCTURE_TYPE_SEMAPHORE_TYPE_CREATE_INFO};
+    type_create_info.semaphoreType = VK_SEMAPHORE_TYPE_TIMELINE;
+    type_create_info.initialValue = 0;
+
+    VkSemaphoreCreateInfo fence_sem_info{};
+    fence_sem_info.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
+    fence_sem_info.pNext = &type_create_info;
+    VK_CHECK_RESULT(vkCreateSemaphore(vk_ctx->device, &fence_sem_info, nullptr, &vk_ctx->in_flight_fence_sem.semaphore));
+    vk_ctx->in_flight_fence_sem.count = 0;
+
+    vk_ctx->image_available_semaphores = buffer_alloc<VkSemaphore>(vk_ctx->arena, MAX_FRAMES_IN_FLIGHT);
+    VkSemaphoreCreateInfo semaphore_info{};
+    semaphore_info.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
+    for (U32 i = 0; i < vk_ctx->image_available_semaphores.size; i++)
+    {
+        VK_CHECK_RESULT(vkCreateSemaphore(vk_ctx->device, &semaphore_info, nullptr, &vk_ctx->image_available_semaphores.data[i]));
+    }
 }
 
 static void
@@ -187,10 +205,6 @@ render_ctx_destroy()
     vkDestroyCommandPool(vk_ctx->device, vk_ctx->command_pool, nullptr);
 
     vkDestroySurfaceKHR(vk_ctx->instance, vk_ctx->surface, nullptr);
-    for (U32 i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
-    {
-        vkDestroyFence(vk_ctx->device, vk_ctx->in_flight_fences.data[i], nullptr);
-    }
 
     vkDestroyDescriptorPool(vk_ctx->device, vk_ctx->descriptor_pool, 0);
 
@@ -207,17 +221,23 @@ render_ctx_destroy()
     vkDestroyDescriptorSetLayout(vk_ctx->device, vk_ctx->storage_buffer_descriptor_set_layout, nullptr);
     vkDestroyDescriptorSetLayout(vk_ctx->device, vk_ctx->car_height_calculate_descriptor_set_layout, nullptr);
 
+    // sync object destroy
+    vkDestroySemaphore(vk_ctx->device, vk_ctx->in_flight_fence_sem.semaphore, nullptr);
+    for (U32 i = 0; i < vk_ctx->image_available_semaphores.size; i++)
+    {
+        vkDestroySemaphore(vk_ctx->device, vk_ctx->image_available_semaphores.data[i], nullptr);
+    }
+
     vkDestroyDevice(vk_ctx->device, nullptr);
     if (vk_ctx->enable_validation_layers)
     {
         vulkan::destroy_debug_utils_messenger_ext(vk_ctx->instance, vk_ctx->debug_messenger, nullptr);
     }
     vkDestroyInstance(vk_ctx->instance, nullptr);
-    vulkan::ctx_release();
 
     arena_release(vk_ctx->render_frame_arena);
-
     arena_release(vk_ctx->arena);
+    vulkan::ctx_release();
 }
 
 static void
@@ -231,14 +251,28 @@ render_frame(Vec2U32 framebuffer_dim, B32* in_out_framebuffer_resized, Vec2S64 m
     vulkan::asset_manager_execute_cmds();
     vulkan::asset_manager_cmd_done_check();
 
-    vmaSetCurrentFrameIndex(vk_ctx->asset_manager->allocator, vk_ctx->current_frame);
+    U64 frame_index = vk_ctx->current_frame;
+    vmaSetCurrentFrameIndex(vk_ctx->asset_manager->allocator, frame_index);
+
+    U64 frame_wait_value = 0;
+    if (vk_ctx->in_flight_fence_sem.count >= MAX_FRAMES_IN_FLIGHT)
+    {
+        frame_wait_value = vk_ctx->in_flight_fence_sem.count - MAX_FRAMES_IN_FLIGHT + 1;
+    }
+    if (frame_wait_value != 0)
+    {
+        prof_scope_marker_named("Wait for frame");
+        VkSemaphoreWaitInfo fence_wait_info{VK_STRUCTURE_TYPE_SEMAPHORE_WAIT_INFO};
+        fence_wait_info.pSemaphores = &vk_ctx->in_flight_fence_sem.semaphore;
+        fence_wait_info.semaphoreCount = 1;
+        fence_wait_info.pValues = &frame_wait_value;
+        VK_CHECK_RESULT(vkWaitSemaphores(vk_ctx->device, &fence_wait_info, UINT64_MAX));
+    }
 
     // delete everyting in the deletion queue as all the command using its ressource have
     // finished execution at this point
     vulkan::deletion_queue_empty_next();
     vulkan::mapped_buffers_update();
-
-    defer({ vk_ctx->current_frame = (vk_ctx->current_frame + 1) % MAX_FRAMES_IN_FLIGHT; });
 
     vulkan::SwapchainResources* swapchain_resources = vk_ctx->swapchain_resources;
     if (!swapchain_resources)
@@ -249,88 +283,84 @@ render_frame(Vec2U32 framebuffer_dim, B32* in_out_framebuffer_resized, Vec2S64 m
             vk_ctx->swapchain_resources = vulkan::swapchain_create(vk_ctx, &swapchain_details, swapchain_extent);
         return;
     }
-    VkFence* in_flight_fence = &vk_ctx->in_flight_fences.data[vk_ctx->current_frame];
     U32 image_idx = 0;
-    VkSemaphore image_available_semaphore = swapchain_resources->image_available_semaphores.data[vk_ctx->current_frame];
     {
-        {
-            prof_scope_marker_named("Wait for frame");
-            VkResult fence_result = vkWaitForFences(vk_ctx->device, 1, in_flight_fence, VK_TRUE, UINT64_MAX);
-            VK_CHECK_RESULT(fence_result);
-        }
-
-        VkResult result = {};
-        {
-            prof_scope_marker_named("Acquire Next Image");
-            result = vkAcquireNextImageKHR(vk_ctx->device, vk_ctx->swapchain_resources->swapchain, UINT64_MAX, image_available_semaphore, VK_NULL_HANDLE, &image_idx);
-        }
-
-        if (result == VK_ERROR_OUT_OF_DATE_KHR || *in_out_framebuffer_resized)
+        if (*in_out_framebuffer_resized)
         {
             *in_out_framebuffer_resized = false;
             vulkan::swapchain_recreate(framebuffer_dim);
             return;
         }
-        else if (result != VK_SUCCESS && result != VK_SUBOPTIMAL_KHR)
+
         {
-            exit_with_error("failed to acquire swap chain image!");
+            VkSemaphore image_available_semaphore = vk_ctx->image_available_semaphores.data[frame_index];
+            prof_scope_marker_named("Acquire Next Image");
+            VkResult result = vkAcquireNextImageKHR(vk_ctx->device, vk_ctx->swapchain_resources->swapchain, UINT64_MAX, image_available_semaphore, VK_NULL_HANDLE, &image_idx);
+            if (result == VK_ERROR_OUT_OF_DATE_KHR)
+            {
+                vulkan::swapchain_recreate(framebuffer_dim);
+                return;
+            }
+            else if (result != VK_SUCCESS && result != VK_SUBOPTIMAL_KHR)
+            {
+                exit_with_error("failed to acquire swap chain image!");
+            }
         }
     }
 
-    VkFence image_in_flight_fence = swapchain_resources->image_in_flight_fences.data[image_idx];
-    if (image_in_flight_fence != VK_NULL_HANDLE)
-    {
-        prof_scope_marker_named("Wait For Fences");
-        VK_CHECK_RESULT(vkWaitForFences(vk_ctx->device, 1, &image_in_flight_fence, VK_TRUE, UINT64_MAX));
-    }
-    swapchain_resources->image_in_flight_fences.data[image_idx] = *in_flight_fence;
-
-    VkSemaphore render_finished_semaphore = swapchain_resources->render_finished_semaphores.data[image_idx];
-
-    VkCommandBuffer cmd_buffer = vk_ctx->command_buffers.data[vk_ctx->current_frame];
-    VK_CHECK_RESULT(vkResetFences(vk_ctx->device, 1, in_flight_fence));
+    VkCommandBuffer cmd_buffer = vk_ctx->command_buffers.data[frame_index];
     VK_CHECK_RESULT(vkResetCommandBuffer(cmd_buffer, 0));
 
-    vulkan::command_buffer_record(image_idx, vk_ctx->current_frame, mouse_cursor_pos);
+    vulkan::command_buffer_record(image_idx, (U32)frame_index, mouse_cursor_pos);
 
-    VkSemaphoreSubmitInfo waitSemaphoreInfo{};
-    waitSemaphoreInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO;
-    waitSemaphoreInfo.semaphore = image_available_semaphore;
-    waitSemaphoreInfo.stageMask = VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT;
+    VkSemaphore image_available_semaphore = vk_ctx->image_available_semaphores.data[frame_index];
+    VkSemaphore render_finished_semaphore = swapchain_resources->render_finished_semaphores.data[image_idx];
 
-    VkSemaphoreSubmitInfo signalSemaphoreInfo{};
-    signalSemaphoreInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO;
-    signalSemaphoreInfo.semaphore = render_finished_semaphore;
-    signalSemaphoreInfo.stageMask = VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT;
+    VkSemaphoreSubmitInfo wait_semaphore_info{};
+    wait_semaphore_info.sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO;
+    wait_semaphore_info.semaphore = image_available_semaphore;
+    wait_semaphore_info.stageMask = VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT;
+
+    VkSemaphoreSubmitInfo signal_info{};
+    signal_info.sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO;
+    signal_info.semaphore = render_finished_semaphore;
+    signal_info.stageMask = VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT;
+
+    U64 fence_signal_value = ++vk_ctx->in_flight_fence_sem.count;
+    VkSemaphoreSubmitInfo fence_info{};
+    fence_info.sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO;
+    fence_info.semaphore = vk_ctx->in_flight_fence_sem.semaphore;
+    fence_info.stageMask = VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT;
+    fence_info.value = fence_signal_value;
 
     VkCommandBufferSubmitInfo commandBufferInfo{};
     commandBufferInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_SUBMIT_INFO;
     commandBufferInfo.commandBuffer = cmd_buffer;
 
-    VkSubmitInfo2 submitInfo{};
-    submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO_2;
-    submitInfo.waitSemaphoreInfoCount = 1;
-    submitInfo.pWaitSemaphoreInfos = &waitSemaphoreInfo;
-    submitInfo.signalSemaphoreInfoCount = 1;
-    submitInfo.pSignalSemaphoreInfos = &signalSemaphoreInfo;
-    submitInfo.commandBufferInfoCount = 1;
-    submitInfo.pCommandBufferInfos = &commandBufferInfo;
+    VkSemaphoreSubmitInfo submit_semaphore_info[] = {signal_info, fence_info};
+    VkSubmitInfo2 submit_info{};
+    submit_info.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO_2;
+    submit_info.waitSemaphoreInfoCount = 1;
+    submit_info.pWaitSemaphoreInfos = &wait_semaphore_info;
+    submit_info.signalSemaphoreInfoCount = ArrayCount(submit_semaphore_info);
+    submit_info.pSignalSemaphoreInfos = submit_semaphore_info;
+    submit_info.commandBufferInfoCount = 1;
+    submit_info.pCommandBufferInfos = &commandBufferInfo;
 
-    VK_CHECK_RESULT(vkQueueSubmit2(vk_ctx->graphics_queue, 1, &submitInfo, *in_flight_fence));
+    VK_CHECK_RESULT(vkQueueSubmit2(vk_ctx->graphics_queue, 1, &submit_info, NULL));
+    vk_ctx->current_frame = (frame_index + 1) % MAX_FRAMES_IN_FLIGHT;
 
-    VkPresentInfoKHR presentInfo{};
-    presentInfo.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
+    VkSwapchainKHR swapchains[] = {vk_ctx->swapchain_resources->swapchain};
+    VkPresentInfoKHR present_info{};
+    present_info.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
+    present_info.waitSemaphoreCount = 1;
+    present_info.pWaitSemaphores = &render_finished_semaphore;
+    present_info.swapchainCount = 1;
+    present_info.pSwapchains = swapchains;
+    present_info.pImageIndices = &image_idx;
+    present_info.pResults = nullptr; // Optional
 
-    presentInfo.waitSemaphoreCount = 1;
-    presentInfo.pWaitSemaphores = &render_finished_semaphore;
-
-    VkSwapchainKHR swapChains[] = {vk_ctx->swapchain_resources->swapchain};
-    presentInfo.swapchainCount = 1;
-    presentInfo.pSwapchains = swapChains;
-    presentInfo.pImageIndices = &image_idx;
-    presentInfo.pResults = nullptr; // Optional
-
-    VkResult result = vkQueuePresentKHR(vk_ctx->present_queue, &presentInfo);
+    VkResult result = vkQueuePresentKHR(vk_ctx->present_queue, &present_info);
     if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR || *in_out_framebuffer_resized)
     {
         *in_out_framebuffer_resized = 0;

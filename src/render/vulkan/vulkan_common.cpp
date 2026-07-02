@@ -348,6 +348,17 @@ logical_device_create(Arena* arena, Context* vk_ctx)
         exit_with_error("Selected Vulkan physical device does not support shaderInt64");
     }
 
+    VkPhysicalDeviceTimelineSemaphoreFeatures timeline_semaphore_supported{};
+    timeline_semaphore_supported.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_TIMELINE_SEMAPHORE_FEATURES;
+    VkPhysicalDeviceFeatures2 supported_features2{};
+    supported_features2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
+    supported_features2.pNext = &timeline_semaphore_supported;
+    vkGetPhysicalDeviceFeatures2(vk_ctx->physical_device, &supported_features2);
+    if (!timeline_semaphore_supported.timelineSemaphore)
+    {
+        exit_with_error("Selected Vulkan physical device does not support timeline semaphores");
+    }
+
     VkPhysicalDeviceFeatures deviceFeatures{};
     deviceFeatures.samplerAnisotropy = VK_TRUE;
     deviceFeatures.sampleRateShading = VK_TRUE;
@@ -387,10 +398,15 @@ logical_device_create(Arena* arena, Context* vk_ctx)
     sync2_features.synchronization2 = VK_TRUE;
     sync2_features.pNext = &descriptor_indexing_features;
 
+    VkPhysicalDeviceTimelineSemaphoreFeatures timeline_semaphore_features{};
+    timeline_semaphore_features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_TIMELINE_SEMAPHORE_FEATURES;
+    timeline_semaphore_features.timelineSemaphore = VK_TRUE;
+    timeline_semaphore_features.pNext = &sync2_features;
+
     VkPhysicalDeviceDynamicRenderingFeatures dynamic_rendering_features{};
     dynamic_rendering_features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DYNAMIC_RENDERING_FEATURES;
     dynamic_rendering_features.dynamicRendering = VK_TRUE;
-    dynamic_rendering_features.pNext = &sync2_features;
+    dynamic_rendering_features.pNext = &timeline_semaphore_features;
 
     VkDeviceCreateInfo createInfo{};
     createInfo.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
@@ -644,24 +660,6 @@ object_id_resources_cleanup()
     for (U32 i = 0; i < ArrayCount(swapchain_resources->object_id_buffer_readback); i++)
     {
         buffer_readback_destroy(&swapchain_resources->object_id_buffer_readback[i]);
-    }
-}
-
-static void
-sync_objects_create(Context* vk_ctx)
-{
-    vk_ctx->in_flight_fences = buffer_alloc<VkFence>(vk_ctx->arena, render::MAX_FRAMES_IN_FLIGHT);
-
-    VkFenceCreateInfo fenceInfo{};
-    fenceInfo.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
-    fenceInfo.flags = VK_FENCE_CREATE_SIGNALED_BIT;
-
-    for (U32 i = 0; i < render::MAX_FRAMES_IN_FLIGHT; i++)
-    {
-        if ((vkCreateFence(vk_ctx->device, &fenceInfo, nullptr, &vk_ctx->in_flight_fences.data[i]) != VK_SUCCESS))
-        {
-            exit_with_error("failed to fences synchronization objects for a frame!");
-        }
     }
 }
 
@@ -1079,21 +1077,13 @@ swapchain_create(Context* vk_ctx, SwapChainSupportDetails* swapchain_info, VkExt
     depth_resources_create(vk_ctx, swapchain_resources);
     object_id_image_resource_create(swapchain_resources, image_count);
 
-    swapchain_resources->image_available_semaphores = buffer_alloc<VkSemaphore>(vk_ctx->arena, image_count);
-    swapchain_resources->render_finished_semaphores = buffer_alloc<VkSemaphore>(vk_ctx->arena, image_count);
-    swapchain_resources->image_in_flight_fences = buffer_alloc<VkFence>(vk_ctx->arena, image_count);
+    swapchain_resources->render_finished_semaphores = buffer_alloc<VkSemaphore>(swapchain_resources->arena, swapchain_image_count);
 
-    VkSemaphoreCreateInfo semaphoreInfo{};
-    semaphoreInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
-
-    for (U32 i = 0; i < image_count; i++)
+    VkSemaphoreCreateInfo semaphore_info{};
+    semaphore_info.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
+    for (U32 i = 0; i < swapchain_image_count; i++)
     {
-        swapchain_resources->image_in_flight_fences.data[i] = VK_NULL_HANDLE;
-        if ((vkCreateSemaphore(vk_ctx->device, &semaphoreInfo, nullptr, &swapchain_resources->image_available_semaphores.data[i]) != VK_SUCCESS) ||
-            (vkCreateSemaphore(vk_ctx->device, &semaphoreInfo, nullptr, &swapchain_resources->render_finished_semaphores.data[i]) != VK_SUCCESS))
-        {
-            exit_with_error("failed to create semaphores for swapchain images!");
-        }
+        VK_CHECK_RESULT(vkCreateSemaphore(vk_ctx->device, &semaphore_info, nullptr, &swapchain_resources->render_finished_semaphores.data[i]));
     }
 
     return swapchain_resources;
@@ -1102,9 +1092,8 @@ swapchain_create(Context* vk_ctx, SwapChainSupportDetails* swapchain_info, VkExt
 static void
 swapchain_cleanup(VkDevice device, SwapchainResources* swapchain_resources)
 {
-    for (U32 i = 0; i < swapchain_resources->image_count; i++)
+    for (U32 i = 0; i < swapchain_resources->render_finished_semaphores.size; i++)
     {
-        vkDestroySemaphore(device, swapchain_resources->image_available_semaphores.data[i], nullptr);
         vkDestroySemaphore(device, swapchain_resources->render_finished_semaphores.data[i], nullptr);
     }
 

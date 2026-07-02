@@ -41,10 +41,8 @@ struct SwapchainResources
     Buffer<ImageResource> object_id_image_resolve_resources;
     BufferReadback object_id_buffer_readback[render::MAX_FRAMES_IN_FLIGHT];
 
-    // sync objects
-    Buffer<VkSemaphore> image_available_semaphores;
+    // Present wait semaphores are indexed by swapchain image, not frame.
     Buffer<VkSemaphore> render_finished_semaphores;
-    Buffer<VkFence> image_in_flight_fences;
 };
 
 struct QueueFamilyIndices
@@ -172,9 +170,6 @@ depth_resources_create(Context* vk_context, SwapchainResources* swapchain_resour
 
 static void
 swapchain_recreate(Vec2U32 framebuffer_dim);
-
-static void
-sync_objects_create(Context* vk_ctx);
 
 static VkCommandPool
 command_pool_create(VkDevice device, VkCommandPoolCreateInfo* poolInfo);
