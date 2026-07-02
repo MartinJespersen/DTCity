@@ -149,7 +149,7 @@ car_instance_pipeline_create(Context* vk_ctx, String8 shader_path)
 }
 
 static Pipeline
-model_3d_pipeline_create(Context* vk_ctx, String8 shader_path)
+tile_pipeline_create(Context* vk_ctx, String8 shader_path)
 {
     ScratchScope scratch = ScratchScope(0, 0);
 

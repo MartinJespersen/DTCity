@@ -122,6 +122,9 @@ g_internal B32
 _tileset_renderer_tile_resource_untrack(TilesetRenderer* renderer, TileRenderDataList* list);
 
 g_internal void
+_tileset_renderer_tile_to_show_push(TilesetRenderer* renderer, const Cesium3DTilesSelection::Tile& tile, B32 is_fading_out);
+
+g_internal void
 _tileset_renderer_raster_resource_track(TilesetRenderer* renderer, RasterRenderResource* resource);
 
 g_internal B32

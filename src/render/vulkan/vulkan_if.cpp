@@ -152,7 +152,7 @@ render_ctx_create(String8 shader_path, io::IO* io_ctx, async::ThreadPool* thread
 
     vk_ctx->render_frame_arena = arena_alloc();
     Debug_SetName(vk_ctx->render_frame_arena, "vulkan render frame arena");
-    vk_ctx->model_3D_pipeline = vulkan::model_3d_pipeline_create(vk_ctx, shader_path);
+    vk_ctx->model_3D_pipeline = vulkan::tile_pipeline_create(vk_ctx, shader_path);
     vk_ctx->car_instance_pipeline = vulkan::car_instance_pipeline_create(vk_ctx, shader_path);
     vk_ctx->blend_3d_pipeline = vulkan::blend_3d_pipeline_create(shader_path);
     vk_ctx->road_intersection_pipeline = vulkan::road_intersection_pipeline_create(shader_path);
@@ -797,6 +797,7 @@ tile_pipeline_add(render::TilePipelineData* pipeline_input)
         push_constants.overlay_scale_x = pipeline_input->overlay_scale.x;
         push_constants.overlay_scale_y = pipeline_input->overlay_scale.y;
         push_constants.height_offset = pipeline_input->height_offset;
+        push_constants.lod_fade = pipeline_input->lod_fade;
 
         vulkan::TilePipelineNode* node = PushStruct(vk_ctx->render_frame_arena, vulkan::TilePipelineNode);
         node->vertex_alloc = asset_vertex_buffer->item.buffer_alloc;

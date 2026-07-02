@@ -253,6 +253,7 @@ struct TilePipelineData
     U32 index_offset;
 
     F32 height_offset;
+    F32 lod_fade;
 
     TilePipelineBits pipeline_bits;
     DepthCompare depth_test_compare;

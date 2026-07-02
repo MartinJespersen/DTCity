@@ -839,6 +839,7 @@ tile_render_data_from_gltf(const CesiumGltf::Model& model, const glm::dmat4& ece
     {
         TileRenderData* render_data = PushStruct(tile_render_data_list->arena, TileRenderData);
         SLLQueuePush(tile_render_data_list->first, tile_render_data_list->last, render_data);
+        render_data->render_data.lod_fade = 1.0f;
 
         // Create and async load index and vertex buffer
         // First pass: count vertices/indices only for primitives with this material
@@ -1084,8 +1085,8 @@ tileset_renderer_create(TilesetRenderer* tileset, async::ThreadPool* threads, St
 
     // setup tilesets
     TilesetRendererCreateContext create_context = _tileset_renderer_create_context(tileset, threads, origin_longitude, origin_latitude, origin_height);
-    create_context.options.enableLodTransitionPeriod = false;
-    create_context.options.lodTransitionLength = 1.0;
+    create_context.options.enableLodTransitionPeriod = true;
+    create_context.options.lodTransitionLength = 0.35f;
 
     create_context.options.preloadSiblings = false;
     create_context.options.loadingDescendantLimit = 6;
@@ -1273,6 +1274,51 @@ tileset_pump_async(TilesetRenderer* renderer)
 }
 
 g_internal void
+_tileset_renderer_tile_to_show_push(TilesetRenderer* renderer, const Cesium3DTilesSelection::Tile& tile, B32 is_fading_out)
+{
+    if (tile.getState() != Cesium3DTilesSelection::TileLoadState::Done)
+    {
+        return;
+    }
+
+    const Cesium3DTilesSelection::TileContent& content = tile.getContent();
+    const Cesium3DTilesSelection::TileRenderContent* render_content = content.getRenderContent();
+    if (!render_content)
+    {
+        return;
+    }
+
+    void* renderer_resources = render_content->getRenderResources();
+    if (!renderer_resources)
+    {
+        return;
+    }
+
+    TileRenderDataList* render_data = static_cast<TileRenderDataList*>(renderer_resources);
+    if (!render_data || !render_data->tile_is_loaded)
+    {
+        return;
+    }
+
+    F32 lod_fade = render_content->getLodTransitionFadePercentage();
+    lod_fade = glm::clamp(lod_fade, 0.0f, 1.0f);
+    F32 lod_visibility = is_fading_out ? 1.0f - lod_fade : lod_fade;
+    if (lod_visibility <= 0.0f)
+    {
+        return;
+    }
+
+    prof_scope_marker_named("tileset_update_view:schedule_loaded_tiles");
+    _tile_render_data_overlay_apply(render_data);
+    for (TileRenderData* render_data_node = render_data->first; render_data_node; render_data_node = render_data_node->next)
+    {
+        render_data_node->render_data.lod_fade = lod_visibility;
+        SLLQueuePush_N(renderer->tile_to_show.first, renderer->tile_to_show.last, render_data_node, render_next);
+        renderer->tiles_to_show_count++;
+    }
+}
+
+g_internal void
 tileset_update_view(TilesetRenderer* renderer, ui::Camera* camera, Vec2U32 viewport_size, F64 delta_time)
 {
     prof_scope_marker;
@@ -1318,39 +1364,12 @@ tileset_update_view(TilesetRenderer* renderer, ui::Camera* camera, Vec2U32 viewp
 
             for (const Cesium3DTilesSelection::Tile* tile : result.tilesToRenderThisFrame)
             {
-                if (tile->getState() != Cesium3DTilesSelection::TileLoadState::Done)
-                {
-                    continue;
-                }
+                _tileset_renderer_tile_to_show_push(renderer, *tile, false);
+            }
 
-                const Cesium3DTilesSelection::TileContent& content = tile->getContent();
-                const Cesium3DTilesSelection::TileRenderContent* render_content = content.getRenderContent();
-
-                if (!render_content)
-                {
-                    continue;
-                }
-
-                void* renderer_resources = render_content->getRenderResources();
-                if (!renderer_resources)
-                    continue;
-
-                TileRenderDataList* render_data = static_cast<TileRenderDataList*>(renderer_resources);
-                if (!render_data)
-                {
-                    continue;
-                }
-
-                if (render_data->tile_is_loaded)
-                {
-                    prof_scope_marker_named("tileset_update_view:schedule_loaded_tiles");
-                    _tile_render_data_overlay_apply(render_data);
-                    for (TileRenderData* render_data_node = render_data->first; render_data_node; render_data_node = render_data_node->next)
-                    {
-                        SLLQueuePush_N(renderer->tile_to_show.first, renderer->tile_to_show.last, render_data_node, render_next);
-                        renderer->tiles_to_show_count++;
-                    }
-                }
+            for (const Cesium3DTilesSelection::Tile::ConstPointer& tile : result.tilesFadingOut)
+            {
+                _tileset_renderer_tile_to_show_push(renderer, *tile, true);
             }
         }
     }

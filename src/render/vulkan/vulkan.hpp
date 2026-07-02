@@ -15,6 +15,7 @@ struct TilePipelinePushConstants
     F32 overlay_scale_x;
     F32 overlay_scale_y;
     F32 height_offset;
+    F32 lod_fade;
 };
 
 struct TilePipelineNode

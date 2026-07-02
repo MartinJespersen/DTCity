@@ -1456,12 +1456,14 @@ buildings_build(City* city, osm::Network* osm_network, render::SamplerInfo* samp
                                      .index_buffer_handle = index_handle,
                                      .texture_handle = roof_texture_handle,
                                      .index_count = render_info.roof_index_count,
-                                     .index_offset = render_info.roof_index_offset};
+                                     .index_offset = render_info.roof_index_offset,
+                                     .lod_fade = 1.0f};
     buildings->facade_model_handles = {.vertex_buffer_handle = vertex_handle,
                                        .index_buffer_handle = index_handle,
                                        .texture_handle = facade_texture_handle,
                                        .index_count = render_info.facade_index_count,
-                                       .index_offset = render_info.facade_index_offset};
+                                       .index_offset = render_info.facade_index_offset,
+                                       .lod_fade = 1.0f};
 }
 
 g_internal Direction

@@ -31,10 +31,18 @@ layout(push_constant) uniform constants
     float overlay_scale_x;
     float overlay_scale_y;
     float height_offset;
+    float lod_fade;
 } PushConstants;
 
 void main()
 {
+    float visibility = clamp(PushConstants.lod_fade, 0.0, 1.0);
+    float dither = fract(52.9829189 * fract(dot(gl_FragCoord.xy, vec2(0.06711056, 0.00583715))));
+    if (visibility < dither)
+    {
+        discard;
+    }
+
     vec4 base_color = texture(texture_sampler[PushConstants.base_tex], in_uv);
 
     vec4 surface_color;

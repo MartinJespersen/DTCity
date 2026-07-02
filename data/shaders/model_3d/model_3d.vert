@@ -33,6 +33,7 @@ layout(push_constant) uniform constants
     float overlay_scale_x;
     float overlay_scale_y;
     float height_offset;
+    float lod_fade;
 } PushConstants;
 
 void main() {
