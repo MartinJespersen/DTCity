@@ -1167,6 +1167,7 @@ agent_sim_update(AgentSim* agent_sim, Buffer<Coordinate> coord_buffer, glm::dmat
             glm::dvec3 local_dir = glm::dvec3(1, 0, 0);
             Agent new_agent = {.ecef_coord = ecef_coord, .ecef_dir = local_dir};
             agent = agents_active->push(new_agent);
+            agent->vehicle_type = coord->vehicle_type;
             AgentMapItem agent_map_item = {.agent = agent};
             agent_ptr = map_insert(agent_sim->agent_map, coord->id, agent_map_item);
         }

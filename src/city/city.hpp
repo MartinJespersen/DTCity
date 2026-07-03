@@ -191,6 +191,7 @@ struct Agent
     glm::dvec3 ecef_coord;
     glm::dvec3 ecef_dir;
     U64 latest_update_frame;
+    VehicleType vehicle_type;
 
     // rendering
     render::Transform model_matrix;
@@ -454,7 +455,29 @@ _city_coordinate_buffer_from_str(Arena* arena, String8 json)
     for (auto obj : doc)
     {
         Coordinate* coord = coord_buffer[idx];
-        error = obj.get<Coordinate>(*coord);
+        CoordinateView coord_view = {};
+        error = obj.get<CoordinateView>(coord_view);
+        coord->lat = coord_view.lat;
+        coord->lon = coord_view.lon;
+        String8 id_str = str8((U8*)coord_view.id.data(), coord_view.id.size());
+        U64 needle_start = str8_substr_find(id_str, S("_bicycle"), 0, MatchFlag_CaseInsensitive);
+        coord->vehicle_type = VehicleType::Car;
+        if (needle_start < id_str.size)
+        {
+            coord->vehicle_type = VehicleType::Bicycle;
+        }
+        B32 is_integer = try_s64_from_str8_c_rules(id_str, &coord->id);
+        if (!is_integer)
+        {
+            String8 id_prefix_str = str8(id_str.str, needle_start);
+            B32 is_integer = try_s64_from_str8_c_rules(id_prefix_str, &coord->id);
+            if (!is_integer)
+            {
+                DEBUG_LOG("Cannot get integer from vehicle id %.*s", (int)coord_view.id.size(), coord_view.id.data());
+                coord->vehicle_type = VehicleType::None;
+            }
+        }
+
         if (error)
         {
             return {};

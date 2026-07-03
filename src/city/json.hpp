@@ -2,9 +2,23 @@
 
 namespace city
 {
+struct CoordinateView
+{
+    std::string_view id;
+    F64 lat;
+    F64 lon;
+};
+enum class VehicleType : S32
+{
+    None = 0,
+    Car,
+    Bicycle
+};
+
 struct Coordinate
 {
     S64 id;
+    VehicleType vehicle_type;
     F64 lat;
     F64 lon;
 };
@@ -12,7 +26,7 @@ struct Coordinate
 
 template <>
 simdjson_inline simdjson::error_code
-simdjson::ondemand::value::get(city::Coordinate& out) noexcept
+simdjson::ondemand::value::get(city::CoordinateView& out) noexcept
 {
     simdjson::ondemand::object obj;
     simdjson::error_code error = get_object().get(obj);
@@ -21,7 +35,7 @@ simdjson::ondemand::value::get(city::Coordinate& out) noexcept
         return error;
     }
 
-    error = obj["id"].get_int64().get(out.id);
+    error = obj["id"].get_string().get(out.id);
     if (error)
     {
         return error;
