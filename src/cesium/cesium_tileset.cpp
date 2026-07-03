@@ -1112,6 +1112,7 @@ tileset_renderer_create(TilesetRenderer* tileset, async::ThreadPool* threads, St
         is_map_tile = false;
         create_context.options.rendererOptions = is_map_tile;
         create_context.options.loadingDescendantLimit = 6;
+        create_context.options.maximumScreenSpaceError = 128;
         create_context.renderer->tilesets.data[1] = tileset->allocator->place<Cesium3DTilesSelection::Tileset>(create_context.externals, (const char*)url.str, create_context.options);
         CesiumGeospatial::Cartographic center_position(glm::radians(origin_longitude), glm::radians(origin_latitude), 0.0);
         _height_offset_sample_async(create_context.renderer, center_position);

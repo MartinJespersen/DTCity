@@ -1,33 +1,24 @@
-# Urgent changes
-* All vulkan load function should take in thread_ctx 
-* validation layer: vkCmdBlitImage2(): THREADING ERROR : object of type VkCommandPool is simultaneously used in current thread 35788 and thread 17432
-
 # Less urgent changes
 * Reconsider the number of descriptor pools (whether 1 is enough) and the descriptor numbers
 * In function RoadSegmentFromTwoRoadNodes: the normalize function leads to values being Nan. Handle this in a better way.
-* Improve the threading in the asset manager (e.g. too many mutexes are used at the moment)
-* Remove the printf logging and find way to log the queue messages
-* make descriptor_pool and functionallity part of asset_manager.
 * tile transform might need to be passed to shader as a uniform buffer
 
 # features
-* Simplify render pipeline with timeline semaphores
-* For Cpp Allocator
-  * Should work on arrays and initializer lists as well
-  * std::construct_at and std::destroy_at could be used instead of what is done at the moment.
+* Allow different modes (transportation vehicles) in the application
+* Show a clock in the application allowing 
 * Tesselation could be used in tile pipeline for road colormap overlays
 * delete draw flush and related code
-* Use a list of fences for draw and compute calls that waits for asynchrounously loaded assets
 * Osm data visualizer should not be affected by netascore not showing
-* It should be possible to switch between cities in the editor
 * Use the OSM data for showing data about buildings
   * buildings need to be rendered included in compute pass as well
 * simplify render interface (a little too verbose at the moment)
 * Logging should be improved to not always print to console 
   * Create memory viewer
+* For Cpp Allocator
+  * Should work on arrays and initializer lists as well
+  * std::construct_at and std::destroy_at could be used instead of what is done at the moment.
 * 3D geometry
   <!--* include LOD2 geometry-->
-  * Improve tile queue to avoid too many glitches
   * Get 3D geometry from host path
   * Create window to list 5-by-5km geometry with corresponding connection point.
 * Make application work on arm arhitecture 
@@ -35,6 +26,9 @@
   * Make app work on MACOS
 * Create visualizer for arena allocations
 * Make shader bin directory be build specific (so that recompilation is triggered if other build type is used)
+* Asset management changes
+  * Improve the threading in the asset manager (e.g. too many mutexes are used at the moment)
+  * Use a list of fences for draw and compute calls that waits for asynchrounously loaded assets
 
 # Debug Log Suggestions
 * arena: alloc, push, pop and releases
