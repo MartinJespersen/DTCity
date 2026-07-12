@@ -165,13 +165,13 @@
 #error Unknown trap intrinsic for this compiler.
 #endif
 
-#define AssertAlways(x)                                                                                                                                                                                \
-    do                                                                                                                                                                                                 \
-    {                                                                                                                                                                                                  \
-        if (!(x))                                                                                                                                                                                      \
-        {                                                                                                                                                                                              \
-            Trap();                                                                                                                                                                                    \
-        }                                                                                                                                                                                              \
+#define AssertAlways(x) \
+    do                  \
+    {                   \
+        if (!(x))       \
+        {               \
+            Trap();     \
+        }               \
     } while (0)
 #if BUILD_DEBUG
 #define Assert(x) AssertAlways(x)
@@ -211,21 +211,21 @@
 #define ins_atomic_u64_dec_eval(x) (__atomic_fetch_sub((volatile U64*)(x), 1, __ATOMIC_SEQ_CST) - 1)
 #define ins_atomic_u64_eval_assign(x, c) __atomic_exchange_n(x, c, __ATOMIC_SEQ_CST)
 #define ins_atomic_u64_add_eval(x, c) (__atomic_fetch_add((volatile U64*)(x), c, __ATOMIC_SEQ_CST) + (c))
-#define ins_atomic_u64_eval_cond_assign(x, k, c)                                                                                                                                                       \
-    ({                                                                                                                                                                                                 \
-        U64 _new = (c);                                                                                                                                                                                \
-        __atomic_compare_exchange_n((volatile U64*)(x), &_new, (k), 0, __ATOMIC_SEQ_CST, __ATOMIC_SEQ_CST);                                                                                            \
-        _new;                                                                                                                                                                                          \
+#define ins_atomic_u64_eval_cond_assign(x, k, c)                                                            \
+    ({                                                                                                      \
+        U64 _new = (c);                                                                                     \
+        __atomic_compare_exchange_n((volatile U64*)(x), &_new, (k), 0, __ATOMIC_SEQ_CST, __ATOMIC_SEQ_CST); \
+        _new;                                                                                               \
     })
 #define ins_atomic_u32_eval(x) __atomic_load_n(x, __ATOMIC_SEQ_CST)
 #define ins_atomic_u32_inc_eval(x) (__atomic_fetch_add((volatile U32*)(x), 1, __ATOMIC_SEQ_CST) + 1)
 #define ins_atomic_u32_add_eval(x, c) (__atomic_fetch_add((volatile U32*)(x), c, __ATOMIC_SEQ_CST) + (c))
 #define ins_atomic_u32_eval_assign(x, c) __atomic_exchange_n(x, c, __ATOMIC_SEQ_CST)
-#define ins_atomic_u32_eval_cond_assign(x, k, c)                                                                                                                                                       \
-    ({                                                                                                                                                                                                 \
-        U32 _new = (c);                                                                                                                                                                                \
-        __atomic_compare_exchange_n((volatile U32*)(x), &_new, (k), 0, __ATOMIC_SEQ_CST, __ATOMIC_SEQ_CST);                                                                                            \
-        _new;                                                                                                                                                                                          \
+#define ins_atomic_u32_eval_cond_assign(x, k, c)                                                            \
+    ({                                                                                                      \
+        U32 _new = (c);                                                                                     \
+        __atomic_compare_exchange_n((volatile U32*)(x), &_new, (k), 0, __ATOMIC_SEQ_CST, __ATOMIC_SEQ_CST); \
+        _new;                                                                                               \
     })
 #else
 #error Atomic intrinsics not defined for this compiler / architecture.
@@ -251,15 +251,15 @@
 #define SetNil(nil, p) ((p) = (nil))
 
 //- rjf: doubly-linked-lists
-#define DLLInsert_NPZ(nil, f, l, p, n, next, prev)                                                                                                                                                     \
-    (CheckNil(nil, f)   ? ((f) = (l) = (n), SetNil(nil, (n)->next), SetNil(nil, (n)->prev))                                                                                                            \
-     : CheckNil(nil, p) ? ((n)->next = (f), (f)->prev = (n), (f) = (n), SetNil(nil, (n)->prev))                                                                                                        \
-     : ((p) == (l))     ? ((l)->next = (n), (n)->prev = (l), (l) = (n), SetNil(nil, (n)->next))                                                                                                        \
+#define DLLInsert_NPZ(nil, f, l, p, n, next, prev)                                              \
+    (CheckNil(nil, f)   ? ((f) = (l) = (n), SetNil(nil, (n)->next), SetNil(nil, (n)->prev))     \
+     : CheckNil(nil, p) ? ((n)->next = (f), (f)->prev = (n), (f) = (n), SetNil(nil, (n)->prev)) \
+     : ((p) == (l))     ? ((l)->next = (n), (n)->prev = (l), (l) = (n), SetNil(nil, (n)->next)) \
                         : (((!CheckNil(nil, p) && CheckNil(nil, (p)->next)) ? (0) : ((p)->next->prev = (n))), ((n)->next = (p)->next), ((p)->next = (n)), ((n)->prev = (p))))
 #define DLLPushBack_NPZ(nil, f, l, n, next, prev) DLLInsert_NPZ(nil, f, l, l, n, next, prev)
 #define DLLPushFront_NPZ(nil, f, l, n, next, prev) DLLInsert_NPZ(nil, l, f, f, n, prev, next)
-#define DLLRemove_NPZ(nil, f, l, n, next, prev)                                                                                                                                                        \
-    (((n) == (f) ? (f) = (n)->next : (0)), ((n) == (l) ? (l) = (l)->prev : (0)), (CheckNil(nil, (n)->prev) ? (0) : ((n)->prev->next = (n)->next)),                                                     \
+#define DLLRemove_NPZ(nil, f, l, n, next, prev)                                                                                                    \
+    (((n) == (f) ? (f) = (n)->next : (0)), ((n) == (l) ? (l) = (l)->prev : (0)), (CheckNil(nil, (n)->prev) ? (0) : ((n)->prev->next = (n)->next)), \
      (CheckNil(nil, (n)->next) ? (0) : ((n)->next->prev = (n)->prev)))
 
 //- rjf: singly-linked, doubly-headed lists (queues)
@@ -341,12 +341,12 @@ __asan_unpoison_memory_region(void const volatile* addr, size_t size);
 
 #define CeilIntegerDiv(a, b) (((a) + (b) - 1) / (b))
 
-#define Swap(T, a, b)                                                                                                                                                                                  \
-    do                                                                                                                                                                                                 \
-    {                                                                                                                                                                                                  \
-        T t__ = a;                                                                                                                                                                                     \
-        (a) = b;                                                                                                                                                                                       \
-        (b) = t__;                                                                                                                                                                                     \
+#define Swap(T, a, b) \
+    do                \
+    {                 \
+        T t__ = a;    \
+        (a) = b;      \
+        (b) = t__;    \
     } while (0)
 
 #if ARCH_64BIT
@@ -371,8 +371,8 @@ __asan_unpoison_memory_region(void const volatile* addr, size_t size);
 #define Extract32(word, pos) (((word) >> ((pos) * 32)) & max_U32)
 
 #if LANG_CPP
-#define zero_struct                                                                                                                                                                                    \
-    {                                                                                                                                                                                                  \
+#define zero_struct \
+    {               \
     }
 #else
 #define zero_struct {0}
@@ -459,6 +459,15 @@ typedef enum Axis2
     Axis2_COUNT,
 } Axis2;
 #define axis2_flip(a) ((Axis2)(!(a)))
+
+typedef enum Axis3
+{
+    Axis3_Invalid = -1,
+    Axis3_X,
+    Axis3_Y,
+    Axis2_Z,
+    Axis3_COUNT,
+} Axis3;
 
 typedef enum Corner
 {
@@ -992,6 +1001,7 @@ u64_array_bsearch(U64* arr, U64 count, U64 value);
 // type casts
 
 #define enum_idx(a) static_cast<U32>(a)
+#define enum_class_s32(a) static_cast<S32>(a)
 
 // Bitmask enum class
 

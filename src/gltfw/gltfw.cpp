@@ -201,8 +201,12 @@ gltfw_primitive_create(Arena* arena, cgltf_data* data, cgltf_primitive* in_prim)
     // get texture
     cgltf_material* material = in_prim->material;
     cgltf_pbr_metallic_roughness* pbr_material = &material->pbr_metallic_roughness;
+    primitive->color = glm::vec4(pbr_material->base_color_factor[0], pbr_material->base_color_factor[1], pbr_material->base_color_factor[2], pbr_material->base_color_factor[3]);
     cgltf_texture_view* texture_view = &pbr_material->base_color_texture;
-    primitive->tex_idx = (U32)cgltf_texture_index(data, texture_view->texture);
+    if (texture_view && texture_view->texture)
+    {
+        primitive->tex_idx = (U32)cgltf_texture_index(data, texture_view->texture) + 1; // + 1 to allow 0 to be nil texture
+    }
 
     cgltf_accessor* accessor_indices = in_prim->indices;
     primitive->indices = buffer_alloc<U32>(arena, accessor_indices->count);
@@ -262,8 +266,8 @@ gltfw_primitives_read(Arena* arena, cgltf_data* data)
 g_internal Buffer<gltfw_Texture>
 gltfw_textures_read(Arena* arena, cgltf_data* data)
 {
-    Buffer<gltfw_Texture> textures = buffer_alloc<gltfw_Texture>(arena, data->textures_count);
-    for (U32 tex_idx = 0; tex_idx < textures.size; ++tex_idx)
+    Buffer<gltfw_Texture> textures = buffer_alloc<gltfw_Texture>(arena, data->textures_count + 1); // +1 to allow nil texture
+    for (U32 tex_idx = 1; tex_idx < textures.size; ++tex_idx)
     {
         gltfw_Texture* tex = &textures.data[tex_idx];
         cgltf_texture* cgltf_tex = &data->textures[tex_idx];
@@ -322,5 +326,6 @@ gltfw_glb_read(Arena* arena, String8 glb_path)
     gltfw_PrimitiveList prim_list = gltfw_primitives_read(arena, data);
     Buffer<gltfw_Texture> tex_buffer = gltfw_textures_read(arena, data);
 
+    Assert(tex_buffer.size > 0);
     return gltfw_Result{prim_list, tex_buffer};
 }

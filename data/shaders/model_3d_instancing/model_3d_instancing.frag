@@ -9,9 +9,10 @@ layout(set = 1, binding = 0) uniform sampler2D texture_sampler[];
 
 layout(push_constant) uniform constants
 {
+    vec4 color;
     uint tex_idx;
 } PushConstants;
 
 void main() {
-    out_color = texture(texture_sampler[nonuniformEXT(PushConstants.tex_idx)], in_uv);
+    out_color = vec4(mix(texture(texture_sampler[nonuniformEXT(PushConstants.tex_idx)], in_uv).xyz, PushConstants.color.xyz, PushConstants.color.w), 1);
 }

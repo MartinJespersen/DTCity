@@ -231,7 +231,7 @@ car_instance_rendering()
         VkDeviceSize vertex_offsets[] = {0, node->instance_buffer_offset};
         for (U32 mesh_idx = 0; mesh_idx < node->meshes.size; ++mesh_idx)
         {
-            render::MeshHandlePair* mesh = node->meshes[mesh_idx];
+            render::ModelInfo* mesh = node->meshes[mesh_idx];
             render::AssetItem<BufferHandle>* vertex_item = asset_manager_buffer_item_get(mesh->vertex_handle);
             render::AssetItem<BufferHandle>* index_item = asset_manager_buffer_item_get(mesh->index_handle);
             if (mesh->texture_handle_idx >= node->texture_handles.size)
@@ -248,7 +248,7 @@ car_instance_rendering()
             BufferHandle* vertex_handle = &vertex_item->item;
             BufferHandle* index_handle = &index_item->item;
             TextureHandle* texture = &texture_item->item;
-            CarInstancePushConstants push_constants = {.tex_idx = texture->descriptor_set_idx};
+            CarInstancePushConstants push_constants = {.color = mesh->color, .tex_idx = texture->descriptor_set_idx};
             VkBuffer vertex_buffers[] = {
                 vertex_handle->buffer_alloc.buffer,
                 instance_buffer,

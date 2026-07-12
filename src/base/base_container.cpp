@@ -321,8 +321,8 @@ ArrayResourcePool<T>::create(Arena* arena, U32 capacity)
 {
     ArrayResourcePool* pool = PushStruct(arena, ArrayResourcePool<T>);
     pool->capacity = Max(capacity, 1);
-    pool->items = PushArray(arena, ArrayItemHeader<T>, capacity + 1);
-    for (U32 i = 1; i < capacity; i++)
+    pool->items = PushArray(arena, ArrayItemHeader<T>, pool->capacity + 1);
+    for (U32 i = 1; i < pool->capacity; i++)
     {
         pool->items[i].next = i + 1;
     }
@@ -382,5 +382,87 @@ ArrayResourcePool<T>::item_free(ArrayResourcePoolHandle item_handle)
         {
             // TODO: Log
         }
+    }
+}
+
+template <typename T>
+ArrayResourcePoolIterator<T>
+ArrayResourcePool<T>::begin()
+{
+    ArrayResourcePoolIterator<T> iter = {this, 1};
+    iter.skip_unused();
+    return iter;
+}
+
+template <typename T>
+ArrayResourcePoolIterator<T>
+ArrayResourcePool<T>::end()
+{
+    ArrayResourcePoolIterator<T> iter = {this, this->capacity + 1};
+    return iter;
+}
+
+template <typename T>
+T&
+ArrayResourcePoolIterator<T>::operator*()
+{
+    Assert(this->pool);
+    Assert(this->idx > 0 && this->idx <= this->pool->capacity);
+    Assert(this->pool->items[this->idx].in_use);
+
+    T& result = this->pool->items[this->idx].data;
+    return result;
+}
+
+template <typename T>
+T*
+ArrayResourcePoolIterator<T>::operator->()
+{
+    Assert(this->pool);
+    Assert(this->idx > 0 && this->idx <= this->pool->capacity);
+    Assert(this->pool->items[this->idx].in_use);
+
+    T* result = &this->pool->items[this->idx].data;
+    return result;
+}
+
+template <typename T>
+ArrayResourcePoolIterator<T>&
+ArrayResourcePoolIterator<T>::operator++()
+{
+    this->idx += 1;
+    this->skip_unused();
+    return *this;
+}
+
+template <typename T>
+bool
+ArrayResourcePoolIterator<T>::operator!=(ArrayResourcePoolIterator<T> other)
+{
+    bool result = this->pool != other.pool || this->idx != other.idx;
+    return result;
+}
+
+template <typename T>
+bool
+ArrayResourcePoolIterator<T>::operator==(ArrayResourcePoolIterator<T> other)
+{
+    bool result = this->pool == other.pool && this->idx == other.idx;
+    return result;
+}
+
+template <typename T>
+void
+ArrayResourcePoolIterator<T>::skip_unused()
+{
+    Assert(this->pool);
+    while (this->idx <= this->pool->capacity)
+    {
+        ArrayItemHeader<T>* item = &this->pool->items[this->idx];
+        if (item->in_use)
+        {
+            break;
+        }
+        this->idx += 1;
     }
 }

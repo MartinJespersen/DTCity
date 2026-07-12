@@ -33,6 +33,7 @@ struct TilePipelineNode
 
 struct CarInstancePushConstants
 {
+    glm::vec4 color;
     U32 tex_idx;
 };
 
@@ -62,7 +63,7 @@ struct CarInstanceRenderNode
 
     // draw pipeline ressources
     render::MappedHandle<void> camera_handle;
-    Buffer<render::MeshHandlePair> meshes;
+    Buffer<render::ModelInfo> meshes;
     Buffer<render::Handle> texture_handles;
 
     // shared pipeline ressources

@@ -305,11 +305,12 @@ struct Transform
     glm::vec4 w_basis;
 };
 
-struct MeshHandlePair
+struct ModelInfo
 {
     Handle vertex_handle;
     Handle index_handle;
     U32 texture_handle_idx;
+    glm::vec4 color;
 };
 
 struct Quad2F64
@@ -423,7 +424,7 @@ blend_3d_draw(Blend3DPipelineData pipeline_input);
 static void
 tile_pipeline_add(render::TilePipelineData* pipeline_input);
 g_internal bool
-agent_instance_render_bucket_add(render::MappedHandle<void> camera_handle, Buffer<render::MeshHandlePair> meshes, Buffer<render::Handle> texture_handles, render::BufferInfo* instance_buffer_info,
+agent_instance_render_bucket_add(render::MappedHandle<void> camera_handle, Buffer<render::ModelInfo> meshes, Buffer<render::Handle> texture_handles, render::BufferInfo* instance_buffer_info,
                                  U32 instance_buffer_offset);
 
 g_internal void

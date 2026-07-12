@@ -200,6 +200,34 @@ struct ArrayItemHeader
 };
 
 template <typename T>
+struct ArrayResourcePool;
+
+template <typename T>
+struct ArrayResourcePoolIterator
+{
+    ArrayResourcePool<T>* pool;
+    U32 idx;
+
+    T&
+    operator*();
+
+    T*
+    operator->();
+
+    ArrayResourcePoolIterator<T>&
+    operator++();
+
+    bool
+    operator!=(ArrayResourcePoolIterator<T> other);
+
+    bool
+    operator==(ArrayResourcePoolIterator<T> other);
+
+    void
+    skip_unused();
+};
+
+template <typename T>
 struct ArrayResourcePool
 {
     ArrayItemHeader<T>* items;
@@ -217,4 +245,10 @@ struct ArrayResourcePool
 
     void
     item_free(ArrayResourcePoolHandle item_handle);
+
+    ArrayResourcePoolIterator<T>
+    begin();
+
+    ArrayResourcePoolIterator<T>
+    end();
 };

@@ -40,6 +40,7 @@ struct gltfw_Primitive
     gltfw_Primitive* next;
     Buffer<gltfw_Vertex3D> vertices;
     Buffer<U32> indices;
+    glm::vec4 color;
     U32 tex_idx;
 };
 

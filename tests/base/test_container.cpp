@@ -113,6 +113,62 @@ TEST_CASE("Array Resource Pool Reuses Freed Slot")
     CHECK(object_a->num == 42);
 }
 
+TEST_CASE("Array Resource Pool Iterates Active Items")
+{
+    struct TestObject
+    {
+        U32 num;
+    };
+
+    Arena* arena = arena_alloc();
+    Debug_SetName(arena, "test container arena");
+    defer(arena_release(arena));
+
+    ArrayResourcePool<TestObject>* pool = ArrayResourcePool<TestObject>::create(arena, 4);
+
+    U32 empty_count = 0;
+    for (TestObject& object : *pool)
+    {
+        (void)object;
+        empty_count++;
+    }
+    CHECK(empty_count == 0);
+
+    ArrayResourcePoolHandle handle_a = pool->handle_get();
+    ArrayResourcePoolHandle handle_b = pool->handle_get();
+    ArrayResourcePoolHandle handle_c = pool->handle_get();
+
+    TestObject* object_a = 0;
+    TestObject* object_b = 0;
+    TestObject* object_c = 0;
+    bool object_a_found = pool->item_from_handle(handle_a, &object_a);
+    bool object_b_found = pool->item_from_handle(handle_b, &object_b);
+    bool object_c_found = pool->item_from_handle(handle_c, &object_c);
+    CHECK(object_a_found);
+    CHECK(object_b_found);
+    CHECK(object_c_found);
+
+    object_a->num = 10;
+    object_b->num = 20;
+    object_c->num = 30;
+    pool->item_free(handle_b);
+
+    U32 active_count = 0;
+    U32 active_sum = 0;
+    for (TestObject& object : *pool)
+    {
+        CHECK(object.num != 20);
+        active_count++;
+        active_sum += object.num;
+        object.num += 1;
+    }
+
+    CHECK(active_count == 2);
+    CHECK(active_sum == 40);
+    CHECK(object_a->num == 11);
+    CHECK(object_c->num == 31);
+}
+
 TEST_CASE("Dynamic Array Grows")
 {
     dynamic_array_init(MB(1));
