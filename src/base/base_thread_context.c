@@ -189,3 +189,43 @@ LogScopeEnd(Arena* arena)
     }
     return result;
 }
+
+//- rjf: lane metadata
+
+lib_internal LaneCtx
+tctx_set_lane_ctx(LaneCtx lane_ctx)
+{
+    TCTX* tctx = TCTX_Get();
+    LaneCtx restore = tctx->lane_ctx;
+    tctx->lane_ctx = lane_ctx;
+    return restore;
+}
+
+lib_internal void
+tctx_lane_barrier_wait(void* broadcast_ptr, U64 broadcast_size, U64 broadcast_src_lane_idx)
+{
+    prof_frame_marker;
+    TCTX* tctx = TCTX_Get();
+
+    // rjf: doing broadcast -> copy to broadcast memory on source lane
+    U64 broadcast_size_clamped = ClampTop(broadcast_size, sizeof(tctx->lane_ctx.broadcast_memory[0]));
+    if (broadcast_ptr != 0 && lane_idx() == broadcast_src_lane_idx)
+    {
+        MemoryCopy(tctx->lane_ctx.broadcast_memory, broadcast_ptr, broadcast_size_clamped);
+    }
+
+    // rjf: all cases: barrier
+    barrier_wait(tctx->lane_ctx.barrier);
+
+    // rjf: doing broadcast -> copy from broadcast memory on destination lanes
+    if (broadcast_ptr != 0 && lane_idx() != broadcast_src_lane_idx)
+    {
+        MemoryCopy(broadcast_ptr, tctx->lane_ctx.broadcast_memory, broadcast_size_clamped);
+    }
+
+    // rjf: doing broadcast -> barrier on all lanes
+    if (broadcast_ptr != 0)
+    {
+        barrier_wait(tctx->lane_ctx.barrier);
+    }
+}

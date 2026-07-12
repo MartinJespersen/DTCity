@@ -51,14 +51,24 @@ LogMsgF(LogMsgKind kind, char* fmt, ...);
 #define log_user_errorf(...) LogMsgF(LogMsgKind_UserError, __VA_ARGS__)
 
 #define LogInfoNamedBlock(s) DeferLoop(LogInfoF("%s:\n{\n", ((s).str)), LogInfoF("}\n"))
-#define LogInfoNamedBlockF(...)                                                                    \
-    DeferLoop((LogInfoF(__VA_ARGS__), LogInfoF(":\n{\n")), LogInfoF("}\n"))
+#define LogInfoNamedBlockF(...) DeferLoop((LogInfoF(__VA_ARGS__), LogInfoF(":\n{\n")), LogInfoF("}\n"))
 
 lib_internal void
 LogScopeBegin();
 lib_internal LogScopeResult
 LogScopeEnd(Arena* arena);
 
+////////////////////////////////
+//~ rjf: Lane Context
+
+typedef struct LaneCtx LaneCtx;
+struct LaneCtx
+{
+    U64 lane_idx;
+    U64 lane_count;
+    Barrier barrier;
+    U64* broadcast_memory;
+};
 ////////////////////////////////
 // NOTE(allen): Thread Context
 
@@ -73,6 +83,8 @@ struct TCTX
     char* file_name;
     U64 line_number;
 
+    LaneCtx lane_ctx;
+
     Log* log;
 };
 
@@ -84,7 +96,7 @@ TCTX_InitAndEquip(TCTX* tctx);
 lib_internal void
 TCTX_Release();
 lib_internal TCTX*
-tctx_get_equipped();
+TCTX_Get();
 
 lib_internal Arena*
 TCTX_ScratchGet(Arena** conflicts, U64 countt);
@@ -118,5 +130,18 @@ struct ScratchScope
     Arena* arena;
     U64 pos;
 };
+
+//- rjf: lane metadata
+lib_internal LaneCtx
+tctx_set_lane_ctx(LaneCtx lane_ctx);
+lib_internal void
+tctx_lane_barrier_wait(void* broadcast_ptr, U64 broadcast_size, U64 broadcast_src_lane_idx);
+#define lane_idx() (TCTX_Get()->lane_ctx.lane_idx)
+#define lane_count() (TCTX_Get()->lane_ctx.lane_count)
+#define lane_from_task_idx(idx) ((idx) % lane_count())
+#define lane_ctx(ctx) tctx_set_lane_ctx((ctx))
+#define lane_sync() tctx_lane_barrier_wait(0, 0, 0)
+#define lane_sync_u64(ptr, src_lane_idx) tctx_lane_barrier_wait((ptr), sizeof(*(ptr)), (src_lane_idx))
+#define lane_range(count) m_range_from_n_idx_m_count(lane_idx(), lane_count(), (count))
 
 #endif // BASE_THREAD_CONTEXT_H

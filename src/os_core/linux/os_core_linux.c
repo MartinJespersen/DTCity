@@ -1175,6 +1175,88 @@ os_condition_variable_broadcast(OS_Handle cv)
     pthread_cond_broadcast(&cv_entity->cv.cond_handle);
 }
 
+lib_internal RWMutex
+rw_mutex_alloc()
+{
+    OS_Handle handle = os_rw_mutex_alloc();
+    RWMutex mutex = {handle.u64[0]};
+    return mutex;
+}
+
+lib_internal void
+rw_mutex_release(RWMutex mutex)
+{
+    OS_Handle handle = {mutex.u64[0]};
+    os_rw_mutex_release(handle);
+}
+
+lib_internal void
+rw_mutex_take(RWMutex mutex, B32 write_mode)
+{
+    OS_Handle handle = {mutex.u64[0]};
+    if (write_mode)
+    {
+        os_rw_mutex_take_w(handle);
+    }
+    else
+    {
+        os_rw_mutex_take_r(handle);
+    }
+}
+
+lib_internal void
+rw_mutex_drop(RWMutex mutex, B32 write_mode)
+{
+    OS_Handle handle = {mutex.u64[0]};
+    if (write_mode)
+    {
+        os_rw_mutex_drop_w(handle);
+    }
+    else
+    {
+        os_rw_mutex_drop_r(handle);
+    }
+}
+
+lib_internal CondVar
+cond_var_alloc()
+{
+    OS_Handle handle = os_condition_variable_alloc();
+    CondVar cv = {handle.u64[0]};
+    return cv;
+}
+
+lib_internal void
+cond_var_release(CondVar cv)
+{
+    OS_Handle handle = {cv.u64[0]};
+    os_condition_variable_release(handle);
+}
+
+lib_internal B32
+cond_var_wait_rw(CondVar cv, RWMutex mutex, B32 write_mode, U64 endt_us)
+{
+    OS_Handle cv_handle = {cv.u64[0]};
+    OS_Handle mutex_handle = {mutex.u64[0]};
+    B32 result = 0;
+    if (write_mode)
+    {
+        result = os_condition_variable_wait_rw_w(cv_handle, mutex_handle, endt_us);
+    }
+    else
+    {
+        result = os_condition_variable_wait_rw_r(cv_handle, mutex_handle, endt_us);
+    }
+    return result;
+}
+
+lib_internal void
+cond_var_signal(CondVar cv)
+{
+    OS_Handle handle = {cv.u64[0]};
+    os_condition_variable_signal(handle);
+}
+
 //- rjf: cross-process semaphores
 
 lib_internal OS_Handle
