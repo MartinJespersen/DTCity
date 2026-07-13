@@ -170,7 +170,7 @@ gltfw_gltf_read(Arena* arena, String8 gltf_path, String8 root_node_name)
 }
 
 g_internal gltfw_Primitive*
-gltfw_primitive_create(Arena* arena, cgltf_data* data, cgltf_primitive* in_prim)
+gltfw_primitive_create(Arena* arena, cgltf_data* data, cgltf_primitive* in_prim, cgltf_float* node_to_scene)
 {
     gltfw_Primitive* primitive = PushStruct(arena, gltfw_Primitive);
 
@@ -220,9 +220,19 @@ gltfw_primitive_create(Arena* arena, cgltf_data* data, cgltf_primitive* in_prim)
     for (U32 vertex_idx = 0; vertex_idx < primitive->vertices.size; vertex_idx++)
     {
         if (accessor_position)
+        {
             cgltf_accessor_read_float(accessor_position, vertex_idx, primitive->vertices.data[vertex_idx].pos.v, 3);
+            Vec3F32* pos = &primitive->vertices.data[vertex_idx].pos;
+            Vec3F32 transformed_pos = {};
+            transformed_pos.x = node_to_scene[0] * pos->x + node_to_scene[4] * pos->y + node_to_scene[8] * pos->z + node_to_scene[12];
+            transformed_pos.y = node_to_scene[1] * pos->x + node_to_scene[5] * pos->y + node_to_scene[9] * pos->z + node_to_scene[13];
+            transformed_pos.z = node_to_scene[2] * pos->x + node_to_scene[6] * pos->y + node_to_scene[10] * pos->z + node_to_scene[14];
+            *pos = transformed_pos;
+        }
         if (accessor_uv)
+        {
             cgltf_accessor_read_float(accessor_uv, vertex_idx, primitive->vertices.data[vertex_idx].uv.v, 2);
+        }
     }
 
     return primitive;
@@ -250,10 +260,12 @@ gltfw_primitives_read(Arena* arena, cgltf_data* data)
                 cgltf_mesh* mesh = node->mesh;
                 if (mesh)
                 {
+                    cgltf_float node_to_scene[16] = {};
+                    cgltf_node_transform_world(node, node_to_scene);
                     for (U32 prim_idx = 0; prim_idx < mesh->primitives_count; ++prim_idx)
                     {
                         cgltf_primitive* primitive = &mesh->primitives[prim_idx];
-                        gltfw_Primitive* primitive_w = gltfw_primitive_create(arena, data, primitive);
+                        gltfw_Primitive* primitive_w = gltfw_primitive_create(arena, data, primitive, node_to_scene);
                         SLLQueuePush(prim_list.first, prim_list.last, primitive_w);
                     }
                 }
@@ -270,7 +282,7 @@ gltfw_textures_read(Arena* arena, cgltf_data* data)
     for (U32 tex_idx = 1; tex_idx < textures.size; ++tex_idx)
     {
         gltfw_Texture* tex = &textures.data[tex_idx];
-        cgltf_texture* cgltf_tex = &data->textures[tex_idx];
+        cgltf_texture* cgltf_tex = &data->textures[tex_idx - 1];
         cgltf_sampler* cgltf_sampler = cgltf_tex->sampler;
 
         gltfw_Sampler gltfw_sampler = {

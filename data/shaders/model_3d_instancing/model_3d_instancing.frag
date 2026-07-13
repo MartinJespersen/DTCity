@@ -14,5 +14,7 @@ layout(push_constant) uniform constants
 } PushConstants;
 
 void main() {
-    out_color = vec4(mix(texture(texture_sampler[nonuniformEXT(PushConstants.tex_idx)], in_uv).xyz, PushConstants.color.xyz, PushConstants.color.w), 1);
+    vec4 texture_color = texture(texture_sampler[nonuniformEXT(PushConstants.tex_idx)], in_uv);
+    vec4 model_color = texture_color.w != 0.0 ? texture_color : PushConstants.color;
+    out_color = model_color;
 }

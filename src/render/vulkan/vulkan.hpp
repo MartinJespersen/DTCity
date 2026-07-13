@@ -287,14 +287,14 @@ blend_3d_bucket_add(BufferAllocation* vertex_buffer_allocation, BufferAllocation
 g_internal void
 road_intersection_compute();
 g_internal void
-car_instance_compute();
+agent_instance_compute();
 static void
 road_intersection_bucket_add(BufferHandle* vertex_buffer, BufferHandle* index_buffer, BufferHandle* road_segment_buffer, BufferHandle* road_segment_node_buffer, U32 overlay_option);
 
 static void
 model_3d_rendering();
 static void
-car_instance_rendering();
+agent_instance_rendering();
 static void
 blend_3d_rendering();
 static void

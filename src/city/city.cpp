@@ -10,7 +10,7 @@ city_init(City* city, String8 cache_path)
     Debug_SetName(arena, "city arena");
     city->cache_path = push_str8_copy(arena, cache_path);
     city->arena = arena;
-    city->agent_scale_factor = 1.0f;
+    city->all_agent_scale_factor = 1.0f;
 }
 
 g_internal void
@@ -375,7 +375,8 @@ city_update(City* city, Buffer<city::Coordinate> new_agent_coords, async::Thread
             car_sim->texture_dir = push_str8_copy(allocator->arena, ctx->data_subdirs.data[dt_DataDirType::Texture]);
             car_sim->agent_count = 100;
             car_sim->max_agent_count = 10000;
-            car_sim->agent_config[enum_class_s32(VehicleType::Car)] = {.asset_file_name = S("car.glb"), .transform = glm::identity<glm::mat3>(), .height_axis = Axis3_Y};
+            car_sim->agent_config[enum_class_s32(VehicleType::Car)] = {.asset_file_name = S("car.glb"), .model_forward_dir = glm::vec3(0.0, 0.0, 1.0)};
+            car_sim->agent_config[enum_class_s32(VehicleType::Bicycle)] = {.asset_file_name = S("bike.glb"), .model_forward_dir = glm::vec3(-1.0, 0.0, 0.0), .model_to_world_scale = 1.0};
             async::AsyncTaskStatus<AgentSim>* car_sim_task = async::async_task_run(ctx->thread_pool, agent_sim_build, car_sim, "Car Sim Task");
 
             AsyncCityTask* car_sim_task_list_elem = PushStruct(allocator->arena, AsyncCityTask);
@@ -390,41 +391,54 @@ city_update(City* city, Buffer<city::Coordinate> new_agent_coords, async::Thread
         if (city->cars_creation_done)
         {
             prof_scope_marker_named("Car update scope");
-            F32 scale_factor = city->agent_scale_factor;
+            F32 scale_factor = city->all_agent_scale_factor;
             agent_sim_update(&city->car_sim, new_agent_coords, tileset->ecef_to_local, scale_factor, ctx->io->frame_count);
 
-            ChunkList<render::Transform>* transform_list = chunk_list_create<render::Transform>(scratch.arena, 100);
             AgentSim* agent_sim = &city->car_sim;
+            ModelRenderInfo* models = agent_sim->models;
             S64 frame_rate = ctx->io->frame_rate.load();
+
+            ChunkList<render::Transform>* transform_lists[ArrayCount(agent_sim->agent_config)];
+            for (U32 agent_cfg_idx = 0; agent_cfg_idx < ArrayCount(transform_lists); ++agent_cfg_idx)
+            {
+                transform_lists[agent_cfg_idx] = chunk_list_create<render::Transform>(scratch.arena, 100);
+            }
             for (U64 agent_idx = 0; agent_idx < agent_sim->agents_active->size; agent_idx += 1)
             {
                 Agent* agent = &(*agent_sim->agents_active)[agent_idx];
 
                 if (((S64)ctx->io->frame_count - (S64)agent->latest_update_frame) < (frame_rate * 2)) // Do not add agent after 2 seconds
                 {
+                    ChunkList<render::Transform>* transform_list = transform_lists[enum_idx(agent->vehicle_type)];
                     chunk_list_insert(scratch.arena, transform_list, agent->model_matrix);
                 }
             }
 
-            Buffer<render::Transform> transform_buffer = buffer_from_chunk_list(draw::draw_frame_arena_get(), transform_list);
-            // instance buffer offset alignment and assignment
-            render::BufferInfo instance_buffer_info = render::BufferInfo(transform_buffer, render::BufferType_Vertex | render::BufferType_StorageBuffer);
             render::MappedHandle<void> camera_handle_void = render::mapped_handle_erased(camera_handle);
-            draw::CarInstanceDrawResult draw_result = draw::draw_agent_instance_render(camera_handle_void, city->car_sim.models, city->car_sim.texture_handles, &instance_buffer_info);
-
-            if (draw_result.render_scheduled)
+            for (U32 agent_cfg_idx = 0; agent_cfg_idx < ArrayCount(agent_sim->agent_config); ++agent_cfg_idx)
             {
-                U32 instance_buffer_offset = draw_result.buffer_offset;
-                for (cesium::TileRenderData* tile = tileset->tile_to_show.first; tile; tile = tile->render_next)
-                {
-                    B32 is_map_tile = has_flag(tile->render_data.pipeline_bits, render::TilePipelineBits::IsMapTile);
-                    bool map_tile_reference = is_map_tile && (city_config->custom_geometry_enabled == false);
-                    bool custom_geometry_reference = (is_map_tile == false) && city_config->custom_geometry_enabled;
+                AgentConfig* agent_config = &agent_sim->agent_config[agent_cfg_idx];
+                ModelRenderInfo* model_render_info = &models[agent_cfg_idx];
 
-                    if (map_tile_reference || custom_geometry_reference)
+                Buffer<render::Transform> transform_buffer = buffer_from_chunk_list(draw::draw_frame_arena_get(), transform_lists[agent_cfg_idx]);
+                render::BufferInfo instance_buffer_info = render::BufferInfo(transform_buffer, render::BufferType_Vertex | render::BufferType_StorageBuffer);
+
+                draw::CarInstanceDrawResult draw_result = draw::draw_agent_instance_render(camera_handle_void, model_render_info->geometry, model_render_info->texture_handles, &instance_buffer_info);
+
+                if (draw_result.render_scheduled)
+                {
+                    U32 instance_buffer_offset = draw_result.buffer_offset;
+                    for (cesium::TileRenderData* tile = tileset->tile_to_show.first; tile; tile = tile->render_next)
                     {
-                        render::agent_instance_compute_bucket_add(&instance_buffer_info, tile->render_data.vertex_buffer_handle, tile->render_data.index_buffer_handle,
-                                                                  -city->car_sim.agent_center_offset.min, instance_buffer_offset);
+                        B32 is_map_tile = has_flag(tile->render_data.pipeline_bits, render::TilePipelineBits::IsMapTile);
+                        bool map_tile_reference = is_map_tile && (city_config->custom_geometry_enabled == false);
+                        bool custom_geometry_reference = (is_map_tile == false) && city_config->custom_geometry_enabled;
+
+                        if (map_tile_reference || custom_geometry_reference)
+                        {
+                            render::agent_instance_compute_bucket_add(&instance_buffer_info, tile->render_data.vertex_buffer_handle, tile->render_data.index_buffer_handle,
+                                                                      -agent_config->model_height_offset.min, instance_buffer_offset);
+                        }
                     }
                 }
             }
@@ -1002,95 +1016,101 @@ agents_create(AgentSim* agent_sim)
     prof_scope_marker;
     ScratchScope scratch = ScratchScope(0, 0);
 
-    // parse glb file
-    String8 glb_path = str8_path_from_str8_list(scratch.arena, {agent_sim->asset_dir, S("car.glb")});
-    gltfw_Result glb_result = gltfw_glb_read(agent_sim->allocator->arena, glb_path);
-    U32 primitive_count = 0;
-    for (gltfw_Primitive* node = glb_result.primitives.first; node; node = node->next)
+    for (U32 agent_cfg_idx = 0; agent_cfg_idx < ArrayCount(agent_sim->agent_config); ++agent_cfg_idx)
     {
-        primitive_count++;
-    }
-    AssertAlways(primitive_count > 0);
+        AgentConfig* agent_config = &agent_sim->agent_config[agent_cfg_idx];
+        ModelRenderInfo* model_render_info = &agent_sim->models[agent_cfg_idx];
 
-    Vec3F32 model_min = {};
-    Vec3F32 model_max = {};
-    B32 model_bounds_initialized = false;
-    for (gltfw_Primitive* node = glb_result.primitives.first; node; node = node->next)
-    {
-        for (U32 vertex_idx = 0; vertex_idx < node->vertices.size; vertex_idx++)
+        // parse glb file
+        String8 glb_path = str8_path_from_str8_list(scratch.arena, {agent_sim->asset_dir, agent_config->asset_file_name});
+        gltfw_Result glb_result = gltfw_glb_read(agent_sim->allocator->arena, glb_path);
+        U32 primitive_count = 0;
+        for (gltfw_Primitive* node = glb_result.primitives.first; node; node = node->next)
         {
-            Vec3F32 pos = node->vertices.data[vertex_idx].pos;
-            if (!model_bounds_initialized)
+            primitive_count++;
+        }
+        AssertAlways(primitive_count > 0);
+
+        Vec3F32 model_min = {};
+        Vec3F32 model_max = {};
+        B32 model_bounds_initialized = false;
+        for (gltfw_Primitive* node = glb_result.primitives.first; node; node = node->next)
+        {
+            for (U32 vertex_idx = 0; vertex_idx < node->vertices.size; vertex_idx++)
             {
-                model_min = pos;
-                model_max = pos;
-                model_bounds_initialized = true;
+                Vec3F32 pos = node->vertices.data[vertex_idx].pos;
+                if (!model_bounds_initialized)
+                {
+                    model_min = pos;
+                    model_max = pos;
+                    model_bounds_initialized = true;
+                }
+                else
+                {
+                    model_min.x = Min(model_min.x, pos.x);
+                    model_min.y = Min(model_min.y, pos.y);
+                    model_min.z = Min(model_min.z, pos.z);
+                    model_max.x = Max(model_max.x, pos.x);
+                    model_max.y = Max(model_max.y, pos.y);
+                    model_max.z = Max(model_max.z, pos.z);
+                }
+            }
+        }
+
+        Vec3F32 model_pivot = {};
+        model_pivot.x = (model_min.x + model_max.x) * 0.5f;
+        model_pivot.y = model_min.y;
+        model_pivot.z = (model_min.z + model_max.z) * 0.5f;
+
+        model_render_info->geometry = buffer_alloc<render::ModelInfo>(agent_sim->allocator->arena, primitive_count);
+        model_render_info->texture_handles = buffer_alloc<render::Handle>(agent_sim->allocator->arena, glb_result.textures.size);
+
+        render::ThreadWorkerCmdCtx* thread_ctx = render::thread_ctx_create();
+        render::thread_cmd_buffer_record(thread_ctx);
+        defer(render::thread_cmd_buffer_end(thread_ctx));
+
+        Assert(model_render_info->texture_handles.size > 0);
+        model_render_info->texture_handles.data[0] = render::texture_zero_handle_get();
+        for (U32 tex_idx = 1; tex_idx < glb_result.textures.size; ++tex_idx)
+        {
+            gltfw_Texture* tex = glb_result.textures[tex_idx];
+            render::SamplerInfo sampler_info = sampler_from_cgltf_sampler(tex->sampler);
+            model_render_info->texture_handles.data[tex_idx] = render::texture_load_sync(thread_ctx, &sampler_info, tex->tex_buf);
+        }
+
+        U32 mesh_idx = 0;
+        for (gltfw_Primitive* node = glb_result.primitives.first; node; node = node->next)
+        {
+            Assert(node->tex_idx < model_render_info->texture_handles.size);
+
+            // vertex and index extraction
+            Buffer<render::TileVertex> vertex_buffer = vertex_3d_from_gltfw_vertex(agent_sim->allocator->arena, node->vertices);
+            for (U32 vertex_idx = 0; vertex_idx < vertex_buffer.size; vertex_idx++)
+            {
+                vertex_buffer.data[vertex_idx].pos.x -= model_pivot.x;
+                vertex_buffer.data[vertex_idx].pos.y -= model_pivot.y;
+                vertex_buffer.data[vertex_idx].pos.z -= model_pivot.z;
+            }
+            render::BufferInfo vertex_buffer_info = render::BufferInfo(vertex_buffer, render::BufferType_Vertex);
+            Buffer<U32> index_buffer = buffer_arena_copy(agent_sim->allocator->arena, node->indices);
+            render::BufferInfo index_buffer_info = render::BufferInfo(index_buffer, render::BufferType_Index);
+            model_render_info->geometry.data[mesh_idx].vertex_handle = render::buffer_load_sync(thread_ctx, &vertex_buffer_info, S("agent_mesh_vertex"));
+            model_render_info->geometry.data[mesh_idx].index_handle = render::buffer_load_sync(thread_ctx, &index_buffer_info, S("agent_mesh_index"));
+            model_render_info->geometry.data[mesh_idx].texture_handle_idx = node->tex_idx;
+            model_render_info->geometry.data[mesh_idx].color = node->color;
+
+            Rng1F32 vertex_center_offset = car_center_height_offset(vertex_buffer);
+            if (mesh_idx == 0)
+            {
+                agent_config->model_height_offset = vertex_center_offset;
             }
             else
             {
-                model_min.x = Min(model_min.x, pos.x);
-                model_min.y = Min(model_min.y, pos.y);
-                model_min.z = Min(model_min.z, pos.z);
-                model_max.x = Max(model_max.x, pos.x);
-                model_max.y = Max(model_max.y, pos.y);
-                model_max.z = Max(model_max.z, pos.z);
+                agent_config->model_height_offset.min = Min(agent_config->model_height_offset.min, vertex_center_offset.min);
+                agent_config->model_height_offset.max = Max(agent_config->model_height_offset.max, vertex_center_offset.max);
             }
+            mesh_idx++;
         }
-    }
-
-    Vec3F32 model_pivot = {};
-    model_pivot.x = (model_min.x + model_max.x) * 0.5f;
-    model_pivot.y = model_min.y;
-    model_pivot.z = (model_min.z + model_max.z) * 0.5f;
-
-    agent_sim->models = buffer_alloc<render::ModelInfo>(agent_sim->allocator->arena, primitive_count);
-    agent_sim->texture_handles = buffer_alloc<render::Handle>(agent_sim->allocator->arena, glb_result.textures.size);
-
-    render::ThreadWorkerCmdCtx* thread_ctx = render::thread_ctx_create();
-    render::thread_cmd_buffer_record(thread_ctx);
-    defer(render::thread_cmd_buffer_end(thread_ctx));
-
-    Assert(agent_sim->texture_handles.size > 0);
-    agent_sim->texture_handles.data[0] = render::texture_zero_handle_get();
-    for (U32 tex_idx = 1; tex_idx < glb_result.textures.size; ++tex_idx)
-    {
-        gltfw_Texture* tex = glb_result.textures[tex_idx];
-        render::SamplerInfo sampler_info = sampler_from_cgltf_sampler(tex->sampler);
-        agent_sim->texture_handles.data[tex_idx] = render::texture_load_sync(thread_ctx, &sampler_info, tex->tex_buf);
-    }
-
-    U32 mesh_idx = 0;
-    for (gltfw_Primitive* node = glb_result.primitives.first; node; node = node->next)
-    {
-        Assert(node->tex_idx < agent_sim->texture_handles.size);
-
-        // vertex and index extraction
-        Buffer<render::TileVertex> vertex_buffer = vertex_3d_from_gltfw_vertex(agent_sim->allocator->arena, node->vertices);
-        for (U32 vertex_idx = 0; vertex_idx < vertex_buffer.size; vertex_idx++)
-        {
-            vertex_buffer.data[vertex_idx].pos.x -= model_pivot.x;
-            vertex_buffer.data[vertex_idx].pos.y -= model_pivot.y;
-            vertex_buffer.data[vertex_idx].pos.z -= model_pivot.z;
-        }
-        render::BufferInfo vertex_buffer_info = render::BufferInfo(vertex_buffer, render::BufferType_Vertex);
-        Buffer<U32> index_buffer = buffer_arena_copy(agent_sim->allocator->arena, node->indices);
-        render::BufferInfo index_buffer_info = render::BufferInfo(index_buffer, render::BufferType_Index);
-        agent_sim->models.data[mesh_idx].vertex_handle = render::buffer_load_sync(thread_ctx, &vertex_buffer_info, S("agent_mesh_vertex"));
-        agent_sim->models.data[mesh_idx].index_handle = render::buffer_load_sync(thread_ctx, &index_buffer_info, S("agent_mesh_index"));
-        agent_sim->models.data[mesh_idx].texture_handle_idx = node->tex_idx;
-        agent_sim->models.data[mesh_idx].color = node->color;
-
-        Rng1F32 vertex_center_offset = car_center_height_offset(vertex_buffer);
-        if (mesh_idx == 0)
-        {
-            agent_sim->agent_center_offset = vertex_center_offset;
-        }
-        else
-        {
-            agent_sim->agent_center_offset.min = Min(agent_sim->agent_center_offset.min, vertex_center_offset.min);
-            agent_sim->agent_center_offset.max = Max(agent_sim->agent_center_offset.max, vertex_center_offset.max);
-        }
-        mesh_idx++;
     }
     agent_sim->agent_map = map_create<WsId, AgentMapItem>(agent_sim->allocator->arena, agent_sim->agent_count);
     agent_sim->agents_active = agent_sim->allocator->place<ArenaArray<Agent>>(agent_sim->max_agent_count);
@@ -1104,17 +1124,50 @@ agent_sim_destroy(AgentSim* car_sim)
         return;
     }
 
-    for (U32 i = 0; i < car_sim->models.size; ++i)
+    for (U32 model_idx = 0; model_idx < ArrayCount(car_sim->models); ++model_idx)
     {
-        render::handle_destroy(car_sim->models.data[i].vertex_handle);
-        render::handle_destroy(car_sim->models.data[i].index_handle);
-    }
-    for (U32 i = 0; i < car_sim->texture_handles.size; ++i)
-    {
-        render::handle_destroy(car_sim->texture_handles.data[i]);
+        ModelRenderInfo* model_render_info = &car_sim->models[model_idx];
+
+        for (auto geometry : model_render_info->geometry)
+        {
+            render::handle_destroy(geometry.vertex_handle);
+            render::handle_destroy(geometry.index_handle);
+        }
+
+        for (auto texture_handle : model_render_info->texture_handles)
+        {
+            render::handle_destroy(texture_handle);
+        }
     }
 
     Allocator::destroy(car_sim->allocator);
+}
+
+// assumes forward direction is in the x direction and model coordinate system having +Y as upd and +Z being up in world coordinate system.
+g_internal glm::dmat3
+_gltf_rotation_to_world(glm::dvec3 world_dir, glm::dvec3 model_dir)
+{
+    using glm::dmat3;
+    using glm::dvec3;
+
+    // build model basis vectors/matrix
+    dvec3 model_up = glm::dvec3(0.0, 1.0, 0.0);
+    dvec3 model_basis_forward = glm::normalize(model_dir);
+    dvec3 model_basis_side = glm::normalize(glm::cross(model_up, model_basis_forward));
+    dvec3 model_basis_up = glm::normalize(glm::cross(model_basis_forward, model_basis_side));
+    dmat3 model_basis = dmat3(model_basis_forward, model_basis_side, model_basis_up);
+
+    // build world basis
+    dvec3 world_up = glm::dvec3(0.0, 0.0, 1.0);
+    dvec3 world_basis_forward = glm::normalize(world_dir);
+    dvec3 world_basis_side = glm::normalize(glm::cross(world_up, world_basis_forward));
+    dvec3 world_basis_up = glm::normalize(glm::cross(world_basis_forward, world_basis_side));
+    dmat3 world_basis = dmat3(world_basis_forward, world_basis_side, world_basis_up);
+
+    // model to work rotation R * model_basis = world_basise <==> R = world_basis * model_basis_inv (inv = transpose because of orthonormality)
+    dmat3 model_to_world_rotation = world_basis * glm::transpose(model_basis);
+
+    return model_to_world_rotation;
 }
 
 g_internal void
@@ -1124,7 +1177,6 @@ agent_sim_update(AgentSim* agent_sim, Buffer<Coordinate> coord_buffer, glm::dmat
 
     ArenaArray<Agent>* agents_active = agent_sim->agents_active;
 
-    glm::dvec3 z_up = glm::dvec3(0.0f, 0.0f, 1.0f);
     for (U32 agent_idx = 0; agent_idx < coord_buffer.size; agent_idx++)
     {
         Coordinate* coord = &coord_buffer.data[agent_idx];
@@ -1155,14 +1207,14 @@ agent_sim_update(AgentSim* agent_sim, Buffer<Coordinate> coord_buffer, glm::dmat
             agent_ptr = map_insert(agent_sim->agent_map, coord->id, agent_map_item);
         }
 
-        // model specific orientation
-        glm::dvec3 x_basis = -glm::normalize(glm::dvec3(ecef_to_local * glm::dvec4(agent->ecef_dir, 0.0)));
-        glm::dvec3 z_basis = glm::cross(x_basis, z_up);
-        glm::dvec3 y_basis = glm::cross(z_basis, x_basis);
+        AgentConfig* agent_config = &agent_sim->agent_config[enum_idx(agent->vehicle_type)];
 
-        agent->model_matrix.x_basis = glm::vec4(glm::dvec4(x_basis, 0.0f)) * scale_factor;
-        agent->model_matrix.y_basis = glm::vec4(glm::dvec4(y_basis, 0.0f)) * scale_factor;
-        agent->model_matrix.z_basis = glm::vec4(glm::dvec4(z_basis, 0.0f)) * scale_factor;
+        glm::dvec3 local_world_dir = glm::dvec3(ecef_to_local * glm::dvec4(agent->ecef_dir, 0.0));
+        glm::dmat3 model_to_world_rotation = _gltf_rotation_to_world(local_world_dir, glm::dvec3(agent_config->model_forward_dir));
+
+        agent->model_matrix.x_basis = glm::vec4(glm::dvec4(model_to_world_rotation[0], 0.0f)) * (scale_factor + agent_config->model_to_world_scale);
+        agent->model_matrix.y_basis = glm::vec4(glm::dvec4(model_to_world_rotation[1], 0.0f)) * (scale_factor + agent_config->model_to_world_scale);
+        agent->model_matrix.z_basis = glm::vec4(glm::dvec4(model_to_world_rotation[2], 0.0f)) * (scale_factor + agent_config->model_to_world_scale);
         agent->model_matrix.w_basis = glm::vec4(ecef_to_local * glm::dvec4(ecef_coord, 1.0));
 
         agent->latest_update_frame = cur_frame;

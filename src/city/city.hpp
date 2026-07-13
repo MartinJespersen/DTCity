@@ -195,10 +195,20 @@ struct AgentMapItem
 
 struct AgentConfig
 {
+    // static input
     String8 asset_file_name;
-    glm::mat3 transform;
-    S32 height_from_center;
-    Axis3 height_axis;
+    glm::vec3 model_forward_dir; // +X is forward
+    F32 model_to_world_scale;
+
+    // computed
+    Rng1F32 model_height_offset;
+};
+
+struct ModelRenderInfo
+{
+    // rendering
+    Buffer<render::ModelInfo> geometry;
+    Buffer<render::Handle> texture_handles;
 };
 
 struct AgentSim
@@ -211,13 +221,9 @@ struct AgentSim
     U32 max_agent_count;
 
     AgentConfig agent_config[(S32)VehicleType::Count];
+    ModelRenderInfo models[(S32)VehicleType::Count];
     Map<WsId, AgentMapItem>* agent_map;
     ArenaArray<Agent>* agents_active;
-
-    // rendering
-    Buffer<render::ModelInfo> models;
-    Buffer<render::Handle> texture_handles;
-    Rng1F32 agent_center_offset;
 };
 
 struct BuildingRenderInfo
@@ -310,7 +316,7 @@ struct City
 
     Road road;
     AgentSim car_sim;
-    F32 agent_scale_factor;
+    F32 all_agent_scale_factor;
     Buildings buildings;
     ArrayResourcePoolHandle tileset_handle;
     neta::NetaState* neta_state;
@@ -349,6 +355,8 @@ g_internal void
 agent_sim_destroy(AgentSim* car_sim);
 g_internal void
 agent_sim_update(AgentSim* agent_sim, Buffer<Coordinate> coord_buffer, glm::dmat4& ecef_to_local, F32 scale_factor, U64 cur_frame);
+g_internal glm::dmat3
+_gltf_rotation_to_world(glm::dvec3 world_dir, glm::dvec3 model_dir);
 // ~mgj: HTTP and caching
 g_internal String8
 str8_from_bbox(Arena* arena, Rng2F64 bbox);
@@ -467,7 +475,6 @@ _city_coordinate_buffer_from_str(Arena* arena, String8 json)
             if (!is_integer)
             {
                 DEBUG_LOG("Cannot get integer from vehicle id %.*s", (int)coord_view.id.size(), coord_view.id.data());
-                coord->vehicle_type = VehicleType::None;
             }
         }
 

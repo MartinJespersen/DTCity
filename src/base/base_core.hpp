@@ -465,7 +465,7 @@ typedef enum Axis3
     Axis3_Invalid = -1,
     Axis3_X,
     Axis3_Y,
-    Axis2_Z,
+    Axis3_Z,
     Axis3_COUNT,
 } Axis3;
 

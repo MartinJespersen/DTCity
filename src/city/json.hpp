@@ -10,7 +10,6 @@ struct CoordinateView
 };
 enum class VehicleType : S32
 {
-    None = 0,
     Car,
     Bicycle,
     Count

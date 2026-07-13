@@ -248,7 +248,7 @@ dt_main_loop(void* ptr)
     }
 
     city::RoadOverlayOption neta_overlay_option = city::RoadOverlayOption_None;
-    S32 cur_area_option = 0;
+    S32 cur_area_option = 1;
     S32 area_option = cur_area_option;
 
     const city::AreaConfig* area_config = &cities_info_arr[cur_area_option];
@@ -288,7 +288,7 @@ dt_main_loop(void* ptr)
 
         ImGui::SeparatorText("Agent Size");
         city::City* selected_city = city_buf[area_option];
-        ImGui::SliderFloat("Scale", &selected_city->agent_scale_factor, 0.01f, 1.0f, "%.3f");
+        ImGui::SliderFloat("Scale", &selected_city->all_agent_scale_factor, 0.01f, 100.0f, "%.3f");
 
         ImGui::End();
 

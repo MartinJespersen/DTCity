@@ -40,7 +40,7 @@ road_intersection_bucket_add(BufferHandle* vertex_buffer, BufferHandle* index_bu
 }
 
 g_internal void
-car_instance_compute()
+agent_instance_compute()
 {
     Context* vk_ctx = ctx_get();
     RenderFrame* render_frame = vk_ctx->render_frame;
@@ -170,7 +170,7 @@ road_intersection_compute()
 } // namespace vulkan
 
 static void
-car_instance_rendering()
+agent_instance_rendering()
 {
     Context* vk_ctx = ctx_get();
     VkCommandBuffer cmd_buffer = vk_ctx->command_buffers.data[vk_ctx->current_frame];
@@ -658,7 +658,7 @@ command_buffer_record(U32 image_index, U32 current_frame, Vec2S64 mouse_cursor_p
 
             debug_label.pLabelName = "Car Instance Compute";
             CMD_BEGIN_DEBUG_UTILS_LABEL_EXT(current_cmd_buf, &debug_label);
-            car_instance_compute();
+            agent_instance_compute();
             CMD_END_DEBUG_UTILS_LABEL_EXT(current_cmd_buf);
 
             render::AssetItem<BufferHandle>* model_3D_instance_buffer = vulkan::asset_manager_buffer_item_get(vk_ctx->model_3D_instance_buffer[vk_ctx->current_frame]);
@@ -689,7 +689,7 @@ command_buffer_record(U32 image_index, U32 current_frame, Vec2S64 mouse_cursor_p
 
             debug_label.pLabelName = "Car Instance Rendering";
             CMD_BEGIN_DEBUG_UTILS_LABEL_EXT(current_cmd_buf, &debug_label);
-            car_instance_rendering();
+            agent_instance_rendering();
             CMD_END_DEBUG_UTILS_LABEL_EXT(current_cmd_buf);
 
             debug_label.pLabelName = "Model 3D Rendering";
