@@ -121,8 +121,9 @@ slow_barrier_wait(Barrier barrier)
         B32 done_waiting = 0;
         for (U64 spin_count = 0; spin_count < 10000; spin_count += 1)
         {
-            prof_scope_marker_named("spin loop wait") if (ins_atomic_u64_eval(&n->threads_left_to_leave) != 0)
+            if (ins_atomic_u64_eval(&n->threads_left_to_leave) != 0)
             {
+                prof_scope_marker_named("spin loop wait");
                 done_waiting = 1;
                 break;
             }
@@ -130,17 +131,17 @@ slow_barrier_wait(Barrier barrier)
 
         // rjf: not done waiting -> need to do slow wait on condition variable
         if (!done_waiting)
-            prof_scope_marker_named("spin slow wait")
+        {
+            prof_scope_marker_named("spin slow wait");
+            DeferLoop(rw_mutex_take(n->rw_mutex, 0), rw_mutex_drop(n->rw_mutex, 0)) for (;;)
             {
-                DeferLoop(rw_mutex_take(n->rw_mutex, 0), rw_mutex_drop(n->rw_mutex, 0)) for (;;)
+                if (ins_atomic_u64_eval(&n->threads_left_to_leave) != 0)
                 {
-                    if (ins_atomic_u64_eval(&n->threads_left_to_leave) != 0)
-                    {
-                        break;
-                    }
-                    cond_var_wait_rw(n->cv, n->rw_mutex, 0, max_U64);
+                    break;
                 }
+                cond_var_wait_rw(n->cv, n->rw_mutex, 0, max_U64);
             }
+        }
 
         // rjf: decrement leave counter
         if (ins_atomic_u64_dec_eval(&n->threads_left_to_leave) > 0)
@@ -167,7 +168,8 @@ slow_barrier_wait(Barrier barrier)
 
     //- rjf: wait for threads left to leave == 0
     {
-        prof_scope_marker_named("wait for threads to leave") for (U64 spin_count = 0;; spin_count += 1)
+        prof_scope_marker_named("wait for threads to leave");
+        for (U64 spin_count = 0;; spin_count += 1)
         {
             if (ins_atomic_u64_eval(&n->threads_left_to_leave) == 0)
             {
