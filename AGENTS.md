@@ -25,6 +25,7 @@ In the src directory all sub-directories are layers that are all responsible for
 - struct should always be placed in the header file (.h/.hpp)
 - ScratchScope should always be created with the arena passed to the function, e.g. `ScratchScope scratch = ScratchScope(&arena, 1);`, to avoid arena collisions.
 - Data in structs should always be placed at the top with methods, constructor and destructors below it.
+- Always look for ways to merge code paths and avoid duplication of code.
 
 # Third party libraries
 - Cesium Native library source code can be found at https://github.com/CesiumGS/cesium-native or C:/repos/cesium-native

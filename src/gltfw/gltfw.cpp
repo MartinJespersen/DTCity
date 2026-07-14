@@ -341,3 +341,22 @@ gltfw_glb_read(Arena* arena, String8 glb_path)
     Assert(tex_buffer.size > 0);
     return gltfw_Result{prim_list, tex_buffer};
 }
+
+lib_internal Rng3F32
+gltfw_model_bounds_calc(Buffer<gltfw_Vertex3D> vertices)
+{
+    Assert(vertices.size > 0);
+    Vec3F32 low = vertices.data[0].pos;
+    Vec3F32 high = low;
+    for (U64 i = 1; i < vertices.size; i++)
+    {
+        low.x = Min(low.x, vertices.data[i].pos.x);
+        low.y = Min(low.y, vertices.data[i].pos.y);
+        low.z = Min(low.z, vertices.data[i].pos.z);
+        high.x = Max(high.x, vertices.data[i].pos.x);
+        high.y = Max(high.y, vertices.data[i].pos.y);
+        high.z = Max(high.z, vertices.data[i].pos.z);
+    }
+
+    return r3f32(low, high);
+}

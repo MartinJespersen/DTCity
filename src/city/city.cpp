@@ -407,8 +407,17 @@ city_update(City* city, Buffer<city::Coordinate> new_agent_coords, async::Thread
             {
                 Agent* agent = &(*agent_sim->agents_active)[agent_idx];
 
-                if (((S64)ctx->io->frame_count - (S64)agent->latest_update_frame) < (frame_rate * 2)) // Do not add agent after 2 seconds
+                if (((S64)ctx->io->frame_count - (S64)agent->latest_update_frame) < (frame_rate * 2)) // Do not add agent after 2 seconds without a streaming update
                 {
+                    AgentConfig* agent_config = &agent_sim->agent_config[enum_idx(agent->vehicle_type)];
+                    glm::mat4 model_transform = glm::mat4(agent->model_matrix.x_basis, agent->model_matrix.y_basis, agent->model_matrix.z_basis, agent->model_matrix.w_basis);
+                    Rng3F32 world_bounds = _agent_world_bounds_from_transform(agent_config->model_bounds, model_transform);
+                    B32 visible = ui::frustum_check_from_bounding_box(&camera->frustum_planes, world_bounds);
+                    if (!visible)
+                    {
+                        continue;
+                    }
+
                     ChunkList<render::Transform>* transform_list = transform_lists[enum_idx(agent->vehicle_type)];
                     chunk_list_insert(scratch.arena, transform_list, agent->model_matrix);
                 }
@@ -437,7 +446,7 @@ city_update(City* city, Buffer<city::Coordinate> new_agent_coords, async::Thread
                         if (map_tile_reference || custom_geometry_reference)
                         {
                             render::agent_instance_compute_bucket_add(&instance_buffer_info, tile->render_data.vertex_buffer_handle, tile->render_data.index_buffer_handle,
-                                                                      -agent_config->model_height_offset.min, instance_buffer_offset);
+                                                                      -agent_config->model_bounds.min.y, instance_buffer_offset);
                         }
                     }
                 }
@@ -983,23 +992,6 @@ quad_to_buffer_add(RoadSegmentCorners* road_segment, Buffer<render::Vertex3DBlen
 }
 
 // ~mgj: Cars
-g_internal Rng1F32
-car_center_height_offset(Buffer<render::TileVertex> vertices)
-{
-    F32 highest_value = 0;
-    for (U64 i = 0; i < vertices.size; i++)
-    {
-        highest_value = Max(highest_value, vertices.data[i].pos.y);
-    }
-
-    F32 lowest_value = highest_value;
-    for (U64 i = 0; i < vertices.size; i++)
-    {
-        lowest_value = Min(lowest_value, vertices.data[i].pos.y);
-    }
-
-    return r1f32(lowest_value, highest_value);
-}
 
 g_internal osm::EcefLocation
 random_ecef_road_node_get(osm::Network* network)
@@ -1008,6 +1000,46 @@ random_ecef_road_node_get(osm::Network* network)
     Assert(node_id != 0);
     osm::EcefLocation node_loc = osm::location_get(network, node_id);
     return node_loc;
+}
+
+g_internal Rng3F32
+_agent_world_bounds_from_transform(Rng3F32 model_bounds, glm::mat4 model_transform)
+{
+    Rng3F32 world_bounds = {};
+    for (U32 corner_idx = 0; corner_idx < 8; corner_idx++)
+    {
+        glm::vec4 model_corner = glm::vec4(corner_idx & 1 ? model_bounds.max.x : model_bounds.min.x, corner_idx & 2 ? model_bounds.max.y : model_bounds.min.y,
+                                           corner_idx & 4 ? model_bounds.max.z : model_bounds.min.z, 1.0f);
+        glm::vec4 world_corner = model_transform * model_corner;
+        Vec3F32 world_pos = {world_corner.x, world_corner.y, world_corner.z};
+        if (corner_idx == 0)
+        {
+            world_bounds = r3f32(world_pos, world_pos);
+        }
+        else
+        {
+            world_bounds.min.x = Min(world_bounds.min.x, world_pos.x);
+            world_bounds.min.y = Min(world_bounds.min.y, world_pos.y);
+            world_bounds.min.z = Min(world_bounds.min.z, world_pos.z);
+            world_bounds.max.x = Max(world_bounds.max.x, world_pos.x);
+            world_bounds.max.y = Max(world_bounds.max.y, world_pos.y);
+            world_bounds.max.z = Max(world_bounds.max.z, world_pos.z);
+        }
+    }
+    return world_bounds;
+}
+
+g_internal Rng3F32
+sub_rng3f32(Rng3F32& bounds, Vec3F32& pivot)
+{
+    Rng3F32 corrected_bounds = {};
+    corrected_bounds.min.x = bounds.min.x - pivot.x;
+    corrected_bounds.min.y = bounds.min.y - pivot.y;
+    corrected_bounds.min.z = bounds.min.z - pivot.z;
+    corrected_bounds.max.x = bounds.max.x - pivot.x;
+    corrected_bounds.max.y = bounds.max.y - pivot.y;
+    corrected_bounds.max.z = bounds.max.z - pivot.z;
+    return corrected_bounds;
 }
 
 g_internal void
@@ -1031,40 +1063,40 @@ agents_create(AgentSim* agent_sim)
         }
         AssertAlways(primitive_count > 0);
 
-        Vec3F32 model_min = {};
-        Vec3F32 model_max = {};
+        // calculate model bounds
+        Rng3F32 model_bounds = {};
         B32 model_bounds_initialized = false;
         for (gltfw_Primitive* node = glb_result.primitives.first; node; node = node->next)
         {
-            for (U32 vertex_idx = 0; vertex_idx < node->vertices.size; vertex_idx++)
+            Rng3F32 primitive_bounds = gltfw_model_bounds_calc(node->vertices);
+            if (!model_bounds_initialized)
             {
-                Vec3F32 pos = node->vertices.data[vertex_idx].pos;
-                if (!model_bounds_initialized)
-                {
-                    model_min = pos;
-                    model_max = pos;
-                    model_bounds_initialized = true;
-                }
-                else
-                {
-                    model_min.x = Min(model_min.x, pos.x);
-                    model_min.y = Min(model_min.y, pos.y);
-                    model_min.z = Min(model_min.z, pos.z);
-                    model_max.x = Max(model_max.x, pos.x);
-                    model_max.y = Max(model_max.y, pos.y);
-                    model_max.z = Max(model_max.z, pos.z);
-                }
+                model_bounds = primitive_bounds;
+                model_bounds_initialized = true;
+            }
+            else
+            {
+                model_bounds.min.x = Min(model_bounds.min.x, primitive_bounds.min.x);
+                model_bounds.min.y = Min(model_bounds.min.y, primitive_bounds.min.y);
+                model_bounds.min.z = Min(model_bounds.min.z, primitive_bounds.min.z);
+
+                model_bounds.max.x = Max(model_bounds.max.x, primitive_bounds.max.x);
+                model_bounds.max.y = Max(model_bounds.max.y, primitive_bounds.max.y);
+                model_bounds.max.z = Max(model_bounds.max.z, primitive_bounds.max.z);
             }
         }
 
+        // set pivot based on model bounds
         Vec3F32 model_pivot = {};
-        model_pivot.x = (model_min.x + model_max.x) * 0.5f;
-        model_pivot.y = model_min.y;
-        model_pivot.z = (model_min.z + model_max.z) * 0.5f;
+        model_pivot.x = (model_bounds.min.x + model_bounds.max.x) * 0.5f;
+        model_pivot.y = model_bounds.min.y;
+        model_pivot.z = (model_bounds.min.z + model_bounds.max.z) * 0.5f;
+
+        // new bounds from pivot
+        agent_config->model_bounds = sub_rng3f32(model_bounds, model_pivot);
 
         model_render_info->geometry = buffer_alloc<render::ModelInfo>(agent_sim->allocator->arena, primitive_count);
         model_render_info->texture_handles = buffer_alloc<render::Handle>(agent_sim->allocator->arena, glb_result.textures.size);
-
         render::ThreadWorkerCmdCtx* thread_ctx = render::thread_ctx_create();
         render::thread_cmd_buffer_record(thread_ctx);
         defer(render::thread_cmd_buffer_end(thread_ctx));
@@ -1085,12 +1117,16 @@ agents_create(AgentSim* agent_sim)
 
             // vertex and index extraction
             Buffer<render::TileVertex> vertex_buffer = vertex_3d_from_gltfw_vertex(agent_sim->allocator->arena, node->vertices);
+
+            // offset vertices based on new pivot
             for (U32 vertex_idx = 0; vertex_idx < vertex_buffer.size; vertex_idx++)
             {
                 vertex_buffer.data[vertex_idx].pos.x -= model_pivot.x;
                 vertex_buffer.data[vertex_idx].pos.y -= model_pivot.y;
                 vertex_buffer.data[vertex_idx].pos.z -= model_pivot.z;
             }
+
+            // load geometry and textures
             render::BufferInfo vertex_buffer_info = render::BufferInfo(vertex_buffer, render::BufferType_Vertex);
             Buffer<U32> index_buffer = buffer_arena_copy(agent_sim->allocator->arena, node->indices);
             render::BufferInfo index_buffer_info = render::BufferInfo(index_buffer, render::BufferType_Index);
@@ -1099,19 +1135,10 @@ agents_create(AgentSim* agent_sim)
             model_render_info->geometry.data[mesh_idx].texture_handle_idx = node->tex_idx;
             model_render_info->geometry.data[mesh_idx].color = node->color;
 
-            Rng1F32 vertex_center_offset = car_center_height_offset(vertex_buffer);
-            if (mesh_idx == 0)
-            {
-                agent_config->model_height_offset = vertex_center_offset;
-            }
-            else
-            {
-                agent_config->model_height_offset.min = Min(agent_config->model_height_offset.min, vertex_center_offset.min);
-                agent_config->model_height_offset.max = Max(agent_config->model_height_offset.max, vertex_center_offset.max);
-            }
             mesh_idx++;
         }
     }
+
     agent_sim->agent_map = map_create<WsId, AgentMapItem>(agent_sim->allocator->arena, agent_sim->agent_count);
     agent_sim->agents_active = agent_sim->allocator->place<ArenaArray<Agent>>(agent_sim->max_agent_count);
 }
@@ -1882,6 +1909,67 @@ vertex_3d_from_gltfw_vertex(Arena* arena, Buffer<gltfw_Vertex3D> in_vertex_buffe
         out_vertex_buffer.data[i].uv = in_vertex_buffer.data[i].uv;
     }
     return out_vertex_buffer;
+}
+
+// coordinates from str list
+g_internal Buffer<Coordinate>
+_city_coordinate_buffer_from_str(Arena* arena, String8 json)
+{
+    prof_scope_marker;
+    simdjson::ondemand::parser parser;
+    simdjson::ondemand::document doc;
+    simdjson::padded_string json_padded((char*)json.str, json.size);
+    simdjson::error_code error = parser.iterate(json_padded).get(doc);
+    defer(if (error) DEBUG_LOG("error in Coordinate Buffer deserialization"););
+
+    U64 element_count = doc.count_elements();
+    Buffer<Coordinate> coord_buffer = buffer_alloc<Coordinate>(arena, element_count);
+    U32 idx = 0;
+    for (auto obj : doc)
+    {
+        Coordinate* coord = coord_buffer[idx];
+        CoordinateView coord_view = {};
+        error = obj.get<CoordinateView>(coord_view);
+        coord->lat = coord_view.lat;
+        coord->lon = coord_view.lon;
+        String8 id_str = str8((U8*)coord_view.id.data(), coord_view.id.size());
+        U64 needle_start = str8_substr_find(id_str, S("_bicycle"), 0, MatchFlag_CaseInsensitive);
+        coord->vehicle_type = VehicleType::Car;
+        if (needle_start < id_str.size)
+        {
+            coord->vehicle_type = VehicleType::Bicycle;
+        }
+        B32 is_integer = try_s64_from_str8_c_rules(id_str, &coord->id);
+        if (!is_integer)
+        {
+            String8 id_prefix_str = str8(id_str.str, needle_start);
+            B32 is_integer = try_s64_from_str8_c_rules(id_prefix_str, &coord->id);
+            if (!is_integer)
+            {
+                DEBUG_LOG("Cannot get integer from vehicle id %.*s", (int)coord_view.id.size(), coord_view.id.data());
+            }
+        }
+
+        if (error)
+        {
+            return {};
+        }
+        idx++;
+    }
+
+    return coord_buffer;
+}
+
+g_internal Buffer<Coordinate>
+city_latest_coordinates_buffer_from_str8_list(Arena* arena, String8List* list)
+{
+    Buffer<Coordinate> buffer = {};
+    if (list->last)
+    {
+        String8 json = list->last->string;
+        buffer = _city_coordinate_buffer_from_str(arena, json);
+    }
+    return buffer;
 }
 
 } // namespace city

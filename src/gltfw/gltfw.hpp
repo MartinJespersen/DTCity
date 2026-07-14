@@ -68,3 +68,6 @@ static CgltfResult
 gltfw_gltf_read(Arena* arena, String8 gltf_path, String8 root_node_name);
 static gltfw_Result
 gltfw_glb_read(Arena* arena, String8 glb_path);
+
+lib_internal Rng3F32
+gltfw_model_bounds_calc(Buffer<gltfw_Vertex3D> vertices);

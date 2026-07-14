@@ -69,6 +69,8 @@ camera_update(Camera* camera, io::IO* input, F64 time, Vec2S32 extent, bool enab
 
     Vec2U32 camera_framebuffer_dim = vec_2u32((U32)Max(extent.x, 1), (U32)Max(extent.y, 1));
     render::MappedHandle<ui::CameraUniformBuffer> camera_handle = camera->mut_handles;
+    glm::mat4 transform = camera->projection_matrix * camera->view_matrix;
+    _frustum_planes_calculate(&camera->frustum_planes, transform);
     ui::_camera_uniform_buffer_update(camera, camera_handle, camera_framebuffer_dim);
 }
 
@@ -76,14 +78,35 @@ g_internal void
 _camera_uniform_buffer_update(ui::Camera* camera, render::MappedHandle<CameraUniformBuffer> mut_handle, Vec2U32 screen_res)
 {
     ScratchScope scratch = ScratchScope(0, 0);
-    glm::mat4 transform = camera->projection_matrix * camera->view_matrix;
+
     ui::CameraUniformBuffer ubo = {};
-    _frustum_planes_calculate(&ubo.frustum, transform);
     ubo.viewport_dim.x = screen_res.x;
     ubo.viewport_dim.y = screen_res.y;
     ubo.view = camera->view_matrix;
     ubo.proj = camera->projection_matrix;
+    ubo.frustum = camera->frustum_planes;
     render::mapped_buffer_add(mut_handle, &ubo);
+}
+
+g_internal bool
+frustum_check_from_bounding_box(Frustum* frustum, Rng3F32 bbox)
+{
+    for (U32 plane_idx = 0; plane_idx < ArrayCount(frustum->planes); ++plane_idx)
+    {
+        const glm::vec4& plane = frustum->planes[plane_idx];
+        Vec3F32 positive_point = {};
+        positive_point.x = plane.x >= 0.0f ? bbox.max.x : bbox.min.x;
+        positive_point.y = plane.y >= 0.0f ? bbox.max.y : bbox.min.y;
+        positive_point.z = plane.z >= 0.0f ? bbox.max.z : bbox.min.z;
+
+        F32 distance = plane.x * positive_point.x + plane.y * positive_point.y + plane.z * positive_point.z + plane.w;
+        if (distance < 0.0f)
+        {
+            return false;
+        }
+    }
+
+    return true;
 }
 
 g_internal void

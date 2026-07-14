@@ -405,6 +405,32 @@ union Rng2S64
     Vec2S64 v[2];
 };
 
+//~ mgj: 3-range (cube)
+
+typedef union Rng3F32 Rng3F32;
+union Rng3F32
+{
+    struct
+    {
+        Vec3F32 min;
+        Vec3F32 max;
+    };
+    struct
+    {
+        Vec3F32 p0;
+        Vec3F32 p1;
+    };
+    struct
+    {
+        F32 x0;
+        F32 y0;
+        F32 z0;
+        F32 x1;
+        F32 y1;
+        F32 z1;
+    };
+    Vec3F32 v[2];
+};
 ////////////////////////////////
 //~ rjf: List Types
 
@@ -968,6 +994,11 @@ lib_internal Rng2F32
 intersect_2f32(Rng2F32 a, Rng2F32 b);
 lib_internal Vec2F32
 clamp_2f32(Rng2F32 r, Vec2F32 v);
+
+#define r3f32(min, max) rng_3f32((min), (max))
+#define r3f32p(x0, y0, z0, x1, y1, z1) r3f32(V3F32((x0), (y0), (z0)), V3F32((x1), (y1), (z1)))
+lib_internal Rng3F32
+rng_3f32(Vec3F32 min, Vec3F32 max);
 
 ////////////////////////////////
 //~ rjf: Color Operations

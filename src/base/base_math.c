@@ -1490,6 +1490,13 @@ rng_2f32(Vec2F32 min, Vec2F32 max)
     Rng2F32 r = {min, max};
     return r;
 }
+
+lib_internal Rng3F32
+rng_3f32(Vec3F32 min, Vec3F32 max)
+{
+    Rng3F32 r = {min, max};
+    return r;
+}
 lib_internal Rng2F32
 rng2f32_inverted_inf(void)
 {

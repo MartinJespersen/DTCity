@@ -29,6 +29,7 @@ struct CameraUniformBuffer
 struct Camera
 {
     render::MappedHandle<CameraUniformBuffer> mut_handles;
+    ui::Frustum frustum_planes;
     glm::mat4 view_matrix;
     glm::mat4 projection_matrix;
     glm::vec3 position;
@@ -47,6 +48,8 @@ camera_update(Camera* camera, io::IO* input, F64 time, Vec2S32 extent, bool enab
 
 g_internal void
 _camera_uniform_buffer_update(ui::Camera* camera, render::MappedHandle<CameraUniformBuffer> mut_handle, Vec2U32 screen_res);
+g_internal bool
+frustum_check_from_bounding_box(Frustum* frustum, Rng3F32 bbox);
 
 g_internal void
 _frustum_planes_calculate(Frustum* out_frustum, const glm::mat4 matrix);

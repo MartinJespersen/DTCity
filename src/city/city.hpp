@@ -201,7 +201,7 @@ struct AgentConfig
     F32 model_to_world_scale;
 
     // computed
-    Rng1F32 model_height_offset;
+    Rng3F32 model_bounds;
 };
 
 struct ModelRenderInfo
@@ -413,8 +413,6 @@ bvh_create(Arena* arena, Buffer<RoadSegmentCorners> road_segment_buffer, U32 lea
 
 g_internal Vec3F64
 height_dim_add(Vec2F64 pos, F64 height);
-g_internal Rng1F32
-car_center_height_offset(Buffer<render::TileVertex> vertices);
 g_internal osm::EcefLocation
 random_ecef_road_node_get(osm::Network* network);
 g_internal F64
@@ -441,63 +439,12 @@ NodeBufferPrintDebug(Buffer<Vec2F64> node_buffer);
 // coordinates from str list
 
 g_internal Buffer<Coordinate>
-_city_coordinate_buffer_from_str(Arena* arena, String8 json)
-{
-    prof_scope_marker;
-    simdjson::ondemand::parser parser;
-    simdjson::ondemand::document doc;
-    simdjson::padded_string json_padded((char*)json.str, json.size);
-    simdjson::error_code error = parser.iterate(json_padded).get(doc);
-    defer(if (error) DEBUG_LOG("error in Coordinate Buffer deserialization"););
-
-    U64 element_count = doc.count_elements();
-    Buffer<Coordinate> coord_buffer = buffer_alloc<Coordinate>(arena, element_count);
-    U32 idx = 0;
-    for (auto obj : doc)
-    {
-        Coordinate* coord = coord_buffer[idx];
-        CoordinateView coord_view = {};
-        error = obj.get<CoordinateView>(coord_view);
-        coord->lat = coord_view.lat;
-        coord->lon = coord_view.lon;
-        String8 id_str = str8((U8*)coord_view.id.data(), coord_view.id.size());
-        U64 needle_start = str8_substr_find(id_str, S("_bicycle"), 0, MatchFlag_CaseInsensitive);
-        coord->vehicle_type = VehicleType::Car;
-        if (needle_start < id_str.size)
-        {
-            coord->vehicle_type = VehicleType::Bicycle;
-        }
-        B32 is_integer = try_s64_from_str8_c_rules(id_str, &coord->id);
-        if (!is_integer)
-        {
-            String8 id_prefix_str = str8(id_str.str, needle_start);
-            B32 is_integer = try_s64_from_str8_c_rules(id_prefix_str, &coord->id);
-            if (!is_integer)
-            {
-                DEBUG_LOG("Cannot get integer from vehicle id %.*s", (int)coord_view.id.size(), coord_view.id.data());
-            }
-        }
-
-        if (error)
-        {
-            return {};
-        }
-        idx++;
-    }
-
-    return coord_buffer;
-}
+_city_coordinate_buffer_from_str(Arena* arena, String8 json);
 
 g_internal Buffer<Coordinate>
-city_latest_coordinates_buffer_from_str8_list(Arena* arena, String8List* list)
-{
-    Buffer<Coordinate> buffer = {};
-    if (list->last)
-    {
-        String8 json = list->last->string;
-        buffer = _city_coordinate_buffer_from_str(arena, json);
-    }
-    return buffer;
-}
+city_latest_coordinates_buffer_from_str8_list(Arena* arena, String8List* list);
+
+g_internal Rng3F32
+_agent_world_bounds_from_transform(Rng3F32 model_bounds, glm::mat4 model_transform);
 
 } // namespace city
