@@ -290,7 +290,8 @@ pipeline_destroy(Pipeline* pipeline)
 }
 
 static void
-blend_3d_bucket_add(BufferAllocation* vertex_buffer_allocation, BufferAllocation* index_buffer_allocation, render::Handle texture_handle, render::Handle colormap_handle, render::Handle camera_handle)
+blend_3d_bucket_add(BufferAllocation* vertex_buffer_allocation, BufferAllocation* index_buffer_allocation, render::Handle texture_handle, render::Handle colormap_handle,
+                    render::MappedHandle<void> camera_handle)
 {
     Context* vk_ctx = ctx_get();
     RenderFrame* render_frame = vk_ctx->render_frame;
@@ -299,7 +300,7 @@ blend_3d_bucket_add(BufferAllocation* vertex_buffer_allocation, BufferAllocation
     render::AssetItem<TextureHandle>* colormap_tex = asset_manager_texture_item_get(colormap_handle);
     Assert(base_tex);
     Assert(colormap_tex);
-    if (!base_tex || !colormap_tex || render::is_handle_zero(camera_handle))
+    if (!base_tex || !colormap_tex || camera_handle.buffer.size == 0)
     {
         return;
     }
@@ -470,7 +471,8 @@ blend_3d_rendering()
     VkDeviceSize offsets[] = {0};
     for (Blend3DNode* node = render_frame->blend_3d_list.first; node; node = node->next)
     {
-        render::AssetItem<BufferHandle>* camera_buffer_handle = asset_manager_buffer_item_get(node->camera_handle);
+        render::Handle camera_handle = node->camera_handle.buffer[vk_ctx->current_frame]->handle;
+        render::AssetItem<BufferHandle>* camera_buffer_handle = asset_manager_buffer_item_get(camera_handle);
         AssertAlways(camera_buffer_handle);
         BufferHandle* camera_buffer = &camera_buffer_handle->item;
 

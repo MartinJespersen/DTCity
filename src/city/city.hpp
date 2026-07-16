@@ -152,6 +152,7 @@ struct Road
     ////////////////////////////////
     // Graphics API
 
+    render::Handle texture_handle;
     render::Handle colormap_handle;
     U32 current_handle_idx;
     bool new_vertex_handle_loading;

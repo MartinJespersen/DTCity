@@ -279,7 +279,7 @@ struct Blend3DPipelineData
     Handle index_buffer_handle;
     Handle texture_handle;
     Handle colormap_handle;
-    Handle camera_handle;
+    MappedHandle<void> camera_handle;
 };
 
 struct TileVertex

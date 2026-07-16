@@ -12,10 +12,10 @@ set(DISABLE_WARNINGS_COMPILE_FLAG "")
 set(ALL_TARGETS city)
 set(RADLINKER_PATH "C:/repos/raddebugger/build/radlink.exe")
 
-option(BUILD_DEBUG "Enable Additional Debugging Information (e.g Vulkan Validation Layers)" ON)
+option(BUILD_DEBUG "Enable Additional Debugging Information (e.g Vulkan Validation Layers)" OFF)
 option(ASAN_ENABLED "Enable Address Sanitizer" OFF)
 option(BUILD_TESTS "Build tests" OFF)
-option(SHADER_DEBUG "Enable Shader Debugging" ON)
+option(SHADER_DEBUG "Enable Shader Debugging" OFF)
 option(USE_RADLINKER "Use RAD linker for MSVC debug builds" ON)
 
 # cmake macro -> compiler macro

@@ -309,6 +309,15 @@ city_update(City* city, Buffer<city::Coordinate> new_agent_coords, async::Thread
     if (city->road_building_done)
     {
         city->road.overlay_option_cur = neta_overlay_option;
+
+        render::Blend3DPipelineData road_pipeline_data = {
+            .vertex_buffer_handle = city->road.road_build_result.vertex_buffer_handle,
+            .index_buffer_handle = city->road.road_build_result.index_buffer_handle,
+            .texture_handle = city->road.texture_handle,
+            .colormap_handle = city->road.texture_handle,
+            .camera_handle = render::mapped_handle_erased(camera_handle),
+        };
+        render::blend_3d_draw(road_pipeline_data);
     }
 
     cesium::TilesetRenderer* tileset = {};
@@ -540,6 +549,7 @@ road_destroy(Road* road)
 {
     render::handle_destroy(road->road_build_result.vertex_buffer_handle);
     render::handle_destroy(road->road_build_result.index_buffer_handle);
+    render::handle_destroy(road->texture_handle);
     render::handle_destroy(road->colormap_handle);
     render::handle_destroy_deferred(road->segment_buffer_handle);
     render::handle_destroy_deferred(road->segment_node_buffer_handle);
@@ -1835,6 +1845,16 @@ road_create(City* city, Road* in_out_road, glm::dmat4& ecef_to_local, String8 ar
     in_out_road->ecef_to_local = ecef_to_local;
     in_out_road->road_height = 10.0f;
     in_out_road->default_road_width = 2.0f;
+
+    render::SamplerInfo sampler_info = {
+        .min_filter = render::Filter_Linear,
+        .mag_filter = render::Filter_Linear,
+        .mip_map_mode = render::MipMapMode_Linear,
+        .address_mode_u = render::SamplerAddressMode_Repeat,
+        .address_mode_v = render::SamplerAddressMode_Repeat,
+    };
+    String8 texture_path = str8_path_from_str8_list(scratch.arena, {ctx->data_subdirs.data[dt_DataDirType::Texture], S("road_texture.ktx2")});
+    in_out_road->texture_handle = render::texture_load_async(&sampler_info, texture_path);
 
     U64 node_hashmap_size = 1000;
     U64 way_hashmap_size = 100;

@@ -122,7 +122,7 @@ struct Blend3DNode
     BufferAllocation index_alloc;
     BufferAllocation vertex_alloc;
     Blend3dPushConstants push_constants;
-    render::Handle camera_handle;
+    render::MappedHandle<void> camera_handle;
 };
 
 struct Blend3DList
@@ -286,7 +286,8 @@ static void
 camera_descriptor_set_layout_create(Context* vk_ctx);
 // ~mgj: Building
 static void
-blend_3d_bucket_add(BufferAllocation* vertex_buffer_allocation, BufferAllocation* index_buffer_allocation, render::Handle texture_handle, render::Handle colormap_handle, render::Handle camera_handle);
+blend_3d_bucket_add(BufferAllocation* vertex_buffer_allocation, BufferAllocation* index_buffer_allocation, render::Handle texture_handle, render::Handle colormap_handle,
+                    render::MappedHandle<void> camera_handle);
 
 g_internal void
 road_intersection_compute();
