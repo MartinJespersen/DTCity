@@ -7,7 +7,7 @@ struct Pipeline
     VkPipelineLayout pipeline_layout;
 };
 g_internal Pipeline
-car_instance_pipeline_create(Context* vk_ctx, String8 shader_path);
+agent_instance_pipeline_create(Context* vk_ctx, String8 shader_path);
 g_internal Pipeline
 tile_pipeline_create(Context* vk_ctx, String8 shader_path);
 g_internal Pipeline

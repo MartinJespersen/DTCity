@@ -4,7 +4,6 @@
 * tile transform might need to be passed to shader as a uniform buffer
 
 # features
-* Allow different modes (transportation vehicles) in the application
 * Show a clock in the application allowing 
 * Tesselation could be used in tile pipeline for road colormap overlays
 * delete draw flush and related code

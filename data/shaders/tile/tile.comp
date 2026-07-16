@@ -2,22 +2,11 @@
 #extension GL_EXT_nonuniform_qualifier : require
 #extension GL_EXT_buffer_reference : require
 #extension GL_EXT_buffer_reference2 : require
+#extension GL_EXT_shader_explicit_arithmetic_types_int64 : require
 #extension GL_EXT_debug_printf: enable
+#extension GL_GOOGLE_include_directive : require
 
-const uint CORNERS_COUNT = 4;
-const uint OPTION_COUNT = 5;
-
-struct RoadSegment {
-    uvec2 id;
-    vec2 positions[CORNERS_COUNT];
-    float options[OPTION_COUNT];
-};
-
-struct Bounds
-{
-    vec2 min;
-    vec2 max;
-};
+#include "includes.glsl"
 
 struct RoadSegmentNode {
     Bounds bounds;
@@ -26,16 +15,6 @@ struct RoadSegmentNode {
     uint is_leaf;
     uint data_0;
     uint data_1;
-};
-
-struct Vertex {
-    float pos_x;
-    float pos_y;
-    float pos_z;
-    float overlay_option;
-    vec2 uv;
-    vec2 overlay_uv;
-    uvec2 id;
 };
 
 layout(std430, set = 0, binding = 0) readonly buffer RoadSegmentBuffer {
@@ -60,29 +39,60 @@ layout(push_constant) uniform PushConstants
     uint overlay_option_idx;
 } push_constants;
 
-layout(local_size_x = 256, local_size_y = 1, local_size_z = 1) in;
 
-bool is_face_inside_road_segment(vec2 road_corner_pos[CORNERS_COUNT], vec2 face_avg)
+bool polygon_intersection_sat(vec2 road_segments[CORNERS_COUNT], vec2 v[3])
 {
-    bool all_positive = true;
-    bool all_negative = true;
-    for (int i = 0; i < CORNERS_COUNT; i++) {
-        vec2 edge = road_corner_pos[(i + 1) % CORNERS_COUNT] - road_corner_pos[i];
-        vec2 to_point = face_avg - road_corner_pos[i];
-        float cross_z = edge.x * to_point.y - edge.y * to_point.x;
-        if (cross_z <= 0.0) all_positive = false;
-        if (cross_z >= 0.0) all_negative = false;
-        if (!all_positive && !all_negative) return false;
+    // check every edge of road_segment
+    for (int r_i = 0; r_i < CORNERS_COUNT; r_i++)
+    {
+        vec2 p0 = road_segments[r_i];
+        vec2 p1 = road_segments[(r_i + 1) % CORNERS_COUNT];
+        vec2 r_v = p0 - p1;
+        vec2 n = vec2(-r_v.y, r_v.x);
+
+        // find max interval for road segment points project to normal vector n
+        float p2_dot = dot(road_segments[(r_i+2) % CORNERS_COUNT] - p0, n);
+        float p3_dot = dot(road_segments[(r_i+3) % CORNERS_COUNT] - p0, n);
+
+        float min_seg = min(0.0, min(p2_dot, p3_dot));
+        float max_seg = max(0.0, max(p2_dot, p3_dot));
+
+        // find max interval for triangle points project to normal vector n
+        float min_face = min(dot(v[0] - p0, n), min(dot(v[1] - p0, n), dot(v[2] - p0, n)));
+        float max_face = max(dot(v[0] - p0, n), max(dot(v[1] - p0, n), dot(v[2] - p0, n)));
+
+        if (min_face > max_seg || max_face < min_seg) {
+            return false;
+        }
     }
+
+    // check every edge of triangle
+    for (int t_i = 0; t_i < 3; t_i++)
+    {
+        vec2 p0 = v[t_i];
+        vec2 p1 = v[(t_i + 1) % 3];
+        vec2 t_v = p0 - p1;
+        vec2 n = vec2(-t_v.y, t_v.x);
+
+        // find max interval for remaining triangle point project to normal vector n
+        float opposite_dot = dot(v[(t_i+2) % 3] - p0, n);
+        float min_triangle = min(0.0, opposite_dot);
+        float max_triangle = max(0.0, opposite_dot);
+
+        float min_seg = min(min(dot(road_segments[0] - p0, n), dot(road_segments[1] - p0, n)),
+                            min(dot(road_segments[2] - p0, n), dot(road_segments[3] - p0, n)));
+        float max_seg = max(max(dot(road_segments[0] - p0, n), dot(road_segments[1] - p0, n)),
+                            max(dot(road_segments[2] - p0, n), dot(road_segments[3] - p0, n)));
+
+        if (min_triangle > max_seg || max_triangle < min_seg) {
+            return false;
+        }
+    }
+
     return true;
 }
 
-bool in_bounds(Bounds bounds, vec2 pos)
-{
-    return pos.x >= bounds.min.x && pos.x <= bounds.max.x &&
-        pos.y >= bounds.min.y && pos.y <= bounds.max.y;
-}
-
+layout(local_size_x = 256, local_size_y = 1, local_size_z = 1) in;
 void main()
 {
     uint index = gl_GlobalInvocationID.x;
@@ -115,7 +125,9 @@ void main()
             for (uint i = cur.data_0; i < cur.data_1; i++)
             {
                 vec2 road_segment[CORNERS_COUNT] = road_segments.data[i].positions;
-                if (is_face_inside_road_segment(road_segment, pos_avg.xy))
+                vec2 v[3] = {v0.xy, v1.xy, v2.xy};
+                bool do_intersec = polygon_intersection_sat(road_segment, v);
+                if (do_intersec)
                 {
                     vertices.data[v0_idx].id = road_segments.data[i].id;
                     vertices.data[v1_idx].id = road_segments.data[i].id;
@@ -124,6 +136,10 @@ void main()
                     vertices.data[v0_idx].overlay_option = road_segments.data[i].options[push_constants.overlay_option_idx];
                     vertices.data[v1_idx].overlay_option = road_segments.data[i].options[push_constants.overlay_option_idx];
                     vertices.data[v2_idx].overlay_option = road_segments.data[i].options[push_constants.overlay_option_idx];
+
+                    vertices.data[v0_idx].road_segment_idx = i;
+                    vertices.data[v1_idx].road_segment_idx = i;
+                    vertices.data[v2_idx].road_segment_idx = i;
 
                     return;
                 }

@@ -16,6 +16,9 @@ struct TilePipelinePushConstants
     F32 overlay_scale_y;
     F32 height_offset;
     F32 lod_fade;
+    F32 tessellation_factor;
+    F32 tesselated_edge_size;
+    U32 road_test_enabled;
 };
 
 struct TilePipelineNode
@@ -27,6 +30,7 @@ struct TilePipelineNode
     U32 index_buffer_offset;
     U32 index_count;
     BufferAllocation vertex_alloc;
+    BufferAllocation road_segment_alloc;
     TilePipelinePushConstants push_constants;
     render::MappedHandle<void> camera_handle;
 };

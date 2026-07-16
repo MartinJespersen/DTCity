@@ -156,6 +156,8 @@ _tile_pipeline_add(cesium::TileRenderData* tile, City* city, render::MappedHandl
         tile->render_data.pipeline_bits &= ~render::TilePipelineBits::ColormapEnable;
     }
     tile->render_data.colormap_handle = city->road.colormap_handle;
+    tile->render_data.road_segment_buffer_handle = city->road.segment_buffer_handle;
+    tile->render_data.road_test_enabled = city->road_building_done && tile->compute_scheduled;
     tile->render_data.camera_handle = render::mapped_handle_erased(camera_handle);
     render::tile_pipeline_add(&tile->render_data);
 }

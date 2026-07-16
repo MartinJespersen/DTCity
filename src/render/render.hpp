@@ -239,6 +239,7 @@ struct TilePipelineData
 {
     Handle vertex_buffer_handle;
     Handle index_buffer_handle;
+    Handle road_segment_buffer_handle;
     Handle texture_handle;
     Handle overlay_texture_handle;
     Handle colormap_handle;
@@ -254,6 +255,7 @@ struct TilePipelineData
 
     F32 height_offset;
     F32 lod_fade;
+    B32 road_test_enabled;
 
     TilePipelineBits pipeline_bits;
     DepthCompare depth_test_compare;
@@ -287,6 +289,7 @@ struct TileVertex
     Vec2F32 uv;
     Vec2F32 overlay_uv;
     Vec2U32 object_id;
+    U32 road_segment_idx;
 };
 
 struct Vertex3DBlend

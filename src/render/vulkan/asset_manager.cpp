@@ -509,7 +509,7 @@ asset_manager_create(VkPhysicalDevice physical_device, VkDevice device, VkInstan
     asset_manager->cmd_wait_list = asset_manager_cmd_list_create();
     asset_manager->cmd_queue = asset_manager_cmd_queue_create();
 
-    descriptor_index_allocator_init(&asset_manager->descriptor_index_allocator, arena, 10000);
+    descriptor_index_allocator_init(&asset_manager->descriptor_index_allocator, arena, 20000);
 
     // ~mgj: Mutex for asset operations (Textures and Buffers)
     asset_manager->texture_mutex = os_rw_mutex_alloc();

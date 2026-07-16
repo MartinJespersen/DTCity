@@ -1,7 +1,7 @@
 namespace vulkan
 {
 static Pipeline
-car_instance_pipeline_create(Context* vk_ctx, String8 shader_path)
+agent_instance_pipeline_create(Context* vk_ctx, String8 shader_path)
 {
     ScratchScope scratch = ScratchScope(0, 0);
 
@@ -11,7 +11,10 @@ car_instance_pipeline_create(Context* vk_ctx, String8 shader_path)
     ShaderModuleInfo vert_shader_stage_info = shader_stage_from_spirv(scratch.arena, vk_ctx->device, VK_SHADER_STAGE_VERTEX_BIT, vert_path);
     ShaderModuleInfo frag_shader_stage_info = shader_stage_from_spirv(scratch.arena, vk_ctx->device, VK_SHADER_STAGE_FRAGMENT_BIT, frag_path);
 
-    VkPipelineShaderStageCreateInfo shader_stages[] = {vert_shader_stage_info.info, frag_shader_stage_info.info};
+    VkPipelineShaderStageCreateInfo shader_stages[] = {
+        vert_shader_stage_info.info,
+        frag_shader_stage_info.info,
+    };
 
     VkDynamicState dynamicStates[] = {VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR};
 
@@ -153,13 +156,22 @@ tile_pipeline_create(Context* vk_ctx, String8 shader_path)
 {
     ScratchScope scratch = ScratchScope(0, 0);
 
-    String8 vert_path = CreatePathFromStrings(scratch.arena, Str8BufferFromCString(scratch.arena, {(char*)shader_path.str, "bin", "model_3d_vert.spv"}));
-    String8 frag_path = CreatePathFromStrings(scratch.arena, Str8BufferFromCString(scratch.arena, {(char*)shader_path.str, "bin", "model_3d_frag.spv"}));
+    String8 vert_path = CreatePathFromStrings(scratch.arena, Str8BufferFromCString(scratch.arena, {(char*)shader_path.str, "bin", "tile_vert.spv"}));
+    String8 frag_path = CreatePathFromStrings(scratch.arena, Str8BufferFromCString(scratch.arena, {(char*)shader_path.str, "bin", "tile_frag.spv"}));
+    String8 tese_path = CreatePathFromStrings(scratch.arena, Str8BufferFromCString(scratch.arena, {(char*)shader_path.str, "bin", "tile_tese.spv"}));
+    String8 tesc_path = CreatePathFromStrings(scratch.arena, Str8BufferFromCString(scratch.arena, {(char*)shader_path.str, "bin", "tile_tesc.spv"}));
 
     ShaderModuleInfo vert_shader_stage_info = shader_stage_from_spirv(scratch.arena, vk_ctx->device, VK_SHADER_STAGE_VERTEX_BIT, vert_path);
+    ShaderModuleInfo tesc_shader_stage_info = shader_stage_from_spirv(scratch.arena, vk_ctx->device, VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT, tesc_path);
+    ShaderModuleInfo tese_shader_stage_info = shader_stage_from_spirv(scratch.arena, vk_ctx->device, VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT, tese_path);
     ShaderModuleInfo frag_shader_stage_info = shader_stage_from_spirv(scratch.arena, vk_ctx->device, VK_SHADER_STAGE_FRAGMENT_BIT, frag_path);
 
-    VkPipelineShaderStageCreateInfo shader_stages[] = {vert_shader_stage_info.info, frag_shader_stage_info.info};
+    VkPipelineShaderStageCreateInfo shader_stages[] = {
+        vert_shader_stage_info.info,
+        tesc_shader_stage_info.info,
+        tese_shader_stage_info.info,
+        frag_shader_stage_info.info,
+    };
 
     VkDynamicState dynamicStates[] = {
         VK_DYNAMIC_STATE_VIEWPORT,  VK_DYNAMIC_STATE_SCISSOR, VK_DYNAMIC_STATE_DEPTH_WRITE_ENABLE, VK_DYNAMIC_STATE_DEPTH_COMPARE_OP, VK_DYNAMIC_STATE_COLOR_WRITE_ENABLE_EXT,
@@ -178,12 +190,12 @@ tile_pipeline_create(Context* vk_ctx, String8 shader_path)
     U32 uv_offset = offsetof(render::TileVertex, uv);
     U32 overlay_uv_offset = offsetof(render::TileVertex, overlay_uv);
     U32 object_id_offset = offsetof(render::TileVertex, object_id);
+    U32 road_segment_idx_offset = offsetof(render::TileVertex, road_segment_idx);
 
-    VkVertexInputAttributeDescription attr_desc[] = {{.location = 0, .binding = 0, .format = VK_FORMAT_R32G32B32_SFLOAT, .offset = pos_offset},
-                                                     {.location = 1, .binding = 0, .format = VK_FORMAT_R32_SFLOAT, .offset = colormap_value_offset},
-                                                     {.location = 2, .binding = 0, .format = VK_FORMAT_R32G32_SFLOAT, .offset = uv_offset},
-                                                     {.location = 3, .binding = 0, .format = VK_FORMAT_R32G32_SFLOAT, .offset = overlay_uv_offset},
-                                                     {.location = 4, .binding = 0, .format = vk_ctx->object_id_format, .offset = object_id_offset}};
+    VkVertexInputAttributeDescription attr_desc[] = {
+        {.location = 0, .binding = 0, .format = VK_FORMAT_R32G32B32_SFLOAT, .offset = pos_offset},     {.location = 1, .binding = 0, .format = VK_FORMAT_R32_SFLOAT, .offset = colormap_value_offset},
+        {.location = 2, .binding = 0, .format = VK_FORMAT_R32G32_SFLOAT, .offset = uv_offset},         {.location = 3, .binding = 0, .format = VK_FORMAT_R32G32_SFLOAT, .offset = overlay_uv_offset},
+        {.location = 4, .binding = 0, .format = vk_ctx->object_id_format, .offset = object_id_offset}, {.location = 5, .binding = 0, .format = VK_FORMAT_R32_UINT, .offset = road_segment_idx_offset}};
 
     VkVertexInputBindingDescription input_desc[] = {{.binding = 0, .stride = sizeof(render::TileVertex), .inputRate = VK_VERTEX_INPUT_RATE_VERTEX}};
 
@@ -194,7 +206,11 @@ tile_pipeline_create(Context* vk_ctx, String8 shader_path)
 
     VkPipelineInputAssemblyStateCreateInfo input_assembly{};
     input_assembly.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
-    input_assembly.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+    input_assembly.topology = VK_PRIMITIVE_TOPOLOGY_PATCH_LIST;
+
+    VkPipelineTessellationStateCreateInfo tessellation_state{};
+    tessellation_state.sType = VK_STRUCTURE_TYPE_PIPELINE_TESSELLATION_STATE_CREATE_INFO;
+    tessellation_state.patchControlPoints = 3;
 
     VkViewport viewport{};
     viewport.x = 0.0f;
@@ -240,7 +256,7 @@ tile_pipeline_create(Context* vk_ctx, String8 shader_path)
     VkDescriptorSetLayout descriptor_set_layouts[] = {vk_ctx->camera_descriptor_set_layout, vk_ctx->bindless_descriptor_set_layout};
 
     VkPushConstantRange push_constant_range{};
-    push_constant_range.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT | VK_SHADER_STAGE_VERTEX_BIT;
+    push_constant_range.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT | VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT | VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT;
     push_constant_range.offset = 0;
     push_constant_range.size = sizeof(TilePipelinePushConstants);
 
@@ -277,6 +293,7 @@ tile_pipeline_create(Context* vk_ctx, String8 shader_path)
     pipeline_create_info.pStages = shader_stages;
     pipeline_create_info.pVertexInputState = &vertex_input_info;
     pipeline_create_info.pInputAssemblyState = &input_assembly;
+    pipeline_create_info.pTessellationState = &tessellation_state;
     pipeline_create_info.pViewportState = &viewport_state;
     pipeline_create_info.pRasterizationState = &rasterizer;
     pipeline_create_info.pMultisampleState = &multisampling;
@@ -438,7 +455,7 @@ road_intersection_pipeline_create(String8 shader_path)
     Context* vk_ctx = ctx_get();
     ScratchScope scratch = ScratchScope(0, 0);
 
-    String8 comp_path = CreatePathFromStrings(scratch.arena, Str8BufferFromCString(scratch.arena, {(char*)shader_path.str, "bin", "road_intersection_comp.spv"}));
+    String8 comp_path = CreatePathFromStrings(scratch.arena, Str8BufferFromCString(scratch.arena, {(char*)shader_path.str, "bin", "tile_comp.spv"}));
 
     ShaderModuleInfo comp_shader_stage_info = shader_stage_from_spirv(scratch.arena, vk_ctx->device, VK_SHADER_STAGE_COMPUTE_BIT, comp_path);
 

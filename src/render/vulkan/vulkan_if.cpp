@@ -153,7 +153,7 @@ render_ctx_create(String8 shader_path, io::IO* io_ctx, async::ThreadPool* thread
     vk_ctx->render_frame_arena = arena_alloc();
     Debug_SetName(vk_ctx->render_frame_arena, "vulkan render frame arena");
     vk_ctx->model_3D_pipeline = vulkan::tile_pipeline_create(vk_ctx, shader_path);
-    vk_ctx->car_instance_pipeline = vulkan::car_instance_pipeline_create(vk_ctx, shader_path);
+    vk_ctx->car_instance_pipeline = vulkan::agent_instance_pipeline_create(vk_ctx, shader_path);
     vk_ctx->blend_3d_pipeline = vulkan::blend_3d_pipeline_create(shader_path);
     vk_ctx->road_intersection_pipeline = vulkan::road_intersection_pipeline_create(shader_path);
     vk_ctx->car_height_calculate_pipeline = vulkan::car_instance_compute_pipeline_create(shader_path);
@@ -762,6 +762,7 @@ tile_pipeline_add(render::TilePipelineData* pipeline_input)
 
     render::AssetItem<vulkan::BufferHandle>* asset_vertex_buffer = 0;
     render::AssetItem<vulkan::BufferHandle>* asset_index_buffer = 0;
+    render::AssetItem<vulkan::BufferHandle>* asset_road_segment_buffer = 0;
     render::AssetItem<vulkan::TextureHandle>* asset_base_texture = 0;
     render::AssetItem<vulkan::BufferHandle>* asset_colormap = 0;
     render::AssetItem<vulkan::TextureHandle>* overlay_tex = 0;
@@ -769,6 +770,7 @@ tile_pipeline_add(render::TilePipelineData* pipeline_input)
     B32 overlay_tex_loaded = render::is_resource_loaded(pipeline_input->overlay_texture_handle, &overlay_tex);
     B32 vertex_loaded = render::is_resource_loaded(pipeline_input->vertex_buffer_handle, &asset_vertex_buffer);
     B32 index_loaded = render::is_resource_loaded(pipeline_input->index_buffer_handle, &asset_index_buffer);
+    B32 road_segment_loaded = render::is_resource_loaded(pipeline_input->road_segment_buffer_handle, &asset_road_segment_buffer);
     B32 base_texture_loaded = render::is_resource_loaded(pipeline_input->texture_handle, &asset_base_texture);
     B32 colormap_loaded = render::is_resource_loaded(pipeline_input->colormap_handle, &asset_colormap);
 
@@ -798,10 +800,14 @@ tile_pipeline_add(render::TilePipelineData* pipeline_input)
         push_constants.overlay_scale_y = pipeline_input->overlay_scale.y;
         push_constants.height_offset = pipeline_input->height_offset;
         push_constants.lod_fade = pipeline_input->lod_fade;
+        push_constants.tessellation_factor = 1.0f;
+        push_constants.tesselated_edge_size = 1.0f;
+        push_constants.road_test_enabled = pipeline_input->road_test_enabled && road_segment_loaded;
 
         vulkan::TilePipelineNode* node = PushStruct(vk_ctx->render_frame_arena, vulkan::TilePipelineNode);
         node->vertex_alloc = asset_vertex_buffer->item.buffer_alloc;
         node->index_alloc = asset_index_buffer->item.buffer_alloc;
+        node->road_segment_alloc = road_segment_loaded ? asset_road_segment_buffer->item.buffer_alloc : asset_vertex_buffer->item.buffer_alloc;
         node->push_constants = push_constants;
         node->index_count = pipeline_input->index_count;
         node->index_buffer_offset = pipeline_input->index_offset;

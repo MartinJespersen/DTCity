@@ -282,12 +282,20 @@ create_instance(Context* vk_ctx)
     createInfo.ppEnabledExtensionNames = CStrArrFromStr8Buffer(scratch.arena, extensions);
 
     VkDebugUtilsMessengerCreateInfoEXT debugCreateInfo{};
-    VkValidationFeatureEnableEXT gpu_av_enables[] = {VK_VALIDATION_FEATURE_ENABLE_GPU_ASSISTED_EXT, VK_VALIDATION_FEATURE_ENABLE_GPU_ASSISTED_RESERVE_BINDING_SLOT_EXT,
-                                                     VK_VALIDATION_FEATURE_ENABLE_DEBUG_PRINTF_EXT, VK_VALIDATION_FEATURE_ENABLE_SYNCHRONIZATION_VALIDATION_EXT};
+    VkValidationFeatureEnableEXT validation_feature_enables[4] = {};
+    U32 validation_feature_count = 0;
+    if (vk_ctx->enable_gpu_assisted_validation)
+    {
+        validation_feature_enables[validation_feature_count++] = VK_VALIDATION_FEATURE_ENABLE_GPU_ASSISTED_EXT;
+        validation_feature_enables[validation_feature_count++] = VK_VALIDATION_FEATURE_ENABLE_GPU_ASSISTED_RESERVE_BINDING_SLOT_EXT;
+    }
+    validation_feature_enables[validation_feature_count++] = VK_VALIDATION_FEATURE_ENABLE_DEBUG_PRINTF_EXT;
+    validation_feature_enables[validation_feature_count++] = VK_VALIDATION_FEATURE_ENABLE_SYNCHRONIZATION_VALIDATION_EXT;
+
     VkValidationFeaturesEXT validation_features{};
     validation_features.sType = VK_STRUCTURE_TYPE_VALIDATION_FEATURES_EXT;
-    validation_features.enabledValidationFeatureCount = ArrayCount(gpu_av_enables);
-    validation_features.pEnabledValidationFeatures = gpu_av_enables;
+    validation_features.enabledValidationFeatureCount = validation_feature_count;
+    validation_features.pEnabledValidationFeatures = validation_feature_enables;
 
     if (vk_ctx->enable_validation_layers)
     {
@@ -295,15 +303,8 @@ create_instance(Context* vk_ctx)
         createInfo.ppEnabledLayerNames = CStrArrFromStr8Buffer(scratch.arena, vk_ctx->validation_layers);
 
         populate_debug_messenger_create_info(debugCreateInfo);
-        if (vk_ctx->enable_gpu_assisted_validation)
-        {
-            validation_features.pNext = &debugCreateInfo;
-            createInfo.pNext = &validation_features;
-        }
-        else
-        {
-            createInfo.pNext = &debugCreateInfo;
-        }
+        validation_features.pNext = &debugCreateInfo;
+        createInfo.pNext = &validation_features;
     }
     else
     {
@@ -602,7 +603,8 @@ populate_debug_messenger_create_info(VkDebugUtilsMessengerCreateInfoEXT& createI
 {
     createInfo = {};
     createInfo.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT;
-    createInfo.messageSeverity = VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT;
+    createInfo.messageSeverity = VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_SEVERITY_INFO_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT |
+                                 VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT;
     createInfo.messageType = VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT;
     createInfo.pfnUserCallback = debug_callback;
 }

@@ -2,12 +2,14 @@
 #extension GL_EXT_nonuniform_qualifier : require
 #extension GL_EXT_buffer_reference2 : require
 #extension GL_EXT_shader_explicit_arithmetic_types_int64 : require
+#extension GL_GOOGLE_include_directive : require
+
+#include "includes.glsl"
 
 layout(location = 0) in vec2 in_uv;
 layout(location = 1) in vec2 in_overlay_uv;
 layout(location = 2) flat in uvec2 in_object_id;
 layout(location = 3) flat in float in_overlay_option;
-layout(location = 4) in vec2 in_position_xy;
 
 layout(location = 0) out vec4 out_color;
 layout(location = 1) out uvec2 out_object_id;
@@ -19,42 +21,32 @@ layout(std430, buffer_reference, buffer_reference_align = 8) readonly buffer Col
     vec3 data[];
 };
 
-layout(push_constant) uniform constants
+layout(push_constant) uniform Constants
 {
-    uint base_tex;
-    uint overlay_tex_idx;
-    uint overlay_enabled;
-    uint64_t colormap_address;
-    uint colormap_len;
-    float overlay_translation_x;
-    float overlay_translation_y;
-    float overlay_scale_x;
-    float overlay_scale_y;
-    float height_offset;
-    float lod_fade;
-} PushConstants;
+    RenderPushConstants push_constants;
+};
 
 void main()
 {
-    float visibility = clamp(PushConstants.lod_fade, 0.0, 1.0);
+    float visibility = clamp(push_constants.lod_fade, 0.0, 1.0);
     float dither = fract(52.9829189 * fract(dot(gl_FragCoord.xy, vec2(0.06711056, 0.00583715))));
     if (visibility < dither)
     {
         discard;
     }
 
-    vec4 base_color = texture(texture_sampler[PushConstants.base_tex], in_uv);
+    vec4 base_color = texture(texture_sampler[push_constants.base_tex], in_uv);
 
     vec4 surface_color;
 
-    if (PushConstants.overlay_enabled != 0u)
+    if (push_constants.overlay_enabled != 0u)
     {
         vec2 overlay_uv =
-            in_overlay_uv * vec2(PushConstants.overlay_scale_x, PushConstants.overlay_scale_y) +
-                vec2(PushConstants.overlay_translation_x, PushConstants.overlay_translation_y);
+            in_overlay_uv * vec2(push_constants.overlay_scale_x, push_constants.overlay_scale_y) +
+                vec2(push_constants.overlay_translation_x, push_constants.overlay_translation_y);
 
         vec4 overlay_color =
-            texture(texture_sampler[PushConstants.overlay_tex_idx], overlay_uv);
+            texture(texture_sampler[push_constants.overlay_tex_idx], overlay_uv);
 
         surface_color = mix(base_color, overlay_color, overlay_color.a);
     }
@@ -64,11 +56,11 @@ void main()
     }
 
     vec4 road_color = vec4(0, 0, 0, 1);
-    if (PushConstants.colormap_len > 0)
+    if (push_constants.colormap_len > 0)
     {
-        uint idx = uint(float(PushConstants.colormap_len) * in_overlay_option);
-        idx = min(idx, PushConstants.colormap_len - 1);
-        Colormap colormap = Colormap(PushConstants.colormap_address);
+        uint idx = uint(float(push_constants.colormap_len) * in_overlay_option);
+        idx = min(idx, push_constants.colormap_len - 1);
+        Colormap colormap = Colormap(push_constants.colormap_address);
         road_color = vec4(colormap.data[idx], 1);
     }
 
