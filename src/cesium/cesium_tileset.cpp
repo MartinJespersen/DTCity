@@ -666,26 +666,21 @@ tile_render_data_from_gltf(const CesiumGltf::Model& model, const glm::dmat4& ece
         PrimitiveNode* last;
     };
 
-    U64 model_scene_count = model.scenes.size();
-    Assert(model_scene_count == 1);
-    for (U32 i = 0; i < model.nodes.size(); i++)
-    {
-        Assert(model.nodes[i].children.size() == 0);
-    }
     PrimitiveList primitive_list = {};
-    for (const CesiumGltf::Node& node : model.nodes)
-    {
-        for (const CesiumGltf::Mesh& mesh : model.meshes)
+    model.forEachPrimitiveInScene(
+        -1,
+        [&](const CesiumGltf::Model& gltf, const CesiumGltf::Node& node, const CesiumGltf::Mesh& mesh, const CesiumGltf::MeshPrimitive& primitive, const glm::dmat4& node_transform)
         {
-            for (const CesiumGltf::MeshPrimitive& primitive : mesh.primitives)
-            {
+                (void)gltf;
+                (void)node;
+                (void)mesh;
                 auto pos_it = primitive.attributes.find("POSITION");
                 if (pos_it == primitive.attributes.end())
-                    continue;
+                    return;
 
                 const CesiumGltf::Accessor* pos_accessor = CesiumGltf::Model::getSafe(&model.accessors, pos_it->second);
                 if (!pos_accessor)
-                    continue;
+                    return;
 
                 // Get UV accessor if available
                 const CesiumGltf::Accessor* uv_accessor = nullptr;
@@ -705,11 +700,11 @@ tile_render_data_from_gltf(const CesiumGltf::Model& model, const glm::dmat4& ece
                 // Get buffer views and buffers for position
                 const CesiumGltf::BufferView* pos_buffer_view = CesiumGltf::Model::getSafe(&model.bufferViews, pos_accessor->bufferView);
                 if (!pos_buffer_view)
-                    continue;
+                    return;
 
                 const CesiumGltf::Buffer* pos_buffer = CesiumGltf::Model::getSafe(&model.buffers, pos_buffer_view->buffer);
                 if (!pos_buffer)
-                    continue;
+                    return;
 
                 // Read positions
                 const U8* pos_data = (U8*)pos_buffer->cesium.data.data() + pos_buffer_view->byteOffset + pos_accessor->byteOffset;
@@ -772,10 +767,7 @@ tile_render_data_from_gltf(const CesiumGltf::Model& model, const glm::dmat4& ece
                     vertex->object_id = {};
 
                     const F32* pos = (const F32*)(pos_data + i * pos_stride);
-                    glm::dmat4 node_matrix(glm::dvec4(node.matrix[0], node.matrix[1], node.matrix[2], node.matrix[3]), glm::dvec4(node.matrix[4], node.matrix[5], node.matrix[6], node.matrix[7]),
-                                           glm::dvec4(node.matrix[8], node.matrix[9], node.matrix[10], node.matrix[11]),
-                                           glm::dvec4(node.matrix[12], node.matrix[13], node.matrix[14], node.matrix[15]));
-                    glm::dvec4 pos_node = node_matrix * glm::dvec4(pos[0], pos[1], pos[2], 1.0);
+                    glm::dvec4 pos_node = node_transform * glm::dvec4(pos[0], pos[1], pos[2], 1.0);
                     glm::dvec4 pos_local = ecef_to_local * tile_transform * gltf_to_zup * pos_node;
 
                     vertex->pos.x = (F32)pos_local.x;
@@ -831,9 +823,7 @@ tile_render_data_from_gltf(const CesiumGltf::Model& model, const glm::dmat4& ece
                 primitive_node->has_overlay_uv = overlay_uv_data != nullptr;
 
                 SLLQueuePush(primitive_list.first, primitive_list.last, primitive_node);
-            }
-        }
-    }
+        });
     U64 mat_count = model.materials.size();
     for (U32 mat_idx = 0; mat_idx < mat_count; ++mat_idx)
     {
@@ -1088,7 +1078,7 @@ tileset_renderer_create(TilesetRenderer* tileset, async::ThreadPool* threads, St
     create_context.options.enableLodTransitionPeriod = true;
     create_context.options.lodTransitionLength = 0.35f;
 
-    create_context.options.preloadSiblings = false;
+    create_context.options.preloadSiblings = true;
     create_context.options.loadingDescendantLimit = 6;
     create_context.options.forbidHoles = true;
     U32 tileset_count = 1;
@@ -1112,7 +1102,7 @@ tileset_renderer_create(TilesetRenderer* tileset, async::ThreadPool* threads, St
         is_map_tile = false;
         create_context.options.rendererOptions = is_map_tile;
         create_context.options.loadingDescendantLimit = 6;
-        create_context.options.maximumScreenSpaceError = 128;
+        create_context.options.maximumScreenSpaceError = 16;
         create_context.renderer->tilesets.data[1] = tileset->allocator->place<Cesium3DTilesSelection::Tileset>(create_context.externals, (const char*)url.str, create_context.options);
         CesiumGeospatial::Cartographic center_position(glm::radians(origin_longitude), glm::radians(origin_latitude), 0.0);
         _height_offset_sample_async(create_context.renderer, center_position);
