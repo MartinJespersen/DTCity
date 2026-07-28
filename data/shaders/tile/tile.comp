@@ -108,6 +108,7 @@ void main()
     vec3 v1 = vec3(vertices.data[v1_idx].pos_x, vertices.data[v1_idx].pos_y, vertices.data[v1_idx].pos_z);
     vec3 v2 = vec3(vertices.data[v2_idx].pos_x, vertices.data[v2_idx].pos_y, vertices.data[v2_idx].pos_z);
     vec3 pos_avg = (v0 + v1 + v2) / 3.0;
+    vec2 triangle[3] = {v0.xy, v1.xy, v2.xy};
 
     uint stack[64];
     int stack_ptr = 0;
@@ -117,7 +118,7 @@ void main()
     {
         RoadSegmentNode cur = road_node_segments.data[stack[--stack_ptr]];
 
-        if (!in_bounds(cur.bounds, pos_avg.xy))
+        if (!triangle_bounds_overlap(cur.bounds, triangle))
             continue;
 
         if (cur.is_leaf != 0u)
@@ -125,21 +126,12 @@ void main()
             for (uint i = cur.data_0; i < cur.data_1; i++)
             {
                 vec2 road_segment[CORNERS_COUNT] = road_segments.data[i].positions;
-                vec2 v[3] = {v0.xy, v1.xy, v2.xy};
-                bool do_intersec = polygon_intersection_sat(road_segment, v);
+                bool do_intersec = polygon_intersection_sat(road_segment, triangle);
                 if (do_intersec)
                 {
-                    vertices.data[v0_idx].id = road_segments.data[i].id;
-                    vertices.data[v1_idx].id = road_segments.data[i].id;
-                    vertices.data[v2_idx].id = road_segments.data[i].id;
-
                     vertices.data[v0_idx].overlay_option = road_segments.data[i].options[push_constants.overlay_option_idx];
                     vertices.data[v1_idx].overlay_option = road_segments.data[i].options[push_constants.overlay_option_idx];
                     vertices.data[v2_idx].overlay_option = road_segments.data[i].options[push_constants.overlay_option_idx];
-
-                    vertices.data[v0_idx].road_segment_idx = i;
-                    vertices.data[v1_idx].road_segment_idx = i;
-                    vertices.data[v2_idx].road_segment_idx = i;
 
                     return;
                 }

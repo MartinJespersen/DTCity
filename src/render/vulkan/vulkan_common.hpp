@@ -39,7 +39,10 @@ struct SwapchainResources
     VkFormat object_id_image_format;
     Buffer<ImageResource> object_id_image_resources;
     Buffer<ImageResource> object_id_image_resolve_resources;
+    Buffer<B32> object_id_images_initialized;
     BufferReadback object_id_buffer_readback[render::MAX_FRAMES_IN_FLIGHT];
+
+    B32 shared_attachment_images_initialized;
 
     // Present wait semaphores are indexed by swapchain image, not frame.
     Buffer<VkSemaphore> render_finished_semaphores;

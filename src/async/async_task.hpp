@@ -8,7 +8,7 @@ struct AsyncHttpTaskState;
 enum class ExtensionType
 {
     None,
-    Http
+    Http = (1 << 0)
 };
 
 constexpr bool

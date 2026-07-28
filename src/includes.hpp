@@ -5,11 +5,13 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <limits>
 
 #include "debug_forward_ref.hpp"
 // helper diagnostics
 #include "diagnostics.hpp"
 
+#include <CDT.h>
 // cesium native libraries
 #include "cesium/cesium_native_headers.hpp"
 

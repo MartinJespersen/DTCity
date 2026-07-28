@@ -38,19 +38,18 @@ void main()
     out_overlay_option = in_overlay_option;
     vec4 pos = gl_TessCoord.x * gl_in[0].gl_Position + gl_TessCoord.y * gl_in[1].gl_Position + gl_TessCoord.z * gl_in[2].gl_Position;
 
-    if (push_constants.road_test_enabled != 0)
+    if (push_constants.road_test_enabled != 0 && in_road_segment_index != 0)
     {
-        vec2 road_segment[CORNERS_COUNT] = road_segments[in_road_segment_index].positions;
-        if (is_face_inside_road_segment(road_segment, pos.xy))
-        {
-            out_object_id = road_segments[in_road_segment_index].id;
-            out_overlay_option = in_overlay_option;
-        }
-        else
-        {
-            out_object_id = uvec2(0, 0);
-            out_overlay_option = 0.0;
-        }
+        uint road_segment_index = in_road_segment_index - 1;
+        vec2 road_segment[CORNERS_COUNT] = road_segments[road_segment_index].positions;
+
+        out_object_id = road_segments[road_segment_index].id;
+        out_overlay_option = in_overlay_option;
+    }
+    else
+    {
+        out_object_id = uvec2(0, 0);
+        out_overlay_option = 0.0;
     }
 
     gl_Position = ubo_camera.projection * ubo_camera.view * pos;

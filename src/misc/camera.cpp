@@ -9,7 +9,7 @@ camera_init(Arena* arena, Camera* camera)
     camera->position = glm::vec3(0.0f, 0.0f, 1000.0f);
     camera->yaw = 0.0f;
     camera->pitch = -60.0f; // Look downward at the ground
-    camera->view_dir = ui_direction_normal_from_euler_angles(camera->yaw, camera->pitch);
+    camera->view_dir = geometry::ui_direction_normal_from_euler_angles(camera->yaw, camera->pitch);
 
     render::ThreadWorkerCmdCtx* thread_ctx = render::thread_ctx_create();
     render::thread_cmd_buffer_record(thread_ctx);
@@ -37,7 +37,7 @@ camera_update(Camera* camera, io::IO* input, F64 time, Vec2S32 extent, bool enab
                 camera->pitch = 89.0f;
             if (camera->pitch < -89.0f)
                 camera->pitch = -89.0f;
-            camera->view_dir = ui_direction_normal_from_euler_angles(camera->yaw, camera->pitch);
+            camera->view_dir = geometry::ui_direction_normal_from_euler_angles(camera->yaw, camera->pitch);
         }
 
         camera->fov -= (F32)input->scroll_y.load(std::memory_order_seq_cst) * scroll_sensitivity;

@@ -119,6 +119,7 @@ struct BvhContext
 
 struct BvhResult
 {
+    RoadSegmentNode* root;
     Buffer<RoadSegmentCorners> road_segment_buffer_sorted;
     Buffer<RoadSegmentNodeStorageBuffer> node_buffer;
 };
@@ -326,6 +327,10 @@ struct City
     // async
     AsyncCityTaskList task_list;
 };
+
+// global
+// TODO remove this as global
+city::BvhResult* g_bvh_result = 0;
 
 g_internal void
 road_destroy(Road* road);

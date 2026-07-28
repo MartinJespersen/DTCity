@@ -70,3 +70,12 @@ bool in_bounds(Bounds bounds, vec2 pos)
     return pos.x >= bounds.min.x && pos.x <= bounds.max.x &&
         pos.y >= bounds.min.y && pos.y <= bounds.max.y;
 }
+
+bool triangle_bounds_overlap(Bounds bounds, vec2 triangle[3])
+{
+    vec2 triangle_min = min(triangle[0], min(triangle[1], triangle[2]));
+    vec2 triangle_max = max(triangle[0], max(triangle[1], triangle[2]));
+
+    return triangle_max.x >= bounds.min.x && triangle_min.x <= bounds.max.x &&
+        triangle_max.y >= bounds.min.y && triangle_min.y <= bounds.max.y;
+}

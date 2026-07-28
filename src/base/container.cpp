@@ -56,6 +56,15 @@ buffer_concat(Arena* arena, Buffer<T> a, Buffer<T> b)
     return result;
 }
 
+template <typename T>
+lib_internal Buffer<T>
+buffer_from_arr(Arena* arena, T* arr, U64 size)
+{
+    Buffer<T> buffer = buffer_alloc<T>(arena, size);
+    MemoryCopy(buffer.data, arr, size * sizeof(T));
+    return buffer;
+}
+
 ////////////////////////////////
 lib_internal Buffer<String8>
 Str8BufferFromCString(Arena* arena, std::initializer_list<const char*> strings)

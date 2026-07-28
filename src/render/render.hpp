@@ -284,10 +284,10 @@ struct Blend3DPipelineData
 
 struct TileVertex
 {
-    Vec3F32 pos;
+    glm::vec3 pos;
     F32 colormap_value;
-    Vec2F32 uv;
-    Vec2F32 overlay_uv;
+    glm::vec2 uv;
+    glm::vec2 overlay_uv;
     Vec2U32 object_id;
     U32 road_segment_idx;
 };

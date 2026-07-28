@@ -71,6 +71,7 @@ city_build(City* city, Rng2F64 bbox, String8 tileset_url, String8 area)
 
     // road init
     Road* road = &city->road;
+
     city::road_create(city, road, ecef_to_local, area, bbox_cache_str);
     road->bbox = bbox;
 
@@ -520,6 +521,7 @@ road_build(async::ThreadInfo info, async::AsyncTaskStatus<RoadBuildTask>* status
     ////////////////////////////////////////
     // build road buffers
     road->road_build_result = city::road_segment_build(road->arena, network, network->edge_structure.edges, road->default_road_width, road->road_height, road->ecef_to_local, road->road_info_map);
+    g_bvh_result = &road->road_build_result.bvh_result;
     render::BufferInfo road_segment_buffer_info = render::BufferInfo(road->road_build_result.bvh_result.road_segment_buffer_sorted, render::BufferType_StorageBuffer);
     road->segment_buffer_handle = render::buffer_load_sync(thread_ctx, &road_segment_buffer_info, S("road_segment_buffer"));
     render::BufferInfo road_segment_node_buffer_info = render::BufferInfo(road->road_build_result.bvh_result.node_buffer, render::BufferType_StorageBuffer);
@@ -732,7 +734,6 @@ g_internal BvhResult
 bvh_create(Arena* arena, Buffer<RoadSegmentCorners> road_segment_buffer, U32 leaf_bb_max)
 {
     ScratchScope scratch = ScratchScope(&arena, 1);
-
     Buffer<BoundingBox> bb_buffer = buffer_alloc<BoundingBox>(scratch.arena, road_segment_buffer.size);
 
     // 1. for every element in the buffer, find the center point (used for segmentation)
@@ -767,7 +768,7 @@ bvh_create(Arena* arena, Buffer<RoadSegmentCorners> road_segment_buffer, U32 lea
     bvh->bb_buffer = bb_buffer;
     bvh->leaf_bb_max = leaf_bb_max;
 
-    RoadSegmentNode* root = PushStruct(scratch.arena, RoadSegmentNode);
+    RoadSegmentNode* root = PushStruct(arena, RoadSegmentNode);
     bvh->root = root;
     root->bounds = bounds_union(bb_buffer, 0, bb_buffer.size);
     root->start_idx = 0;
@@ -805,7 +806,7 @@ bvh_create(Arena* arena, Buffer<RoadSegmentCorners> road_segment_buffer, U32 lea
 
         for (U32 i = 0; i < ArrayCount(idx_range.v); ++i)
         {
-            node->children[i] = PushStruct(scratch.arena, RoadSegmentNode);
+            node->children[i] = PushStruct(arena, RoadSegmentNode);
             node->children[i]->start_idx = idx_range.min.v[i];
             node->children[i]->end_idx = idx_range.max.v[i];
             node->children[i]->bounds = bounds_union(bb_buffer, node->children[i]->start_idx, node->children[i]->end_idx);
@@ -860,8 +861,22 @@ bvh_create(Arena* arena, Buffer<RoadSegmentCorners> road_segment_buffer, U32 lea
     }
     Assert(cur_node_idx == road_segment_node_buffer.size);
 
-    BvhResult result = {road_segment_buffer_sorted, road_segment_node_buffer};
+    BvhResult result = {bvh->root, road_segment_buffer_sorted, road_segment_node_buffer};
     return result;
+}
+
+g_internal void
+assert_non_intersecting_edges(glm::vec2* vertices, U32 count)
+{
+    AssertAlways(count >= 4);
+    glm::vec2 v0 = vertices[0];
+    glm::vec2 v1 = vertices[1];
+    glm::vec2 v2 = vertices[2];
+    glm::vec2 v3 = vertices[3];
+
+    glm::vec2 _dummy;
+    AssertAlways(geometry::line_intersection(v0, v1, v2, v3, &_dummy) == false);
+    AssertAlways(geometry::line_intersection(v1, v2, v3, v0, &_dummy) == false);
 }
 
 g_internal city::RoadBuildResult
@@ -883,33 +898,9 @@ road_segment_build(Arena* arena, osm::Network* network, Buffer<osm::RoadEdge> ed
 
         osm::EcefLocation start_node = osm::location_get(network, edge->node_id_from);
         osm::EcefLocation end_node = osm::location_get(network, edge->node_id_to);
-        osm::WayNode* way_node = osm::way_find(network, edge->way_id);
-        osm::Way* way = &way_node->way;
-
-        F32 road_width = tag_value_get(scratch.arena, S("width"), default_road_width, way->tags);
 
         RoadSegment road_segment;
         road_segment_from_road_nodes(&road_segment, start_node, end_node, default_road_width);
-
-        osm::RoadEdge* prev_edge = edge->prev;
-        if (prev_edge)
-        {
-            osm::EcefLocation start_node_prev = osm::location_get(network, prev_edge->node_id_from);
-            osm::EcefLocation end_node_prev = osm::location_get(network, prev_edge->node_id_to);
-            RoadSegment road_segment_prev;
-            road_segment_from_road_nodes(&road_segment_prev, start_node_prev, end_node_prev, road_width);
-            road_segments_coalesce(&road_segment_prev, &road_segment, road_width);
-        }
-
-        osm::RoadEdge* next_edge = edge->next;
-        if (next_edge)
-        {
-            osm::EcefLocation start_node_next = osm::location_get(network, next_edge->node_id_from);
-            osm::EcefLocation end_node_next = osm::location_get(network, next_edge->node_id_to);
-            RoadSegment road_segment_next;
-            road_segment_from_road_nodes(&road_segment_next, start_node_next, end_node_next, road_width);
-            road_segments_coalesce(&road_segment, &road_segment_next, road_width);
-        }
 
         // Road coordinates stored in buffer for 3D geometry projection
         RoadSegmentCorners* road_segment_corners = corner_buffer[i];
@@ -922,6 +913,12 @@ road_segment_build(Arena* arena, osm::Network* network, Buffer<osm::RoadEdge> ed
         road_segment_corners->corners[RoadSegmentCornerCoord_TopRight] = vec_2f32(local_top_right.x, local_top_right.y);
         road_segment_corners->corners[RoadSegmentCornerCoord_BottomRight] = vec_2f32(local_bottom_right.x, local_bottom_right.y);
         road_segment_corners->corners[RoadSegmentCornerCoord_BottomLeft] = vec_2f32(local_bottom_left.x, local_bottom_left.y);
+
+        // Assert non_intersecting edges
+        {
+            glm::vec2 vertices[RoadSegmentCornerCoord_Count] = {local_top_left, local_top_right, local_bottom_right, local_bottom_left};
+            assert_non_intersecting_edges(vertices, RoadSegmentCornerCoord_Count);
+        }
         RoadInfo* road_info = map_get(road_info_map, edge->id);
         if (road_info)
         {
@@ -1927,8 +1924,8 @@ vertex_3d_from_gltfw_vertex(Arena* arena, Buffer<gltfw_Vertex3D> in_vertex_buffe
     Buffer<render::TileVertex> out_vertex_buffer = buffer_alloc<render::TileVertex>(arena, in_vertex_buffer.size);
     for (U32 i = 0; i < in_vertex_buffer.size; i++)
     {
-        out_vertex_buffer.data[i].pos = in_vertex_buffer.data[i].pos;
-        out_vertex_buffer.data[i].uv = in_vertex_buffer.data[i].uv;
+        out_vertex_buffer.data[i].pos = glm::vec3(in_vertex_buffer.data[i].pos.x, in_vertex_buffer.data[i].pos.y, in_vertex_buffer.data[i].pos.z);
+        out_vertex_buffer.data[i].uv = glm::vec2(in_vertex_buffer.data[i].uv.x, in_vertex_buffer.data[i].uv.y);
     }
     return out_vertex_buffer;
 }

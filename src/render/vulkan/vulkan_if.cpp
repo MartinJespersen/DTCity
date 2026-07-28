@@ -800,7 +800,7 @@ tile_pipeline_add(render::TilePipelineData* pipeline_input)
         push_constants.overlay_scale_y = pipeline_input->overlay_scale.y;
         push_constants.height_offset = pipeline_input->height_offset;
         push_constants.lod_fade = pipeline_input->lod_fade;
-        push_constants.tessellation_factor = 1.0f;
+        push_constants.tessellation_factor = 0.0f;
         push_constants.tesselated_edge_size = 1.0f;
         push_constants.road_test_enabled = pipeline_input->road_test_enabled && road_segment_loaded;
 

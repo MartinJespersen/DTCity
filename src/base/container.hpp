@@ -61,6 +61,9 @@ template <typename T>
 Buffer<T>
 buffer_alloc(Arena* arena, U64 count);
 template <typename T>
+lib_internal Buffer<T>
+buffer_from_arr(Arena* arena, T* arr, U64 size);
+template <typename T>
 lib_internal void
 BufferCopy(Buffer<T> dst, Buffer<T> src, U64 element_count_to_copy);
 template <typename T>

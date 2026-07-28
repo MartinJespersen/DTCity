@@ -3,6 +3,12 @@
 namespace cesium
 {
 
+struct Mesh
+{
+    Buffer<render::TileVertex> vertices;
+    Buffer<U32> indices;
+};
+
 struct RasterTileInfo
 {
     const CesiumGltf::ImageAsset& image;

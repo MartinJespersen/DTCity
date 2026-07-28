@@ -566,32 +566,71 @@ command_buffer_record(U32 image_index, U32 current_frame, Vec2S64 mouse_cursor_p
         pre_render_swapchain_barrier.image = swapchain_image;
         pre_render_swapchain_barrier.subresourceRange = {.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT, .baseMipLevel = 0, .levelCount = 1, .baseArrayLayer = 0, .layerCount = 1};
 
+        B32 shared_attachments_initialized = swapchain_resource->shared_attachment_images_initialized;
+        VkImageMemoryBarrier2 pre_render_color_barrier{
+            .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
+            .srcStageMask = shared_attachments_initialized ? VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT : VK_PIPELINE_STAGE_2_NONE,
+            .srcAccessMask = shared_attachments_initialized ? VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT : VK_ACCESS_2_NONE,
+            .dstStageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
+            .dstAccessMask = VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT,
+            .oldLayout = shared_attachments_initialized ? VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL : VK_IMAGE_LAYOUT_UNDEFINED,
+            .newLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+            .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+            .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+            .image = swapchain_resource->color_image_resource.image_alloc.image,
+            .subresourceRange = {.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT, .baseMipLevel = 0, .levelCount = 1, .baseArrayLayer = 0, .layerCount = 1},
+        };
+
+        VkPipelineStageFlags2 depth_stages = VK_PIPELINE_STAGE_2_EARLY_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_2_LATE_FRAGMENT_TESTS_BIT;
+        VkImageMemoryBarrier2 pre_render_depth_barrier{
+            .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
+            .srcStageMask = shared_attachments_initialized ? depth_stages : VK_PIPELINE_STAGE_2_NONE,
+            .srcAccessMask = shared_attachments_initialized ? VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT : VK_ACCESS_2_NONE,
+            .dstStageMask = depth_stages,
+            .dstAccessMask = VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_READ_BIT | VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT,
+            .oldLayout = shared_attachments_initialized ? VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL : VK_IMAGE_LAYOUT_UNDEFINED,
+            .newLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
+            .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+            .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+            .image = swapchain_resource->depth_image_resource.image_alloc.image,
+            .subresourceRange = {.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT, .baseMipLevel = 0, .levelCount = 1, .baseArrayLayer = 0, .layerCount = 1},
+        };
+
+        B32 object_id_images_initialized = swapchain_resource->object_id_images_initialized.data[image_index];
+
         VkImageMemoryBarrier2 pre_render_object_id_barrier{.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
-                                                           .srcStageMask = VK_PIPELINE_STAGE_2_NONE,
-                                                           .srcAccessMask = VK_ACCESS_2_NONE,
-                                                           .dstStageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
-                                                           .dstAccessMask = VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT,
-                                                           .oldLayout = VK_IMAGE_LAYOUT_UNDEFINED,
-                                                           .newLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-                                                           .image = object_id_image,
-                                                           .subresourceRange = {.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT, .baseMipLevel = 0, .levelCount = 1, .baseArrayLayer = 0, .layerCount = 1}};
+                                                            .srcStageMask = object_id_images_initialized ? VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT : VK_PIPELINE_STAGE_2_NONE,
+                                                            .srcAccessMask = object_id_images_initialized ? VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT : VK_ACCESS_2_NONE,
+                                                            .dstStageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
+                                                            .dstAccessMask = VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT,
+                                                            .oldLayout = object_id_images_initialized ? VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL : VK_IMAGE_LAYOUT_UNDEFINED,
+                                                            .newLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+                                                            .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+                                                            .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+                                                            .image = object_id_image,
+                                                            .subresourceRange = {.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT, .baseMipLevel = 0, .levelCount = 1, .baseArrayLayer = 0, .layerCount = 1}};
 
         VkImageMemoryBarrier2 pre_render_object_id_resolve_image_barrier{
             .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
-            .srcStageMask = VK_PIPELINE_STAGE_2_NONE,
-            .srcAccessMask = VK_ACCESS_2_NONE,
+            .srcStageMask = object_id_images_initialized ? VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT | VK_PIPELINE_STAGE_2_TRANSFER_BIT : VK_PIPELINE_STAGE_2_NONE,
+            .srcAccessMask = object_id_images_initialized ? VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT | VK_ACCESS_2_TRANSFER_READ_BIT : VK_ACCESS_2_NONE,
             .dstStageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
             .dstAccessMask = VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT,
-            .oldLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+            .oldLayout = object_id_images_initialized ? VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL : VK_IMAGE_LAYOUT_UNDEFINED,
             .newLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+            .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+            .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
             .image = object_id_resolve_image,
             .subresourceRange = {.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT, .baseMipLevel = 0, .levelCount = 1, .baseArrayLayer = 0, .layerCount = 1}};
 
-        VkImageMemoryBarrier2 pre_render_barriers[] = {pre_render_object_id_barrier, pre_render_swapchain_barrier, pre_render_object_id_resolve_image_barrier};
+        VkImageMemoryBarrier2 pre_render_barriers[] = {
+            pre_render_color_barrier, pre_render_depth_barrier, pre_render_object_id_barrier, pre_render_swapchain_barrier, pre_render_object_id_resolve_image_barrier};
         VkDependencyInfo pre_render_transition_info = {
             .sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO, .imageMemoryBarrierCount = ArrayCount(pre_render_barriers), .pImageMemoryBarriers = pre_render_barriers};
 
         vkCmdPipelineBarrier2(current_cmd_buf, &pre_render_transition_info);
+        swapchain_resource->shared_attachment_images_initialized = true;
+        swapchain_resource->object_id_images_initialized.data[image_index] = true;
         {
             TracyVkZone(vk_ctx->tracy_ctx[current_frame], current_cmd_buf, "Render"); // NOLINT
 
@@ -802,21 +841,6 @@ command_buffer_record(U32 image_index, U32 current_frame, Vec2S64 mouse_cursor_p
                 vk_ctx->hovered_object_id = *object_id;
             }
 
-            VkImageMemoryBarrier2 object_id_reset_barrier = {.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
-                                                             .srcStageMask = VK_PIPELINE_STAGE_2_TRANSFER_BIT,
-                                                             .srcAccessMask = VK_ACCESS_2_TRANSFER_READ_BIT,
-                                                             .dstStageMask = VK_PIPELINE_STAGE_2_NONE,
-                                                             .dstAccessMask = VK_ACCESS_2_NONE,
-                                                             .oldLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
-                                                             .newLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-                                                             .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-                                                             .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-                                                             .image = object_id_resolve_image,
-                                                             .subresourceRange = {.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT, .baseMipLevel = 0, .levelCount = 1, .baseArrayLayer = 0, .layerCount = 1}};
-
-            VkDependencyInfo layout_reset_transition_info = {.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO, .imageMemoryBarrierCount = 1, .pImageMemoryBarriers = &object_id_reset_barrier};
-
-            vkCmdPipelineBarrier2(current_cmd_buf, &layout_reset_transition_info);
         }
 
         TracyVkCollect(vk_ctx->tracy_ctx[current_frame], current_cmd_buf);

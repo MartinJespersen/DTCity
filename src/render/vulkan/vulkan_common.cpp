@@ -214,6 +214,7 @@ object_id_image_resource_create(SwapchainResources* swapchain_resources, U32 ima
     swapchain_resources->object_id_image_format = attachment_format;
     swapchain_resources->object_id_image_resources = object_id_image_resources;
     swapchain_resources->object_id_image_resolve_resources = object_id_image_resolve_resources;
+    swapchain_resources->object_id_images_initialized = buffer_alloc<B32>(swapchain_resources->arena, image_count);
 
     for (U32 i = 0; i < ArrayCount(swapchain_resources->object_id_buffer_readback); i++)
     {
@@ -1077,7 +1078,7 @@ swapchain_create(Context* vk_ctx, SwapChainSupportDetails* swapchain_info, VkExt
 
     color_resources_create(vk_ctx, swapchain_resources);
     depth_resources_create(vk_ctx, swapchain_resources);
-    object_id_image_resource_create(swapchain_resources, image_count);
+    object_id_image_resource_create(swapchain_resources, swapchain_image_count);
 
     swapchain_resources->render_finished_semaphores = buffer_alloc<VkSemaphore>(swapchain_resources->arena, swapchain_image_count);
 
