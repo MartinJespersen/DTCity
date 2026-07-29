@@ -56,28 +56,6 @@ draw_flush()
     }
 }
 
-g_internal bool
-draw_road_intersection_compute(render::Handle vertex_buffer_handle, render::Handle index_buffer_handle, render::Handle road_segment_buffer_handle, render::Handle road_segment_node_buffer_handle,
-                               U32 overlay_option)
-{
-    if (!render::is_resource_loaded(vertex_buffer_handle) || !render::is_resource_loaded(index_buffer_handle) || !render::is_resource_loaded(road_segment_buffer_handle) ||
-        !render::is_resource_loaded(road_segment_node_buffer_handle))
-    {
-        return false;
-    }
-
-    DrawFrame* frame = draw_frame_get();
-    RoadIntersectionNode* node = PushStruct(g_draw_ctx.frame_arena, RoadIntersectionNode);
-    node->vertex_buffer_handle = vertex_buffer_handle;
-    node->index_buffer_handle = index_buffer_handle;
-    node->road_segment_buffer_handle = road_segment_buffer_handle;
-    node->road_segment_node_buffer_handle = road_segment_node_buffer_handle;
-    node->overlay_option = overlay_option;
-    SLLQueuePush(frame->road_intersection_list.first, frame->road_intersection_list.last, node);
-
-    return true;
-}
-
 g_internal CarInstanceDrawResult
 draw_agent_instance_render(render::MappedHandle<void> camera_handle, Buffer<render::ModelInfo> meshes, Buffer<render::Handle> texture_handles, render::BufferInfo* instance_buffer_info)
 {

@@ -16,9 +16,8 @@ struct TilePipelinePushConstants
     F32 overlay_scale_y;
     F32 height_offset;
     F32 lod_fade;
-    F32 tessellation_factor;
-    F32 tesselated_edge_size;
     U32 road_test_enabled;
+    U32 overlay_option_idx;
 };
 
 struct TilePipelineNode
@@ -245,7 +244,6 @@ struct Context
     Pipeline model_3D_pipeline;
     Pipeline car_instance_pipeline;
     Pipeline blend_3d_pipeline;
-    Pipeline road_intersection_pipeline;
     Pipeline car_height_calculate_pipeline;
     Pipeline bbox_pipeline;
     VkDescriptorSetLayout road_segment_descriptor_set_layout;
@@ -290,14 +288,12 @@ blend_3d_bucket_add(BufferAllocation* vertex_buffer_allocation, BufferAllocation
                     render::MappedHandle<void> camera_handle);
 
 g_internal void
-road_intersection_compute();
-g_internal void
 agent_instance_compute();
 static void
 road_intersection_bucket_add(BufferHandle* vertex_buffer, BufferHandle* index_buffer, BufferHandle* road_segment_buffer, BufferHandle* road_segment_node_buffer, U32 overlay_option);
 
 static void
-model_3d_rendering();
+tile_rendering();
 static void
 agent_instance_rendering();
 static void

@@ -155,7 +155,6 @@ render_ctx_create(String8 shader_path, io::IO* io_ctx, async::ThreadPool* thread
     vk_ctx->model_3D_pipeline = vulkan::tile_pipeline_create(vk_ctx, shader_path);
     vk_ctx->car_instance_pipeline = vulkan::agent_instance_pipeline_create(vk_ctx, shader_path);
     vk_ctx->blend_3d_pipeline = vulkan::blend_3d_pipeline_create(shader_path);
-    vk_ctx->road_intersection_pipeline = vulkan::road_intersection_pipeline_create(shader_path);
     vk_ctx->car_height_calculate_pipeline = vulkan::car_instance_compute_pipeline_create(shader_path);
 
     // sync objects
@@ -211,7 +210,6 @@ render_ctx_destroy()
     vulkan::pipeline_destroy(&vk_ctx->model_3D_pipeline);
     vulkan::pipeline_destroy(&vk_ctx->car_instance_pipeline);
     vulkan::pipeline_destroy(&vk_ctx->blend_3d_pipeline);
-    vulkan::pipeline_destroy(&vk_ctx->road_intersection_pipeline);
     vulkan::pipeline_destroy(&vk_ctx->car_height_calculate_pipeline);
     vulkan::pipeline_destroy(&vk_ctx->bbox_pipeline);
 
@@ -800,9 +798,8 @@ tile_pipeline_add(render::TilePipelineData* pipeline_input)
         push_constants.overlay_scale_y = pipeline_input->overlay_scale.y;
         push_constants.height_offset = pipeline_input->height_offset;
         push_constants.lod_fade = pipeline_input->lod_fade;
-        push_constants.tessellation_factor = 0.0f;
-        push_constants.tesselated_edge_size = 1.0f;
         push_constants.road_test_enabled = pipeline_input->road_test_enabled && road_segment_loaded;
+        push_constants.overlay_option_idx = pipeline_input->overlay_option_idx;
 
         vulkan::TilePipelineNode* node = PushStruct(vk_ctx->render_frame_arena, vulkan::TilePipelineNode);
         node->vertex_alloc = asset_vertex_buffer->item.buffer_alloc;

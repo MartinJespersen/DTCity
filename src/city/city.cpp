@@ -146,7 +146,7 @@ _cache_and_parse_osm_json(async::ThreadPool* thread_pool, Road* road, osm::Netwo
 }
 
 g_internal void
-_tile_pipeline_add(cesium::TileRenderData* tile, City* city, render::MappedHandle<ui::CameraUniformBuffer> camera_handle)
+_tile_pipeline_add(cesium::TileRenderData* tile, City* city, render::MappedHandle<ui::CameraUniformBuffer> camera_handle, RoadOverlayOption road_overlay_option_idx)
 {
     if (city->road.overlay_option_cur != 0)
     {
@@ -158,8 +158,9 @@ _tile_pipeline_add(cesium::TileRenderData* tile, City* city, render::MappedHandl
     }
     tile->render_data.colormap_handle = city->road.colormap_handle;
     tile->render_data.road_segment_buffer_handle = city->road.segment_buffer_handle;
-    tile->render_data.road_test_enabled = city->road_building_done && tile->compute_scheduled;
+    tile->render_data.road_test_enabled = city->road_building_done;
     tile->render_data.camera_handle = render::mapped_handle_erased(camera_handle);
+    tile->render_data.overlay_option_idx = road_overlay_option_idx;
     render::tile_pipeline_add(&tile->render_data);
 }
 
@@ -306,19 +307,9 @@ city_update(City* city, Buffer<city::Coordinate> new_agent_coords, async::Thread
     //
 
     // Update and render Cesium 3D Tiles ////////////
-    bool overlay_option_changed = neta_overlay_option != city->road.overlay_option_cur;
     if (city->road_building_done)
     {
         city->road.overlay_option_cur = neta_overlay_option;
-
-        render::Blend3DPipelineData road_pipeline_data = {
-            .vertex_buffer_handle = city->road.road_build_result.vertex_buffer_handle,
-            .index_buffer_handle = city->road.road_build_result.index_buffer_handle,
-            .texture_handle = city->road.texture_handle,
-            .colormap_handle = city->road.texture_handle,
-            .camera_handle = render::mapped_handle_erased(camera_handle),
-        };
-        render::blend_3d_draw(road_pipeline_data);
     }
 
     cesium::TilesetRenderer* tileset = {};
@@ -329,15 +320,6 @@ city_update(City* city, Buffer<city::Coordinate> new_agent_coords, async::Thread
         // always drawn tiles
         for (cesium::TileRenderData* tile = tileset->tile_to_show.first; tile; tile = tile->render_next)
         {
-            if (city->road_building_done)
-            {
-                if (tile->compute_scheduled == false || overlay_option_changed)
-                {
-                    tile->compute_scheduled = draw::draw_road_intersection_compute(tile->render_data.vertex_buffer_handle, tile->render_data.index_buffer_handle, city->road.segment_buffer_handle,
-                                                                                   city->road.segment_node_buffer_handle, neta_overlay_option);
-                }
-            }
-
             B32 is_map_tile = has_flag(tile->render_data.pipeline_bits, render::TilePipelineBits::IsMapTile);
             if (is_map_tile)
             {
@@ -346,7 +328,7 @@ city_update(City* city, Buffer<city::Coordinate> new_agent_coords, async::Thread
                     tile->render_data.height_offset = -tileset->height_offset;
                 }
 
-                _tile_pipeline_add(tile, city, camera_handle);
+                _tile_pipeline_add(tile, city, camera_handle, neta_overlay_option);
             }
         }
 
@@ -361,7 +343,7 @@ city_update(City* city, Buffer<city::Coordinate> new_agent_coords, async::Thread
                 {
                     tile->render_data.pipeline_bits |= render::TilePipelineBits::ColorDisable;
                     tile->render_data.depth_test_compare = render::DepthCompare::Always;
-                    _tile_pipeline_add(tile, city, camera_handle);
+                    _tile_pipeline_add(tile, city, camera_handle, neta_overlay_option);
                 }
             }
             // draw custom tiles with depth diabled but color enabled
@@ -372,7 +354,7 @@ city_update(City* city, Buffer<city::Coordinate> new_agent_coords, async::Thread
                 {
                     tile->render_data.pipeline_bits &= (~render::TilePipelineBits::ColorDisable);
                     tile->render_data.depth_test_compare = render::DepthCompare::LessOrEqual;
-                    _tile_pipeline_add(tile, city, camera_handle);
+                    _tile_pipeline_add(tile, city, camera_handle, neta_overlay_option);
                 }
             }
         }
@@ -1399,13 +1381,11 @@ buildings_buffers_create(Arena* arena, osm::Network* osm_network, F32 road_heigh
                 glm::vec3 local_next_pos = glm::vec3(ecef_to_local * glm::dvec4(next_node_loc.pos.x, next_node_loc.pos.y, next_node_loc.pos.z, 1.0));
 
                 F32 side_width = glm::length(local_next_pos - local_pos);
-                Vec2U32 id = {.u64 = (U64)way->id};
 
-                vertex_buffer.data[vert_idx] = {.pos = {local_pos.x, local_pos.y, local_pos.z + road_height}, .uv = {0.0f, 0.0f}, .object_id = id};
-                vertex_buffer.data[vert_idx + 1] = {.pos = {local_pos.x, local_pos.y, local_pos.z + road_height + building_height}, .uv = {0.0f, building_height}, .object_id = id};
-                vertex_buffer.data[vert_idx + 2] = {.pos = {local_next_pos.x, local_next_pos.y, local_next_pos.z + road_height}, .uv = {side_width, 0.0f}, .object_id = id};
-                vertex_buffer.data[vert_idx + 3] = {
-                    .pos = {local_next_pos.x, local_next_pos.y, local_next_pos.z + road_height + building_height}, .uv = {side_width, building_height}, .object_id = id};
+                vertex_buffer.data[vert_idx] = {.pos = {local_pos.x, local_pos.y, local_pos.z + road_height}, .uv = {0.0f, 0.0f}};
+                vertex_buffer.data[vert_idx + 1] = {.pos = {local_pos.x, local_pos.y, local_pos.z + road_height + building_height}, .uv = {0.0f, building_height}};
+                vertex_buffer.data[vert_idx + 2] = {.pos = {local_next_pos.x, local_next_pos.y, local_next_pos.z + road_height}, .uv = {side_width, 0.0f}};
+                vertex_buffer.data[vert_idx + 3] = {.pos = {local_next_pos.x, local_next_pos.y, local_next_pos.z + road_height + building_height}, .uv = {side_width, building_height}};
 
                 index_buffer.data[index_idx] = vert_idx;
                 index_buffer.data[index_idx + 1] = vert_idx + 1;
@@ -1472,11 +1452,9 @@ buildings_buffers_create(Arena* arena, osm::Network* osm_network, F32 road_heigh
                 {
                     osm::EcefLocation node_utm = final_utm_node_buffer.data[idx];
                     glm::vec3 local_pos = glm::vec3(ecef_to_local * glm::dvec4(node_utm.pos.x, node_utm.pos.y, node_utm.pos.z, 1.0));
-                    Vec2U32 id = {.u64 = (U64)way->id};
                     vertex_buffer.data[base_vertex_idx + idx] = {
                         .pos = {local_pos.x, local_pos.y, local_pos.z + road_height + building_height},
                         .uv = {local_pos.x, local_pos.y},
-                        .object_id = id,
                     };
                 }
 

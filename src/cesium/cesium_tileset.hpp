@@ -25,8 +25,6 @@ struct TileRenderData
     TileRenderData* render_next;
 
     render::TilePipelineData render_data;
-
-    bool compute_scheduled;
 };
 
 struct TileRasterOverlayAttachment

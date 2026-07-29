@@ -87,88 +87,6 @@ agent_instance_compute()
     }
 }
 
-g_internal void
-road_intersection_compute()
-{
-    Context* vk_ctx = ctx_get();
-    RenderFrame* render_frame = vk_ctx->render_frame;
-    RoadIntersectionList* list = &render_frame->road_intersection_list;
-
-    if (!list->first)
-    {
-        return;
-    }
-
-    VkCommandBuffer cmd_buffer = vk_ctx->command_buffers.data[vk_ctx->current_frame];
-    TracyVkZone(vk_ctx->tracy_ctx[vk_ctx->current_frame], cmd_buffer,
-                "road_intersection_compute"); // NOLINT
-
-    Pipeline* pipeline = &vk_ctx->road_intersection_pipeline;
-
-    vkCmdBindPipeline(cmd_buffer, VK_PIPELINE_BIND_POINT_COMPUTE, pipeline->pipeline);
-
-    for (RoadIntersectionNode* node = list->first; node; node = node->next)
-    {
-        U32 triangle_count = node->index_buffer.elem_count / 3;
-        RoadIntersectionPushConstants push_constants = {};
-        push_constants.road_segment_buffer_elem_count = node->road_segment_buffer.elem_count;
-        push_constants.overlay_option_idx = node->overlay_option_idx;
-
-        vkCmdPushConstants(cmd_buffer, pipeline->pipeline_layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(RoadIntersectionPushConstants), &push_constants);
-
-        VkDescriptorBufferInfo road_segment_buffer_info{};
-        road_segment_buffer_info.buffer = node->road_segment_buffer.buffer_alloc.buffer;
-        road_segment_buffer_info.offset = 0;
-        road_segment_buffer_info.range = VK_WHOLE_SIZE;
-
-        VkDescriptorBufferInfo road_segment_node_buffer_info{};
-        road_segment_node_buffer_info.buffer = node->road_segment_node_buffer.buffer_alloc.buffer;
-        road_segment_node_buffer_info.offset = 0;
-        road_segment_node_buffer_info.range = VK_WHOLE_SIZE;
-
-        VkDescriptorBufferInfo vertex_buffer_info{};
-        vertex_buffer_info.buffer = node->vertex_buffer.buffer_alloc.buffer;
-        vertex_buffer_info.offset = 0;
-        vertex_buffer_info.range = VK_WHOLE_SIZE;
-
-        VkDescriptorBufferInfo index_buffer_info{};
-        index_buffer_info.buffer = node->index_buffer.buffer_alloc.buffer;
-        index_buffer_info.offset = 0;
-        index_buffer_info.range = VK_WHOLE_SIZE;
-
-        VkWriteDescriptorSet push_writes[] = {
-            {.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, .dstBinding = 0, .descriptorCount = 1, .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, .pBufferInfo = &road_segment_buffer_info},
-            {.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-             .dstBinding = 1,
-             .descriptorCount = 1,
-             .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
-             .pBufferInfo = &road_segment_node_buffer_info},
-            {.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, .dstBinding = 2, .descriptorCount = 1, .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, .pBufferInfo = &vertex_buffer_info},
-            {.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, .dstBinding = 3, .descriptorCount = 1, .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, .pBufferInfo = &index_buffer_info},
-        };
-
-        cmd_push_descriptor_set_khr(cmd_buffer, VK_PIPELINE_BIND_POINT_COMPUTE, pipeline->pipeline_layout, 0, ArrayCount(push_writes), push_writes);
-
-        U32 workgroup_count = (triangle_count + 255) / 256; // 256 is the workgroup size specified in the shader
-        vkCmdDispatch(cmd_buffer, workgroup_count, 1, 1);
-
-        VkBufferMemoryBarrier2 barrier = {.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER_2,
-                                          .srcStageMask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
-                                          .srcAccessMask = VK_ACCESS_2_SHADER_WRITE_BIT,
-                                          .dstStageMask = VK_PIPELINE_STAGE_2_VERTEX_ATTRIBUTE_INPUT_BIT,
-                                          .dstAccessMask = VK_ACCESS_2_VERTEX_ATTRIBUTE_READ_BIT,
-                                          .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-                                          .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-                                          .buffer = node->vertex_buffer.buffer_alloc.buffer,
-                                          .offset = 0,
-                                          .size = node->vertex_buffer.buffer_alloc.size};
-        VkDependencyInfo dep_info = {.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO, .bufferMemoryBarrierCount = 1, .pBufferMemoryBarriers = &barrier};
-
-        vkCmdPipelineBarrier2(cmd_buffer, &dep_info);
-    }
-
-} // namespace vulkan
-
 static void
 agent_instance_rendering()
 {
@@ -266,8 +184,8 @@ static void
 camera_descriptor_set_layout_create(Context* vk_ctx)
 {
     VkDescriptorSetLayoutBinding bindings[] = {
-        {0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT | VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT, NULL},
-        {1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT, NULL},
+        {0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1, VK_SHADER_STAGE_VERTEX_BIT, NULL},
+        {1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_VERTEX_BIT, NULL},
     };
 
     VkDescriptorSetLayoutCreateInfo layout_info{};
@@ -345,11 +263,11 @@ draw_indexed_separate_depth_and_color_calls(VkCommandBuffer cmd_buffer, U32 inde
 }
 
 static void
-model_3d_rendering()
+tile_rendering()
 {
     Context* vk_ctx = ctx_get();
     VkCommandBuffer cmd_buffer = vk_ctx->command_buffers.data[vk_ctx->current_frame];
-    TracyVkZone(vk_ctx->tracy_ctx[vk_ctx->current_frame], cmd_buffer, "model_3d_rendering");
+    TracyVkZone(vk_ctx->tracy_ctx[vk_ctx->current_frame], cmd_buffer, "tile_rendering");
 
     Pipeline* model_3D_pipeline = &vk_ctx->model_3D_pipeline;
     RenderFrame* render_frame = vk_ctx->render_frame;
@@ -400,7 +318,7 @@ model_3d_rendering()
 
         cmd_push_descriptor_set_khr(cmd_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, model_3D_pipeline->pipeline_layout, 0, ArrayCount(push_writes), push_writes);
         vkCmdSetDepthBias(cmd_buffer, 0, 0, 0);
-        VkShaderStageFlags push_constant_stages = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT | VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT | VK_SHADER_STAGE_FRAGMENT_BIT;
+        VkShaderStageFlags push_constant_stages = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT;
         vkCmdPushConstants(cmd_buffer, model_3D_pipeline->pipeline_layout, push_constant_stages, 0, sizeof(TilePipelinePushConstants), &node->push_constants);
         vkCmdBindDescriptorSets(cmd_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, model_3D_pipeline->pipeline_layout, 1, ArrayCount(descriptor_sets), descriptor_sets, 0, NULL);
         vkCmdBindVertexBuffers(cmd_buffer, 0, 1, &node->vertex_alloc.buffer, offsets);
@@ -599,16 +517,16 @@ command_buffer_record(U32 image_index, U32 current_frame, Vec2S64 mouse_cursor_p
         B32 object_id_images_initialized = swapchain_resource->object_id_images_initialized.data[image_index];
 
         VkImageMemoryBarrier2 pre_render_object_id_barrier{.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
-                                                            .srcStageMask = object_id_images_initialized ? VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT : VK_PIPELINE_STAGE_2_NONE,
-                                                            .srcAccessMask = object_id_images_initialized ? VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT : VK_ACCESS_2_NONE,
-                                                            .dstStageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
-                                                            .dstAccessMask = VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT,
-                                                            .oldLayout = object_id_images_initialized ? VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL : VK_IMAGE_LAYOUT_UNDEFINED,
-                                                            .newLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-                                                            .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-                                                            .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-                                                            .image = object_id_image,
-                                                            .subresourceRange = {.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT, .baseMipLevel = 0, .levelCount = 1, .baseArrayLayer = 0, .layerCount = 1}};
+                                                           .srcStageMask = object_id_images_initialized ? VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT : VK_PIPELINE_STAGE_2_NONE,
+                                                           .srcAccessMask = object_id_images_initialized ? VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT : VK_ACCESS_2_NONE,
+                                                           .dstStageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
+                                                           .dstAccessMask = VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT,
+                                                           .oldLayout = object_id_images_initialized ? VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL : VK_IMAGE_LAYOUT_UNDEFINED,
+                                                           .newLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+                                                           .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+                                                           .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+                                                           .image = object_id_image,
+                                                           .subresourceRange = {.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT, .baseMipLevel = 0, .levelCount = 1, .baseArrayLayer = 0, .layerCount = 1}};
 
         VkImageMemoryBarrier2 pre_render_object_id_resolve_image_barrier{
             .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
@@ -623,8 +541,8 @@ command_buffer_record(U32 image_index, U32 current_frame, Vec2S64 mouse_cursor_p
             .image = object_id_resolve_image,
             .subresourceRange = {.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT, .baseMipLevel = 0, .levelCount = 1, .baseArrayLayer = 0, .layerCount = 1}};
 
-        VkImageMemoryBarrier2 pre_render_barriers[] = {
-            pre_render_color_barrier, pre_render_depth_barrier, pre_render_object_id_barrier, pre_render_swapchain_barrier, pre_render_object_id_resolve_image_barrier};
+        VkImageMemoryBarrier2 pre_render_barriers[] = {pre_render_color_barrier, pre_render_depth_barrier, pre_render_object_id_barrier, pre_render_swapchain_barrier,
+                                                       pre_render_object_id_resolve_image_barrier};
         VkDependencyInfo pre_render_transition_info = {
             .sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO, .imageMemoryBarrierCount = ArrayCount(pre_render_barriers), .pImageMemoryBarriers = pre_render_barriers};
 
@@ -699,12 +617,6 @@ command_buffer_record(U32 image_index, U32 current_frame, Vec2S64 mouse_cursor_p
                 buffer_alloc_create_or_resize(vk_ctx->render_frame->car_instance_render_list.total_instance_buffer_byte_count, vk_ctx->model_3D_instance_buffer[vk_ctx->current_frame],
                                               VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT);
 
-            // ~mgj: Compute shaders
-            debug_label.pLabelName = "Road Intersection Compute";
-            CMD_BEGIN_DEBUG_UTILS_LABEL_EXT(current_cmd_buf, &debug_label);
-            road_intersection_compute();
-            CMD_END_DEBUG_UTILS_LABEL_EXT(current_cmd_buf);
-
             debug_label.pLabelName = "Car Instance Compute";
             CMD_BEGIN_DEBUG_UTILS_LABEL_EXT(current_cmd_buf, &debug_label);
             agent_instance_compute();
@@ -743,7 +655,7 @@ command_buffer_record(U32 image_index, U32 current_frame, Vec2S64 mouse_cursor_p
 
             debug_label.pLabelName = "Model 3D Rendering";
             CMD_BEGIN_DEBUG_UTILS_LABEL_EXT(current_cmd_buf, &debug_label);
-            model_3d_rendering();
+            tile_rendering();
             CMD_END_DEBUG_UTILS_LABEL_EXT(current_cmd_buf);
 
             blend_3d_rendering();
@@ -840,7 +752,6 @@ command_buffer_record(U32 image_index, U32 current_frame, Vec2S64 mouse_cursor_p
                 U64* object_id = (U64*)swapchain_resource->object_id_buffer_readback[current_frame].mapped_ptr;
                 vk_ctx->hovered_object_id = *object_id;
             }
-
         }
 
         TracyVkCollect(vk_ctx->tracy_ctx[current_frame], current_cmd_buf);

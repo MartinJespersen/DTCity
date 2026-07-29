@@ -14,9 +14,8 @@ struct RenderPushConstants
     float overlay_scale_y;
     float height_offset;
     float lod_fade;
-    float tessellation_factor;
-    float tessellated_edge_size;
     uint road_test_enabled;
+    uint overlay_option_idx;
 };
 
 struct Bounds

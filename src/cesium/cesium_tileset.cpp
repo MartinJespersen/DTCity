@@ -739,8 +739,6 @@ assign_vertex_values(glm::vec2 v, TileVertexFace& face, geometry::Triangle2d& pr
     out_vertex->overlay_uv = interpolated_overlay_uv;
     out_vertex->uv = interpolated_uv;
     // TODO: the below fields should also change: eg. object_id could be known, road_segment_idx is no longer needed.
-    out_vertex->object_id = vec_2u32(0, 0);
-    out_vertex->colormap_value = 0;
     out_vertex->road_segment_idx = 0;
 }
 
@@ -768,8 +766,6 @@ mesh_append(Arena* arena, ChunkList<render::TileVertex>* vertices_chunk_list, Ch
     for (auto vert : mesh.vertices)
     {
         vert.road_segment_idx = road_idx;
-        vert.colormap_value = road_idx != 0 ? 1.0f : 0.0f;
-        vert.object_id = vec_2u32(0, 0);
         chunk_list_insert(arena, vertices_chunk_list, vert);
     }
 
@@ -1033,10 +1029,8 @@ tile_render_data_from_gltf(const CesiumGltf::Model& model, const glm::dmat4& ece
             for (U32 i = 0; i < (U32)pos_accessor->count; ++i)
             {
                 render::TileVertex* vertex = &vertices.data[i];
-                vertex->colormap_value = 0.0f;
                 vertex->uv = {};
                 vertex->overlay_uv = {};
-                vertex->object_id = {};
 
                 const F32* pos = (const F32*)(pos_data + i * pos_stride);
                 glm::dvec4 pos_node = node_transform * glm::dvec4(pos[0], pos[1], pos[2], 1.0);

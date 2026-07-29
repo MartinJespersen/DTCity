@@ -259,6 +259,8 @@ struct TilePipelineData
 
     TilePipelineBits pipeline_bits;
     DepthCompare depth_test_compare;
+
+    U32 overlay_option_idx;
 };
 
 struct TilePipelineDataNode
@@ -285,10 +287,8 @@ struct Blend3DPipelineData
 struct TileVertex
 {
     glm::vec3 pos;
-    F32 colormap_value;
     glm::vec2 uv;
     glm::vec2 overlay_uv;
-    Vec2U32 object_id;
     U32 road_segment_idx;
 };
 
