@@ -355,22 +355,18 @@ triangle_partition_by_quads(Arena* arena, Triangle2d triangle, Buffer<Quad2d> cl
     // Planar subdivision can grow very quickly for coarse faces containing
     // many roads. Reuse fixed work buffers so intermediate clip results cannot
     // consume the entire worker scratch arena.
-    constexpr U32 max_partition_triangle_count = 32768;
-    Triangle2d* remaining_triangles = PushArray(scratch.arena, Triangle2d, max_partition_triangle_count);
-    Triangle2d* next_remaining_triangles = PushArray(scratch.arena, Triangle2d, max_partition_triangle_count);
-    ClassifiedTriangle2d* claimed_triangles = PushArray(scratch.arena, ClassifiedTriangle2d, max_partition_triangle_count);
-    U32 remaining_triangle_count = 1;
-    U32 claimed_triangle_count = 0;
-    remaining_triangles[0] = triangle;
-
+    constexpr U32 partition_chunk_capacity = 256;
+    ChunkList<Triangle2d>* remaining_triangles = chunk_list_create<Triangle2d>(scratch.arena, partition_chunk_capacity);
+    ChunkList<Triangle2d>* next_remaining_triangles = chunk_list_create<Triangle2d>(scratch.arena, partition_chunk_capacity);
+    ChunkList<ClassifiedTriangle2d>* claimed_triangles = chunk_list_create<ClassifiedTriangle2d>(scratch.arena, partition_chunk_capacity);
+    chunk_list_insert(scratch.arena, remaining_triangles, triangle);
     for (U32 quad_idx = 0; quad_idx < clipping_quads.size; ++quad_idx)
     {
         Quad2d& quad = clipping_quads.data[quad_idx];
-        U32 next_remaining_triangle_count = 0;
-
-        for (U32 remaining_triangle_idx = 0; remaining_triangle_idx < remaining_triangle_count; ++remaining_triangle_idx)
+        chunk_list_empty(next_remaining_triangles);
+        for (U32 remaining_triangle_idx = 0; remaining_triangle_idx < remaining_triangles->total_count; ++remaining_triangle_idx)
         {
-            Triangle2d& remaining_triangle = remaining_triangles[remaining_triangle_idx];
+            Triangle2d& remaining_triangle = (*remaining_triangles)[remaining_triangle_idx];
 
             // Clip and CDT allocations only need to live for this input
             // triangle. Excluding the partition work arena selects the other
@@ -379,24 +375,14 @@ triangle_partition_by_quads(Arena* arena, Triangle2d triangle, Buffer<Quad2d> cl
             ClipResult clip_result = quad_to_triangle_clipping(triangle_scratch.arena, remaining_triangle, quad);
             if (clip_result.inner.size < 3)
             {
-                if (claimed_triangle_count + next_remaining_triangle_count >= max_partition_triangle_count)
-                {
-                    ERROR_LOG("Triangle partition exceeded %u triangles", max_partition_triangle_count);
-                    return {};
-                }
-                next_remaining_triangles[next_remaining_triangle_count++] = remaining_triangle;
+                chunk_list_insert(scratch.arena, next_remaining_triangles, remaining_triangle);
                 continue;
             }
 
             PolygonMesh2d inner_mesh = polygon_triangulate(triangle_scratch.arena, clip_result.inner);
             if (inner_mesh.indices.size < 3)
             {
-                if (claimed_triangle_count + next_remaining_triangle_count >= max_partition_triangle_count)
-                {
-                    ERROR_LOG("Triangle partition exceeded %u triangles", max_partition_triangle_count);
-                    return {};
-                }
-                next_remaining_triangles[next_remaining_triangle_count++] = remaining_triangle;
+                chunk_list_insert(scratch.arena, next_remaining_triangles, remaining_triangle);
                 continue;
             }
 
@@ -435,27 +421,14 @@ triangle_partition_by_quads(Arena* arena, Triangle2d triangle, Buffer<Quad2d> cl
 
             if (!outer_triangulation_succeeded)
             {
-                if (claimed_triangle_count + next_remaining_triangle_count >= max_partition_triangle_count)
-                {
-                    ERROR_LOG("Triangle partition exceeded %u triangles", max_partition_triangle_count);
-                    return {};
-                }
-                next_remaining_triangles[next_remaining_triangle_count++] = remaining_triangle;
+                chunk_list_insert(scratch.arena, next_remaining_triangles, remaining_triangle);
                 continue;
             }
 
             Assert(inner_mesh.indices.size % 3 == 0);
-            U64 inner_triangle_count = inner_mesh.indices.size / 3;
-            U64 partition_triangle_count = (U64)claimed_triangle_count + next_remaining_triangle_count + outer_triangles->total_count + inner_triangle_count;
-            if (partition_triangle_count > max_partition_triangle_count)
-            {
-                ERROR_LOG("Triangle partition exceeded %u triangles", max_partition_triangle_count);
-                return {};
-            }
-
             for (U32 index_idx = 0; index_idx < inner_mesh.indices.size; index_idx += 3)
             {
-                ClassifiedTriangle2d* claimed_triangle = &claimed_triangles[claimed_triangle_count++];
+                ClassifiedTriangle2d* claimed_triangle = chunk_list_get_next(scratch.arena, claimed_triangles);
                 *claimed_triangle = {};
                 claimed_triangle->region_idx = quad_idx + 1;
                 for (U32 triangle_vertex_idx = 0; triangle_vertex_idx < ArrayCount(claimed_triangle->triangle.v); ++triangle_vertex_idx)
@@ -467,24 +440,24 @@ triangle_partition_by_quads(Arena* arena, Triangle2d triangle, Buffer<Quad2d> cl
 
             for (Triangle2d& outer_triangle : *outer_triangles)
             {
-                next_remaining_triangles[next_remaining_triangle_count++] = outer_triangle;
+                chunk_list_insert(scratch.arena, next_remaining_triangles, outer_triangle);
             }
         }
 
-        Swap(Triangle2d*, remaining_triangles, next_remaining_triangles);
-        remaining_triangle_count = next_remaining_triangle_count;
-        if (remaining_triangle_count == 0)
+        Swap(ChunkList<Triangle2d>*, remaining_triangles, next_remaining_triangles);
+        if (remaining_triangles->total_count == 0)
         {
             break;
         }
     }
 
-    Buffer<ClassifiedTriangle2d> result = buffer_alloc<ClassifiedTriangle2d>(arena, claimed_triangle_count + remaining_triangle_count);
-    MemoryCopy(result.data, claimed_triangles, sizeof(ClassifiedTriangle2d) * claimed_triangle_count);
-    for (U32 remaining_triangle_idx = 0; remaining_triangle_idx < remaining_triangle_count; ++remaining_triangle_idx)
+    Buffer<ClassifiedTriangle2d> result = buffer_alloc<ClassifiedTriangle2d>(arena, claimed_triangles->total_count + remaining_triangles->total_count);
+    buffer_from_chunk_list_append(result, 0, claimed_triangles);
+
+    for (U32 remaining_triangle_idx = 0; remaining_triangle_idx < remaining_triangles->total_count; ++remaining_triangle_idx)
     {
-        ClassifiedTriangle2d* terrain_triangle = &result.data[claimed_triangle_count + remaining_triangle_idx];
-        terrain_triangle->triangle = remaining_triangles[remaining_triangle_idx];
+        ClassifiedTriangle2d* terrain_triangle = &result.data[claimed_triangles->total_count + remaining_triangle_idx];
+        terrain_triangle->triangle = (*remaining_triangles)[remaining_triangle_idx];
     }
     return result;
 }

@@ -12,19 +12,6 @@
 * Determine vertex heights of generated vertices
 * Change UV coordinates by
 
-
-    geometry::Triangle2d triangle = {{
-        (0.0, 0.0),
-        (10.0, 0.0),
-        (0.0, 10.0),
-    }};
-    geometry::Quad2d quad = {{
-        (2.0, -2.0),
-        (6.0, -2.0),
-        (6.0, 4.0),
-        (2.0, 4.0)
-    }};
-
 # Tessellation review findings
 * [Critical] Fix CPU BVH traversal in `tessellate_roads_overlapping`. Pop the current node before pushing its children; the deferred pop currently removes a child and leaves the parent on the stack, causing repeated traversal or an infinite loop.
 * [High] Tessellate every SAT-confirmed overlap case, including when all face vertices are outside the road, all face vertices are inside the road, or a road crosses a coarse face without containing any face vertex.

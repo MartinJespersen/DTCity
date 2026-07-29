@@ -781,7 +781,7 @@ mesh_append(Arena* arena, ChunkList<render::TileVertex>* vertices_chunk_list, Ch
 }
 
 g_internal Mesh
-tessellate_tile_face_for_roads(Arena* arena, city::RoadSegmentNode* root, Buffer<city::RoadSegmentCorners> road_buffer, TileVertexFace& face)
+tessellate_tile_face_for_roads(Arena* arena, city::RoadSegmentNode* root, Buffer<city::RoadSegmentCorners> road_buffer, TileVertexFace& face, U32 MAX_ROADS_PER_FACE = 100)
 {
     prof_scope_marker;
     ScratchScope scratch = ScratchScope(&arena, 1);
@@ -865,6 +865,12 @@ tessellate_tile_face_for_roads(Arena* arena, city::RoadSegmentNode* root, Buffer
 
     Buffer<geometry::Quad2d> quad_buffer = buffer_from_chunk_list(scratch.arena, candidate_quads);
     Buffer<U32> road_index_buffer = buffer_from_chunk_list(scratch.arena, candidate_road_indices);
+
+    if (quad_buffer.size > MAX_ROADS_PER_FACE) // Too large triangle faces with too many road crossings should be rejected to reduce tesselation times
+    {
+        return {};
+    }
+
     Buffer<geometry::ClassifiedTriangle2d> partition = geometry::triangle_partition_by_quads(scratch.arena, projected_tri, quad_buffer);
 
     bool has_road_triangle = false;
@@ -1405,7 +1411,7 @@ tileset_renderer_create(TilesetRenderer* tileset, async::ThreadPool* threads, St
     create_context.options.enableLodTransitionPeriod = true;
     create_context.options.lodTransitionLength = 0.35f;
 
-    create_context.options.maximumScreenSpaceError = 8;
+    create_context.options.maximumScreenSpaceError = 16;
     create_context.options.preloadSiblings = true;
     create_context.options.loadingDescendantLimit = 6;
     create_context.options.forbidHoles = true;

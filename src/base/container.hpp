@@ -109,6 +109,7 @@ struct ChunkList
 {
     ChunkItem<T>* first;
     ChunkItem<T>* last;
+    ChunkItem<T>* free_list;
     U64 capacity;
     U64 chunk_count;
     U64 total_count;
@@ -117,6 +118,7 @@ struct ChunkList
     operator[](U64 idx)
     {
         U64 chunk_idx = idx / capacity;
+        U64 value_idx = idx % capacity;
 
         ChunkItem<T>* chunk = first;
         for (U64 i = 0; i < chunk_idx; ++i)
@@ -124,7 +126,7 @@ struct ChunkList
             chunk = chunk->next;
         }
 
-        return chunk->values[chunk->count - 1];
+        return chunk->values[value_idx];
     }
 
     struct Iterator
@@ -185,6 +187,9 @@ template <typename T>
 ChunkList<T>*
 chunk_list_create(Arena* arena, U64 capacity);
 template <typename T>
+lib_internal void
+chunk_list_empty(ChunkList<T>* list);
+template <typename T>
 ChunkItem<T>*
 chunk_item_from_array(Arena* arena, T* values, U64 count);
 template <typename T>
@@ -199,6 +204,9 @@ chunk_list_get_next(Arena* arena, ChunkList<T>* list);
 template <typename T>
 lib_internal Buffer<T>
 buffer_from_chunk_list(Arena* arena, ChunkList<T>* list);
+template <typename T>
+lib_internal Buffer<T>
+buffer_from_chunk_list_append(Buffer<T> buffer, U32 buffer_offset, ChunkList<T>* list);
 
 lib_internal String8
 str8_from_chunk_list(Arena* arena, ChunkList<U8>* list);

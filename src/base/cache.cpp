@@ -5,7 +5,7 @@ _hash_u64_from_str8(String8 str)
 }
 
 g_internal B32
-cache_needs_update(String8 cache_data_file, String8 cache_meta_file)
+cache_needs_update(String8 cache_data_file, String8 cache_meta_file, U32 ttl_sec)
 {
     ScratchScope scratch = ScratchScope(0, 0);
     U64 file_hash = 0;
@@ -67,7 +67,7 @@ cache_needs_update(String8 cache_data_file, String8 cache_meta_file)
 
                 Rng1U64 ttl_range = {U64(ttl_base - meta_data_str.str), U64(cur_byte - meta_data_str.str)};
                 file_timestamp = U64FromStr8(Str8Substr(meta_data_str, ttl_range), 10);
-                if (cur_time > file_timestamp + 10000) // hard coded ttl of 10,000 seconds
+                if (cur_time > file_timestamp + ttl_sec) // hard coded ttl of 10,000 seconds
                 {
                     update_needed = true;
                 }
@@ -116,7 +116,7 @@ cache_write(String8 cache_file, String8 content, String8 hash_content)
 }
 
 lib_internal Result<String8>
-cache_read(Arena* arena, String8 cache_file, String8 hash_input)
+cache_read(Arena* arena, String8 cache_file, String8 hash_input, U32 ttl_sec)
 {
     prof_scope_marker;
     ScratchScope scratch = ScratchScope(&arena, 1);
@@ -149,7 +149,7 @@ cache_read(Arena* arena, String8 cache_file, String8 hash_input)
             DEBUG_LOG("DataFetch: Could not read everything from cache\n");
         }
 
-        B32 needs_update = cache_needs_update(hash_input, cache_meta_file);
+        B32 needs_update = cache_needs_update(hash_input, cache_meta_file, ttl_sec);
         read_from_cache = !needs_update;
     }
 
