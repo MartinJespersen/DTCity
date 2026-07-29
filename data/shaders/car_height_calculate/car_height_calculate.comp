@@ -11,10 +11,9 @@ struct Vertex
     float pos_x;
     float pos_y;
     float pos_z;
-    float overlay_option;
     vec2 uv;
     vec2 overlay_uv;
-    uvec2 object_id;
+    uvec2 road_segment_idx;
 };
 
 struct Agent {

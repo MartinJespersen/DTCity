@@ -691,7 +691,7 @@ agent_instance_compute_bucket_add(render::BufferInfo* instance_buffer_info, rend
 }
 
 g_internal bool
-agent_instance_render_bucket_add(render::MappedHandle<void> camera_handle, Buffer<render::ModelInfo> meshes, Buffer<render::Handle> texture_handles, render::BufferInfo* instance_buffer_info,
+agent_instance_render_bucket_add(render::MappedHandle<void> camera_handle, Buffer<render::AgentModelInfo> meshes, Buffer<render::Handle> texture_handles, render::BufferInfo* instance_buffer_info,
                                  U32 instance_buffer_offset)
 {
     if (instance_buffer_info->buffer.size == 0 || instance_buffer_info->elem_count == 0 || meshes.size == 0 || texture_handles.size == 0)
@@ -706,7 +706,7 @@ agent_instance_render_bucket_add(render::MappedHandle<void> camera_handle, Buffe
     B32 resources_loaded = true;
     for (U32 mesh_idx = 0; mesh_idx < meshes.size; ++mesh_idx)
     {
-        render::ModelInfo* mesh = meshes[mesh_idx];
+        render::AgentModelInfo* mesh = meshes[mesh_idx];
         if (mesh->texture_handle_idx >= texture_handles.size)
         {
             return false;

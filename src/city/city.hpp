@@ -178,56 +178,6 @@ struct RoadSegment
     RoadCrossSection end;
 };
 
-typedef S64 WsId;
-struct Agent
-{
-    glm::dvec3 ecef_coord;
-    glm::dvec3 ecef_dir;
-    U64 latest_update_frame;
-    VehicleType vehicle_type;
-
-    // rendering
-    render::Transform model_matrix;
-};
-
-struct AgentMapItem
-{
-    Agent* agent;
-};
-
-struct AgentConfig
-{
-    // static input
-    String8 asset_file_name;
-    glm::vec3 model_forward_dir; // +X is forward
-    F32 model_to_world_scale;
-
-    // computed
-    Rng3F32 model_bounds;
-};
-
-struct ModelRenderInfo
-{
-    // rendering
-    Buffer<render::ModelInfo> geometry;
-    Buffer<render::Handle> texture_handles;
-};
-
-struct AgentSim
-{
-    Allocator* allocator;
-
-    String8 asset_dir;
-    String8 texture_dir;
-    U32 agent_count;
-    U32 max_agent_count;
-
-    AgentConfig agent_config[(S32)VehicleType::Count];
-    ModelRenderInfo models[(S32)VehicleType::Count];
-    Map<WsId, AgentMapItem>* agent_map;
-    ArenaArray<Agent>* agents_active;
-};
-
 struct BuildingRenderInfo
 {
     Buffer<render::TileVertex> vertex_buffer;
@@ -354,15 +304,6 @@ buildings_buffers_create(Arena* arena, osm::Network* network, F32 road_height, g
 g_internal Buffer<U32>
 EarClipping(Arena* arena, Buffer<Vec2F64> node_buffer);
 
-// ~mgj: Cars
-g_internal void
-agents_create(AgentSim* car_sim);
-g_internal void
-agent_sim_destroy(AgentSim* car_sim);
-g_internal void
-agent_sim_update(AgentSim* agent_sim, Buffer<Coordinate> coord_buffer, glm::dmat4& ecef_to_local, F32 scale_factor, U64 cur_frame);
-g_internal glm::dmat3
-_gltf_rotation_to_world(glm::dvec3 world_dir, glm::dvec3 model_dir);
 // ~mgj: HTTP and caching
 g_internal String8
 str8_from_bbox(Arena* arena, Rng2F64 bbox);

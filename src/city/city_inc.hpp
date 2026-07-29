@@ -5,4 +5,5 @@
 
 // ~mgj: user defined[h/hpp]
 #include "neta.hpp"
+#include "agent.hpp"
 #include "city/city.hpp"

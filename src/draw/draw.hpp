@@ -58,12 +58,6 @@ struct DrawFrame
     RoadIntersectionList road_intersection_list;
 };
 
-struct CarInstanceDrawResult
-{
-    bool render_scheduled;
-    U32 buffer_offset;
-};
-
 struct Draw
 {
     // reset every frame
@@ -86,7 +80,5 @@ draw_flush();
 
 g_internal void
 draw_blend_3d(render::Blend3DPipelineData pipeline_input);
-g_internal CarInstanceDrawResult
-draw_agent_instance_render(render::MappedHandle<void> camera_handle, Buffer<render::ModelInfo> meshes, Buffer<render::Handle> texture_handles, render::BufferInfo* instance_buffer_info);
 
 } // namespace draw

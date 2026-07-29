@@ -34,10 +34,8 @@ struct Vertex {
     float pos_x;
     float pos_y;
     float pos_z;
-    float overlay_option;
     vec2 uv;
     vec2 overlay_uv;
-    uvec2 id;
     uint road_segment_idx;
 };
 

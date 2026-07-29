@@ -56,21 +56,4 @@ draw_flush()
     }
 }
 
-g_internal CarInstanceDrawResult
-draw_agent_instance_render(render::MappedHandle<void> camera_handle, Buffer<render::ModelInfo> meshes, Buffer<render::Handle> texture_handles, render::BufferInfo* instance_buffer_info)
-{
-    DrawFrame* frame = draw_frame_get();
-    U32 align = 16;
-    U32 instance_buffer_offset = frame->total_instance_buffer_byte_count + (align - 1);
-    instance_buffer_offset -= instance_buffer_offset % align;
-
-    frame->total_instance_buffer_byte_count = Max(frame->total_instance_buffer_byte_count, instance_buffer_offset + instance_buffer_info->buffer.size);
-
-    CarInstanceDrawResult result = {};
-    result.render_scheduled = render::agent_instance_render_bucket_add(camera_handle, meshes, texture_handles, instance_buffer_info, instance_buffer_offset);
-    result.buffer_offset = instance_buffer_offset;
-
-    return result;
-}
-
 } // namespace draw

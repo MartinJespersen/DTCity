@@ -149,7 +149,7 @@ agent_instance_rendering()
         VkDeviceSize vertex_offsets[] = {0, node->instance_buffer_offset};
         for (U32 mesh_idx = 0; mesh_idx < node->meshes.size; ++mesh_idx)
         {
-            render::ModelInfo* mesh = node->meshes[mesh_idx];
+            render::AgentModelInfo* mesh = node->meshes[mesh_idx];
             render::AssetItem<BufferHandle>* vertex_item = asset_manager_buffer_item_get(mesh->vertex_handle);
             render::AssetItem<BufferHandle>* index_item = asset_manager_buffer_item_get(mesh->index_handle);
             if (mesh->texture_handle_idx >= node->texture_handles.size)

@@ -1497,6 +1497,13 @@ rng_3f32(Vec3F32 min, Vec3F32 max)
     Rng3F32 r = {min, max};
     return r;
 }
+lib_internal Rng3F32
+sub_rng3f32(Rng3F32 r, Vec3F32 x)
+{
+    r.min = sub_3f32(r.min, x);
+    r.max = sub_3f32(r.max, x);
+    return r;
+}
 lib_internal Rng2F32
 rng2f32_inverted_inf(void)
 {
