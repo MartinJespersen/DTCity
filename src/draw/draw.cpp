@@ -46,14 +46,4 @@ draw_frame_get()
     return g_draw_ctx.frame;
 }
 
-g_internal void
-draw_flush()
-{
-    DrawFrame* frame = draw_frame_get();
-    for (RoadIntersectionNode* node = frame->road_intersection_list.first; node; node = node->next)
-    {
-        render::road_intersection_compute_add(node->vertex_buffer_handle, node->index_buffer_handle, node->road_segment_buffer_handle, node->road_segment_node_buffer_handle, node->overlay_option);
-    }
-}
-
 } // namespace draw

@@ -116,6 +116,9 @@ tile_render_data_from_gltf(const CesiumGltf::Model& model, const glm::dmat4& ece
 g_internal RasterRenderResource*
 render_raster_tile_record(render::ThreadWorkerCmdCtx* thread_input, RasterTileInfo* tile_info);
 
+g_internal F64
+sample_height_from_result(const Cesium3DTilesSelection::SampleHeightResult& result, const char* label);
+
 g_internal void
 _tileset_renderer_free_handles(TileRenderDataList* list);
 

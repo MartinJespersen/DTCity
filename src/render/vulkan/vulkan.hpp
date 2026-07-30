@@ -42,8 +42,9 @@ struct CarInstancePushConstants
 
 struct CarHeightCalculatePushConstants
 {
-    U32 car_count;
-    F32 agent_center_offset;
+    U32 agent_count;
+    F32 agent_height_offset;
+    F32 tile_height_offset;
 };
 
 struct CarInstanceComputeNode
@@ -244,7 +245,6 @@ struct Context
     Pipeline model_3D_pipeline;
     Pipeline car_instance_pipeline;
     Pipeline blend_3d_pipeline;
-    Pipeline car_height_calculate_pipeline;
     Pipeline bbox_pipeline;
     VkDescriptorSetLayout road_segment_descriptor_set_layout;
     VkDescriptorSetLayout storage_buffer_descriptor_set_layout;
@@ -286,11 +286,6 @@ camera_descriptor_set_layout_create(Context* vk_ctx);
 static void
 blend_3d_bucket_add(BufferAllocation* vertex_buffer_allocation, BufferAllocation* index_buffer_allocation, render::Handle texture_handle, render::Handle colormap_handle,
                     render::MappedHandle<void> camera_handle);
-
-g_internal void
-agent_instance_compute();
-static void
-road_intersection_bucket_add(BufferHandle* vertex_buffer, BufferHandle* index_buffer, BufferHandle* road_segment_buffer, BufferHandle* road_segment_node_buffer, U32 overlay_option);
 
 static void
 tile_rendering();

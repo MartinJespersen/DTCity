@@ -286,9 +286,12 @@ dt_main_loop(void* ptr)
             ImGui::RadioButton(city::road_overlay_option_strs[i], (int*)&neta_overlay_option, (int)i);
         }
 
-        ImGui::SeparatorText("Agent Size");
-        city::City* selected_city = city_buf[area_option];
-        ImGui::SliderFloat("Scale", &selected_city->all_agent_scale_factor, 0.01f, 100.0f, "%.3f");
+        {
+            prof_scope_marker_named("Scroll Agent Time");
+            ImGui::SeparatorText("Agent Size");
+            city::City* selected_city = city_buf[area_option];
+            ImGui::SliderFloat("Scale", &selected_city->all_agent_scale_factor, 0.01f, 100.0f, "%.3f");
+        }
 
         ImGui::End();
 
@@ -310,6 +313,11 @@ dt_main_loop(void* ptr)
         bool imgui_window_hovered = ImGui::IsWindowHovered(ImGuiHoveredFlags_AnyWindow);
         bool imgui_input_captured = imgui_io.WantCaptureMouse || imgui_io.WantCaptureKeyboard;
         bool world_camera_enable = !imgui_window_hovered && !imgui_input_captured;
+        area->no_gui_focus = false;
+        if (!world_camera_enable)
+        {
+            area->no_gui_focus = true;
+        }
         ui::camera_update(camera, ctx->io, ctx->time->frame_timestamp_delta_ms / 1'000'000, vec_2s32(io_ctx->framebuffer_width, io_ctx->framebuffer_height), world_camera_enable);
         // keep inactive cities' tilesets making progress so their raster overlay
         // tile providers finish creating in the background; the active city is
@@ -331,7 +339,6 @@ dt_main_loop(void* ptr)
 
         /////////////////////////////////////
 
-        draw::draw_flush();
         render::render_frame(framebuffer_dim, &io_ctx->framebuffer_resized, io_ctx->mouse_pos_cur_s64);
 
         ImGui::EndFrame();

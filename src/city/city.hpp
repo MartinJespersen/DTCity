@@ -266,6 +266,8 @@ struct City
     bool cars_creation_started;
     bool cars_creation_done;
 
+    bool no_gui_focus;
+
     Road road;
     AgentSim car_sim;
     F32 all_agent_scale_factor;

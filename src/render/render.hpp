@@ -430,13 +430,6 @@ g_internal bool
 agent_instance_render_bucket_add(render::MappedHandle<void> camera_handle, Buffer<render::AgentModelInfo> meshes, Buffer<render::Handle> texture_handles, render::BufferInfo* instance_buffer_info,
                                  U32 instance_buffer_offset);
 
-g_internal void
-agent_instance_compute_bucket_add(render::BufferInfo* instance_buffer_info, render::Handle tile_vertex_buffer_handle, render::Handle tile_index_buffer_handle, F32 car_center_to_road_offset,
-                                  U32 instance_buffer_offset);
-
-g_internal bool
-road_intersection_compute_add(Handle vertex_buffer_handle, Handle index_buffer_handle, Handle road_segment_buffer_handle, Handle road_segment_node_buffer_handle, U32 overlay_option);
-
 g_internal Handle
 buffer_load_async(BufferInfo* buffer_info);
 

@@ -250,53 +250,55 @@ city_update(City* city, Buffer<city::Coordinate> new_agent_coords, async::Thread
 
     if (city->osm_task_done)
     {
-        osm::RoadEdge** edge_ptr = map_get(&city->osm_network->edge_structure.edge_map, (S64)hovered_object_id);
-        if (edge_ptr)
+        if (!city->no_gui_focus)
         {
-            osm::RoadEdge* edge = *edge_ptr;
-            osm::WayNode* way_node = osm::way_find(city->osm_network, edge->way_id);
-            osm::Way* way = &way_node->way;
-
-            bool open = true;
-            ImGui::Begin("Object Info", &open, ImGuiWindowFlags_AlwaysAutoResize);
-            for (osm::Tag& tag : way->tags)
+            osm::RoadEdge** edge_ptr = map_get(&city->osm_network->edge_structure.edge_map, (S64)hovered_object_id);
+            if (edge_ptr)
             {
-                ImGui::Text("%s: %s", (char*)tag.key.str, (char*)tag.value.str);
-            }
+                osm::RoadEdge* edge = *edge_ptr;
+                osm::WayNode* way_node = osm::way_find(city->osm_network, edge->way_id);
+                osm::Way* way = &way_node->way;
 
-            city::RoadInfo* chosen_edge = map_get(city->road.road_info_map, edge->id);
-            if (chosen_edge)
-            {
-                for (U32 i = 1; i < ArrayCount(chosen_edge->options); i++)
+                bool open = true;
+                ImGuiWindowFlags object_info_flags = ImGuiWindowFlags_AlwaysAutoResize;
+                ImGui::Begin("Object Info", &open, object_info_flags);
+                for (osm::Tag& tag : way->tags)
                 {
-                    ImGui::Text("%s: %lf", city::road_overlay_option_strs[i], chosen_edge->options[i]);
+                    ImGui::Text("%s: %s", (char*)tag.key.str, (char*)tag.value.str);
                 }
-            }
-            ImVec2 window_size = ImGui::GetWindowSize();
-            ImVec2 window_pos = ImVec2((F32)framebuffer_dim.x - window_size.x, 0);
-            ImGui::SetWindowPos(window_pos, ImGuiCond_Always);
 
-            ImGui::End();
-        }
-    }
-    if (city->osm_task_done)
-    {
-        osm::WayNode* way_node = osm::way_find(city->osm_network, hovered_object_id);
-        if (way_node)
-        {
-            osm::Way* way = &way_node->way;
-            bool open = true;
-            ImGui::Begin("Object Info", &open, ImGuiWindowFlags_AlwaysAutoResize);
-            for (U32 tag_idx = 0; tag_idx < way->tags.size; tag_idx += 1)
+                city::RoadInfo* chosen_edge = map_get(city->road.road_info_map, edge->id);
+                if (chosen_edge)
+                {
+                    for (U32 i = 1; i < ArrayCount(chosen_edge->options); i++)
+                    {
+                        ImGui::Text("%s: %lf", city::road_overlay_option_strs[i], chosen_edge->options[i]);
+                    }
+                }
+                ImVec2 window_size = ImGui::GetWindowSize();
+                ImVec2 window_pos = ImVec2((F32)framebuffer_dim.x - window_size.x, 0);
+                ImGui::SetWindowPos(window_pos, ImGuiCond_Always);
+
+                ImGui::End();
+            }
+            osm::WayNode* way_node = osm::way_find(city->osm_network, hovered_object_id);
+            if (way_node)
             {
-                osm::Tag* tag = &way->tags.data[tag_idx];
-                ImGui::Text("%s: %s", (char*)tag->key.str, (char*)tag->value.str);
-            }
-            ImVec2 window_size = ImGui::GetWindowSize();
-            ImVec2 window_pos = ImVec2((F32)framebuffer_dim.x - window_size.x, 0);
-            ImGui::SetWindowPos(window_pos, ImGuiCond_Always);
+                osm::Way* way = &way_node->way;
+                bool open = true;
+                ImGuiWindowFlags object_info_flags = ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoMouseInputs | ImGuiWindowFlags_NoFocusOnAppearing;
+                ImGui::Begin("Object Info", &open, object_info_flags);
+                for (U32 tag_idx = 0; tag_idx < way->tags.size; tag_idx += 1)
+                {
+                    osm::Tag* tag = &way->tags.data[tag_idx];
+                    ImGui::Text("%s: %s", (char*)tag->key.str, (char*)tag->value.str);
+                }
+                ImVec2 window_size = ImGui::GetWindowSize();
+                ImVec2 window_pos = ImVec2((F32)framebuffer_dim.x - window_size.x, 0);
+                ImGui::SetWindowPos(window_pos, ImGuiCond_Always);
 
-            ImGui::End();
+                ImGui::End();
+            }
         }
     }
 
@@ -386,7 +388,7 @@ city_update(City* city, Buffer<city::Coordinate> new_agent_coords, async::Thread
         {
             prof_scope_marker_named("Car update scope");
             F32 scale_factor = city->all_agent_scale_factor;
-            agent_sim_update(&city->car_sim, new_agent_coords, tileset->ecef_to_local, scale_factor, ctx->io->frame_count);
+            agent_sim_update(&city->car_sim, tileset, new_agent_coords, tileset->ecef_to_local, scale_factor, ctx->io->frame_count);
 
             AgentSim* agent_sim = &city->car_sim;
             AgentModelRenderInfo* models = agent_sim->models;
@@ -420,30 +422,12 @@ city_update(City* city, Buffer<city::Coordinate> new_agent_coords, async::Thread
             render::MappedHandle<void> camera_handle_void = render::mapped_handle_erased(camera_handle);
             for (U32 agent_cfg_idx = 0; agent_cfg_idx < ArrayCount(agent_sim->agent_config); ++agent_cfg_idx)
             {
-                AgentConfig* agent_config = &agent_sim->agent_config[agent_cfg_idx];
                 AgentModelRenderInfo* model_render_info = &models[agent_cfg_idx];
 
                 Buffer<render::Transform> transform_buffer = buffer_from_chunk_list(draw::draw_frame_arena_get(), transform_lists[agent_cfg_idx]);
                 render::BufferInfo instance_buffer_info = render::BufferInfo(transform_buffer, render::BufferType_Vertex | render::BufferType_StorageBuffer);
 
-                city::AgentInstanceDrawResult draw_result = city::agent_draw(camera_handle_void, model_render_info->geometry, model_render_info->texture_handles, &instance_buffer_info);
-
-                if (draw_result.render_scheduled)
-                {
-                    U32 instance_buffer_offset = draw_result.buffer_offset;
-                    for (cesium::TileRenderData* tile = tileset->tile_to_show.first; tile; tile = tile->render_next)
-                    {
-                        B32 is_map_tile = has_flag(tile->render_data.pipeline_bits, render::TilePipelineBits::IsMapTile);
-                        bool map_tile_reference = is_map_tile && (city_config->custom_geometry_enabled == false);
-                        bool custom_geometry_reference = (is_map_tile == false) && city_config->custom_geometry_enabled;
-
-                        if (map_tile_reference || custom_geometry_reference)
-                        {
-                            render::agent_instance_compute_bucket_add(&instance_buffer_info, tile->render_data.vertex_buffer_handle, tile->render_data.index_buffer_handle,
-                                                                      -agent_config->model_bounds.min.y, instance_buffer_offset);
-                        }
-                    }
-                }
+                city::agent_draw(camera_handle_void, model_render_info->geometry, model_render_info->texture_handles, &instance_buffer_info);
             }
         }
     }
@@ -981,8 +965,6 @@ quad_to_buffer_add(RoadSegmentCorners* road_segment, Buffer<render::Vertex3DBlen
     *cur_vertex_idx += 4;
     *cur_index_idx += 6;
 }
-
-// ~mgj: Cars
 
 g_internal osm::EcefLocation
 random_ecef_road_node_get(osm::Network* network)

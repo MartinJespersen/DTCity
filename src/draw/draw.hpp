@@ -75,8 +75,6 @@ g_internal Arena*
 draw_frame_arena_get();
 g_internal DrawFrame*
 draw_frame_get();
-g_internal void
-draw_flush();
 
 g_internal void
 draw_blend_3d(render::Blend3DPipelineData pipeline_input);

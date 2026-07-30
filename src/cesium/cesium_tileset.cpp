@@ -1322,7 +1322,7 @@ _tileset_renderer_create_context(TilesetRenderer* tileset, async::ThreadPool* th
 }
 
 g_internal F64
-_sample_height_from_result(const Cesium3DTilesSelection::SampleHeightResult& result, const char* label)
+sample_height_from_result(const Cesium3DTilesSelection::SampleHeightResult& result, const char* label)
 {
     F64 sampled_height = 0.0;
     if (result.positions.size() > 0)
@@ -1355,8 +1355,8 @@ _height_offset_sample_async(TilesetRenderer* renderer, CesiumGeospatial::Cartogr
         .thenInMainThread(
             [renderer, center_position](std::vector<Cesium3DTilesSelection::SampleHeightResult>&& results)
             {
-                F64 terrain_height = _sample_height_from_result(results[0], "terrain");
-                F64 geometry_height = _sample_height_from_result(results[1], "geometry");
+                F64 terrain_height = sample_height_from_result(results[0], "terrain");
+                F64 geometry_height = sample_height_from_result(results[1], "geometry");
 
                 B32 geometry_ok = results[0].sampleSuccess.size() > 0 && results[0].sampleSuccess[0];
                 B32 terrain_ok = results[1].sampleSuccess.size() > 0 && results[1].sampleSuccess[0];

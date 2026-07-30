@@ -27,67 +27,6 @@ ctx_get()
 }
 
 static void
-road_intersection_bucket_add(BufferHandle* vertex_buffer, BufferHandle* index_buffer, BufferHandle* road_segment_buffer, BufferHandle* road_segment_node_buffer, U32 overlay_option)
-{
-    Context* vk_ctx = ctx_get();
-    RoadIntersectionNode* node = PushStruct(vk_ctx->render_frame_arena, RoadIntersectionNode);
-    node->vertex_buffer = *vertex_buffer;
-    node->index_buffer = *index_buffer;
-    node->road_segment_buffer = *road_segment_buffer;
-    node->road_segment_node_buffer = *road_segment_node_buffer;
-    node->overlay_option_idx = overlay_option;
-    SLLQueuePush(vk_ctx->render_frame->road_intersection_list.first, vk_ctx->render_frame->road_intersection_list.last, node);
-}
-
-g_internal void
-agent_instance_compute()
-{
-    Context* vk_ctx = ctx_get();
-    RenderFrame* render_frame = vk_ctx->render_frame;
-    CarInstanceCompute* car_instance_draw = &render_frame->car_instance_compute_list;
-    CarInstanceComputeNodeList* list = &car_instance_draw->list;
-
-    if (!list->first)
-    {
-        return;
-    }
-
-    VkCommandBuffer cmd_buffer = vk_ctx->command_buffers.data[vk_ctx->current_frame];
-    TracyVkZone(vk_ctx->tracy_ctx[vk_ctx->current_frame], cmd_buffer, "car_height_calculate_compute");
-
-    Pipeline* pipeline = &vk_ctx->car_height_calculate_pipeline;
-    vkCmdBindPipeline(cmd_buffer, VK_PIPELINE_BIND_POINT_COMPUTE, pipeline->pipeline);
-
-    render::AssetItem<BufferHandle>* instance_buffer_handle = asset_manager_buffer_item_get(vk_ctx->model_3D_instance_buffer[vk_ctx->current_frame]);
-    if (!instance_buffer_handle)
-        return;
-    BufferAllocation instance_buffer_alloc = instance_buffer_handle->item.buffer_alloc;
-    VkBuffer instance_buffer = instance_buffer_alloc.buffer;
-
-    for (CarInstanceComputeNode* node = list->first; node; node = node->next)
-    {
-        vkCmdPushConstants(cmd_buffer, pipeline->pipeline_layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(CarHeightCalculatePushConstants), &node->compute_push_constants);
-
-        VkDescriptorBufferInfo buffer_infos[] = {
-            {.buffer = instance_buffer, .offset = node->instance_buffer_offset, .range = node->instance_buffer_info.buffer.size},
-            {.buffer = node->tile_vertex_handle->buffer_alloc.buffer, .offset = 0, .range = VK_WHOLE_SIZE},
-            {.buffer = node->tile_index_handle->buffer_alloc.buffer, .offset = 0, .range = VK_WHOLE_SIZE},
-        };
-
-        VkWriteDescriptorSet writes[] = {
-            {.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, .dstBinding = 0, .descriptorCount = 1, .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, .pBufferInfo = &buffer_infos[0]},
-            {.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, .dstBinding = 1, .descriptorCount = 1, .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, .pBufferInfo = &buffer_infos[1]},
-            {.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, .dstBinding = 2, .descriptorCount = 1, .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, .pBufferInfo = &buffer_infos[2]},
-        };
-        cmd_push_descriptor_set_khr(cmd_buffer, VK_PIPELINE_BIND_POINT_COMPUTE, pipeline->pipeline_layout, 0, ArrayCount(writes), writes);
-
-        U32 triangle_count = node->tile_index_handle->elem_count / 3;
-        U32 workgroup_count = (triangle_count + 255) / 256;
-        vkCmdDispatch(cmd_buffer, workgroup_count, 1, 1);
-    }
-}
-
-static void
 agent_instance_rendering()
 {
     Context* vk_ctx = ctx_get();
@@ -616,11 +555,6 @@ command_buffer_record(U32 image_index, U32 current_frame, Vec2S64 mouse_cursor_p
             vk_ctx->model_3D_instance_buffer[vk_ctx->current_frame] =
                 buffer_alloc_create_or_resize(vk_ctx->render_frame->car_instance_render_list.total_instance_buffer_byte_count, vk_ctx->model_3D_instance_buffer[vk_ctx->current_frame],
                                               VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT);
-
-            debug_label.pLabelName = "Car Instance Compute";
-            CMD_BEGIN_DEBUG_UTILS_LABEL_EXT(current_cmd_buf, &debug_label);
-            agent_instance_compute();
-            CMD_END_DEBUG_UTILS_LABEL_EXT(current_cmd_buf);
 
             render::AssetItem<BufferHandle>* model_3D_instance_buffer = vulkan::asset_manager_buffer_item_get(vk_ctx->model_3D_instance_buffer[vk_ctx->current_frame]);
             if (model_3D_instance_buffer)

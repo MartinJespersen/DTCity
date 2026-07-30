@@ -155,7 +155,6 @@ render_ctx_create(String8 shader_path, io::IO* io_ctx, async::ThreadPool* thread
     vk_ctx->model_3D_pipeline = vulkan::tile_pipeline_create(vk_ctx, shader_path);
     vk_ctx->car_instance_pipeline = vulkan::agent_instance_pipeline_create(vk_ctx, shader_path);
     vk_ctx->blend_3d_pipeline = vulkan::blend_3d_pipeline_create(shader_path);
-    vk_ctx->car_height_calculate_pipeline = vulkan::car_instance_compute_pipeline_create(shader_path);
 
     // sync objects
     VkSemaphoreTypeCreateInfo type_create_info{VK_STRUCTURE_TYPE_SEMAPHORE_TYPE_CREATE_INFO};
@@ -210,7 +209,6 @@ render_ctx_destroy()
     vulkan::pipeline_destroy(&vk_ctx->model_3D_pipeline);
     vulkan::pipeline_destroy(&vk_ctx->car_instance_pipeline);
     vulkan::pipeline_destroy(&vk_ctx->blend_3d_pipeline);
-    vulkan::pipeline_destroy(&vk_ctx->car_height_calculate_pipeline);
     vulkan::pipeline_destroy(&vk_ctx->bbox_pipeline);
 
     vkDestroyDescriptorSetLayout(vk_ctx->device, vk_ctx->bindless_descriptor_set_layout, nullptr);
@@ -658,38 +656,6 @@ buffer_load_async(render::BufferInfo* buffer_info)
     return asset_handle;
 }
 
-g_internal void
-agent_instance_compute_bucket_add(render::BufferInfo* instance_buffer_info, render::Handle tile_vertex_buffer_handle, render::Handle tile_index_buffer_handle, F32 car_center_to_road_offset,
-                                  U32 instance_buffer_offset)
-{
-    if (instance_buffer_info->buffer.size == 0 || instance_buffer_info->elem_count == 0)
-    {
-        return;
-    }
-
-    vulkan::Context* vk_ctx = vulkan::ctx_get();
-    vulkan::RenderFrame* render_frame = vk_ctx->render_frame;
-    vulkan::CarInstanceCompute* instance_draw = &render_frame->car_instance_compute_list;
-
-    render::AssetItem<vulkan::BufferHandle>* asset_tile_vertex = 0;
-    render::AssetItem<vulkan::BufferHandle>* asset_tile_index = 0;
-    if (render::is_resource_loaded(tile_vertex_buffer_handle, &asset_tile_vertex) && render::is_resource_loaded(tile_index_buffer_handle, &asset_tile_index))
-    {
-        vulkan::CarInstanceComputeNode* node = PushStruct(vk_ctx->render_frame_arena, vulkan::CarInstanceComputeNode);
-
-        // compute ressources
-        vulkan::CarHeightCalculatePushConstants compute_push_constants = {.car_count = instance_buffer_info->elem_count, .agent_center_offset = car_center_to_road_offset};
-        node->tile_index_handle = &asset_tile_index->item;
-        node->tile_vertex_handle = &asset_tile_vertex->item;
-        node->compute_push_constants = compute_push_constants;
-        node->instance_buffer_info = *instance_buffer_info;
-        node->instance_buffer_offset = instance_buffer_offset;
-
-        // push work
-        SLLQueuePush(instance_draw->list.first, instance_draw->list.last, node);
-    }
-}
-
 g_internal bool
 agent_instance_render_bucket_add(render::MappedHandle<void> camera_handle, Buffer<render::AgentModelInfo> meshes, Buffer<render::Handle> texture_handles, render::BufferInfo* instance_buffer_info,
                                  U32 instance_buffer_offset)
@@ -732,24 +698,6 @@ agent_instance_render_bucket_add(render::MappedHandle<void> camera_handle, Buffe
     }
 
     return false;
-}
-
-g_internal bool
-road_intersection_compute_add(Handle vertex_buffer_handle, Handle index_buffer_handle, Handle road_segment_buffer_handle, Handle road_segment_node_buffer_handle, U32 overlay_option)
-{
-    bool compute_scheduled = false;
-
-    render::AssetItem<vulkan::BufferHandle>* vertex_buffer = 0;
-    render::AssetItem<vulkan::BufferHandle>* index_buffer = 0;
-    render::AssetItem<vulkan::BufferHandle>* road_segment_buffer = 0;
-    render::AssetItem<vulkan::BufferHandle>* road_segment_node_buffer = 0;
-    if (is_resource_loaded(vertex_buffer_handle, &vertex_buffer) && is_resource_loaded(index_buffer_handle, &index_buffer) && is_resource_loaded(road_segment_buffer_handle, &road_segment_buffer) &&
-        is_resource_loaded(road_segment_node_buffer_handle, &road_segment_node_buffer))
-    {
-        compute_scheduled = true;
-        vulkan::road_intersection_bucket_add(&vertex_buffer->item, &index_buffer->item, &road_segment_buffer->item, &road_segment_node_buffer->item, overlay_option);
-    }
-    return compute_scheduled;
 }
 
 static void
