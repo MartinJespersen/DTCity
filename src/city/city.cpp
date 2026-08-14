@@ -427,7 +427,7 @@ city_update(City* city, Buffer<city::Coordinate> new_agent_coords, async::Thread
             {
                 Agent* agent = &(*agent_sim->agents_active)[agent_idx];
 
-                if (((S64)ctx->io->frame_count - (S64)agent->latest_update_frame) < (frame_rate * 2)) // Do not add agent after 2 seconds without a streaming update
+                if (((S64)ctx->io->frame_count - (S64)agent->latest_update_frame) < (frame_rate * 10)) // Do not add agent after 2 seconds without a streaming update
                 {
                     AgentConfig* agent_config = &agent_sim->agent_config[enum_idx(agent->vehicle_type)];
                     glm::mat4 model_transform = glm::mat4(agent->model_matrix.x_basis, agent->model_matrix.y_basis, agent->model_matrix.z_basis, agent->model_matrix.w_basis);
@@ -996,15 +996,6 @@ quad_to_buffer_add(RoadSegmentCorners* road_segment, Buffer<render::Vertex3DBlen
 
     *cur_vertex_idx += 4;
     *cur_index_idx += 6;
-}
-
-g_internal osm::EcefLocation
-random_ecef_road_node_get(osm::Network* network)
-{
-    osm::NodeId node_id = osm::random_node_id_from_type_get(network, osm::WayType::Highway);
-    Assert(node_id != 0);
-    osm::EcefLocation node_loc = osm::location_get(network, node_id);
-    return node_loc;
 }
 
 g_internal Rng3F32

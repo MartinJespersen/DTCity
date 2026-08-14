@@ -6,13 +6,10 @@
 * Reconsider the number of descriptor pools (whether 1 is enough) and the descriptor numbers
 
 # features
-* Triangulation
-  * Find better solution for the global BVH in cesium layer
 * Some roads are close to brown. Why? OOB?
 * chunk_list should not allow chunk items with count larger than capacity
 * Show a clock in the application allowing 
 * agents cannot be deleted due to caching and cesium async height calculation
-* Tesselation could be used in tile pipeline for road colormap overlays
 * delete draw flush and related code
 * Osm data visualizer should not be affected by netascore not showing
 * Use the OSM data for showing data about buildings

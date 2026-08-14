@@ -236,8 +236,6 @@ bvh_create(Bvh* bvh, Buffer<RoadSegmentCorners> road_segment_buffer, U32 leaf_bb
 
 g_internal Vec3F64
 height_dim_add(Vec2F64 pos, F64 height);
-g_internal osm::EcefLocation
-random_ecef_road_node_get(osm::Network* network);
 g_internal F64
 cross_2f64_z_component(Vec2F64 a, Vec2F64 b);
 g_internal B32

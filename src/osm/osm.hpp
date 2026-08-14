@@ -136,8 +136,8 @@ struct NodeList
     Node* last;
 };
 
-#define WAYTYPE_OPTIONS                                                                                                                                                                                \
-    X(Building, "building")                                                                                                                                                                            \
+#define WAYTYPE_OPTIONS     \
+    X(Building, "building") \
     X(Highway, "highway")
 
 enum class WayType : U32
@@ -189,10 +189,6 @@ g_internal WgsLocation
 wgs_location_get(Network* network, U64 node_id);
 g_internal Node*
 node_get(Network* network, U64 node_id);
-g_internal Node*
-random_neighbour_node_get(Network* network, Node* node);
-g_internal Node*
-random_neighbour_node_get(Network* network, U64 node_id);
 g_internal NodeId
 random_node_id_from_type_get(Network* network, WayType type);
 
