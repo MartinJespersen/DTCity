@@ -1,32 +1,15 @@
-* Does road intersect with triangle at all?
-  * Test using SAH
-* If no, triangle should become part of Terrain
-* If yes, and whole triangle is inside road, then make triangle part of road
-* If yes, but some part is Terrain and other is Road, then triangulate
-  * triangulation algorithm steps
-    * Find vertices from road inside 2D triangle
-    * Find vertices from road created by the intersection of the road polygon with the triangle (clipping of triangle)
-    * Generate triangle, but
-      * Use road edges inside triangle as constraint, meaning generated triangle edges cannot intersect with road edges
-* Classify triangulated triangles into Road or Terrain
-* Determine vertex heights of generated vertices
-* Change UV coordinates by
 
 # Tessellation review findings
-* [High] Replace the unsynchronized global `g_bvh_result` pointer with ownership and synchronization that are safe for road-build and tile worker threads. Clear or invalidate access before releasing the road arena.
-* [High] Reprocess or invalidate tiles loaded before the road BVH becomes available so CPU tessellation does not depend on asynchronous tile-loading order.
+* Keep the current tile buffers active until replacement uploads have completed on the GPU.
 
 # Less urgent changes
 * Reconsider the number of descriptor pools (whether 1 is enough) and the descriptor numbers
-* In function RoadSegmentFromTwoRoadNodes: the normalize function leads to values being Nan. Handle this in a better way.
-* tile transform might need to be passed to shader as a uniform buffer
 
 # features
 * Triangulation
   * Find better solution for the global BVH in cesium layer
-  * case where multiple roads overlapping same triangle is not handled.
-  * clean up tile rendering pipeline after triangulation code added
-  * (optional)Implement triangulation of terrain and road only
+* Some roads are close to brown. Why? OOB?
+* chunk_list should not allow chunk items with count larger than capacity
 * Show a clock in the application allowing 
 * agents cannot be deleted due to caching and cesium async height calculation
 * Tesselation could be used in tile pipeline for road colormap overlays

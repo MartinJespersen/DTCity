@@ -3,12 +3,6 @@
 namespace cesium
 {
 
-struct Mesh
-{
-    Buffer<render::TileVertex> vertices;
-    Buffer<U32> indices;
-};
-
 struct RasterTileInfo
 {
     const CesiumGltf::ImageAsset& image;
@@ -17,14 +11,6 @@ struct RasterTileInfo
     RasterTileInfo(const CesiumGltf::ImageAsset& image, const std::any& renderer_options) : image(image), renderer_options(renderer_options)
     {
     }
-};
-
-struct TileRenderData
-{
-    TileRenderData* next;
-    TileRenderData* render_next;
-
-    render::TilePipelineData render_data;
 };
 
 struct TileRasterOverlayAttachment
@@ -41,15 +27,38 @@ struct TileRasterOverlayAttachment
     glm::dvec2 scale;
 };
 
-struct TileRenderDataList
+struct TileDrawBatch
 {
-    TileRenderDataList* next;
-    TileRenderDataList* active_next;
+    TileDrawBatch* next;
+
+    Buffer<render::TileVertex> vertex_buffer_orig;
+    Buffer<U32> index_buffer_orig;
+
+    // Written to the load thread only
+    render::Handle vertex_buffer_handle_load_temp;
+    render::Handle index_buffer_handle_load_temp;
+    U32 index_count_load_temp;
+    B32 has_load_replacement;
+
+    render::TilePipelineData render_data;
+};
+
+struct TileRenderResources
+{
+    TileRenderResources* next;
+    TileRenderResources* prev;
+    TileRenderResources* render_next;
     Arena* arena;
+
+    // Cross thread communication
+    bool tile_has_loaded;
+    bool is_tile_loading;             // when 0 no loads are in flight and the object can be freed(pushed to free list)
+    std::atomic<U32> to_be_dealloced; // this is set to true (not null) in cesium free
+
     bool tile_is_loaded;
 
-    TileRenderData* first;
-    TileRenderData* last;
+    TileDrawBatch* batch_first;
+    TileDrawBatch* batch_last;
 
     TileRasterOverlayAttachment* raster_overlay_first;
 };
@@ -79,12 +88,11 @@ struct TilesetRenderer
     B32 height_sample_stop;
 
     // tiles access from main thread
-    TileRenderDataList* tiles_to_free_stack;
-    U32 tiles_to_free_stack_count;
-    TileRenderDataList tile_to_show;
+    TileRenderResources* tile_to_show_first;
+    TileRenderResources* tile_to_show_last;
     U32 tiles_to_show_count;
+    U64 tile_draw_batch_id_counter;
 
-    TileRenderDataList* active_tile_resource_first;
     RasterRenderResource* active_raster_resource_first;
 };
 
@@ -109,7 +117,7 @@ g_internal void
 tileset_update_view(TilesetRenderer* renderer, ui::Camera* camera, Vec2U32 viewport_size, F64 delta_time);
 
 // Helper to convert cesium glTF to render data
-g_internal TileRenderDataList*
+g_internal TileRenderResources*
 tile_render_data_from_gltf(const CesiumGltf::Model& model, const glm::dmat4& ecef_to_local, const glm::dmat4& tile_transform, CesiumGeometry::Axis gltf_up_axis,
                            render::ThreadWorkerCmdCtx* thread_input);
 
@@ -120,13 +128,10 @@ g_internal F64
 sample_height_from_result(const Cesium3DTilesSelection::SampleHeightResult& result, const char* label);
 
 g_internal void
-_tileset_renderer_free_handles(TileRenderDataList* list);
+tileset_renderer_free_handles(TileRenderResources* list);
 
 g_internal void
-_tileset_renderer_tile_resource_track(TilesetRenderer* renderer, TileRenderDataList* list);
-
-g_internal B32
-_tileset_renderer_tile_resource_untrack(TilesetRenderer* renderer, TileRenderDataList* list);
+tileset_render_resources_release(TileRenderResources* list);
 
 g_internal void
 _tileset_renderer_tile_to_show_push(TilesetRenderer* renderer, const Cesium3DTilesSelection::Tile& tile, B32 is_fading_out);

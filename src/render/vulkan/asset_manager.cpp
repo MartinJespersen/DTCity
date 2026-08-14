@@ -722,9 +722,37 @@ asset_manager_item_create(render::AssetItemList<T>* list, render::AssetItemList<
 g_internal render::Handle
 asset_manager_buffer_allocation_create(render::ThreadWorkerCmdCtx* thread_ctx, render::BufferInfo* buffer_info, VmaAllocationCreateInfo vma_info)
 {
+    render::Handle handle = _asset_manager_buffer_create(buffer_info, vma_info, VK_BUFFER_USAGE_TRANSFER_DST_BIT);
+    render::handle_list_push(thread_ctx, handle);
+    return handle;
+}
+
+g_internal render::Handle
+asset_manager_buffer_immediate_create(render::BufferInfo* buffer_info, String8 debug_name)
+{
+    AssetManager* asset_manager = asset_manager_get();
+    VmaAllocationCreateInfo vma_info = {};
+    vma_info.usage = VMA_MEMORY_USAGE_AUTO;
+    vma_info.flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT;
+
+    render::Handle handle = _asset_manager_buffer_create(buffer_info, vma_info, 0);
+    render::AssetItem<vulkan::BufferHandle>* asset_item = vulkan::asset_manager_buffer_item_get(handle);
+    AssertAlways(asset_item);
+    VK_CHECK_RESULT(vmaCopyMemoryToAllocation(asset_manager->allocator, buffer_info->buffer.data, asset_item->item.buffer_alloc.allocation, 0, buffer_info->buffer.size));
+    asset_item->is_loaded = 1;
+
+#if BUILD_DEBUG
+    vulkan::asset_manager_debug_name_set(asset_item->item.buffer_alloc.allocation, debug_name);
+#endif
+
+    return handle;
+}
+
+static render::Handle
+_asset_manager_buffer_create(render::BufferInfo* buffer_info, VmaAllocationCreateInfo vma_info, VkBufferUsageFlags additional_usage_flags)
+{
     AssetManager* asset_manager = asset_manager_get();
     render::Handle handle = render::Handle::buffer_handle_create((render::BufferType)buffer_info->buffer_type);
-    render::handle_list_push(thread_ctx, handle);
 
     VkBufferUsageFlags usage_flags = {};
     U32 buffer_type = buffer_info->buffer_type;
@@ -737,7 +765,8 @@ asset_manager_buffer_allocation_create(render::ThreadWorkerCmdCtx* thread_ctx, r
     if (buffer_type & render::BufferType_StorageBuffer)
         usage_flags |= VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
     Assert(usage_flags != 0);
-    vulkan::BufferAllocation buffer_alloc = _buffer_allocation_create(buffer_info->buffer.size, usage_flags | VK_BUFFER_USAGE_TRANSFER_DST_BIT, &vma_info, nullptr);
+    usage_flags |= additional_usage_flags;
+    vulkan::BufferAllocation buffer_alloc = _buffer_allocation_create(buffer_info->buffer.size, usage_flags, &vma_info, nullptr);
 
     render::AssetItem<vulkan::BufferHandle>* asset_item = vulkan::asset_manager_buffer_item_get(handle);
     vulkan::BufferHandle* asset_buffer = (vulkan::BufferHandle*)&asset_item->item;

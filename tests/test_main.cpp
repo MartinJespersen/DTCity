@@ -1,16 +1,4 @@
-// third party header
-#define DOCTEST_CONFIG_IMPLEMENT
-#include "third_party/doctest/doctest.h"
-#include <CDT.h>
-#include "glm/glm.hpp"
-#include <limits>
-
-// user header
-#include "diagnostics.hpp"
-#include "base/base_inc.hpp"
-#include "async/segment_buffer.hpp"
-#include "async/async_heap.hpp"
-#include "misc/geometry.hpp"
+#include "test_inc.hpp"
 
 // user source
 #include "base/base_inc.cpp"
@@ -25,6 +13,7 @@
 #include "base/test_math.cpp"
 #include "base/test_strings.cpp"
 #include "cesium/test_tessellation.cpp"
+#include "base/test_freelist.cpp"
 
 int
 App(int argc, char** argv)

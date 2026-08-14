@@ -146,7 +146,7 @@ async_task_run(ThreadPool* thread_pool, WorkerTaskFunc<T> func, T* data, const c
 
 template <typename T>
 g_internal AsyncTaskStatus<T>*
-async_task_run(Arena* arena, ThreadPool* thread_pool, WorkerTaskFunc<T> func, T* data, const char* task_name, S64 us_delay);
+async_task_run(Arena* arena, ThreadPool* thread_pool, WorkerTaskFunc<T> func, T* data, const char* task_name, S64 us_delay = 0);
 
 template <typename T>
 g_internal AsyncTaskStatus<T>*

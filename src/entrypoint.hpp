@@ -31,12 +31,21 @@ struct Context
     Buffer<String8> data_subdirs;
 
     Arena* arena_frame;
-    Arena* arena_main_permanent;
+    Arena* arena;
 
     io::IO* io;
     dt_Time* time;
     ResourcePool<ui::Camera>* camera_container;
     ArrayResourcePool<cesium::TilesetRenderer>* tileset_pool;
+    Pow2Freelist* pow2_freelist;
+
+    cesium::TileRenderResources* tile_first;
+    cesium::TileRenderResources* tile_last;
+    U32 tile_count;
+    city::TileLoadTaskStateNode* tile_load_task_first;
+    city::TileLoadTaskStateNode* tile_load_task_last;
+    city::TileLoadTaskStateNode* tile_load_task_free_list;
+    ArrayResourcePool<city::Bvh>* polygon_bvh_pool;
 
     async::ThreadPool* thread_pool;
 };

@@ -22,6 +22,7 @@
 // #include "base_meta.c"
 // #include "base_entry_point.c"
 #include "container.cpp"
+#include "base_freelist.cpp"
 #include "os_core/os_core_inc.cpp"
 #include "base_container.cpp"
 #include "cache.cpp"

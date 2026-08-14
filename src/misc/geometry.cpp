@@ -96,12 +96,18 @@ bool
 intersect_segment_plane(glm::vec2 a, glm::vec2 b, Plane2d p, float& t, glm::vec2& q)
 {
     // Compute the t value for the directed line ab intersecting the plane
-    glm::vec2 ab = b - a;
-    t = (p.d - glm::dot(p.n, a)) / glm::dot(p.n, ab);
+    glm::dvec2 a_f64 = glm::dvec2((F64)a.x, (F64)a.y);
+    glm::dvec2 b_f64 = glm::dvec2((F64)b.x, (F64)b.y);
+    glm::dvec2 normal_f64 = glm::dvec2((F64)p.n.x, (F64)p.n.y);
+    glm::dvec2 ab_f64 = b_f64 - a_f64;
+    F64 t_f64 = ((F64)p.d - glm::dot(normal_f64, a_f64)) / glm::dot(normal_f64, ab_f64);
+    t = (F32)t_f64;
+
     // If t in [0..1] compute and return intersection point
-    if (t >= 0.0f && t <= 1.0f)
+    if (t_f64 >= 0.0 && t_f64 <= 1.0)
     {
-        q = a + t * ab;
+        glm::dvec2 intersection_f64 = a_f64 + t_f64 * ab_f64;
+        q = glm::vec2((F32)intersection_f64.x, (F32)intersection_f64.y);
         return true;
     }
     // Else no intersection

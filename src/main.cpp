@@ -9,7 +9,7 @@ ctx_create(io::IO* io_ctx)
     Arena* app_arena = (Arena*)arena_alloc();
     Debug_SetName(app_arena, "app arena");
     Context* ctx = PushStruct(app_arena, Context);
-    ctx->arena_main_permanent = app_arena;
+    ctx->arena = app_arena;
     ctx->arena_frame = arena_alloc();
     Debug_SetName(ctx->arena_frame, "app frame arena");
     ctx->io = PushStruct(app_arena, io::IO);
@@ -47,6 +47,7 @@ ctx_create(io::IO* io_ctx)
     U32 main_thread_queue_size = 10;
     ctx->thread_pool = async::thread_pool_create(app_arena, thread_count, queue_size, main_thread_queue_size);
 
+    ctx->pow2_freelist = pow2_freelist_create(app_arena);
     return ctx;
 }
 
@@ -55,21 +56,20 @@ ctx_destroy(Context* ctx)
 {
     async::thread_pool_destroy(ctx->thread_pool);
     resource_pool_release(ctx->camera_container);
-    arena_release(ctx->arena_main_permanent);
+    arena_release(ctx->arena);
 }
 
 int
 App(int argc, char** argv)
 {
     ScratchScope scratch = ScratchScope(0, 0);
-    dynamic_array_init();
 
     io::IO* io_ctx = io::window_create(S("Digital Twin City"), vulkan::Context::WIDTH, vulkan::Context::HEIGHT);
     io::input_state_update(io_ctx);
 
     Context* ctx = ctx_create(io_ctx);
     dt_ctx_set(ctx);
-    ctx->cmdline = os_parse_cmd_line(ctx->arena_main_permanent, argc, argv);
+    ctx->cmdline = os_parse_cmd_line(ctx->arena, argc, argv);
     dt_time_init(ctx->time);
 
     OS_Handle thread_handle = dt_render_thread_start(ctx);

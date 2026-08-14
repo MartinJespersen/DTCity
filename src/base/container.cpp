@@ -13,7 +13,7 @@ buffer_alloc(Arena* arena, U64 count)
 
 template <typename T>
 lib_internal void
-BufferCopy(Buffer<T> dst, Buffer<T> src, U64 element_count_to_copy)
+buffer_copy(Buffer<T> dst, Buffer<T> src, U64 element_count_to_copy)
 {
     Assert(dst.size >= element_count_to_copy);
     MemoryCopy(dst.data, src.data, element_count_to_copy * sizeof(T));
@@ -183,6 +183,54 @@ chunk_list_insert(Arena* arena, ChunkList<T>* list, T& item)
 }
 
 template <typename T>
+ChunkItem<T>*
+chunk_item_create(Arena* arena, ChunkList<T>* list)
+{
+    ChunkItem<T>* chunk = list->free_list;
+    if (chunk)
+    {
+        chunk->count = 0;
+        chunk->next;
+        SLLStackPop(list->free_list);
+    }
+    else
+    {
+        chunk = PushStruct(arena, ChunkItem<T>);
+        chunk->values = PushArray(arena, T, list->capacity);
+    }
+    return chunk;
+}
+
+template <typename T>
+void
+chunk_list_from_buffer_append(Arena* arena, ChunkList<T>* list, const Buffer<T>& buffer)
+{
+    Assert(list->capacity > 0);
+
+    U64 offset = 0;
+    while (offset < buffer.size)
+    {
+        ChunkItem<T>* chunk = list->last;
+        if (!chunk || chunk->count >= list->capacity)
+        {
+            chunk = chunk_item_create(arena, list);
+            SLLQueuePush(list->first, list->last, chunk);
+            list->chunk_count += 1;
+        }
+
+        U64 available_count = list->capacity - chunk->count;
+        U64 copy_count = Min(buffer.size - offset, available_count);
+
+        MemoryCopy(chunk->values + chunk->count, buffer.data + offset, copy_count * sizeof(T));
+
+        chunk->count += copy_count;
+        offset += copy_count;
+    }
+
+    list->total_count += buffer.size;
+}
+
+template <typename T>
 void
 chunk_list_insert_chunk(ChunkList<T>* list, ChunkItem<T>* chunk)
 {
@@ -198,18 +246,7 @@ chunk_list_get_next(Arena* arena, ChunkList<T>* list)
     ChunkItem<T>* chunk = list->last;
     if (!chunk || chunk->count >= list->capacity)
     {
-        chunk = list->free_list;
-        if (chunk)
-        {
-            chunk->count = 0;
-            chunk->next;
-            SLLStackPop(list->free_list);
-        }
-        else
-        {
-            chunk = PushStruct(arena, ChunkItem<T>);
-            chunk->values = PushArray(arena, T, list->capacity);
-        }
+        chunk = chunk_item_create(arena, list);
         SLLQueuePush(list->first, list->last, chunk);
         list->chunk_count += 1;
     }

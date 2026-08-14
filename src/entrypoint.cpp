@@ -136,11 +136,11 @@ imgui_debug_window(city::City* city, async::ThreadPool* thread_pool)
     }
     ImGui::Text("Deletetion Queue Free List: %d active", asset_manager->deletion_queue_free_list_count);
     ImGui::Text("ThreadPool pending tasks: %u", thread_pool->pending_task_count.load());
+    ImGui::Text("Cesium Tiles Alive: List Count: %d", ctx->tile_count);
     cesium::TilesetRenderer* tileset = {};
     if (ctx->tileset_pool->item_from_handle(city->tileset_handle, &tileset))
     {
         ImGui::Text("Tileset Renderer Show: %d active", tileset->tiles_to_show_count);
-        ImGui::Text("Tileset Renderer Free List Count: %d", tileset->tiles_to_free_stack_count);
     }
 
     // netascore status
@@ -222,8 +222,9 @@ dt_main_loop(void* ptr)
                                                  .tileset_path = S("file:///C:/ByModel/eskiltuna/Totalstad_2025_q3/tileset.json")},
                                                 {.name = S("Zurich"), .lon = 8.532010538692882, .lat = 47.40024260563559, .bbox_width_meters = 5000, .bbox_height_meters = 5000}};
 
-    ctx->tileset_pool = ArrayResourcePool<cesium::TilesetRenderer>::create(ctx->arena_main_permanent, ArrayCount(cities_info_arr));
-    Buffer<city::City> city_buf = buffer_alloc<city::City>(ctx->arena_main_permanent, ArrayCount(cities_info_arr));
+    ctx->tileset_pool = ArrayResourcePool<cesium::TilesetRenderer>::create(ctx->arena, ArrayCount(cities_info_arr));
+    ctx->polygon_bvh_pool = ArrayResourcePool<city::Bvh>::create(ctx->arena, ArrayCount(cities_info_arr));
+    Buffer<city::City> city_buf = buffer_alloc<city::City>(ctx->arena, ArrayCount(cities_info_arr));
     for (U32 i = 0; i < city_buf.size; ++i)
     {
         const city::AreaConfig* city_config = &cities_info_arr[i];
@@ -231,7 +232,7 @@ dt_main_loop(void* ptr)
 
         city->camera_handle = resource_pool_array_idx_get(ctx->camera_container);
         ui::Camera* camera = resource_pool_item_from_idx(ctx->camera_container, city->camera_handle);
-        ui::camera_init(ctx->arena_main_permanent, camera);
+        ui::camera_init(ctx->arena, camera);
 
         Rng2F64 bbox = util::wgs84_bbox_from_btm_right_corner(city_config->lon, city_config->lat, city_config->bbox_width_meters, city_config->bbox_height_meters);
         city::city_init(city, ctx->data_subdirs.data[dt_DataDirType::Cache]);
@@ -360,6 +361,10 @@ dt_main_loop(void* ptr)
     for (U32 i = 0; i < city_buf.size; i += 1)
     {
         city::city_release(city_buf[i]);
+    }
+    while (ctx->tile_count > 0)
+    {
+        city::tile_load_update();
     }
     render::gpu_work_done_wait();
     draw::draw_release();

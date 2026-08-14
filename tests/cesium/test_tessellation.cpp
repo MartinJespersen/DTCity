@@ -1,3 +1,18 @@
+TEST_CASE("segment-plane intersection remains on plane for large coordinates")
+{
+    glm::vec2 a = {-4595512.5f, -4600893.5f};
+    glm::vec2 b = {32437188.0f, 32476254.0f};
+    geometry::Plane2d plane = {
+        .n = {-0.7066825628f, -0.7075307369f},
+        .d = 30.2661018372f,
+    };
+
+    F32 t = 0.0f;
+    glm::vec2 intersection = {};
+    REQUIRE(geometry::intersect_segment_plane(a, b, plane, t, intersection));
+    CHECK(geometry::classify_point_on_plane(intersection, plane) == geometry::PlaneClassification::On);
+}
+
 TEST_CASE("triangle clipping returns a valid polygon partition")
 {
     Arena* arena = arena_alloc();

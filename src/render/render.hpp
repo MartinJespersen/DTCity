@@ -243,10 +243,18 @@ enable_bitmask(TilePipelineBits)
     return true;
 }
 
+struct TileVertex
+{
+    glm::vec3 pos;
+    glm::vec2 uv;
+    glm::vec2 overlay_uv;
+    U32 road_segment_idx;
+};
+
 struct TilePipelineData
 {
-    Handle vertex_buffer_handle;
-    Handle index_buffer_handle;
+    Handle vertex_buffer_render_handle;
+    Handle index_buffer_render_handle;
     Handle road_segment_buffer_handle;
     Handle texture_handle;
     Handle overlay_texture_handle;
@@ -258,7 +266,7 @@ struct TilePipelineData
     Vec2F32 overlay_scale;
     S32 overlay_texture_coordinate_id;
 
-    U64 index_count;
+    U32 index_count;
     U32 index_offset;
 
     F32 height_offset;
@@ -292,12 +300,10 @@ struct Blend3DPipelineData
     MappedHandle<void> camera_handle;
 };
 
-struct TileVertex
+struct Mesh
 {
-    glm::vec3 pos;
-    glm::vec2 uv;
-    glm::vec2 overlay_uv;
-    U32 road_segment_idx;
+    Buffer<TileVertex> vertices;
+    Buffer<U32> indices;
 };
 
 struct Vertex3DBlend
@@ -432,6 +438,14 @@ agent_instance_render_bucket_add(render::MappedHandle<void> camera_handle, Buffe
 
 g_internal Handle
 buffer_load_async(BufferInfo* buffer_info);
+
+g_internal Handle
+_buffer_load_immediate(render::BufferInfo* buffer_info, String8 debug_name);
+#if BUILD_DEBUG
+#define buffer_load_immediate(buffer_info, name) _buffer_load_immediate(buffer_info, name)
+#else
+#define buffer_load_immediate(buffer_info, name) _buffer_load_immediate(buffer_info, S(""))
+#endif
 
 g_internal Handle
 _buffer_load_sync(render::ThreadWorkerCmdCtx* thread_ctx, render::BufferInfo* buffer_info, String8 debug_name);

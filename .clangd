@@ -33,3 +33,10 @@ Diagnostics:
   Suppress: "*"
 CompileFlags:
   Add: -ferror-limit=0
+
+---
+If:
+  PathMatch: tests/.*
+CompileFlags:
+  CompilationDatabase: build/win/debug-tests
+  Add: [/FIC:/repos/DTCity/tests/test_inc.hpp]

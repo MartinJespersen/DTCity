@@ -65,7 +65,7 @@ lib_internal Buffer<T>
 buffer_from_arr(Arena* arena, T* arr, U64 size);
 template <typename T>
 lib_internal void
-BufferCopy(Buffer<T> dst, Buffer<T> src, U64 element_count_to_copy);
+buffer_copy(Buffer<T> dst, Buffer<T> src, U64 element_count_to_copy);
 template <typename T>
 lib_internal void
 BufferCopy(Buffer<T> dst, Buffer<T> src, U64 dst_offset, U64 src_offset, U64 size);
@@ -186,6 +186,13 @@ struct ChunkList
 template <typename T>
 ChunkList<T>*
 chunk_list_create(Arena* arena, U64 capacity);
+template <typename T>
+ChunkItem<T>*
+chunk_item_create(Arena* arena, ChunkList<T>* list);
+
+template <typename T>
+void
+chunk_list_from_buffer_append(Arena* arena, ChunkList<T>* list, const Buffer<T>& buffer);
 template <typename T>
 lib_internal void
 chunk_list_empty(ChunkList<T>* list);

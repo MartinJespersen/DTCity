@@ -229,6 +229,10 @@ struct Context
     // ~mgj: Null texture used to clear freed bindless descriptor slots
     render::Handle null_texture_handle;
 
+    // Valid fallback for storage-buffer descriptors when their optional
+    // resource is unavailable.
+    render::Handle dummy_storage_buffer_handle;
+
     // ~mgj: Asset Streaming
     AssetManager* asset_manager;
 

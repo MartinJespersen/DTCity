@@ -5,133 +5,8 @@
 namespace city
 {
 
-struct Buildings;
-
-enum RoadSegmentCornerCoord
-{
-    RoadSegmentCornerCoord_TopLeft,
-    RoadSegmentCornerCoord_TopRight,
-    RoadSegmentCornerCoord_BottomRight,
-    RoadSegmentCornerCoord_BottomLeft,
-    RoadSegmentCornerCoord_Count
-};
-
-#define ROAD_OVERLAY_OPTIONS            \
-    X(None, "None")                     \
-    X(Bikeability_ft, "Bikeability_ft") \
-    X(Bikeability_tf, "Bikeability_tf") \
-    X(Walkability_tf, "Walkability_tf") \
-    X(Walkability_ft, "Walkability_ft")
-
-enum RoadOverlayOption : U32
-{
-#define X(name, str) RoadOverlayOption_##name,
-    ROAD_OVERLAY_OPTIONS
-#undef X
-        RoadOverlayOption_Count
-};
-
-read_only g_internal const char* road_overlay_option_strs[] = {
-#define X(name, str) str,
-    ROAD_OVERLAY_OPTIONS
-#undef X
-};
-
-struct RoadInfo
-{
-    F32 options[RoadOverlayOption_Count];
-};
-
-struct alignas(8) RoadSegmentCorners
-{
-    osm::EdgeId edge_id;
-    Vec2F32 corners[RoadSegmentCornerCoord_Count];
-    RoadInfo road_info;
-};
-// BVH types
-enum Bounds : U32
-{
-    Bounds_Min,
-    Bounds_Max,
-    Bounds_Count
-};
-
-struct RoadSegmentNode
-{
-    RoadSegmentNode* next;
-    RoadSegmentNode* parent;
-    U32 final_idx;
-    Rng2F32 bounds;
-    RoadSegmentNode* children[2];
-    U32 split_axis;
-    F32 split_value;
-
-    // buffer range
-    U32 start_idx;
-    U32 end_idx;
-};
-
-struct RoadSegmentNodeStorageBuffer
-{
-    F32 min_x;
-    F32 min_y;
-    F32 max_x;
-    F32 max_y;
-    U32 split_axis;
-    F32 split_value;
-    U32 is_leaf;
-    union
-    {
-        struct
-        {
-            U32 child_0_idx;
-            U32 child_1_idx;
-        };
-        struct
-        {
-            U32 start_idx;
-            U32 end_idx;
-        };
-    };
-    U32 _pad;
-};
-static_assert(sizeof(RoadSegmentNodeStorageBuffer) == 40, "RoadSegmentNodeStorageBuffer must match std430 RoadSegmentNode size");
-
-struct BoundingBox
-{
-    Vec2F32 center;
-    Rng2F32 bounds;
-    U32 idx;
-};
-
-struct BvhContext
-{
-    RoadSegmentNode* stack;
-    RoadSegmentNode* root;
-
-    U32 road_segment_node_count;
-
-    Buffer<RoadSegmentCorners> road_segment_buffer;
-    Buffer<BoundingBox> bb_buffer;
-
-    U32 leaf_bb_max;
-};
-
-struct BvhResult
-{
-    RoadSegmentNode* root;
-    Buffer<RoadSegmentCorners> road_segment_buffer_sorted;
-    Buffer<RoadSegmentNodeStorageBuffer> node_buffer;
-};
 // /////////////////////////////////
 static_assert(sizeof(RoadSegmentCorners) == 64, "size of road segment might not match shader size");
-
-struct RoadBuildResult
-{
-    render::Handle vertex_buffer_handle;
-    render::Handle index_buffer_handle;
-    BvhResult bvh_result;
-};
 
 struct Road
 {
@@ -148,18 +23,18 @@ struct Road
     glm::dmat4 ecef_to_local;
     Map<osm::EdgeId, RoadInfo>* road_info_map;
 
-    RoadBuildResult road_build_result;
+    ArrayResourcePoolHandle bvh_handle; // NOTE: cannot be replaced at the moment
 
     ////////////////////////////////
     // Graphics API
 
+    render::Handle vertex_buffer_handle;
+    render::Handle index_buffer_handle;
     render::Handle texture_handle;
     render::Handle colormap_handle;
     U32 current_handle_idx;
     bool new_vertex_handle_loading;
     RoadOverlayOption overlay_option_cur;
-    // render::Handle vertex_buffer_handle;
-    // render::Handle index_buffer_handle;
     render::Handle segment_buffer_handle;
     render::Handle segment_node_buffer_handle;
     /////////////////////////
@@ -215,6 +90,7 @@ struct RoadBuildTask
 {
     Road* road;
     osm::Network* network;
+    Bvh* bvh;
 };
 
 struct AsyncCityTask
@@ -263,7 +139,7 @@ struct City
     bool osm_task_done;
     bool road_building_started;
     bool road_building_done;
-    bool cars_creation_started;
+    bool agent_creation_started;
     bool cars_creation_done;
 
     bool no_gui_focus;
@@ -281,8 +157,6 @@ struct City
 };
 
 // global
-// TODO remove this as global
-city::BvhResult* g_bvh_result = 0;
 
 g_internal void
 road_destroy(Road* road);
@@ -356,8 +230,8 @@ g_internal Rng2F32
 bounds_union(Buffer<BoundingBox> center_buffer, U32 start_idx, U32 end_idx);
 g_internal Axis2
 split_axis_find(Buffer<BoundingBox> bb_buffer, U32 start_idx, U32 end_idx);
-g_internal BvhResult
-bvh_create(Arena* arena, Buffer<RoadSegmentCorners> road_segment_buffer, U32 leaf_bb_max);
+g_internal void
+bvh_create(Bvh* bvh, Buffer<RoadSegmentCorners> road_segment_buffer, U32 leaf_bb_max);
 ////////////////////////////////////
 
 g_internal Vec3F64

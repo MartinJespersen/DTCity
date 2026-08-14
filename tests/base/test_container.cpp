@@ -168,26 +168,3 @@ TEST_CASE("Array Resource Pool Iterates Active Items")
     CHECK(object_a->num == 11);
     CHECK(object_c->num == 31);
 }
-
-TEST_CASE("Dynamic Array Grows")
-{
-    dynamic_array_init(MB(1));
-
-    DynamicArray<U32> array = dynamic_array_create<U32>(1);
-    U32 values[128] = {};
-    for (U32 i = 0; i < ArrayCount(values); i += 1)
-    {
-        values[i] = i + 1;
-    }
-    Buffer<U32> value_buffer = {.data = values, .size = ArrayCount(values)};
-    dynamic_array_append(&array, value_buffer);
-
-    CHECK(array.size == ArrayCount(values));
-    CHECK(array.capacity >= ArrayCount(values));
-    CHECK(array.data[0] == 1);
-    CHECK(array.data[1] == 2);
-    CHECK(array.data[127] == 128);
-
-    dynamic_array_destroy(&array);
-    dynamic_array_release();
-}

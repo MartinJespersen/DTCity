@@ -179,7 +179,7 @@ _raster_texture_upload_data_prepare(Arena* arena, const CesiumGltf::ImageAsset& 
     return true;
 }
 
-g_internal TileRenderDataList*
+g_internal TileRenderResources*
 _tile_render_data_list_get(const Cesium3DTilesSelection::Tile& tile)
 {
     const Cesium3DTilesSelection::TileContent& content = tile.getContent();
@@ -189,11 +189,11 @@ _tile_render_data_list_get(const Cesium3DTilesSelection::Tile& tile)
         return nullptr;
     }
 
-    return static_cast<TileRenderDataList*>(render_content->getRenderResources());
+    return static_cast<TileRenderResources*>(render_content->getRenderResources());
 }
 
 g_internal TileRasterOverlayAttachment*
-_tile_raster_attachment_find(TileRenderDataList* render_data_list, const CesiumRasterOverlays::RasterOverlayTile& raster_tile, S32 overlay_texture_coordinate_id)
+_tile_raster_attachment_find(TileRenderResources* render_data_list, const CesiumRasterOverlays::RasterOverlayTile& raster_tile, S32 overlay_texture_coordinate_id)
 {
     if (!render_data_list)
     {
@@ -212,7 +212,7 @@ _tile_raster_attachment_find(TileRenderDataList* render_data_list, const CesiumR
 }
 
 g_internal TileRasterOverlayAttachment*
-_tile_active_raster_attachment_get(TileRenderDataList* render_data_list)
+_tile_active_raster_attachment_get(TileRenderResources* render_data_list)
 {
     if (!render_data_list)
     {
@@ -234,11 +234,11 @@ _tile_active_raster_attachment_get(TileRenderDataList* render_data_list)
 }
 
 g_internal void
-_tile_render_data_overlay_apply(TileRenderDataList* render_data_list)
+_tile_render_data_overlay_apply(TileRenderResources* render_data_list)
 {
     TileRasterOverlayAttachment* attachment = _tile_active_raster_attachment_get(render_data_list);
 
-    for (TileRenderData* render_data = render_data_list ? render_data_list->first : nullptr; render_data; render_data = render_data->next)
+    for (TileDrawBatch* render_data = render_data_list ? render_data_list->batch_first : nullptr; render_data; render_data = render_data->next)
     {
         render_data->render_data.overlay_texture_handle = {};
         render_data->render_data.overlay_translation = {};
@@ -356,7 +356,7 @@ class DTCityPrepareRendererResources : public Cesium3DTilesSelection::IPrepareRe
         render::thread_cmd_buffer_record(thread_ctx);
         defer({ render::thread_cmd_buffer_end(thread_ctx); });
 
-        TileRenderDataList* render_data_list = tile_render_data_from_gltf(*model, ecef_to_local_transform, transform, tileLoadResult.glTFUpAxis, thread_ctx);
+        TileRenderResources* render_data_list = tile_render_data_from_gltf(*model, ecef_to_local_transform, transform, tileLoadResult.glTFUpAxis, thread_ctx);
         {
             auto stub_func = [](void* data, render::ThreadWorkerCmdCtx* thread_input)
             {
@@ -369,14 +369,14 @@ class DTCityPrepareRendererResources : public Cesium3DTilesSelection::IPrepareRe
             {
                 is_map_tile = *is_map_tile_ptr;
             }
-            for (TileRenderData* data = render_data_list->first; data; data = data->next)
+            for (TileDrawBatch* data = render_data_list->batch_first; data; data = data->next)
             {
                 if (is_map_tile)
                 {
                     data->render_data.pipeline_bits |= render::TilePipelineBits::IsMapTile;
                 }
-                render::handle_list_push(thread_ctx, data->render_data.vertex_buffer_handle);
-                render::handle_list_push(thread_ctx, data->render_data.index_buffer_handle);
+                render::handle_list_push(thread_ctx, data->render_data.vertex_buffer_render_handle);
+                render::handle_list_push(thread_ctx, data->render_data.index_buffer_render_handle);
                 render::Handle null_texture_handle = render::texture_zero_handle_get();
                 if (data->render_data.texture_handle.u64 != null_texture_handle.u64 || data->render_data.texture_handle.gen_id != null_texture_handle.gen_id ||
                     data->render_data.texture_handle.type != null_texture_handle.type)
@@ -394,11 +394,14 @@ class DTCityPrepareRendererResources : public Cesium3DTilesSelection::IPrepareRe
     prepareInMainThread(Cesium3DTilesSelection::Tile& tile, void* pLoadThreadResult) override
     {
         (void)tile;
-        TileRenderDataList* render_data_list = static_cast<TileRenderDataList*>(pLoadThreadResult);
-        render_data_list->tile_is_loaded = true;
+        TileRenderResources* tile_render_resources = static_cast<TileRenderResources*>(pLoadThreadResult);
+        tile_render_resources->tile_is_loaded = true;
+        Context* ctx = dt_ctx_get();
 
-        _tileset_renderer_tile_resource_track(tile_set_renderer, render_data_list);
-        return render_data_list;
+        DLLPushBack(ctx->tile_first, ctx->tile_last, tile_render_resources);
+        ctx->tile_count++;
+
+        return tile_render_resources;
     }
 
     void
@@ -408,17 +411,18 @@ class DTCityPrepareRendererResources : public Cesium3DTilesSelection::IPrepareRe
         (void)tile;
         (void)pLoadThreadResult;
 
-        TileRenderDataList* render_data_list = static_cast<TileRenderDataList*>(pMainThreadResult ? pMainThreadResult : pLoadThreadResult);
-        if (!render_data_list)
+        TileRenderResources* tile_render_resources = static_cast<TileRenderResources*>(pMainThreadResult ? pMainThreadResult : pLoadThreadResult);
+        if (!tile_render_resources)
             return;
 
         if (pMainThreadResult)
         {
-            _tileset_renderer_tile_resource_untrack(tile_set_renderer, render_data_list);
+            tile_render_resources->to_be_dealloced.store(true);
         }
-
-        SLLStackPush(tile_set_renderer->tiles_to_free_stack, render_data_list);
-        tile_set_renderer->tiles_to_free_stack_count++;
+        else if (pLoadThreadResult)
+        {
+            tileset_render_resources_release(tile_render_resources);
+        }
     }
 
     void*
@@ -471,7 +475,7 @@ class DTCityPrepareRendererResources : public Cesium3DTilesSelection::IPrepareRe
     attachRasterInMainThread(const Cesium3DTilesSelection::Tile& tile, int32_t overlayTextureCoordinateID, const CesiumRasterOverlays::RasterOverlayTile& rasterTile,
                              void* pMainThreadRendererResources, const glm::dvec2& translation, const glm::dvec2& scale) override
     {
-        TileRenderDataList* render_data_list = _tile_render_data_list_get(tile);
+        TileRenderResources* render_data_list = _tile_render_data_list_get(tile);
         RasterRenderResource* raster_resources = static_cast<RasterRenderResource*>(pMainThreadRendererResources);
         if (!render_data_list || !render_data_list->arena || !raster_resources)
         {
@@ -497,7 +501,7 @@ class DTCityPrepareRendererResources : public Cesium3DTilesSelection::IPrepareRe
     detachRasterInMainThread(const Cesium3DTilesSelection::Tile& tile, int32_t overlayTextureCoordinateID, const CesiumRasterOverlays::RasterOverlayTile& rasterTile,
                              void* pMainThreadRendererResources) noexcept override
     {
-        TileRenderDataList* render_data_list = _tile_render_data_list_get(tile);
+        TileRenderResources* render_data_list = _tile_render_data_list_get(tile);
         if (!render_data_list)
         {
             return;
@@ -637,278 +641,7 @@ render_raster_tile_record(render::ThreadWorkerCmdCtx* thread_input, RasterTileIn
     return resource;
 }
 
-struct TileVertexFace
-{
-    render::TileVertex v[3];
-};
-
-g_internal geometry::Quad2d
-to_glm_quad(city::RoadSegmentCorners* road)
-{
-    constexpr U32 CORNERS_COUNT = city::RoadSegmentCornerCoord_Count;
-    glm::vec2 road_vertices[city::RoadSegmentCornerCoord_Count] = {};
-    for (U32 r_i = 0; r_i < CORNERS_COUNT; r_i++)
-    {
-        Vec2F32 road_vert = road->corners[r_i];
-        road_vertices[r_i] = glm::vec2(road_vert.x, road_vert.y);
-    }
-
-    geometry::Quad2d quad = {};
-    for (U32 r_i = 0; r_i < CORNERS_COUNT; r_i++)
-    {
-        quad.v[r_i] = road_vertices[r_i];
-    }
-    return quad;
-}
-
-g_internal bool
-polygon_intersection_sat(geometry::Quad2d quad, geometry::Triangle2d face)
-{
-    constexpr U32 CORNERS_COUNT = ArrayCount(quad.v);
-    // check every edge of road_segment
-    for (U32 r_i = 0; r_i < ArrayCount(quad.v); r_i++)
-    {
-        glm::vec2 p0 = quad.v[r_i];
-        glm::vec2 p1 = quad.v[(r_i + 1) % CORNERS_COUNT];
-        glm::vec2 r_v = p0 - p1;
-        glm::vec2 n = glm::vec2(-r_v.y, r_v.x);
-
-        // find max interval for road segment points project to normal vector n
-        float p2_dot = dot(quad.v[(r_i + 2) % CORNERS_COUNT] - p0, n);
-        float p3_dot = dot(quad.v[(r_i + 3) % CORNERS_COUNT] - p0, n);
-
-        float min_seg = min(0.0, min(p2_dot, p3_dot));
-        float max_seg = max(0.0, max(p2_dot, p3_dot));
-
-        // find max interval for triangle points project to normal vector n
-        float min_face = min(dot(face.v[0] - p0, n), min(dot(face.v[1] - p0, n), dot(face.v[2] - p0, n)));
-        float max_face = max(dot(face.v[0] - p0, n), max(dot(face.v[1] - p0, n), dot(face.v[2] - p0, n)));
-
-        if (min_face > max_seg || max_face < min_seg)
-        {
-            return false;
-        }
-    }
-
-    // check every edge of triangle
-    constexpr U32 FACE_VERTEX_COUNT = ArrayCount(face.v);
-    for (U32 t_i = 0; t_i < FACE_VERTEX_COUNT; t_i++)
-    {
-        glm::vec2 p0 = face.v[t_i];
-        glm::vec2 p1 = face.v[(t_i + 1) % FACE_VERTEX_COUNT];
-        glm::vec2 t_v = p0 - p1;
-        glm::vec2 n = glm::vec2(-t_v.y, t_v.x);
-
-        // find max interval for remaining triangle point project to normal vector n
-        float opposite_dot = dot(face.v[(t_i + 2) % FACE_VERTEX_COUNT] - p0, n);
-        float min_triangle = min(0.0, opposite_dot);
-        float max_triangle = max(0.0, opposite_dot);
-
-        float min_seg = min(min(dot(quad.v[0] - p0, n), dot(quad.v[1] - p0, n)), min(dot(quad.v[2] - p0, n), dot(quad.v[3] - p0, n)));
-        float max_seg = max(max(dot(quad.v[0] - p0, n), dot(quad.v[1] - p0, n)), max(dot(quad.v[2] - p0, n), dot(quad.v[3] - p0, n)));
-
-        if (min_triangle > max_seg || max_triangle < min_seg)
-        {
-            return false;
-        }
-    }
-
-    return true;
-}
-
-bool
-face_bounds_overlap(Rng2F32 bounds, geometry::Triangle2d& face)
-{
-    glm::vec2 face_min = (glm::min)(face.v[0], (glm::min)(face.v[1], face.v[2]));
-    glm::vec2 face_max = (glm::max)(face.v[0], (glm::max)(face.v[1], face.v[2]));
-
-    return face_max.x >= bounds.min.x && face_min.x <= bounds.max.x && face_max.y >= bounds.min.y && face_min.y <= bounds.max.y;
-}
-
-g_internal void
-assign_vertex_values(glm::vec2 v, TileVertexFace& face, geometry::Triangle2d& projected_tri, render::TileVertex* out_vertex)
-{
-    glm::vec3 barycentric = geometry::barycentric_2d(v, projected_tri.v[0], projected_tri.v[1], projected_tri.v[2]);
-    glm::vec3 interpolated_pos = barycentric.x * face.v[0].pos + barycentric.y * face.v[1].pos + barycentric.z * face.v[2].pos;
-    glm::vec2 interpolated_uv =
-        barycentric.x * glm::vec2(face.v[0].uv.x, face.v[0].uv.y) + barycentric.y * glm::vec2(face.v[1].uv.x, face.v[1].uv.y) + barycentric.z * glm::vec2(face.v[2].uv.x, face.v[2].uv.y);
-    glm::vec2 interpolated_overlay_uv = barycentric.x * glm::vec2(face.v[0].overlay_uv.x, face.v[0].overlay_uv.y) + barycentric.y * glm::vec2(face.v[1].overlay_uv.x, face.v[1].overlay_uv.y) +
-                                        barycentric.z * glm::vec2(face.v[2].overlay_uv.x, face.v[2].overlay_uv.y);
-
-    out_vertex->pos = interpolated_pos;
-    out_vertex->overlay_uv = interpolated_overlay_uv;
-    out_vertex->uv = interpolated_uv;
-    // TODO: the below fields should also change: eg. object_id could be known, road_segment_idx is no longer needed.
-    out_vertex->road_segment_idx = 0;
-}
-
-Mesh
-render_mesh_from_2d_mesh(Arena* arena, geometry::PolygonMesh2d& triangulated_poly, TileVertexFace& tri, geometry::Triangle2d& projected_tri)
-{
-    Buffer<render::TileVertex> vertices = buffer_alloc<render::TileVertex>(arena, triangulated_poly.vertices.size);
-    for (U32 vertex_idx = 0; vertex_idx < triangulated_poly.vertices.size; ++vertex_idx)
-    {
-        glm::vec2 v = triangulated_poly.vertices.data[vertex_idx];
-        assign_vertex_values(v, tri, projected_tri, &vertices.data[vertex_idx]);
-    }
-
-    Mesh mesh = {
-        .vertices = vertices,
-        .indices = triangulated_poly.indices,
-    };
-    return mesh;
-}
-
-g_internal void
-mesh_append(Arena* arena, ChunkList<render::TileVertex>* vertices_chunk_list, ChunkList<U32>* indices_chunk_list, Mesh& mesh, U32 road_idx)
-{
-    U32 base_vertex_idx = vertices_chunk_list->total_count;
-    for (auto vert : mesh.vertices)
-    {
-        vert.road_segment_idx = road_idx;
-        chunk_list_insert(arena, vertices_chunk_list, vert);
-    }
-
-    for (auto ind : mesh.indices)
-    {
-        U32 new_idx = ind + base_vertex_idx;
-        chunk_list_insert(arena, indices_chunk_list, new_idx);
-    }
-}
-
-g_internal Mesh
-tessellate_tile_face_for_roads(Arena* arena, city::RoadSegmentNode* root, Buffer<city::RoadSegmentCorners> road_buffer, TileVertexFace& face, U32 MAX_ROADS_PER_FACE = 100)
-{
-    prof_scope_marker;
-    ScratchScope scratch = ScratchScope(&arena, 1);
-    constexpr U64 vertex_chunk_capacity = 256;
-    constexpr U64 index_chunk_capacity = 512;
-    ChunkList<render::TileVertex>* vertices_chunk_list = chunk_list_create<render::TileVertex>(scratch.arena, vertex_chunk_capacity);
-    ChunkList<U32>* indices_chunk_list = chunk_list_create<U32>(scratch.arena, index_chunk_capacity);
-
-    geometry::Triangle2d projected_tri = {};
-    projected_tri.v[0] = glm::vec2(face.v[0].pos.x, face.v[0].pos.y);
-    projected_tri.v[1] = glm::vec2(face.v[1].pos.x, face.v[1].pos.y);
-    projected_tri.v[2] = glm::vec2(face.v[2].pos.x, face.v[2].pos.y);
-
-    if (!root || road_buffer.size == 0)
-    {
-        return {};
-    }
-
-    // Collect candidate roads without modifying RoadSegmentNode::next. Tile
-    // preparation can run concurrently, so the BVH itself must remain read-only.
-    U64 node_stack_capacity = road_buffer.size * 2;
-    city::RoadSegmentNode** node_stack = PushArray(scratch.arena, city::RoadSegmentNode*, node_stack_capacity);
-    U64 node_stack_count = 0;
-    node_stack[node_stack_count++] = root;
-
-    constexpr U64 road_candidate_chunk_capacity = 32;
-    ChunkList<geometry::Quad2d>* candidate_quads = chunk_list_create<geometry::Quad2d>(scratch.arena, road_candidate_chunk_capacity);
-    ChunkList<U32>* candidate_road_indices = chunk_list_create<U32>(scratch.arena, road_candidate_chunk_capacity);
-    while (node_stack_count > 0)
-    {
-        city::RoadSegmentNode* node = node_stack[--node_stack_count];
-        if (!face_bounds_overlap(node->bounds, projected_tri))
-        {
-            continue;
-        }
-
-        bool is_leaf = node->children[0] == nullptr;
-        if (!is_leaf)
-        {
-            Assert(node_stack_count + 2 <= node_stack_capacity);
-            node_stack[node_stack_count++] = node->children[1];
-            node_stack[node_stack_count++] = node->children[0];
-            continue;
-        }
-
-        for (U32 road_idx = node->start_idx; road_idx < node->end_idx; ++road_idx)
-        {
-            city::RoadSegmentCorners* road = &road_buffer.data[road_idx];
-            geometry::Quad2d road_quad = to_glm_quad(road);
-            if (!polygon_intersection_sat(road_quad, projected_tri))
-            {
-                continue;
-            }
-
-            F32 twice_area = 0.0f;
-            for (U32 vertex_idx = 0; vertex_idx < ArrayCount(road_quad.v); ++vertex_idx)
-            {
-                glm::vec2 a = road_quad.v[vertex_idx];
-                glm::vec2 b = road_quad.v[(vertex_idx + 1) % ArrayCount(road_quad.v)];
-                twice_area += a.x * b.y - a.y * b.x;
-            }
-
-            geometry::Quad2d ccw_road_quad = road_quad;
-            if (twice_area < 0.0f)
-            {
-                for (U32 vertex_idx = 0; vertex_idx < ArrayCount(ccw_road_quad.v); ++vertex_idx)
-                {
-                    ccw_road_quad.v[vertex_idx] = road_quad.v[ArrayCount(road_quad.v) - 1 - vertex_idx];
-                }
-            }
-
-            chunk_list_insert(scratch.arena, candidate_quads, ccw_road_quad);
-            chunk_list_insert(scratch.arena, candidate_road_indices, road_idx);
-        }
-    }
-
-    if (candidate_quads->total_count == 0)
-    {
-        return {};
-    }
-
-    Buffer<geometry::Quad2d> quad_buffer = buffer_from_chunk_list(scratch.arena, candidate_quads);
-    Buffer<U32> road_index_buffer = buffer_from_chunk_list(scratch.arena, candidate_road_indices);
-
-    if (quad_buffer.size > MAX_ROADS_PER_FACE) // Too large triangle faces with too many road crossings should be rejected to reduce tesselation times
-    {
-        return {};
-    }
-
-    Buffer<geometry::ClassifiedTriangle2d> partition = geometry::triangle_partition_by_quads(scratch.arena, projected_tri, quad_buffer);
-
-    bool has_road_triangle = false;
-    for (geometry::ClassifiedTriangle2d& classified_triangle : partition)
-    {
-        if (classified_triangle.region_idx != 0)
-        {
-            has_road_triangle = true;
-            break;
-        }
-    }
-    if (!has_road_triangle)
-    {
-        return {};
-    }
-
-    U32 triangle_indices[] = {0, 1, 2};
-    for (geometry::ClassifiedTriangle2d& classified_triangle : partition)
-    {
-        geometry::PolygonMesh2d triangle_mesh_2d = {
-            .vertices = {.data = classified_triangle.triangle.v, .size = ArrayCount(classified_triangle.triangle.v)},
-            .indices = {.data = triangle_indices, .size = ArrayCount(triangle_indices)},
-        };
-        Mesh triangle_mesh = render_mesh_from_2d_mesh(scratch.arena, triangle_mesh_2d, face, projected_tri);
-
-        U32 encoded_road_idx = 0;
-        if (classified_triangle.region_idx != 0)
-        {
-            U32 candidate_idx = classified_triangle.region_idx - 1;
-            Assert(candidate_idx < road_index_buffer.size);
-            encoded_road_idx = road_index_buffer.data[candidate_idx] + 1;
-        }
-        mesh_append(scratch.arena, vertices_chunk_list, indices_chunk_list, triangle_mesh, encoded_road_idx);
-    }
-
-    Buffer<render::TileVertex> vertices = buffer_from_chunk_list(arena, vertices_chunk_list);
-    Buffer<U32> indices = buffer_from_chunk_list(arena, indices_chunk_list);
-    Mesh mesh = {.vertices = vertices, .indices = indices};
-    return mesh;
-}
-
-g_internal TileRenderDataList*
+g_internal TileRenderResources*
 tile_render_data_from_gltf(const CesiumGltf::Model& model, const glm::dmat4& ecef_to_local, const glm::dmat4& tile_transform, CesiumGeometry::Axis gltf_up_axis,
                            render::ThreadWorkerCmdCtx* thread_input)
 {
@@ -916,7 +649,7 @@ tile_render_data_from_gltf(const CesiumGltf::Model& model, const glm::dmat4& ece
     ScratchScope scratch = ScratchScope(0, 0);
     Arena* tile_arena = arena_alloc();
     Debug_SetName(tile_arena, "cesium tile arena");
-    TileRenderDataList* tile_render_data_list = PushStruct(tile_arena, TileRenderDataList);
+    TileRenderResources* tile_render_data_list = PushStruct(tile_arena, TileRenderResources);
     tile_render_data_list->arena = tile_arena;
     glm::dmat4 gltf_to_zup = CesiumGeometry::Transforms::getUpAxisTransform(gltf_up_axis, CesiumGeometry::Axis::Z);
 
@@ -1082,70 +815,10 @@ tile_render_data_from_gltf(const CesiumGltf::Model& model, const glm::dmat4& ece
                 }
             }
 
-            // tessellate vertices
-            ChunkList<U32>* indices_chunk_list = chunk_list_create<U32>(scratch.arena, 1000);
-            ChunkList<render::TileVertex>* vertices_chunk_list = chunk_list_create<render::TileVertex>(scratch.arena, 1000);
-            if (city::g_bvh_result)
-            {
-                U32* original_vertex_to_output_idx = PushArray(scratch.arena, U32, vertices.size);
-                B32* original_vertex_is_added = PushArray(scratch.arena, B32, vertices.size);
-                // iterate faces
-                for (U32 i = 0; i < indices.size; i += 3)
-                {
-                    TileVertexFace face_vertices = {};
-                    face_vertices.v[0] = vertices.data[indices.data[i]];
-                    face_vertices.v[1] = vertices.data[indices.data[i + 1]];
-                    face_vertices.v[2] = vertices.data[indices.data[i + 2]];
-
-                    Mesh tessellated_mesh = tessellate_tile_face_for_roads(scratch.arena, city::g_bvh_result->root, city::g_bvh_result->road_segment_buffer_sorted, face_vertices);
-                    if (tessellated_mesh.indices.size)
-                    {
-                        U32 idx_offset = vertices_chunk_list->total_count;
-
-                        for (U32 tessellated_index_idx = 0; tessellated_index_idx < tessellated_mesh.indices.size; ++tessellated_index_idx)
-                        {
-                            U32 index = tessellated_mesh.indices.data[tessellated_index_idx] + idx_offset;
-                            chunk_list_insert(scratch.arena, indices_chunk_list, index);
-                        }
-
-                        for (U32 tessellated_vertex_idx = 0; tessellated_vertex_idx < tessellated_mesh.vertices.size; ++tessellated_vertex_idx)
-                        {
-                            chunk_list_insert(scratch.arena, vertices_chunk_list, tessellated_mesh.vertices.data[tessellated_vertex_idx]);
-                        }
-                    }
-                    else
-                    {
-                        for (U32 face_vertex_idx = 0; face_vertex_idx < ArrayCount(face_vertices.v); face_vertex_idx++)
-                        {
-                            render::TileVertex* tv = &vertices.data[indices.data[i + face_vertex_idx]];
-
-                            U32 original_vertex_idx = indices.data[i + face_vertex_idx];
-                            if (!original_vertex_is_added[original_vertex_idx])
-                            {
-                                U32 output_vertex_idx = (U32)vertices_chunk_list->total_count;
-                                original_vertex_to_output_idx[original_vertex_idx] = output_vertex_idx;
-                                original_vertex_is_added[original_vertex_idx] = true;
-
-                                render::TileVertex* new_vertex = chunk_list_get_next(scratch.arena, vertices_chunk_list);
-                                *new_vertex = *tv;
-                            }
-
-                            U32 index = original_vertex_to_output_idx[original_vertex_idx];
-                            chunk_list_insert(scratch.arena, indices_chunk_list, index);
-                        }
-                    }
-                }
-            }
-
             // Create primitive node and add to primitives
             PrimitiveNode* primitive_node = PushStruct(scratch.arena, PrimitiveNode);
             primitive_node->vertices = vertices;
             primitive_node->indices = indices;
-            if (vertices_chunk_list->total_count > 0 && indices_chunk_list->total_count > 0)
-            {
-                primitive_node->vertices = buffer_from_chunk_list(scratch.arena, vertices_chunk_list);
-                primitive_node->indices = buffer_from_chunk_list(scratch.arena, indices_chunk_list);
-            }
             primitive_node->material_idx = primitive.material;
             primitive_node->has_overlay_uv = overlay_uv_data != nullptr;
 
@@ -1154,9 +827,9 @@ tile_render_data_from_gltf(const CesiumGltf::Model& model, const glm::dmat4& ece
     U64 mat_count = model.materials.size();
     for (U32 mat_idx = 0; mat_idx < mat_count; ++mat_idx)
     {
-        TileRenderData* render_data = PushStruct(tile_render_data_list->arena, TileRenderData);
-        SLLQueuePush(tile_render_data_list->first, tile_render_data_list->last, render_data);
-        render_data->render_data.lod_fade = 1.0f;
+        TileDrawBatch* batch = PushStruct(tile_render_data_list->arena, TileDrawBatch);
+        SLLQueuePush(tile_render_data_list->batch_first, tile_render_data_list->batch_last, batch);
+        batch->render_data.lod_fade = 1.0f;
 
         // Create and async load index and vertex buffer
         // First pass: count vertices/indices only for primitives with this material
@@ -1172,10 +845,10 @@ tile_render_data_from_gltf(const CesiumGltf::Model& model, const glm::dmat4& ece
                 has_overlay_uv |= prim_node->has_overlay_uv;
             }
         }
-        render_data->render_data.index_count = index_count;
+        batch->render_data.index_count = index_count;
         if (has_overlay_uv)
         {
-            render_data->render_data.pipeline_bits |= render::TilePipelineBits::OverlayEnabled;
+            batch->render_data.pipeline_bits |= render::TilePipelineBits::OverlayEnabled;
         }
 
         // Second pass: copy and merge vertices/indices
@@ -1200,14 +873,17 @@ tile_render_data_from_gltf(const CesiumGltf::Model& model, const glm::dmat4& ece
                 index_offset += prim_node->indices.size;
             }
         }
-        render::BufferInfo vertex_info = render::BufferInfo(vertices, render::BufferType_Vertex | render::BufferType_StorageBuffer);
-        render::BufferInfo index_info = render::BufferInfo(indices, render::BufferType_Index | render::BufferType_StorageBuffer);
 
         glm::mat4 model_matrix = glm::identity<glm::mat4>();
         render::BufferInfo model_matrix_info = render::BufferInfo(tile_arena, &model_matrix, render::BufferType_Uniform);
 
-        render_data->render_data.vertex_buffer_handle = render::buffer_load_sync(thread_input, &vertex_info, S("cesium_tile_vertex"));
-        render_data->render_data.index_buffer_handle = render::buffer_load_sync(thread_input, &index_info, S("cesium_tile_index"));
+        render::BufferInfo vertex_info = render::BufferInfo(vertices, render::BufferType_Vertex);
+        render::BufferInfo index_info = render::BufferInfo(indices, render::BufferType_Index);
+        batch->vertex_buffer_orig = vertices;
+        batch->index_buffer_orig = indices;
+
+        batch->render_data.vertex_buffer_render_handle = render::buffer_load_sync(thread_input, &vertex_info, S("cesium_tile_vertex"));
+        batch->render_data.index_buffer_render_handle = render::buffer_load_sync(thread_input, &index_info, S("cesium_tile_index"));
 
         // Texture Loading
         S32 tex_idx = -1;
@@ -1220,7 +896,7 @@ tile_render_data_from_gltf(const CesiumGltf::Model& model, const glm::dmat4& ece
             }
         }
 
-        render_data->render_data.texture_handle = render::texture_zero_handle_get();
+        batch->render_data.texture_handle = render::texture_zero_handle_get();
         if (tex_idx >= 0)
         {
             CesiumGltf::Texture texture = model.textures[tex_idx];
@@ -1246,7 +922,7 @@ tile_render_data_from_gltf(const CesiumGltf::Model& model, const glm::dmat4& ece
             if (_cesium_image_rgba8_prepare(tile_render_data_list->arena, image, &tex_buffer, &byte_count))
             {
                 render::TextureUploadData tex_data = render::TextureUploadData::init(tex_buffer, width, height, 4, 1, byte_count);
-                render_data->render_data.texture_handle = render::texture_load_sync(&sampler_info, &tex_data, thread_input->cmd_buffer);
+                batch->render_data.texture_handle = render::texture_load_sync(&sampler_info, &tex_data, thread_input->cmd_buffer);
             }
         }
     }
@@ -1438,12 +1114,12 @@ tileset_renderer_create(TilesetRenderer* tileset, async::ThreadPool* threads, St
 }
 
 g_internal void
-_tileset_renderer_free_handles(TileRenderDataList* list)
+tileset_render_resources_release(TileRenderResources* list)
 {
-    for (TileRenderData* render_data = list->first; render_data; render_data = render_data->next)
+    for (TileDrawBatch* render_data = list->batch_first; render_data; render_data = render_data->next)
     {
-        render::handle_destroy_deferred(render_data->render_data.vertex_buffer_handle);
-        render::handle_destroy_deferred(render_data->render_data.index_buffer_handle);
+        render::handle_destroy_deferred(render_data->render_data.vertex_buffer_render_handle);
+        render::handle_destroy_deferred(render_data->render_data.index_buffer_render_handle);
         render::Handle null_texture_handle = render::texture_zero_handle_get();
         if (render_data->render_data.texture_handle.u64 != null_texture_handle.u64 || render_data->render_data.texture_handle.gen_id != null_texture_handle.gen_id ||
             render_data->render_data.texture_handle.type != null_texture_handle.type)
@@ -1452,37 +1128,6 @@ _tileset_renderer_free_handles(TileRenderDataList* list)
         }
     }
     arena_release(list->arena);
-}
-
-g_internal void
-_tileset_renderer_tile_resource_track(TilesetRenderer* renderer, TileRenderDataList* list)
-{
-    SLLStackPush_N(renderer->active_tile_resource_first, list, active_next);
-}
-
-g_internal B32
-_tileset_renderer_tile_resource_untrack(TilesetRenderer* renderer, TileRenderDataList* list)
-{
-    B32 result = false;
-    TileRenderDataList** prev_next = &renderer->active_tile_resource_first;
-    for (TileRenderDataList* node = renderer->active_tile_resource_first; node; node = node->active_next)
-    {
-        if (node == list)
-        {
-            *prev_next = node->active_next;
-            node->active_next = 0;
-            result = true;
-            break;
-        }
-        prev_next = &node->active_next;
-    }
-    return result;
-}
-
-g_internal void
-_tileset_renderer_raster_resource_track(TilesetRenderer* renderer, RasterRenderResource* resource)
-{
-    SLLStackPush_N(renderer->active_raster_resource_first, resource, active_next);
 }
 
 g_internal B32
@@ -1505,16 +1150,14 @@ _tileset_renderer_raster_resource_untrack(TilesetRenderer* renderer, RasterRende
 }
 
 g_internal void
+_tileset_renderer_raster_resource_track(TilesetRenderer* renderer, RasterRenderResource* resource)
+{
+    SLLStackPush_N(renderer->active_raster_resource_first, resource, active_next);
+}
+
+g_internal void
 _tileset_renderer_active_resources_release(TilesetRenderer* renderer)
 {
-    while (renderer->active_tile_resource_first)
-    {
-        TileRenderDataList* tile_resource = renderer->active_tile_resource_first;
-        renderer->active_tile_resource_first = tile_resource->active_next;
-        tile_resource->active_next = 0;
-        _tileset_renderer_free_handles(tile_resource);
-    }
-
     while (renderer->active_raster_resource_first)
     {
         RasterRenderResource* raster_resource = renderer->active_raster_resource_first;
@@ -1526,29 +1169,6 @@ _tileset_renderer_active_resources_release(TilesetRenderer* renderer)
             render::handle_destroy_deferred(draw->tex);
         }
         arena_release(draw->arena);
-    }
-}
-
-g_internal void
-tileset_renderer_free_list_empty(TilesetRenderer* renderer)
-{
-    prof_scope_marker;
-    while (1)
-    {
-        TileRenderDataList* tile_data = 0;
-        tile_data = renderer->tiles_to_free_stack;
-        if (tile_data)
-        {
-            SLLStackPop(renderer->tiles_to_free_stack);
-            renderer->tiles_to_free_stack_count--;
-        }
-
-        if (!tile_data)
-        {
-            break;
-        }
-
-        _tileset_renderer_free_handles(tile_data);
     }
 }
 
@@ -1570,9 +1190,7 @@ tileset_renderer_destroy(TilesetRenderer* renderer)
     renderer->async_system.dispatchMainThreadTasks();
     Allocator::destroy(renderer->allocator);
 
-    tileset_renderer_free_list_empty(renderer);
     _tileset_renderer_active_resources_release(renderer);
-    Assert(renderer->tiles_to_free_stack_count == 0);
     MemoryZeroStruct(renderer);
 }
 
@@ -1589,7 +1207,6 @@ tileset_pump_async(TilesetRenderer* renderer)
         return;
 
     renderer->async_system.dispatchMainThreadTasks();
-    tileset_renderer_free_list_empty(renderer);
 }
 
 g_internal void
@@ -1613,7 +1230,7 @@ _tileset_renderer_tile_to_show_push(TilesetRenderer* renderer, const Cesium3DTil
         return;
     }
 
-    TileRenderDataList* render_data = static_cast<TileRenderDataList*>(renderer_resources);
+    TileRenderResources* render_data = static_cast<TileRenderResources*>(renderer_resources);
     if (!render_data || !render_data->tile_is_loaded)
     {
         return;
@@ -1629,12 +1246,12 @@ _tileset_renderer_tile_to_show_push(TilesetRenderer* renderer, const Cesium3DTil
 
     prof_scope_marker_named("tileset_update_view:schedule_loaded_tiles");
     _tile_render_data_overlay_apply(render_data);
-    for (TileRenderData* render_data_node = render_data->first; render_data_node; render_data_node = render_data_node->next)
+    for (TileDrawBatch* render_data_node = render_data->batch_first; render_data_node; render_data_node = render_data_node->next)
     {
         render_data_node->render_data.lod_fade = lod_visibility;
-        SLLQueuePush_N(renderer->tile_to_show.first, renderer->tile_to_show.last, render_data_node, render_next);
-        renderer->tiles_to_show_count++;
     }
+    SLLQueuePush_N(renderer->tile_to_show_first, renderer->tile_to_show_last, render_data, render_next);
+    renderer->tiles_to_show_count++;
 }
 
 g_internal void
@@ -1669,11 +1286,11 @@ tileset_update_view(TilesetRenderer* renderer, ui::Camera* camera, Vec2U32 viewp
     renderer->async_system.dispatchMainThreadTasks();
 
     // Clear and rebuild the loaded tiles list
-    renderer->tile_to_show = {};
+    renderer->tile_to_show_first = {};
+    renderer->tile_to_show_last = {};
     renderer->tiles_to_show_count = 0;
     // Update the tileset view
     std::vector<Cesium3DTilesSelection::ViewState> views = {view_state};
-    tileset_renderer_free_list_empty(renderer);
     {
         prof_scope_marker_named("tile load loop");
         for (U32 i = 0; i < renderer->tilesets.size; ++i)

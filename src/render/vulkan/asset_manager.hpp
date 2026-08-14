@@ -308,6 +308,8 @@ static void
 asset_manager_texture_free(render::Handle handle);
 g_internal render::Handle
 asset_manager_buffer_allocation_create(render::ThreadWorkerCmdCtx* thread_ctx, render::BufferInfo* buffer_info, VmaAllocationCreateInfo vma_info);
+g_internal render::Handle
+asset_manager_buffer_immediate_create(render::BufferInfo* buffer_info, String8 debug_name);
 g_internal vulkan::BufferAllocation
 asset_manager_buffer_from_staging(VkCommandBuffer cmd_buffer, render::BufferInfo* buffer_info, VkBuffer dest_buffer);
 static void
@@ -336,6 +338,9 @@ thread_main(async::ThreadInfo thread_info, async::WorkerData input);
 // debug helpers
 lib_internal void
 asset_manager_debug_name_set(void* allocation, String8 name);
+
+static render::Handle
+_asset_manager_buffer_create(render::BufferInfo* buffer_info, VmaAllocationCreateInfo vma_info, VkBufferUsageFlags additional_usage_flags);
 } // namespace vulkan
 
 #define VK_CHECK_RESULT(f)                                                                                                                                                                             \

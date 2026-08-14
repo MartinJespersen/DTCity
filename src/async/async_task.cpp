@@ -88,7 +88,7 @@ async_task_is_done(AsyncTaskStatus<T>* task)
                 }
             }
         }
-        INFO_LOG("%.*s work complete", str8_varg(task->task_name));
+        // INFO_LOG("%.*s work complete", str8_varg(task->task_name));
     }
 
     return result;
