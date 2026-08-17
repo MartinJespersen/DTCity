@@ -45,15 +45,13 @@ if (MSVC)
     endif()
   endif()
 
-  if(BUILD_DEBUG)
-    message(DEBUG "Setting MSVC flags to /Z7 for ccache compatibility.  Current flags: ${CMAKE_CXX_FLAGS_DEBUG}")
-    string(REPLACE "/Zi" "/Z7" CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG}")
-    string(REPLACE "/Zi" "/Z7" CMAKE_C_FLAGS_DEBUG "${CMAKE_C_FLAGS_DEBUG}")
-    string(REPLACE "/Zi" "/Z7" CMAKE_CXX_FLAGS_RELWITHDEBINFO "${CMAKE_CXX_FLAGS_RELWITHDEBINFO}")
-    string(REPLACE "/Zi" "/Z7" CMAKE_C_FLAGS_RELWITHDEBINFO "${CMAKE_C_FLAGS_RELWITHDEBINFO}")
-    message(DEBUG "New flags: ${CMAKE_CXX_FLAGS_DEBUG}")
+  message(DEBUG "Setting MSVC flags to /Z7 for ccache compatibility. Current flags: ${CMAKE_CXX_FLAGS_DEBUG}")
+  string(REPLACE "/Zi" "/Z7" CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG}")
+  string(REPLACE "/Zi" "/Z7" CMAKE_C_FLAGS_DEBUG "${CMAKE_C_FLAGS_DEBUG}")
+  string(REPLACE "/Zi" "/Z7" CMAKE_CXX_FLAGS_RELWITHDEBINFO "${CMAKE_CXX_FLAGS_RELWITHDEBINFO}")
+  string(REPLACE "/Zi" "/Z7" CMAKE_C_FLAGS_RELWITHDEBINFO "${CMAKE_C_FLAGS_RELWITHDEBINFO}")
+  message(DEBUG "New flags: ${CMAKE_CXX_FLAGS_DEBUG}")
 
-  endif()
   add_compile_options(
             /W4
             /wd4201  /wd4005 /wd4838 /wd4244 /wd4996 /wd4310 /wd4245 /wd4100
@@ -63,17 +61,10 @@ if (MSVC)
             /Zc:__cplusplus
         )
 
-  if(NOT NDEBUG)
-    add_compile_options(
-   /Z7
-  )
-  endif()
-
   add_compile_definitions(BUILD_CONSOLE_INTERFACE=1)
 
   list(APPEND ASAN_LINK_FLAGS /INCREMENTAL:NO)
   list(APPEND ASAN_COMPILE_FLAGS /fsanitize=address /D_DISABLE_STRING_ANNOTATION /D_DISABLE_VECTOR_ANNOTATION /D_DISABLE_OPTIONAL_ANNOTATION)
-  set(DISABLE_WARNINGS_COMPILE_FLAG /W0)
 elseif(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
   add_compile_options(
     -maes
@@ -86,6 +77,10 @@ elseif(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
 
     if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
       add_compile_options(-Wno-class-memaccess)
+    endif()
+
+    if(CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
+      add_compile_options(-ftime-trace)
     endif()
 
   else()
@@ -109,7 +104,7 @@ function(disable_warnings_for_sources)
   set_source_files_properties(
     ${ARGV}
     PROPERTIES
-    COMPILE_OPTIONS ${DISABLE_WARNINGS_COMPILE_FLAG}
+    COMPILE_OPTIONS "${DISABLE_WARNINGS_COMPILE_FLAG}"
   )
 endfunction()
 
@@ -134,11 +129,17 @@ endif()
 
 
 # tracy profiler
+set(THIRD_PARTY_SOURCES
+    src/third_party/simdjson/simdjson.cpp
+    src/third_party/imgui/imgui_inc.cpp
+    src/third_party/vma_stb.cpp
+)
+
 option(TRACY_PROFILE_ENABLE "Enable Tracy profiler" OFF)
 if (TRACY_PROFILE_ENABLE)
   add_compile_definitions(TRACY_ENABLE)
   add_compile_definitions(TRACY_PROFILE_ENABLE)
-  target_sources(city PRIVATE ${THIRD_PARTY_LIBS_DIR}/tracy/TracyClient.cpp)
+  list(APPEND THIRD_PARTY_SOURCES ${THIRD_PARTY_LIBS_DIR}/tracy/TracyClient.cpp)
 endif()
 
 # compile shaders
@@ -182,6 +183,8 @@ target_include_directories(city SYSTEM PRIVATE
     ${THIRD_PARTY_LIBS_DIR}
 )
 
+target_precompile_headers(city PRIVATE src/pch.hpp)
+
 # KTX from vcpkg (with Vulkan support) - cesium-native's KTX doesn't include ktxvulkan.h
 find_package(Ktx CONFIG REQUIRED)
 find_package(glfw3 CONFIG REQUIRED)
@@ -217,8 +220,12 @@ add_dependencies(city CompileShaders)
 target_link_directories(city PRIVATE
         ${PLATFORM_LIB_ARTIFACT_DIR}
 )
-target_sources(city PRIVATE src/third_party/simdjson/simdjson.cpp src/third_party/imgui/imgui_inc.cpp)
-disable_warnings_for_sources(src/third_party/simdjson/simdjson.cpp src/third_party/imgui/imgui_inc.cpp)
+target_sources(city PRIVATE ${THIRD_PARTY_SOURCES})
+set_source_files_properties(
+    ${THIRD_PARTY_SOURCES}
+    PROPERTIES SKIP_PRECOMPILE_HEADERS ON
+)
+disable_warnings_for_sources(${THIRD_PARTY_SOURCES})
 target_link_libraries(city PRIVATE
     glfw
     KTX::ktx

@@ -1,7 +1,5 @@
 #pragma once
 
-#include "curl/curl.h"
-
 #include "http/http.h"
 #include "segment_buffer.hpp"
 #include "async_heap.hpp"

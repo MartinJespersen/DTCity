@@ -1,38 +1,6 @@
 #pragma once
 
-///////////////////////////////////////////////////////////////////
-// std includes
-#include <cstdio>
-#include <cstdlib>
-#include <cstring>
-#include <limits>
-
-#include "debug_forward_ref.hpp"
-// helper diagnostics
-#include "diagnostics.hpp"
-
-#include <CDT.h>
-// cesium native libraries
-#include "cesium/cesium_native_headers.hpp"
-
-#undef APIENTRY
-#define GLFW_INCLUDE_VULKAN
-#include <GLFW/glfw3.h>
-#undef APIENTRY
-
-//////////////////////////////////////////////
-// mgj: third party libs
-#define GLM_FORCE_RADIANS
-#define GLM_FORCE_DEPTH_ZERO_TO_ONE
-#define GLM_FORCE_DEFAULT_ALIGNED_GENTYPES
-#define GLM_FORCE_INTRINSICS
-#define GLM_FORCE_INLINE
-#include "glm/glm.hpp"
-#include "glm/gtc/matrix_transform.hpp"
-#define IM_ASSERT(x) assert(x)
-#include "third_party/imgui/imgui_inc.hpp"
-
-//////////////////////////////////////////////
+#include "pch.hpp"
 
 DISABLE_WARNINGS_PUSH
 #define OS_FEATURE_GRAPHICAL 1
@@ -40,11 +8,6 @@ DISABLE_WARNINGS_PUSH
 #include "os_core/os_core_inc.hpp"
 DISABLE_WARNINGS_POP
 #include "debug_log.hpp"
-
-#if (BUILD_DEBUG)
-#define SIMDJSON_DEVELOPMENT_CHECKS 1
-#endif
-#include "simdjson/simdjson.h"
 
 // user defined: [hpp]
 #include "utility/utility_inc.hpp"
