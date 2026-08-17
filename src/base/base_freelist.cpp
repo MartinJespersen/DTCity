@@ -110,6 +110,24 @@ _pow2_freelist_offset_calc()
     return POW2_FREELIST_ALIGN;
 }
 
+template <typename T>
+bool
+BufferHandle<T>::buffer_try_get(Buffer<T>* out)
+{
+    bool result = false;
+    if (this->gen_id)
+    {
+        U32 arr_offset = _pow2_freelist_offset_calc<T>();
+        Pow2FreelistNode* dyn_arr_node = (Pow2FreelistNode*)((U8*)this->buffer.data - arr_offset);
+        if (this->gen_id == dyn_arr_node->gen_id)
+        {
+            result = true;
+            *out = this->buffer;
+        }
+    }
+    return result;
+}
+
 lib_internal U32
 _pow2_freelist_idx_from_alloc_size(U64 alloc_size, U32 exponent_min, U32 exponent_count)
 {

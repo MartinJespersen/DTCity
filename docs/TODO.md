@@ -1,3 +1,10 @@
+# Project TODO:
+- How to show agent locations? Ability to change camera for each agent?
+- Improve performance to be able to visualize large simulations.
+- Visualize multiple scenarios (with dashboard for changing them)
+  - visualization -> simulation communication for scenario change 
+- Agent pr road visualization
+  - heap map?
 
 # Tessellation review findings
 * Keep the current tile buffers active until replacement uploads have completed on the GPU.

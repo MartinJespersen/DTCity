@@ -22,7 +22,11 @@
 #define local_persist static
 #define g_internal static
 #define g_inline static inline
+#if defined(__clang__) || defined(__GNUC__)
+#define lib_internal static __attribute__((unused))
+#else
 #define lib_internal [[maybe_unused]] static
+#endif
 
 #if COMPILER_MSVC || (COMPILER_CLANG && OS_WINDOWS)
 #pragma section(".rdata$", read)

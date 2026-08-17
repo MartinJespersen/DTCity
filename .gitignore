@@ -32,3 +32,4 @@ nul
 .claude
 vcpkg_installed/**
 .env
+debug

@@ -69,20 +69,24 @@ if (MSVC)
   )
   endif()
 
-  add_compile_definitions(BUILD_CONSOLE_INTERFACE ON)
+  add_compile_definitions(BUILD_CONSOLE_INTERFACE=1)
 
   list(APPEND ASAN_LINK_FLAGS /INCREMENTAL:NO)
   list(APPEND ASAN_COMPILE_FLAGS /fsanitize=address /D_DISABLE_STRING_ANNOTATION /D_DISABLE_VECTOR_ANNOTATION /D_DISABLE_OPTIONAL_ANNOTATION)
   set(DISABLE_WARNINGS_COMPILE_FLAG /W0)
-elseif(CMAKE_COMPILER_IS_GNUCXX)
+elseif(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
   add_compile_options(
     -maes
     -msse4
     )
   if(BUILD_DEBUG AND NOT NDEBUG)
     add_compile_options(
-        -Wall -Wextra -Wno-attributes -Wno-format -Wno-unused-function -Wno-unused-parameter -Wno-narrowing -Wno-missing-field-initializers -Wno-sign-conversion -Wno-write-strings -Wno-class-memaccess -Wno-comment -Wno-pedantic
+        -Wall -Wextra -Wno-attributes -Wno-format -Wno-unused-function -Wno-unused-parameter -Wno-narrowing -Wno-missing-field-initializers -Wno-sign-conversion -Wno-write-strings -Wno-comment -Wno-pedantic
     )
+
+    if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+      add_compile_options(-Wno-class-memaccess)
+    endif()
 
   else()
 
@@ -92,6 +96,11 @@ elseif(CMAKE_COMPILER_IS_GNUCXX)
   list(APPEND ASAN_LINK_FLAGS -fsanitize=address)
   list(APPEND ASAN_COMPILE_FLAGS -fsanitize=address)
   set(DISABLE_WARNINGS_COMPILE_FLAG -w)
+
+  if(WIN32)
+    add_compile_definitions(BUILD_CONSOLE_INTERFACE=1)
+    list(APPEND ASAN_COMPILE_FLAGS -D_DISABLE_STRING_ANNOTATION -D_DISABLE_VECTOR_ANNOTATION -D_DISABLE_OPTIONAL_ANNOTATION)
+  endif()
 else()
   message(FATAL_ERROR "Unsupported compiler")
 endif()
@@ -182,6 +191,25 @@ find_package(Vulkan REQUIRED)
 find_package(cesium-native CONFIG REQUIRED)
 
 find_package(absl CONFIG REQUIRED)
+
+# Async++ exports an MSVC-style option for every Windows compiler. The GNU-style
+# Clang driver treats it as an input path, so remove it from the imported target.
+if(CMAKE_CXX_COMPILER_ID MATCHES "Clang" AND CMAKE_CXX_COMPILER_FRONTEND_VARIANT STREQUAL "GNU")
+  get_target_property(ASYNC_COMPILE_OPTIONS Async++ INTERFACE_COMPILE_OPTIONS)
+  list(REMOVE_ITEM ASYNC_COMPILE_OPTIONS "/Zc:__cplusplus")
+  set_target_properties(Async++ PROPERTIES INTERFACE_COMPILE_OPTIONS "${ASYNC_COMPILE_OPTIONS}")
+
+  get_property(IMPORTED_TARGETS DIRECTORY PROPERTY IMPORTED_TARGETS)
+  foreach(IMPORTED_TARGET IN LISTS IMPORTED_TARGETS)
+    if(IMPORTED_TARGET MATCHES "^absl::")
+      get_target_property(IMPORTED_LINK_LIBRARIES ${IMPORTED_TARGET} INTERFACE_LINK_LIBRARIES)
+      if(IMPORTED_LINK_LIBRARIES)
+        list(REMOVE_ITEM IMPORTED_LINK_LIBRARIES "-ignore:4221" "$<LINK_ONLY:-ignore:4221>")
+        set_target_properties(${IMPORTED_TARGET} PROPERTIES INTERFACE_LINK_LIBRARIES "${IMPORTED_LINK_LIBRARIES}")
+      endif()
+    endif()
+  endforeach()
+endif()
 
 # city executable specifics
 add_dependencies(city CompileShaders)

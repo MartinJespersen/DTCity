@@ -48,6 +48,18 @@
       }
     },
     {
+      "name": "debug-windows-clang",
+      "displayName": "Debug (Windows Clang)",
+      "inherits": "debug-windows",
+      "binaryDir": "${sourceDir}/build/win/clang-debug",
+      "cacheVariables": {
+        "CMAKE_C_COMPILER": "clang",
+        "CMAKE_CXX_COMPILER": "clang++",
+        "ASAN_ENABLED": "OFF",
+        "USE_RADLINKER": "OFF"
+      }
+    },
+    {
       "name": "debug-linux",
       "displayName": "Debug (Linux)",
       "inherits": "debug-base",
