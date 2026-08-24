@@ -296,6 +296,143 @@ near_duplicate_vertices_discard_inplace(Buffer<glm::vec2> poly)
     return final_poly;
 }
 
+render::PrimitiveMesh
+hover_icon_mesh_create(Arena* arena, F32 radius, F32 height, F32 hover_height, glm::vec4 color)
+{
+    AssertAlways(arena);
+    AssertAlways(radius > 0.0f);
+    AssertAlways(height > 0.0f);
+
+    constexpr U64 source_vertex_count = 6;
+    constexpr U64 vertex_count = 24;
+    constexpr U64 index_count = 24;
+
+    render::PrimitiveMesh mesh = {};
+    mesh.vertices = buffer_alloc<render::PrimitiveVertex>(arena, vertex_count);
+    mesh.indices = buffer_alloc<U16>(arena, index_count);
+
+    F32 middle_height = hover_height + height * 0.5f;
+    F32 top_height = hover_height + height;
+    glm::vec3 source_vertices[source_vertex_count] = {
+        glm::vec3(0.0f, 0.0f, hover_height),
+        glm::vec3(0.0f, 0.0f, top_height),
+        glm::vec3(radius, 0.0f, middle_height),
+        glm::vec3(0.0f, radius, middle_height),
+        glm::vec3(-radius, 0.0f, middle_height),
+        glm::vec3(0.0f, -radius, middle_height),
+    };
+
+    U16 source_indices[index_count] = {
+        1, 2, 3,
+        1, 3, 4,
+        1, 4, 5,
+        1, 5, 2,
+        0, 3, 2,
+        0, 4, 3,
+        0, 5, 4,
+        0, 2, 5,
+    };
+
+    constexpr U64 triangle_vertex_count = 3;
+    for (U64 triangle_idx = 0; triangle_idx < index_count / triangle_vertex_count; ++triangle_idx)
+    {
+        U64 triangle_offset = triangle_idx * triangle_vertex_count;
+        glm::vec3 position_a = source_vertices[source_indices[triangle_offset]];
+        glm::vec3 position_b = source_vertices[source_indices[triangle_offset + 1]];
+        glm::vec3 position_c = source_vertices[source_indices[triangle_offset + 2]];
+        glm::vec3 normal_unnormalized = glm::cross(position_b - position_a, position_c - position_a);
+        glm::vec3 normal = glm::normalize(normal_unnormalized);
+
+        for (U64 triangle_vertex_idx = 0; triangle_vertex_idx < triangle_vertex_count; ++triangle_vertex_idx)
+        {
+            U64 vertex_idx = triangle_offset + triangle_vertex_idx;
+            U16 source_vertex_idx = source_indices[vertex_idx];
+            mesh.vertices.data[vertex_idx] = {.pos = source_vertices[source_vertex_idx], .normal = normal, .color = color};
+            mesh.indices.data[vertex_idx] = (U16)vertex_idx;
+        }
+    }
+
+    return mesh;
+}
+
+render::PrimitiveMesh
+cylinder_mesh_create(Arena* arena, F32 radius, F32 height, U32 side_count, glm::vec4 color)
+{
+    AssertAlways(arena);
+    AssertAlways(radius > 0.0f);
+    AssertAlways(height > 0.0f);
+    AssertAlways(side_count >= 3);
+    AssertAlways(side_count <= 16383);
+
+    U64 vertex_count = (U64)side_count * 4 + 2;
+    U64 index_count = (U64)side_count * 12;
+    render::PrimitiveMesh mesh = {};
+    mesh.vertices = buffer_alloc<render::PrimitiveVertex>(arena, vertex_count);
+    mesh.indices = buffer_alloc<U16>(arena, index_count);
+
+    U32 bottom_center_idx = side_count * 2;
+    U32 bottom_ring_start_idx = bottom_center_idx + 1;
+    U32 top_center_idx = bottom_ring_start_idx + side_count;
+    U32 top_ring_start_idx = top_center_idx + 1;
+
+    glm::vec3 bottom_normal = glm::vec3(0.0f, 0.0f, -1.0f);
+    glm::vec3 top_normal = glm::vec3(0.0f, 0.0f, 1.0f);
+    mesh.vertices.data[bottom_center_idx] = {.pos = glm::vec3(0.0f), .normal = bottom_normal, .color = color};
+    mesh.vertices.data[top_center_idx] = {.pos = glm::vec3(0.0f, 0.0f, height), .normal = top_normal, .color = color};
+
+    constexpr F32 full_rotation_radians = 6.28318530717958647692f;
+    for (U32 side_idx = 0; side_idx < side_count; ++side_idx)
+    {
+        F32 angle = full_rotation_radians * (F32)side_idx / (F32)side_count;
+        F32 x = radius * glm::cos(angle);
+        F32 y = radius * glm::sin(angle);
+        glm::vec3 radial_normal = glm::vec3(x / radius, y / radius, 0.0f);
+        glm::vec3 bottom_position = glm::vec3(x, y, 0.0f);
+        glm::vec3 top_position = glm::vec3(x, y, height);
+
+        U32 side_bottom_idx = side_idx * 2;
+        U32 side_top_idx = side_bottom_idx + 1;
+        U32 bottom_cap_idx = bottom_ring_start_idx + side_idx;
+        U32 top_cap_idx = top_ring_start_idx + side_idx;
+        mesh.vertices.data[side_bottom_idx] = {.pos = bottom_position, .normal = radial_normal, .color = color};
+        mesh.vertices.data[side_top_idx] = {.pos = top_position, .normal = radial_normal, .color = color};
+        mesh.vertices.data[bottom_cap_idx] = {.pos = bottom_position, .normal = bottom_normal, .color = color};
+        mesh.vertices.data[top_cap_idx] = {.pos = top_position, .normal = top_normal, .color = color};
+    }
+
+    U64 output_index_idx = 0;
+    for (U32 side_idx = 0; side_idx < side_count; ++side_idx)
+    {
+        U32 next_side_idx = (side_idx + 1) % side_count;
+        U16 side_bottom_idx = (U16)(side_idx * 2);
+        U16 side_top_idx = (U16)(side_bottom_idx + 1);
+        U16 next_side_bottom_idx = (U16)(next_side_idx * 2);
+        U16 next_side_top_idx = (U16)(next_side_bottom_idx + 1);
+        U16 bottom_cap_idx = (U16)(bottom_ring_start_idx + side_idx);
+        U16 next_bottom_cap_idx = (U16)(bottom_ring_start_idx + next_side_idx);
+        U16 top_cap_idx = (U16)(top_ring_start_idx + side_idx);
+        U16 next_top_cap_idx = (U16)(top_ring_start_idx + next_side_idx);
+
+        mesh.indices.data[output_index_idx++] = side_bottom_idx;
+        mesh.indices.data[output_index_idx++] = next_side_bottom_idx;
+        mesh.indices.data[output_index_idx++] = side_top_idx;
+        mesh.indices.data[output_index_idx++] = side_top_idx;
+        mesh.indices.data[output_index_idx++] = next_side_bottom_idx;
+        mesh.indices.data[output_index_idx++] = next_side_top_idx;
+
+        mesh.indices.data[output_index_idx++] = (U16)bottom_center_idx;
+        mesh.indices.data[output_index_idx++] = next_bottom_cap_idx;
+        mesh.indices.data[output_index_idx++] = bottom_cap_idx;
+
+        mesh.indices.data[output_index_idx++] = (U16)top_center_idx;
+        mesh.indices.data[output_index_idx++] = top_cap_idx;
+        mesh.indices.data[output_index_idx++] = next_top_cap_idx;
+    }
+    Assert(output_index_idx == mesh.indices.size);
+
+    return mesh;
+}
+
 PolygonMesh2d
 polygon_triangulate(Arena* arena, Buffer<glm::vec2> poly)
 {

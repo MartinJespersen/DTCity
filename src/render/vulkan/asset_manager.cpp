@@ -1314,4 +1314,20 @@ asset_manager_debug_name_set(void* allocation, String8 name)
     }
 }
 
+g_internal bool
+asset_manager_handles_loaded_check(std::initializer_list<render::Handle> handles)
+{
+    bool are_all_handles_loaded = true;
+    for (render::Handle handle : handles)
+    {
+        bool loaded = render::is_resource_loaded(handle);
+        if (loaded == false)
+        {
+            are_all_handles_loaded = false;
+            break;
+        }
+    }
+    return are_all_handles_loaded;
+}
+
 } // namespace vulkan

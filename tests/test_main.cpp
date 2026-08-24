@@ -13,6 +13,7 @@
 #include "base/test_math.cpp"
 #include "base/test_strings.cpp"
 #include "cesium/test_tessellation.cpp"
+#include "misc/test_geometry.cpp"
 #include "base/test_freelist.cpp"
 
 int

@@ -27,6 +27,10 @@ city_area_streaming_begin(async::ThreadPool* thread_pool, City* city, const Area
     {
         Vec2F64 bbox_center = {.x = (city->bbox.min.x + city->bbox.max.x) * 0.5, .y = (city->bbox.min.y + city->bbox.max.y) * 0.5};
         cesium::tileset_renderer_create(tileset, thread_pool, city->tileset_url, bbox_center.x, bbox_center.y, 0.0, area_config->custom_geometry_enabled, MB(256));
+        if (city->cars_creation_done)
+        {
+            _agent_height_updates_start(&city->car_sim, tileset);
+        }
     }
 }
 
@@ -34,6 +38,10 @@ g_internal void
 city_area_streaming_end(City* city)
 {
     Context* ctx = dt_ctx_get();
+    if (city->cars_creation_done)
+    {
+        _agent_height_updates_stop(&city->car_sim);
+    }
 
     cesium::TilesetRenderer* tileset = {};
     if (ctx->tileset_pool->item_from_handle(city->tileset_handle, &tileset))
@@ -165,7 +173,8 @@ _tile_pipeline_add(cesium::TileDrawBatch* tile, City* city, render::MappedHandle
 }
 
 g_internal void
-city_update(City* city, Buffer<city::Coordinate> new_agent_coords, async::ThreadPool* thread_pool, RoadOverlayOption neta_overlay_option, Vec2U32 framebuffer_dim, const AreaConfig* city_config)
+city_update(City* city, Buffer<city::Coordinate> new_agent_coords, async::ThreadPool* thread_pool, RoadOverlayOption neta_overlay_option, Vec2U32 framebuffer_dim, const AreaConfig* city_config,
+            render::MeshHandle hover_icon_mesh_handle, render::MeshHandle hover_icon_connector_mesh_handle)
 {
     prof_scope_marker;
     ScratchScope scratch = ScratchScope(0, 0);
@@ -412,25 +421,26 @@ city_update(City* city, Buffer<city::Coordinate> new_agent_coords, async::Thread
         {
             prof_scope_marker_named("Car update scope");
             F32 scale_factor = city->all_agent_scale_factor;
-            agent_sim_update(&city->car_sim, tileset, new_agent_coords, tileset->ecef_to_local, scale_factor, ctx->io->frame_count);
+            S64 frame_rate = ctx->io->frame_rate.load();
+            render::MappedHandle<void> camera_handle_void = render::mapped_handle_erased(camera_handle);
+            agent_sim_update(&city->car_sim, tileset, new_agent_coords, tileset->ecef_to_local, scale_factor, ctx->io->frame_count, frame_rate, hover_icon_mesh_handle,
+                             hover_icon_connector_mesh_handle, camera_handle_void);
 
             AgentSim* agent_sim = &city->car_sim;
             AgentModelRenderInfo* models = agent_sim->models;
-            S64 frame_rate = ctx->io->frame_rate.load();
 
             ChunkList<render::Transform>* transform_lists[ArrayCount(agent_sim->agent_config)];
             for (U32 agent_cfg_idx = 0; agent_cfg_idx < ArrayCount(transform_lists); ++agent_cfg_idx)
             {
                 transform_lists[agent_cfg_idx] = chunk_list_create<render::Transform>(scratch.arena, 100);
             }
-            for (U64 agent_idx = 0; agent_idx < agent_sim->agents_active->size; agent_idx += 1)
+            for (Agent& agent : *agent_sim->agents_active)
             {
-                Agent* agent = &(*agent_sim->agents_active)[agent_idx];
 
-                if (((S64)ctx->io->frame_count - (S64)agent->latest_update_frame) < (frame_rate * 10)) // Do not add agent after 2 seconds without a streaming update
+                if (((S64)ctx->io->frame_count - (S64)agent.latest_update_frame) < (frame_rate * 10)) // Do not add agent.fter 2 seconds without a streaming update
                 {
-                    AgentConfig* agent_config = &agent_sim->agent_config[enum_idx(agent->vehicle_type)];
-                    glm::mat4 model_transform = glm::mat4(agent->model_matrix.x_basis, agent->model_matrix.y_basis, agent->model_matrix.z_basis, agent->model_matrix.w_basis);
+                    AgentConfig* agent_config = &agent_sim->agent_config[enum_idx(agent.vehicle_type)];
+                    glm::mat4 model_transform = glm::mat4(agent.model_matrix.x_basis, agent.model_matrix.y_basis, agent.model_matrix.z_basis, agent.model_matrix.w_basis);
                     Rng3F32 world_bounds = _agent_world_bounds_from_transform(agent_config->model_bounds, model_transform);
                     B32 visible = ui::frustum_check_from_bounding_box(&camera->frustum_planes, world_bounds);
                     if (!visible)
@@ -438,12 +448,11 @@ city_update(City* city, Buffer<city::Coordinate> new_agent_coords, async::Thread
                         continue;
                     }
 
-                    ChunkList<render::Transform>* transform_list = transform_lists[enum_idx(agent->vehicle_type)];
-                    chunk_list_insert(scratch.arena, transform_list, agent->model_matrix);
+                    ChunkList<render::Transform>* transform_list = transform_lists[enum_idx(agent.vehicle_type)];
+                    chunk_list_insert(scratch.arena, transform_list, agent.model_matrix);
                 }
             }
 
-            render::MappedHandle<void> camera_handle_void = render::mapped_handle_erased(camera_handle);
             for (U32 agent_cfg_idx = 0; agent_cfg_idx < ArrayCount(agent_sim->agent_config); ++agent_cfg_idx)
             {
                 AgentModelRenderInfo* model_render_info = &models[agent_cfg_idx];
@@ -461,6 +470,10 @@ g_internal void
 city_release(City* city)
 {
     Context* ctx = dt_ctx_get();
+    if (city->cars_creation_done)
+    {
+        _agent_height_updates_stop(&city->car_sim);
+    }
     if (city->road.arena)
     {
         road_destroy(&city->road);

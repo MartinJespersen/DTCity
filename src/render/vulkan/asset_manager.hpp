@@ -268,6 +268,8 @@ asset_manager_item_get(render::Handle handle);
 
 static void
 asset_manager_handle_free(render::Handle handle);
+g_internal bool
+asset_manager_handles_loaded_check(std::initializer_list<render::Handle> handles);
 g_internal ImageAllocationResource
 texture_upload_with_blitting(VkCommandBuffer cmd, render::TextureUploadData* data);
 //~mgj: Command Management
@@ -343,13 +345,13 @@ static render::Handle
 _asset_manager_buffer_create(render::BufferInfo* buffer_info, VmaAllocationCreateInfo vma_info, VkBufferUsageFlags additional_usage_flags);
 } // namespace vulkan
 
-#define VK_CHECK_RESULT(f)                                                                                                                                                                             \
-    {                                                                                                                                                                                                  \
-        VkResult res = (f);                                                                                                                                                                            \
-        if (res != VK_SUCCESS)                                                                                                                                                                         \
-        {                                                                                                                                                                                              \
-            ERROR_LOG("Fatal : VkResult is %d in %s:%d\n", res, __FILE__, __LINE__);                                                                                                                   \
-            Trap();                                                                                                                                                                                    \
-            exit(EXIT_FAILURE);                                                                                                                                                                        \
-        }                                                                                                                                                                                              \
+#define VK_CHECK_RESULT(f)                                                           \
+    {                                                                                \
+        VkResult res = (f);                                                          \
+        if (res != VK_SUCCESS)                                                       \
+        {                                                                            \
+            ERROR_LOG("Fatal : VkResult is %d in %s:%d\n", res, __FILE__, __LINE__); \
+            Trap();                                                                  \
+            exit(EXIT_FAILURE);                                                      \
+        }                                                                            \
     }

@@ -147,6 +147,15 @@ struct RoadIntersectionList
     RoadIntersectionNode* last;
 };
 
+struct PrimitiveNode
+{
+    PrimitiveNode* next;
+    render::MeshHandle mesh_handle;
+    render::MappedHandle<void> camera_handle;
+    Buffer<glm::vec3> prim_location_buffer;
+    F32 scale;
+};
+
 struct RenderFrame
 {
     TilePipelineList model_3D_list;
@@ -154,6 +163,10 @@ struct RenderFrame
     CarInstanceRender car_instance_render_list;
     Blend3DList blend_3d_list;
     RoadIntersectionList road_intersection_list;
+
+    PrimitiveNode* primitive_handle_first;
+    PrimitiveNode* primitive_handle_last;
+    U32 primitive_instance_buffer_byte_count;
 };
 
 struct MappedHandle
@@ -212,7 +225,7 @@ struct Context
     U64 hovered_object_id;
     SwapchainResources* swapchain_resources;
 
-    VkSampleCountFlagBits msaa_samples = VK_SAMPLE_COUNT_1_BIT;
+    VkSampleCountFlagBits msaa_samples;
 
     // Graphics and Compute Queue
     QueueFamilyIndices queue_family_indices;
@@ -249,11 +262,13 @@ struct Context
     Pipeline model_3D_pipeline;
     Pipeline car_instance_pipeline;
     Pipeline blend_3d_pipeline;
+    Pipeline primitive_pipeline;
     Pipeline bbox_pipeline;
     VkDescriptorSetLayout road_segment_descriptor_set_layout;
     VkDescriptorSetLayout storage_buffer_descriptor_set_layout;
     VkDescriptorSetLayout car_height_calculate_descriptor_set_layout;
     render::Handle model_3D_instance_buffer[render::MAX_FRAMES_IN_FLIGHT];
+    render::Handle primitive_instance_buffer[render::MAX_FRAMES_IN_FLIGHT];
     LinkedList<MappedHandleTransfer> mapped_handle_list; // mapped handles
 };
 
@@ -290,15 +305,6 @@ camera_descriptor_set_layout_create(Context* vk_ctx);
 static void
 blend_3d_bucket_add(BufferAllocation* vertex_buffer_allocation, BufferAllocation* index_buffer_allocation, render::Handle texture_handle, render::Handle colormap_handle,
                     render::MappedHandle<void> camera_handle);
-
-static void
-tile_rendering();
-static void
-agent_instance_rendering();
-static void
-blend_3d_rendering();
-static void
-pipeline_destroy(Pipeline* draw_ctx);
 
 static void
 command_buffer_record(U32 image_index, U32 current_frame, Vec2S64 mouse_cursor_pos);

@@ -200,7 +200,8 @@ city_area_streaming_begin(async::ThreadPool* thread_pool, City* city, const Area
 g_internal void
 city_area_streaming_end(City* city);
 g_internal void
-city_update(City* city, Buffer<city::Coordinate> new_agent_coords, async::ThreadPool* thread_pool, RoadOverlayOption neta_overlay_option, Vec2U32 framebuffer_dim, const AreaConfig* city_config);
+city_update(City* city, Buffer<city::Coordinate> new_agent_coords, async::ThreadPool* thread_pool, RoadOverlayOption neta_overlay_option, Vec2U32 framebuffer_dim, const AreaConfig* city_config,
+            render::MeshHandle hover_icon_mesh_handle, render::MeshHandle hover_icon_connector_mesh_handle);
 g_internal void
 city_init(City* city, String8 cache_path);
 g_internal void
@@ -268,4 +269,5 @@ city_latest_coordinates_buffer_from_str8_list(Arena* arena, String8List* list);
 g_internal Rng3F32
 _agent_world_bounds_from_transform(Rng3F32 model_bounds, glm::mat4 model_transform);
 
+// helpers
 } // namespace city

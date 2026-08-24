@@ -129,9 +129,12 @@ agent_sim_destroy(AgentSim* car_sim)
 }
 
 g_internal void
-agent_sim_update(AgentSim* agent_sim, cesium::TilesetRenderer* renderer, Buffer<Coordinate> coord_buffer, glm::dmat4& ecef_to_local, F32 scale_factor, U64 cur_frame)
+agent_sim_update(AgentSim* agent_sim, cesium::TilesetRenderer* renderer, Buffer<Coordinate> coord_buffer, glm::dmat4& ecef_to_local, F32 scale_factor, U64 cur_frame, S64 frame_rate,
+                 render::MeshHandle hover_icon_mesh_handle, render::MeshHandle hover_icon_connector_mesh_handle, render::MappedHandle<void> camera_handle)
 {
     prof_scope_marker;
+    constexpr F32 hover_icon_scale = 10.0f;
+    constexpr F32 hover_icon_connector_scale = 1.0f;
 
     ArenaArray<Agent>* agents_active = agent_sim->agents_active;
 
@@ -183,6 +186,42 @@ agent_sim_update(AgentSim* agent_sim, cesium::TilesetRenderer* renderer, Buffer<
 
         agent->latest_update_frame = cur_frame;
     }
+
+    Buffer<glm::vec3> hover_icon_locations = {};
+    Buffer<glm::vec3> hover_icon_connector_locations = {};
+    if (agents_active->size > 0)
+    {
+        Arena* frame_arena = draw::draw_frame_arena_get();
+        hover_icon_locations = buffer_alloc<glm::vec3>(frame_arena, agents_active->size);
+        hover_icon_connector_locations = buffer_alloc<glm::vec3>(frame_arena, agents_active->size);
+        U64 hover_icon_location_count = 0;
+        for (Agent& agent : *agents_active)
+        {
+            S64 frames_since_update = (S64)cur_frame - (S64)agent.latest_update_frame;
+            if (frames_since_update >= frame_rate * 10)
+            {
+                continue;
+            }
+
+            glm::vec3 agent_location = glm::vec3(agent.model_matrix.w_basis);
+            AgentConfig* agent_config = &agent_sim->agent_config[enum_idx(agent.vehicle_type)];
+            F32 agent_height = (scale_factor + agent_config->model_to_world_scale) * (agent_config->model_bounds.max.y - agent_config->model_bounds.min.y);
+            glm::vec3 hover_icon_connector_location = agent_location;
+            hover_icon_connector_location.z += agent_height;
+            glm::vec3 hover_icon_location = hover_icon_connector_location;
+            hover_icon_location.z += agent_hover_icon_offset;
+            hover_icon_connector_locations.data[hover_icon_location_count] = hover_icon_connector_location;
+            hover_icon_locations.data[hover_icon_location_count++] = hover_icon_location;
+        }
+        hover_icon_locations.size = hover_icon_location_count;
+        hover_icon_connector_locations.size = hover_icon_location_count;
+    }
+
+    if (hover_icon_locations.size > 0)
+    {
+        render::primitive_draw(hover_icon_connector_mesh_handle, hover_icon_connector_locations, hover_icon_connector_scale, camera_handle);
+        render::primitive_draw(hover_icon_mesh_handle, hover_icon_locations, hover_icon_scale, camera_handle);
+    }
 }
 
 g_internal void
@@ -198,10 +237,39 @@ agent_draw(render::MappedHandle<void> camera_handle, Buffer<render::AgentModelIn
     render::agent_instance_render_bucket_add(camera_handle, meshes, texture_handles, instance_buffer_info, instance_buffer_offset);
 }
 
+g_internal void
+_agent_height_updates_start(AgentSim* agent_sim, cesium::TilesetRenderer* renderer)
+{
+    if (agent_sim->agents_active == 0)
+    {
+        return;
+    }
+
+    for (Agent& agent : *agent_sim->agents_active)
+    {
+        agent.height_stop = false;
+        _agent_height_update_async(renderer, &agent);
+    }
+}
+
+g_internal void
+_agent_height_updates_stop(AgentSim* agent_sim)
+{
+    for (Agent& agent : *agent_sim->agents_active)
+    {
+        agent.height_stop = true;
+    }
+}
+
 // TODO: This could be written as a general height calculation inside the cesium layer
-void
+g_internal void
 _agent_height_update_async(cesium::TilesetRenderer* renderer, Agent* agent)
 {
+    if (agent->height_stop || renderer->height_sample_stop)
+    {
+        return;
+    }
+
     std::vector<CesiumAsync::Future<Cesium3DTilesSelection::SampleHeightResult>> height_futures;
 
     CesiumGeospatial::Cartographic agent_pos(glm::radians(agent->cartographic_coords.x), glm::radians(agent->cartographic_coords.y), 0);

@@ -12,7 +12,7 @@ _tile_load(async::ThreadInfo info, async::AsyncTaskStatus<TileLoadTaskState>* st
     Bvh* bvh = status->user_data->bvh_result;
     for (cesium::TileDrawBatch* batch = tile->batch_first; batch; batch = batch->next)
     {
-        render::Mesh mesh = {};
+        render::TileMesh mesh = {};
         bool has_road_classification = city::tesselate_roads(scratch.arena, batch->vertex_buffer_orig, batch->index_buffer_orig, *bvh, &mesh);
 
         if (has_road_classification)

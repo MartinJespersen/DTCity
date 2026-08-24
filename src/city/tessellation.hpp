@@ -131,11 +131,11 @@ struct TileVertexFace
     render::TileVertex v[3];
 };
 
-g_internal render::Mesh
+g_internal render::TileMesh
 tessellate_tile_face_for_roads(Arena* arena, city::RoadSegmentNode* root, Buffer<city::RoadSegmentCorners> road_buffer, TileVertexFace& face, U32 MAX_ROADS_PER_FACE = 100);
 
 g_internal bool
-tesselate_roads(Arena* arena, Buffer<render::TileVertex> vertices, Buffer<U32> indices, Bvh& bvh_result, render::Mesh* out_mesh);
+tesselate_roads(Arena* arena, Buffer<render::TileVertex> vertices, Buffer<U32> indices, Bvh& bvh_result, render::TileMesh* out_mesh);
 
 g_internal geometry::Quad2d
 _to_glm_quad(city::RoadSegmentCorners* road);
@@ -149,10 +149,10 @@ _face_bounds_overlap(Rng2F32 bounds, geometry::Triangle2d& face);
 g_internal void
 _assign_vertex_values(glm::vec2 v, TileVertexFace& face, geometry::Triangle2d& projected_tri, render::TileVertex* out_vertex);
 
-render::Mesh
+render::TileMesh
 _render_mesh_from_2d_mesh(Arena* arena, geometry::PolygonMesh2d& triangulated_poly, TileVertexFace& tri, geometry::Triangle2d& projected_tri);
 
 g_internal void
-_mesh_append(Arena* arena, ChunkList<render::TileVertex>* vertices_chunk_list, ChunkList<U32>* indices_chunk_list, render::Mesh& mesh, U32 road_idx);
+_mesh_append(Arena* arena, ChunkList<render::TileVertex>* vertices_chunk_list, ChunkList<U32>* indices_chunk_list, render::TileMesh& mesh, U32 road_idx);
 
 } // namespace city

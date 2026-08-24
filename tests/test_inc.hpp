@@ -10,4 +10,6 @@
 #include "base/base_inc.hpp"
 #include "async/segment_buffer.hpp"
 #include "async/async_heap.hpp"
+#include "async/thread_pool.hpp"
+#include "render/render.hpp"
 #include "misc/geometry.hpp"

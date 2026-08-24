@@ -34,16 +34,27 @@ endif()
 
 # Compiler specific options
 if (MSVC)
-  if(USE_RADLINKER AND NOT ASAN_ENABLED)
+  if(ASAN_ENABLED)
+    find_program(DTCITY_MSVC_LINKER_PATH NAMES link REQUIRED)
+    set(DTCITY_LINKER_PATH "${DTCITY_MSVC_LINKER_PATH}")
+    message(STATUS "Using Microsoft linker for AddressSanitizer: ${DTCITY_LINKER_PATH}")
+  elseif(USE_RADLINKER)
     if(EXISTS "${RADLINKER_PATH}")
-      set(CMAKE_LINKER "${RADLINKER_PATH}" CACHE FILEPATH "RAD linker" FORCE)
-      set(CMAKE_CXX_LINK_EXECUTABLE
-          "<CMAKE_LINKER> /nologo <OBJECTS> ${CMAKE_START_TEMP_FILE} /out:<TARGET> /implib:<TARGET_IMPLIB> /pdb:<TARGET_PDB> /version:<TARGET_VERSION_MAJOR>.<TARGET_VERSION_MINOR> <LINK_FLAGS> <LINK_LIBRARIES> ${CMAKE_END_TEMP_FILE}")
-      set(CMAKE_C_LINK_EXECUTABLE "${CMAKE_CXX_LINK_EXECUTABLE}")
+      set(DTCITY_LINKER_PATH "${RADLINKER_PATH}")
+      message(STATUS "Using RAD linker: ${DTCITY_LINKER_PATH}")
     else()
       message(FATAL_ERROR "RAD linker not found at ${RADLINKER_PATH}")
     endif()
+  else()
+    find_program(DTCITY_LLD_LINKER_PATH NAMES lld-link REQUIRED)
+    set(DTCITY_LINKER_PATH "${DTCITY_LLD_LINKER_PATH}")
+    message(STATUS "Using LLVM linker: ${DTCITY_LINKER_PATH}")
   endif()
+
+  set(CMAKE_LINKER "${DTCITY_LINKER_PATH}" CACHE FILEPATH "Linker used for MSVC object files" FORCE)
+  set(CMAKE_CXX_LINK_EXECUTABLE
+      "<CMAKE_LINKER> /nologo <OBJECTS> ${CMAKE_START_TEMP_FILE} /out:<TARGET> /implib:<TARGET_IMPLIB> /pdb:<TARGET_PDB> /version:<TARGET_VERSION_MAJOR>.<TARGET_VERSION_MINOR> <LINK_FLAGS> <LINK_LIBRARIES> ${CMAKE_END_TEMP_FILE}")
+  set(CMAKE_C_LINK_EXECUTABLE "${CMAKE_CXX_LINK_EXECUTABLE}")
 
   message(DEBUG "Setting MSVC flags to /Z7 for ccache compatibility. Current flags: ${CMAKE_CXX_FLAGS_DEBUG}")
   string(REPLACE "/Zi" "/Z7" CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG}")

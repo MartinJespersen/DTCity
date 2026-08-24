@@ -1,5 +1,10 @@
 #pragma once
 
+namespace render
+{
+struct PrimitiveMesh;
+}
+
 namespace geometry
 {
 
@@ -90,6 +95,13 @@ quad_to_triangle_clipping(Arena* arena, Triangle2d& triangle, Quad2d& quad);
 
 Buffer<glm::vec2>
 near_duplicate_vertices_discard_inplace(Buffer<glm::vec2> poly);
+
+render::PrimitiveMesh
+hover_icon_mesh_create(Arena* arena, F32 radius, F32 height, F32 hover_height, glm::vec4 color);
+
+// Extends along +Z from the origin to height.
+render::PrimitiveMesh
+cylinder_mesh_create(Arena* arena, F32 radius, F32 height, U32 side_count, glm::vec4 color);
 
 PolygonMesh2d
 polygon_triangulate(Arena* arena, Buffer<glm::vec2> poly);

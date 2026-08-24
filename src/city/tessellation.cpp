@@ -101,7 +101,7 @@ _assign_vertex_values(glm::vec2 v, TileVertexFace& face, geometry::Triangle2d& p
     out_vertex->road_segment_idx = 0;
 }
 
-render::Mesh
+render::TileMesh
 _render_mesh_from_2d_mesh(Arena* arena, geometry::PolygonMesh2d& triangulated_poly, TileVertexFace& tri, geometry::Triangle2d& projected_tri)
 {
     Buffer<render::TileVertex> vertices = buffer_alloc<render::TileVertex>(arena, triangulated_poly.vertices.size);
@@ -111,7 +111,7 @@ _render_mesh_from_2d_mesh(Arena* arena, geometry::PolygonMesh2d& triangulated_po
         _assign_vertex_values(v, tri, projected_tri, &vertices.data[vertex_idx]);
     }
 
-    render::Mesh mesh = {
+    render::TileMesh mesh = {
         .vertices = vertices,
         .indices = triangulated_poly.indices,
     };
@@ -119,7 +119,7 @@ _render_mesh_from_2d_mesh(Arena* arena, geometry::PolygonMesh2d& triangulated_po
 }
 
 g_internal void
-_mesh_append(Arena* arena, ChunkList<render::TileVertex>* vertices_chunk_list, ChunkList<U32>* indices_chunk_list, render::Mesh& mesh, U32 road_idx)
+_mesh_append(Arena* arena, ChunkList<render::TileVertex>* vertices_chunk_list, ChunkList<U32>* indices_chunk_list, render::TileMesh& mesh, U32 road_idx)
 {
     U32 base_vertex_idx = vertices_chunk_list->total_count;
     for (auto vert : mesh.vertices)
@@ -135,7 +135,7 @@ _mesh_append(Arena* arena, ChunkList<render::TileVertex>* vertices_chunk_list, C
     }
 }
 
-g_internal render::Mesh
+g_internal render::TileMesh
 tessellate_tile_face_for_roads(Arena* arena, city::RoadSegmentNode* root, Buffer<city::RoadSegmentCorners> road_buffer, TileVertexFace& face, U32 MAX_ROADS_PER_FACE)
 {
     prof_scope_marker;
@@ -249,7 +249,7 @@ tessellate_tile_face_for_roads(Arena* arena, city::RoadSegmentNode* root, Buffer
             .vertices = {.data = classified_triangle.triangle.v, .size = ArrayCount(classified_triangle.triangle.v)},
             .indices = {.data = triangle_indices, .size = ArrayCount(triangle_indices)},
         };
-        render::Mesh triangle_mesh = _render_mesh_from_2d_mesh(scratch.arena, triangle_mesh_2d, face, projected_tri);
+        render::TileMesh triangle_mesh = _render_mesh_from_2d_mesh(scratch.arena, triangle_mesh_2d, face, projected_tri);
 
         U32 encoded_road_idx = 0;
         if (classified_triangle.region_idx != 0)
@@ -263,12 +263,12 @@ tessellate_tile_face_for_roads(Arena* arena, city::RoadSegmentNode* root, Buffer
 
     Buffer<render::TileVertex> vertices = buffer_from_chunk_list(arena, vertices_chunk_list);
     Buffer<U32> indices = buffer_from_chunk_list(arena, indices_chunk_list);
-    render::Mesh mesh = {.vertices = vertices, .indices = indices};
+    render::TileMesh mesh = {.vertices = vertices, .indices = indices};
     return mesh;
 }
 
 g_internal bool
-tesselate_roads(Arena* arena, Buffer<render::TileVertex> vertices, Buffer<U32> indices, Bvh& bvh_result, render::Mesh* out_mesh)
+tesselate_roads(Arena* arena, Buffer<render::TileVertex> vertices, Buffer<U32> indices, Bvh& bvh_result, render::TileMesh* out_mesh)
 {
     ScratchScope scratch = ScratchScope(&arena, 1);
 
@@ -286,7 +286,7 @@ tesselate_roads(Arena* arena, Buffer<render::TileVertex> vertices, Buffer<U32> i
         face_vertices.v[1] = vertices.data[indices.data[i + 1]];
         face_vertices.v[2] = vertices.data[indices.data[i + 2]];
 
-        render::Mesh tessellated_mesh = tessellate_tile_face_for_roads(scratch.arena, bvh_result.root, bvh_result.road_segment_buffer_sorted, face_vertices);
+        render::TileMesh tessellated_mesh = tessellate_tile_face_for_roads(scratch.arena, bvh_result.root, bvh_result.road_segment_buffer_sorted, face_vertices);
         if (tessellated_mesh.indices.size)
         {
             has_road_classification = true;
@@ -323,7 +323,7 @@ tesselate_roads(Arena* arena, Buffer<render::TileVertex> vertices, Buffer<U32> i
         }
     }
 
-    render::Mesh mesh = {};
+    render::TileMesh mesh = {};
     mesh.indices = buffer_from_chunk_list(arena, indices_chunk_list);
     mesh.vertices = buffer_from_chunk_list(arena, vertices_chunk_list);
     *out_mesh = mesh;

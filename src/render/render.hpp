@@ -55,6 +55,12 @@ struct Handle
     buffer_handle_create(BufferType buffer_type);
 };
 
+struct MeshHandle
+{
+    Handle vertex_buffer_handle;
+    Handle index_buffer_handle;
+};
+
 template <typename T>
 struct MappedHandleFrame
 {
@@ -300,10 +306,23 @@ struct Blend3DPipelineData
     MappedHandle<void> camera_handle;
 };
 
-struct Mesh
+struct TileMesh
 {
     Buffer<TileVertex> vertices;
     Buffer<U32> indices;
+};
+
+struct PrimitiveVertex
+{
+    glm::vec3 pos;
+    glm::vec3 normal;
+    glm::vec4 color;
+};
+
+struct PrimitiveMesh
+{
+    Buffer<PrimitiveVertex> vertices;
+    Buffer<U16> indices;
 };
 
 struct Vertex3DBlend
@@ -472,4 +491,12 @@ is_resource_loaded(Handle handle, AssetItem<T>** out_asset);
 g_internal bool
 is_resource_loaded(Handle handle);
 
+// handle helpers
+
+g_internal render::MeshHandle
+mesh_handles_create_and_upload(render::PrimitiveMesh& prim_mesh);
+
+// draw commands
+g_internal void
+primitive_draw(render::MeshHandle prim_handle, Buffer<glm::vec3> prim_location_buffer, F32 scale, render::MappedHandle<void> camera_handle);
 } // namespace render

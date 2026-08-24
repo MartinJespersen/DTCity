@@ -161,6 +161,7 @@ render_ctx_create(String8 shader_path, io::IO* io_ctx, async::ThreadPool* thread
     vk_ctx->model_3D_pipeline = vulkan::tile_pipeline_create(vk_ctx, shader_path);
     vk_ctx->car_instance_pipeline = vulkan::agent_instance_pipeline_create(vk_ctx, shader_path);
     vk_ctx->blend_3d_pipeline = vulkan::blend_3d_pipeline_create(shader_path);
+    vk_ctx->primitive_pipeline = vulkan::primitive_pipeline_create(shader_path);
 
     // sync objects
     VkSemaphoreTypeCreateInfo type_create_info{VK_STRUCTURE_TYPE_SEMAPHORE_TYPE_CREATE_INFO};
@@ -200,6 +201,7 @@ render_ctx_destroy()
     for (U32 i = 0; i < ArrayCount(vk_ctx->model_3D_instance_buffer); i++)
     {
         render::handle_destroy_deferred(vk_ctx->model_3D_instance_buffer[i]);
+        render::handle_destroy_deferred(vk_ctx->primitive_instance_buffer[i]);
     }
 
     vulkan::swapchain_cleanup(vk_ctx->device, vk_ctx->swapchain_resources);
@@ -216,6 +218,7 @@ render_ctx_destroy()
     vulkan::pipeline_destroy(&vk_ctx->model_3D_pipeline);
     vulkan::pipeline_destroy(&vk_ctx->car_instance_pipeline);
     vulkan::pipeline_destroy(&vk_ctx->blend_3d_pipeline);
+    vulkan::pipeline_destroy(&vk_ctx->primitive_pipeline);
     vulkan::pipeline_destroy(&vk_ctx->bbox_pipeline);
 
     vkDestroyDescriptorSetLayout(vk_ctx->device, vk_ctx->bindless_descriptor_set_layout, nullptr);
@@ -953,6 +956,43 @@ handle_done_loading(render::HandleList handles)
             default: InvalidPath; break;
         }
     }
+}
+
+// handle helpers
+g_internal MeshHandle
+mesh_handles_create_and_upload(PrimitiveMesh& prim_mesh)
+{
+    BufferInfo vertex_buffer_info = BufferInfo(prim_mesh.vertices, BufferType_Vertex);
+    BufferInfo index_buffer_info = BufferInfo(prim_mesh.indices, BufferType_Index);
+
+    ThreadWorkerCmdCtx* thread_ctx = thread_ctx_create();
+    thread_cmd_buffer_record(thread_ctx);
+    defer(thread_cmd_buffer_end(thread_ctx));
+
+    Handle vertex_handle = buffer_load_sync(thread_ctx, &vertex_buffer_info, S("Primitive Vertex Buffer Handle"));
+    Handle index_handle = buffer_load_sync(thread_ctx, &index_buffer_info, S("Primitive Index Buffer Handle"));
+
+    return render::MeshHandle{vertex_handle, index_handle};
+}
+
+// draw helpers
+g_internal void
+primitive_draw(render::MeshHandle prim_handle, Buffer<glm::vec3> prim_location_buffer, F32 scale, render::MappedHandle<void> camera_handle)
+{
+    vulkan::Context* vk_ctx = vulkan::ctx_get();
+    vulkan::RenderFrame* render_frame = vk_ctx->render_frame;
+
+    vulkan::PrimitiveNode* node = PushStruct(vk_ctx->render_frame_arena, vulkan::PrimitiveNode);
+    node->mesh_handle = prim_handle;
+    node->camera_handle = camera_handle;
+    node->prim_location_buffer = buffer_arena_copy(vk_ctx->render_frame_arena, prim_location_buffer);
+    node->scale = scale;
+
+    SLLQueuePush(render_frame->primitive_handle_first, render_frame->primitive_handle_last, node);
+
+    U64 instance_buffer_byte_count = prim_location_buffer.size * sizeof(glm::vec3);
+    Assert(instance_buffer_byte_count <= max_U32 - render_frame->primitive_instance_buffer_byte_count);
+    render_frame->primitive_instance_buffer_byte_count += (U32)instance_buffer_byte_count;
 }
 
 } // namespace render
