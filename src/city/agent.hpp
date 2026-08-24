@@ -2,6 +2,7 @@ namespace city
 {
 
 constexpr F32 agent_hover_icon_offset = 100.0f;
+constexpr glm::vec4 agent_hover_icon_color = glm::vec4(1.0f, 0.65f, 0.0f, 1.0f);
 typedef S64 WsId;
 struct AgentModelRenderInfo
 {
@@ -18,6 +19,9 @@ struct Agent
     VehicleType vehicle_type;
     F32 height;
     B32 height_stop;
+
+    // updated per frame
+    Rng3F32 world_bounds;
 
     // rendering
     render::Transform model_matrix;
@@ -58,8 +62,10 @@ agents_create(AgentSim* car_sim);
 g_internal void
 agent_sim_destroy(AgentSim* car_sim);
 g_internal void
-agent_sim_update(AgentSim* agent_sim, cesium::TilesetRenderer* renderer, Buffer<Coordinate> coord_buffer, glm::dmat4& ecef_to_local, F32 scale_factor, U64 cur_frame, S64 frame_rate,
-                 render::MeshHandle hover_icon_mesh_handle, render::MeshHandle hover_icon_connector_mesh_handle, render::MappedHandle<void> camera_handle);
+agent_sim_update(AgentSim* agent_sim, cesium::TilesetRenderer* renderer, Buffer<Coordinate> coord_buffer, glm::dmat4& ecef_to_local, F32 scale_factor, U64 cur_frame);
+
+g_internal void
+agent_icon_add(Agent& agent, render::MeshHandle hover_icon_mesh_handle, F32 hover_icon_scale_factor);
 g_internal void
 agent_draw(render::MappedHandle<void> camera_handle, Buffer<render::AgentModelInfo> meshes, Buffer<render::Handle> texture_handles, render::BufferInfo* instance_buffer_info);
 g_internal glm::dmat3

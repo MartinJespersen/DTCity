@@ -174,7 +174,7 @@ _tile_pipeline_add(cesium::TileDrawBatch* tile, City* city, render::MappedHandle
 
 g_internal void
 city_update(City* city, Buffer<city::Coordinate> new_agent_coords, async::ThreadPool* thread_pool, RoadOverlayOption neta_overlay_option, Vec2U32 framebuffer_dim, const AreaConfig* city_config,
-            render::MeshHandle hover_icon_mesh_handle, render::MeshHandle hover_icon_connector_mesh_handle)
+            render::MeshHandle hover_icon_mesh_handle)
 {
     prof_scope_marker;
     ScratchScope scratch = ScratchScope(0, 0);
@@ -182,6 +182,8 @@ city_update(City* city, Buffer<city::Coordinate> new_agent_coords, async::Thread
     ui::Camera* camera = resource_pool_item_from_idx(ctx->camera_container, city->camera_handle);
     // TODO: vulkan current frame should not be used directly
     render::MappedHandle<ui::CameraUniformBuffer> camera_handle = camera->mut_handles;
+    render::MappedHandle<void> camera_handle_void = render::mapped_handle_erased(camera_handle);
+    draw::draw_camera_set(camera_handle_void);
 
     for (AsyncCityTask* task = city->task_list.first; task;)
     {
@@ -422,9 +424,7 @@ city_update(City* city, Buffer<city::Coordinate> new_agent_coords, async::Thread
             prof_scope_marker_named("Car update scope");
             F32 scale_factor = city->all_agent_scale_factor;
             S64 frame_rate = ctx->io->frame_rate.load();
-            render::MappedHandle<void> camera_handle_void = render::mapped_handle_erased(camera_handle);
-            agent_sim_update(&city->car_sim, tileset, new_agent_coords, tileset->ecef_to_local, scale_factor, ctx->io->frame_count, frame_rate, hover_icon_mesh_handle,
-                             hover_icon_connector_mesh_handle, camera_handle_void);
+            agent_sim_update(&city->car_sim, tileset, new_agent_coords, tileset->ecef_to_local, scale_factor, ctx->io->frame_count);
 
             AgentSim* agent_sim = &city->car_sim;
             AgentModelRenderInfo* models = agent_sim->models;
@@ -436,20 +436,16 @@ city_update(City* city, Buffer<city::Coordinate> new_agent_coords, async::Thread
             }
             for (Agent& agent : *agent_sim->agents_active)
             {
-
                 if (((S64)ctx->io->frame_count - (S64)agent.latest_update_frame) < (frame_rate * 10)) // Do not add agent.fter 2 seconds without a streaming update
                 {
-                    AgentConfig* agent_config = &agent_sim->agent_config[enum_idx(agent.vehicle_type)];
-                    glm::mat4 model_transform = glm::mat4(agent.model_matrix.x_basis, agent.model_matrix.y_basis, agent.model_matrix.z_basis, agent.model_matrix.w_basis);
-                    Rng3F32 world_bounds = _agent_world_bounds_from_transform(agent_config->model_bounds, model_transform);
-                    B32 visible = ui::frustum_check_from_bounding_box(&camera->frustum_planes, world_bounds);
-                    if (!visible)
+                    B32 visible = ui::frustum_check_from_bounding_box(&camera->frustum_planes, agent.world_bounds);
+                    constexpr F32 hover_icon_scale_factor = 10.0f;
+                    agent_icon_add(agent, hover_icon_mesh_handle, hover_icon_scale_factor);
+                    if (visible)
                     {
-                        continue;
+                        ChunkList<render::Transform>* transform_list = transform_lists[enum_idx(agent.vehicle_type)];
+                        chunk_list_insert(scratch.arena, transform_list, agent.model_matrix);
                     }
-
-                    ChunkList<render::Transform>* transform_list = transform_lists[enum_idx(agent.vehicle_type)];
-                    chunk_list_insert(scratch.arena, transform_list, agent.model_matrix);
                 }
             }
 
@@ -1717,16 +1713,33 @@ _city_coordinate_buffer_from_str(Arena* arena, String8 json)
     simdjson::ondemand::document doc;
     simdjson::padded_string json_padded((char*)json.str, json.size);
     simdjson::error_code error = parser.iterate(json_padded).get(doc);
-    defer(if (error) DEBUG_LOG("error in Coordinate Buffer deserialization"););
+    if (error)
+    {
+        DEBUG_LOG("Error parsing coordinate JSON: %s", simdjson::error_message(error));
+        return {};
+    }
 
-    U64 element_count = doc.count_elements();
+    U64 element_count = 0;
+    error = doc.count_elements().get(element_count);
+    if (error)
+    {
+        DEBUG_LOG("Error counting coordinate JSON elements: %s", simdjson::error_message(error));
+        return {};
+    }
+
     Buffer<Coordinate> coord_buffer = buffer_alloc<Coordinate>(arena, element_count);
-    U32 idx = 0;
+    U64 idx = 0;
     for (auto obj : doc)
     {
         Coordinate* coord = coord_buffer[idx];
         CoordinateView coord_view = {};
         error = obj.get<CoordinateView>(coord_view);
+        if (error)
+        {
+            DEBUG_LOG("Error parsing coordinate JSON element %llu: %s", idx, simdjson::error_message(error));
+            return {};
+        }
+
         coord->lat = coord_view.lat;
         coord->lon = coord_view.lon;
         String8 id_str = str8((U8*)coord_view.id.data(), coord_view.id.size());
@@ -1740,16 +1753,11 @@ _city_coordinate_buffer_from_str(Arena* arena, String8 json)
         if (!is_integer)
         {
             String8 id_prefix_str = str8(id_str.str, needle_start);
-            B32 is_integer = try_s64_from_str8_c_rules(id_prefix_str, &coord->id);
+            is_integer = try_s64_from_str8_c_rules(id_prefix_str, &coord->id);
             if (!is_integer)
             {
                 DEBUG_LOG("Cannot get integer from vehicle id %.*s", (int)coord_view.id.size(), coord_view.id.data());
             }
-        }
-
-        if (error)
-        {
-            return {};
         }
         idx++;
     }

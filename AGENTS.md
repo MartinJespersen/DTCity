@@ -27,6 +27,7 @@ In the src directory all sub-directories are layers that are all responsible for
 - Data in structs should always be placed at the top with methods, constructor and destructors below it.
 - Always look for ways to merge code paths and avoid duplication of code.
 - For long code snippets, make sure to add comments to code sections.
+- For the most part use Assert instead of AssertAlways
 
 # Code Suggestions
 - When you find a name (e.g. variable or function) that is not concise or explanatory enough, then suggest a better name.

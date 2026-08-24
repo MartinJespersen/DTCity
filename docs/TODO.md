@@ -1,6 +1,7 @@
 # Project TODO:
-- How to show agent locations? Ability to change camera for each agent?
 - Improve performance to be able to visualize large simulations.
+  - multithreaded addition
+- Ability to change camera for each agent?
 - Visualize multiple scenarios (with dashboard for changing them)
   - Visualization -> simulation communication for scenario change 
 - Agent pr road visualization

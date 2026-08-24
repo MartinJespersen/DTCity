@@ -38,5 +38,12 @@ tile_rendering();
 g_internal Pipeline
 primitive_pipeline_create(String8 shader_path);
 g_internal void
-primitive_rendering();
+primitive_rendering(Buffer<render::PrimitiveInstance> primitive_instances, render::MappedHandle<void> camera_handle);
+
+// Line rendering
+g_internal Pipeline
+line_pipeline_create(Context* vk_ctx, String8 shader_path);
+g_internal void
+lines_render(Buffer<render::LineVertex> line_vertices, render::MappedHandle<void> mapped_camera_handle);
+
 } // namespace vulkan

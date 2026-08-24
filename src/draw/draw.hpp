@@ -44,6 +44,21 @@ struct RoadIntersectionList
     RoadIntersectionNode* last;
 };
 
+struct PrimitiveInstanceNode
+{
+    PrimitiveInstanceNode* next;
+    ChunkList<glm::vec3>* location_chunk_list;
+    F32 scale_factor;
+    render::MeshHandle mesh_handle;
+};
+
+struct PrimitiveInstanceList
+{
+    PrimitiveInstanceNode* first;
+    PrimitiveInstanceNode* last;
+    U64 count;
+};
+
 template <typename T>
 struct MappedHandle
 {
@@ -56,6 +71,9 @@ struct DrawFrame
     U32 total_instance_buffer_byte_count;
     Blend3DList blend_3d_list;
     RoadIntersectionList road_intersection_list;
+    ChunkList<render::LineVertex>* line_vertex_chunk_list;
+    PrimitiveInstanceList primitive_instance_list;
+    render::MappedHandle<void> camera_handle;
 };
 
 struct Draw
@@ -75,6 +93,13 @@ g_internal Arena*
 draw_frame_arena_get();
 g_internal DrawFrame*
 draw_frame_get();
+
+g_internal void
+draw_camera_set(render::MappedHandle<void> camera_handle);
+g_internal void
+draw_line(render::Line& line);
+g_internal void
+primitive_draw(glm::vec3 location, F32 scale_factor, render::MeshHandle mesh_handle);
 
 g_internal void
 draw_blend_3d(render::Blend3DPipelineData pipeline_input);

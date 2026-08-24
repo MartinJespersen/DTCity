@@ -207,14 +207,9 @@ dt_main_loop(void* ptr)
 
     constexpr F32 agent_hover_icon_radius = 1.0f;
     constexpr F32 agent_hover_icon_height = 2.0f;
-    glm::vec4 agent_hover_icon_color = glm::vec4(1.0f, 0.65f, 0.0f, 1.0f);
-    render::PrimitiveMesh agent_hover_icon_mesh = geometry::hover_icon_mesh_create(ctx->arena, agent_hover_icon_radius, agent_hover_icon_height, 0.0f, agent_hover_icon_color);
+    render::PrimitiveMesh agent_hover_icon_mesh =
+        geometry::hover_icon_mesh_create(ctx->arena, agent_hover_icon_radius, agent_hover_icon_height, 0.0f, city::agent_hover_icon_color);
     render::MeshHandle agent_hover_icon_mesh_handle = render::mesh_handles_create_and_upload(agent_hover_icon_mesh);
-    constexpr F32 agent_hover_icon_connector_radius = 0.25f;
-    constexpr U32 agent_hover_icon_connector_side_count = 4;
-    render::PrimitiveMesh agent_hover_icon_connector_mesh =
-        geometry::cylinder_mesh_create(ctx->arena, agent_hover_icon_connector_radius, city::agent_hover_icon_offset, agent_hover_icon_connector_side_count, agent_hover_icon_color);
-    render::MeshHandle agent_hover_icon_connector_mesh_handle = render::mesh_handles_create_and_upload(agent_hover_icon_connector_mesh);
 
     // city building ////////////////////////////////////////////
     const city::AreaConfig cities_info_arr[] = {{.name = S("Aarhus"),
@@ -343,7 +338,7 @@ dt_main_loop(void* ptr)
                 cesium::tileset_pump_async(tileset);
             }
         }
-        city::city_update(area, new_agent_coords, ctx->thread_pool, neta_overlay_option, framebuffer_dim, area_config, agent_hover_icon_mesh_handle, agent_hover_icon_connector_mesh_handle);
+        city::city_update(area, new_agent_coords, ctx->thread_pool, neta_overlay_option, framebuffer_dim, area_config, agent_hover_icon_mesh_handle);
 
         // #if BUILD_DEBUG
         imgui_debug_window(area, ctx->thread_pool);
@@ -375,8 +370,6 @@ dt_main_loop(void* ptr)
     }
     render::handle_destroy(agent_hover_icon_mesh_handle.vertex_buffer_handle);
     render::handle_destroy(agent_hover_icon_mesh_handle.index_buffer_handle);
-    render::handle_destroy(agent_hover_icon_connector_mesh_handle.vertex_buffer_handle);
-    render::handle_destroy(agent_hover_icon_connector_mesh_handle.index_buffer_handle);
     while (ctx->tile_count > 0)
     {
         city::tile_load_update();

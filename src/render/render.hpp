@@ -354,6 +354,26 @@ struct BBoxDraw
     Handle tex;
 };
 
+struct Line
+{
+    glm::vec3 from;
+    glm::vec3 to;
+    glm::vec3 color;
+};
+
+struct LineVertex
+{
+    glm::vec3 pos;
+    glm::vec3 color;
+};
+
+struct PrimitiveInstance
+{
+    Buffer<glm::vec3> locations;
+    F32 scale_factor;
+    MeshHandle mesh_handle;
+};
+
 struct TextureUploadData
 {
     U32 width;
@@ -495,8 +515,4 @@ is_resource_loaded(Handle handle);
 
 g_internal render::MeshHandle
 mesh_handles_create_and_upload(render::PrimitiveMesh& prim_mesh);
-
-// draw commands
-g_internal void
-primitive_draw(render::MeshHandle prim_handle, Buffer<glm::vec3> prim_location_buffer, F32 scale, render::MappedHandle<void> camera_handle);
 } // namespace render

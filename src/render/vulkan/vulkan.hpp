@@ -147,15 +147,6 @@ struct RoadIntersectionList
     RoadIntersectionNode* last;
 };
 
-struct PrimitiveNode
-{
-    PrimitiveNode* next;
-    render::MeshHandle mesh_handle;
-    render::MappedHandle<void> camera_handle;
-    Buffer<glm::vec3> prim_location_buffer;
-    F32 scale;
-};
-
 struct RenderFrame
 {
     TilePipelineList model_3D_list;
@@ -164,9 +155,6 @@ struct RenderFrame
     Blend3DList blend_3d_list;
     RoadIntersectionList road_intersection_list;
 
-    PrimitiveNode* primitive_handle_first;
-    PrimitiveNode* primitive_handle_last;
-    U32 primitive_instance_buffer_byte_count;
 };
 
 struct MappedHandle
@@ -263,12 +251,14 @@ struct Context
     Pipeline car_instance_pipeline;
     Pipeline blend_3d_pipeline;
     Pipeline primitive_pipeline;
+    Pipeline line_pipeline;
     Pipeline bbox_pipeline;
     VkDescriptorSetLayout road_segment_descriptor_set_layout;
     VkDescriptorSetLayout storage_buffer_descriptor_set_layout;
     VkDescriptorSetLayout car_height_calculate_descriptor_set_layout;
     render::Handle model_3D_instance_buffer[render::MAX_FRAMES_IN_FLIGHT];
     render::Handle primitive_instance_buffer[render::MAX_FRAMES_IN_FLIGHT];
+    render::Handle line_buffer_handle[render::MAX_FRAMES_IN_FLIGHT];
     LinkedList<MappedHandleTransfer> mapped_handle_list; // mapped handles
 };
 

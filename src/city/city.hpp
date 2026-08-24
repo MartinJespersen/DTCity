@@ -201,7 +201,7 @@ g_internal void
 city_area_streaming_end(City* city);
 g_internal void
 city_update(City* city, Buffer<city::Coordinate> new_agent_coords, async::ThreadPool* thread_pool, RoadOverlayOption neta_overlay_option, Vec2U32 framebuffer_dim, const AreaConfig* city_config,
-            render::MeshHandle hover_icon_mesh_handle, render::MeshHandle hover_icon_connector_mesh_handle);
+            render::MeshHandle hover_icon_mesh_handle);
 g_internal void
 city_init(City* city, String8 cache_path);
 g_internal void

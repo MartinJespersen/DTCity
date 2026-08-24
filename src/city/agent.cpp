@@ -129,12 +129,9 @@ agent_sim_destroy(AgentSim* car_sim)
 }
 
 g_internal void
-agent_sim_update(AgentSim* agent_sim, cesium::TilesetRenderer* renderer, Buffer<Coordinate> coord_buffer, glm::dmat4& ecef_to_local, F32 scale_factor, U64 cur_frame, S64 frame_rate,
-                 render::MeshHandle hover_icon_mesh_handle, render::MeshHandle hover_icon_connector_mesh_handle, render::MappedHandle<void> camera_handle)
+agent_sim_update(AgentSim* agent_sim, cesium::TilesetRenderer* renderer, Buffer<Coordinate> coord_buffer, glm::dmat4& ecef_to_local, F32 scale_factor, U64 cur_frame)
 {
     prof_scope_marker;
-    constexpr F32 hover_icon_scale = 10.0f;
-    constexpr F32 hover_icon_connector_scale = 1.0f;
 
     ArenaArray<Agent>* agents_active = agent_sim->agents_active;
 
@@ -184,44 +181,28 @@ agent_sim_update(AgentSim* agent_sim, cesium::TilesetRenderer* renderer, Buffer<
         glm::dvec3 elevated_ecef_coord = CesiumGeospatial::Ellipsoid::WGS84.cartographicToCartesian(elevated_cartographic);
         agent->model_matrix.w_basis = glm::vec4(ecef_to_local * glm::dvec4(elevated_ecef_coord, 1.0));
 
+        glm::mat4 model_transform = glm::mat4(agent->model_matrix.x_basis, agent->model_matrix.y_basis, agent->model_matrix.z_basis, agent->model_matrix.w_basis);
+        agent->world_bounds = _agent_world_bounds_from_transform(agent_config->model_bounds, model_transform);
         agent->latest_update_frame = cur_frame;
     }
+}
 
-    Buffer<glm::vec3> hover_icon_locations = {};
-    Buffer<glm::vec3> hover_icon_connector_locations = {};
-    if (agents_active->size > 0)
-    {
-        Arena* frame_arena = draw::draw_frame_arena_get();
-        hover_icon_locations = buffer_alloc<glm::vec3>(frame_arena, agents_active->size);
-        hover_icon_connector_locations = buffer_alloc<glm::vec3>(frame_arena, agents_active->size);
-        U64 hover_icon_location_count = 0;
-        for (Agent& agent : *agents_active)
-        {
-            S64 frames_since_update = (S64)cur_frame - (S64)agent.latest_update_frame;
-            if (frames_since_update >= frame_rate * 10)
-            {
-                continue;
-            }
-
-            glm::vec3 agent_location = glm::vec3(agent.model_matrix.w_basis);
-            AgentConfig* agent_config = &agent_sim->agent_config[enum_idx(agent.vehicle_type)];
-            F32 agent_height = (scale_factor + agent_config->model_to_world_scale) * (agent_config->model_bounds.max.y - agent_config->model_bounds.min.y);
-            glm::vec3 hover_icon_connector_location = agent_location;
-            hover_icon_connector_location.z += agent_height;
-            glm::vec3 hover_icon_location = hover_icon_connector_location;
-            hover_icon_location.z += agent_hover_icon_offset;
-            hover_icon_connector_locations.data[hover_icon_location_count] = hover_icon_connector_location;
-            hover_icon_locations.data[hover_icon_location_count++] = hover_icon_location;
-        }
-        hover_icon_locations.size = hover_icon_location_count;
-        hover_icon_connector_locations.size = hover_icon_location_count;
-    }
-
-    if (hover_icon_locations.size > 0)
-    {
-        render::primitive_draw(hover_icon_connector_mesh_handle, hover_icon_connector_locations, hover_icon_connector_scale, camera_handle);
-        render::primitive_draw(hover_icon_mesh_handle, hover_icon_locations, hover_icon_scale, camera_handle);
-    }
+g_internal void
+agent_icon_add(Agent& agent, render::MeshHandle hover_icon_mesh_handle, F32 hover_icon_scale_factor)
+{
+    glm::vec3 agent_location = glm::vec3(agent.model_matrix.w_basis);
+    F32 agent_height = agent.world_bounds.max.z - agent.world_bounds.min.z;
+    glm::vec3 hover_icon_connector_location = agent_location;
+    hover_icon_connector_location.z += agent_height;
+    glm::vec3 hover_icon_location = hover_icon_connector_location;
+    hover_icon_location.z += agent_hover_icon_offset;
+    render::Line hover_icon_connector = {
+        .from = hover_icon_connector_location,
+        .to = hover_icon_location,
+        .color = glm::vec3(agent_hover_icon_color),
+    };
+    draw::draw_line(hover_icon_connector);
+    draw::primitive_draw(hover_icon_location, hover_icon_scale_factor, hover_icon_mesh_handle);
 }
 
 g_internal void

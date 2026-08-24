@@ -349,6 +349,10 @@ logical_device_create(Arena* arena, Context* vk_ctx)
     {
         exit_with_error("Selected Vulkan physical device does not support shaderInt64");
     }
+    if (!supported_device_features.wideLines)
+    {
+        exit_with_error("Selected Vulkan physical device does not support wideLines");
+    }
 
     VkPhysicalDeviceTimelineSemaphoreFeatures timeline_semaphore_supported{};
     timeline_semaphore_supported.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_TIMELINE_SEMAPHORE_FEATURES;
@@ -368,6 +372,7 @@ logical_device_create(Arena* arena, Context* vk_ctx)
     deviceFeatures.geometryShader = VK_TRUE;
     deviceFeatures.fillModeNonSolid = VK_TRUE;
     deviceFeatures.shaderInt64 = VK_TRUE;
+    deviceFeatures.wideLines = VK_TRUE;
 
     VkPhysicalDeviceBufferDeviceAddressFeatures buffer_device_address_features{};
     buffer_device_address_features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_BUFFER_DEVICE_ADDRESS_FEATURES;

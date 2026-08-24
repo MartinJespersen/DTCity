@@ -139,10 +139,9 @@ _libcurl_ws_callback(void* contents, size_t size, size_t nmemb, void* userp)
     size_t total_size = size * nmemb;
     AsyncWebsocketSession* ws_session = (AsyncWebsocketSession*)userp;
     CurlContext* curl_ctx = ws_session->curl_ctx;
-    Arena* msg_arena = ws_session->msg_arena;
 
-    U8* buffer = PushArray(msg_arena, U8, total_size);
-    ChunkItem<U8>* chunk = chunk_item_from_array(msg_arena, buffer, total_size);
+    U8* buffer = PushArray(curl_ctx->arena, U8, total_size);
+    ChunkItem<U8>* chunk = chunk_item_from_array(curl_ctx->arena, buffer, total_size);
     MemoryCopy(buffer, contents, total_size);
     chunk_list_insert_chunk(&curl_ctx->chunk_list, chunk);
 
@@ -153,7 +152,8 @@ _libcurl_ws_callback(void* contents, size_t size, size_t nmemb, void* userp)
     {
         os_mutex_scope_w(ws_session->msg_rw_mutex)
         {
-            String8 msg = str8_from_chunk_list(ws_session->msg_arena, &curl_ctx->chunk_list);
+            Arena* msg_arena = ws_session->msg_arena;
+            String8 msg = str8_from_chunk_list(msg_arena, &curl_ctx->chunk_list);
             str8_list_push(msg_arena, &ws_session->msg_list, msg);
         }
 

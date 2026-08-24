@@ -286,7 +286,27 @@ command_buffer_record(U32 image_index, U32 current_frame, Vec2S64 mouse_cursor_p
 
             blend_3d_rendering();
 
-            primitive_rendering();
+            draw::DrawFrame* draw_frame = draw::draw_frame_get();
+            Buffer<render::PrimitiveInstance> primitive_instances = {};
+            if (draw_frame->primitive_instance_list.count > 0)
+            {
+                primitive_instances = buffer_alloc<render::PrimitiveInstance>(vk_ctx->render_frame_arena, draw_frame->primitive_instance_list.count);
+                U64 primitive_instance_idx = 0;
+                for (draw::PrimitiveInstanceNode* node = draw_frame->primitive_instance_list.first; node; node = node->next)
+                {
+                    render::PrimitiveInstance* primitive_instance = &primitive_instances.data[primitive_instance_idx++];
+                    primitive_instance->locations = buffer_from_chunk_list(vk_ctx->render_frame_arena, node->location_chunk_list);
+                    primitive_instance->scale_factor = node->scale_factor;
+                    primitive_instance->mesh_handle = node->mesh_handle;
+                }
+            }
+            primitive_rendering(primitive_instances, draw_frame->camera_handle);
+
+            if (draw_frame->line_vertex_chunk_list->total_count > 0)
+            {
+                Buffer<render::LineVertex> line_vertices = buffer_from_chunk_list(vk_ctx->render_frame_arena, draw_frame->line_vertex_chunk_list);
+                lines_render(line_vertices, draw_frame->camera_handle);
+            }
 
             vkCmdEndRendering(current_cmd_buf);
 

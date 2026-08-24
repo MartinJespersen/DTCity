@@ -28,6 +28,7 @@ draw_new_frame()
 {
     arena_clear(g_draw_ctx.frame_arena);
     g_draw_ctx.frame = PushStruct(g_draw_ctx.frame_arena, DrawFrame);
+    g_draw_ctx.frame->line_vertex_chunk_list = chunk_list_create<render::LineVertex>(g_draw_ctx.frame_arena, 200);
 }
 
 g_internal Arena*
@@ -44,6 +45,57 @@ draw_frame_get()
         draw_new_frame();
     }
     return g_draw_ctx.frame;
+}
+
+g_internal void
+draw_camera_set(render::MappedHandle<void> camera_handle)
+{
+    DrawFrame* frame = draw_frame_get();
+    frame->camera_handle = camera_handle;
+}
+
+g_internal void
+draw_line(render::Line& line)
+{
+    DrawFrame* frame = draw_frame_get();
+    render::LineVertex from = {.pos = line.from, .color = line.color};
+    render::LineVertex to = {.pos = line.to, .color = line.color};
+    chunk_list_insert(g_draw_ctx.frame_arena, frame->line_vertex_chunk_list, from);
+    chunk_list_insert(g_draw_ctx.frame_arena, frame->line_vertex_chunk_list, to);
+}
+
+g_internal void
+primitive_draw(glm::vec3 location, F32 scale_factor, render::MeshHandle mesh_handle)
+{
+    DrawFrame* frame = draw_frame_get();
+    PrimitiveInstanceNode* matching_instance = 0;
+    for (PrimitiveInstanceNode* instance = frame->primitive_instance_list.first; instance; instance = instance->next)
+    {
+        render::Handle* instance_vertex_handle = &instance->mesh_handle.vertex_buffer_handle;
+        render::Handle* vertex_handle = &mesh_handle.vertex_buffer_handle;
+        render::Handle* instance_index_handle = &instance->mesh_handle.index_buffer_handle;
+        render::Handle* index_handle = &mesh_handle.index_buffer_handle;
+        B32 vertex_handle_matches = instance_vertex_handle->ptr == vertex_handle->ptr && instance_vertex_handle->gen_id == vertex_handle->gen_id && instance_vertex_handle->type == vertex_handle->type;
+        B32 index_handle_matches = instance_index_handle->ptr == index_handle->ptr && instance_index_handle->gen_id == index_handle->gen_id && instance_index_handle->type == index_handle->type;
+        B32 mesh_matches = vertex_handle_matches && index_handle_matches;
+        if (mesh_matches && instance->scale_factor == scale_factor)
+        {
+            matching_instance = instance;
+            break;
+        }
+    }
+
+    if (!matching_instance)
+    {
+        matching_instance = PushStruct(g_draw_ctx.frame_arena, PrimitiveInstanceNode);
+        matching_instance->location_chunk_list = chunk_list_create<glm::vec3>(g_draw_ctx.frame_arena, 100);
+        matching_instance->scale_factor = scale_factor;
+        matching_instance->mesh_handle = mesh_handle;
+        SLLQueuePush(frame->primitive_instance_list.first, frame->primitive_instance_list.last, matching_instance);
+        frame->primitive_instance_list.count++;
+    }
+
+    chunk_list_insert(g_draw_ctx.frame_arena, matching_instance->location_chunk_list, location);
 }
 
 } // namespace draw
