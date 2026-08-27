@@ -9,11 +9,13 @@ set(ASAN_LINK_FLAGS "")
 set(ASAN_COMPILE_FLAGS "")
 set(GLSL_SHADER_FLAGS "")
 set(DISABLE_WARNINGS_COMPILE_FLAG "")
-set(ALL_TARGETS city)
+set(ALL_TARGETS)
 set(RADLINKER_PATH "C:/repos/raddebugger/build/radlink.exe")
 
 option(BUILD_DEBUG "Enable Additional Debugging Information (e.g Vulkan Validation Layers)" OFF)
 option(ASAN_ENABLED "Enable Address Sanitizer" OFF)
+option(BUILD_CITY "Build the DTCity application" ON)
+option(BUILD_SIMULATOR "Build the vehicle simulator" OFF)
 option(BUILD_TESTS "Build tests" OFF)
 option(SHADER_DEBUG "Enable Shader Debugging" OFF)
 option(USE_RADLINKER "Use RAD linker for MSVC debug builds" ON)
@@ -119,27 +121,6 @@ function(disable_warnings_for_sources)
   )
 endfunction()
 
-find_package(glm CONFIG REQUIRED)
-
-if(BUILD_TESTS)
-  add_subdirectory(tests)
-endif()
-add_executable(city)
-
-include_directories(${CMAKE_CURRENT_SOURCE_DIR}/src ${CMAKE_CURRENT_SOURCE_DIR}/src/third_party/imgui)
-
-
-# address sanitizer
-if(ASAN_ENABLED)
-  foreach(target ${ALL_TARGETS})
-    target_compile_options(${target} PRIVATE ${ASAN_COMPILE_FLAGS})
-    target_link_options(${target} PRIVATE ${ASAN_LINK_FLAGS})
-  endforeach()
-
-endif()
-
-
-# tracy profiler
 set(THIRD_PARTY_SOURCES
     src/third_party/simdjson/simdjson.cpp
     src/third_party/imgui/imgui_inc.cpp
@@ -147,11 +128,23 @@ set(THIRD_PARTY_SOURCES
 )
 
 option(TRACY_PROFILE_ENABLE "Enable Tracy profiler" OFF)
-if (TRACY_PROFILE_ENABLE)
-  add_compile_definitions(TRACY_ENABLE)
-  add_compile_definitions(TRACY_PROFILE_ENABLE)
+if(TRACY_PROFILE_ENABLE)
   list(APPEND THIRD_PARTY_SOURCES ${THIRD_PARTY_LIBS_DIR}/tracy/TracyClient.cpp)
 endif()
+
+if(BUILD_CITY OR BUILD_TESTS)
+  find_package(glm CONFIG REQUIRED)
+endif()
+
+if(BUILD_TESTS)
+  add_subdirectory(tests)
+endif()
+
+if(BUILD_CITY)
+  add_executable(city)
+  list(APPEND ALL_TARGETS city)
+
+  include_directories(${CMAKE_CURRENT_SOURCE_DIR}/src ${CMAKE_CURRENT_SOURCE_DIR}/src/third_party/imgui)
 
 # compile shaders
 file(GLOB_RECURSE GLSL_SOURCE_FILES
@@ -296,9 +289,31 @@ target_compile_definitions(city PRIVATE
         LIBASYNC_STATIC
     )
 
+if(TRACY_PROFILE_ENABLE)
+  target_compile_definitions(city PRIVATE
+      TRACY_ENABLE
+      TRACY_PROFILE_ENABLE
+      TRACY_VULKAN_ENABLE
+  )
+endif()
+
 
 add_custom_target(clang-tidy-check
     COMMAND clang-tidy -p ${CMAKE_BINARY_DIR} "src/main.cpp"
     WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
     COMMENT "Running clang-tidy on"
 )
+endif()
+
+if(BUILD_SIMULATOR)
+  add_subdirectory(simulator)
+  list(APPEND ALL_TARGETS Simulator)
+endif()
+
+# address sanitizer
+if(ASAN_ENABLED)
+  foreach(target ${ALL_TARGETS})
+    target_compile_options(${target} PRIVATE ${ASAN_COMPILE_FLAGS})
+    target_link_options(${target} PRIVATE ${ASAN_LINK_FLAGS})
+  endforeach()
+endif()

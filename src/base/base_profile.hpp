@@ -1,9 +1,11 @@
 #pragma once
 
 #if defined(TRACY_PROFILE_ENABLE)
+#include "third_party/tracy/tracy/Tracy.hpp"
+#if defined(TRACY_VULKAN_ENABLE)
 #include <vulkan/vulkan_core.h>
 #include "third_party/tracy/tracy/TracyVulkan.hpp"
-#include "third_party/tracy/tracy/Tracy.hpp"
+#endif
 #define prof_scope_marker ZoneScoped
 #define prof_scope_marker_named(n) ZoneScopedN(n)
 #define prof_frame_marker FrameMark;

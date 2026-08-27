@@ -204,7 +204,7 @@ tctx_set_lane_ctx(LaneCtx lane_ctx)
 lib_internal void
 tctx_lane_barrier_wait(void* broadcast_ptr, U64 broadcast_size, U64 broadcast_src_lane_idx)
 {
-    prof_frame_marker;
+    prof_scope_marker;
     TCTX* tctx = TCTX_Get();
 
     // rjf: doing broadcast -> copy to broadcast memory on source lane

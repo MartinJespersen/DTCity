@@ -1,10 +1,15 @@
 cmake_minimum_required(VERSION 3.16)
 
-project(Simulator VERSION 0.1.0 LANGUAGES C)
+project(Simulator VERSION 0.1.0 LANGUAGES C CXX)
 
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_C_STANDARD_REQUIRED ON)
 set(CMAKE_C_EXTENSIONS OFF)
+set(CMAKE_CXX_STANDARD 20)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_EXTENSIONS OFF)
+
+option(TRACY_PROFILE_ENABLE "Enable Tracy profiler" OFF)
 
 find_package(OpenGL REQUIRED)
 find_package(Threads REQUIRED)
@@ -13,7 +18,9 @@ set(GLFW_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
 set(GLFW_BUILD_TESTS OFF CACHE BOOL "" FORCE)
 set(GLFW_BUILD_DOCS OFF CACHE BOOL "" FORCE)
 set(GLFW_INSTALL OFF CACHE BOOL "" FORCE)
-add_subdirectory(third_party/glfw)
+if(NOT TARGET glfw)
+    add_subdirectory(third_party/glfw)
+endif()
 
 add_library(civetweb STATIC
     third_party/civetweb/civetweb.c
@@ -66,10 +73,25 @@ endif()
 add_executable(Simulator
     simulator.c
 )
+set_source_files_properties(simulator.c PROPERTIES LANGUAGE CXX)
+set_target_properties(Simulator PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}")
+
+if(TRACY_PROFILE_ENABLE)
+    target_sources(Simulator PRIVATE ../src/third_party/tracy/TracyClient.cpp)
+    target_compile_definitions(Simulator PRIVATE TRACY_ENABLE TRACY_PROFILE_ENABLE)
+endif()
 
 target_include_directories(Simulator
     PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/../src
         ${CMAKE_CURRENT_SOURCE_DIR}/third_party/nuklear
+)
+
+get_filename_component(DTCITY_PROJECT_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/.." ABSOLUTE)
+target_compile_definitions(Simulator
+    PRIVATE
+        BUILD_CONSOLE_INTERFACE=1
+        DTCITY_PROJECT_ROOT="${DTCITY_PROJECT_ROOT}"
 )
 
 target_link_libraries(Simulator
@@ -87,7 +109,7 @@ if(NOT WIN32)
 endif()
 
 if(WIN32)
-    target_link_libraries(Simulator PRIVATE ws2_32)
+    target_link_libraries(Simulator PRIVATE comdlg32 ws2_32)
     target_compile_definitions(Simulator PRIVATE _CRT_SECURE_NO_WARNINGS)
     target_compile_definitions(civetweb PRIVATE _CRT_SECURE_NO_WARNINGS)
     target_compile_definitions(sqlite3 PRIVATE _CRT_SECURE_NO_WARNINGS)

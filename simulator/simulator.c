@@ -1,3 +1,16 @@
+#include <initializer_list>
+#include <memory>
+#include <new>
+#include <utility>
+
+#define DEBUG_LOG(...)
+#define ERROR_LOG(...)
+
+#include "base/base_inc.hpp"
+#include "os_core/os_core_inc.hpp"
+
+#include "base/base_inc.cpp"
+
 #define NK_INCLUDE_FIXED_TYPES
 #define NK_INCLUDE_STANDARD_IO
 #define NK_INCLUDE_STANDARD_VARARGS
@@ -12,8 +25,6 @@
 #define GL_SILENCE_DEPRECATION
 #endif
 
-#include <ctype.h>
-#include <errno.h>
 #include <math.h>
 #include <sqlite3.h>
 #include <stdbool.h>
@@ -23,24 +34,7 @@
 #include <string.h>
 
 #ifdef _WIN32
-#ifndef WIN32_LEAN_AND_MEAN
-#define WIN32_LEAN_AND_MEAN
-#endif
-#include <direct.h>
-#include <io.h>
-#include <windows.h>
-#ifndef R_OK
-#define R_OK 4
-#endif
-#define PROJECT_ACCESS _access
-#define PROJECT_GETCWD _getcwd
-#define PROJECT_STRDUP _strdup
-#else
-#include <pthread.h>
-#include <unistd.h>
-#define PROJECT_ACCESS access
-#define PROJECT_GETCWD getcwd
-#define PROJECT_STRDUP strdup
+#include <commdlg.h>
 #endif
 
 #include <GL/gl3w.h>
@@ -57,6 +51,7 @@
 #define MAX_ELEMENT_BUFFER (1 * 1024 * 1024)
 #define SERVER_PORT 8080
 #define MAX_STATUS_TEXT 8192
+#define MAX_PATH_TEXT 1024
 #define DEFAULT_FPS 20
 #define DEFAULT_VEHICLE_COUNT 200
 #define DEFAULT_DB_PATH "simulator/database/eskiltuna_playback.sqlite"
@@ -69,6 +64,7 @@
 
 struct string_list
 {
+    Arena* arena;
     char** items;
     int count;
     int capacity;
@@ -78,11 +74,7 @@ struct websocket_server
 {
     struct mg_context* context;
     struct mg_connection* client_connection;
-#ifdef _WIN32
-    CRITICAL_SECTION mutex;
-#else
-    pthread_mutex_t mutex;
-#endif
+    OS_Handle mutex;
     char last_received[MAX_STATUS_TEXT];
     char last_sent[MAX_STATUS_TEXT];
     char status_line[256];
@@ -100,8 +92,8 @@ struct vehicle_stream
     uint64_t last_tick_ms;
     double simulated_seconds;
     double next_frame_at_ms;
+    Arena* preview_arena;
     char* last_snapshot_preview;
-    size_t last_snapshot_preview_capacity;
     char vehicle_search[128];
     struct string_list visible_vehicle_ids;
     struct string_list selected_vehicle_ids;
@@ -109,6 +101,7 @@ struct vehicle_stream
 
 struct playback_db
 {
+    Arena* arena;
     sqlite3* db;
     sqlite3_stmt* active_start_stmt;
     sqlite3_stmt* active_end_stmt;
@@ -116,7 +109,8 @@ struct playback_db
     double min_time;
     double max_time;
     double midpoint_time;
-    char path[512];
+    String8 path;
+    char path_input[MAX_PATH_TEXT];
     char status_line[256];
     int last_active_count;
 };
@@ -141,78 +135,35 @@ copy_status(char* dest, size_t dest_size, const char* src)
     snprintf(dest, dest_size, "%s", src);
 }
 
-static bool
-file_exists(const char* path)
+static String8
+str_abs_path_from_relative(Arena* arena, String8 relative_path)
 {
-    return path && PROJECT_ACCESS(path, R_OK) == 0;
+    String8 project_root = str8_c_string(DTCITY_PROJECT_ROOT);
+    String8 result = str8_path_from_str8_list(arena, {project_root, relative_path});
+    return result;
 }
 
 static bool
-get_project_root(char* out_path, size_t out_size)
+resolve_db_path(Arena* arena, String8 path, String8* out_path)
 {
-    if (!out_path || out_size == 0)
+    String8 source_path = path;
+    if (source_path.size == 0)
     {
-        return false;
+        source_path = str8_c_string(DEFAULT_DB_PATH);
     }
 
-#ifdef _WIN32
-    char exe_path[1024];
-    char* last_backslash = NULL;
-    DWORD result = 0;
-
-    result = GetModuleFileNameA(NULL, exe_path, sizeof(exe_path));
-    if (result == 0 || result == sizeof(exe_path))
+    PathStyle path_style = path_style_from_str8(source_path);
+    if (path_style == PathStyle_Relative)
     {
-        return false;
+        *out_path = str_abs_path_from_relative(arena, source_path);
+    }
+    else
+    {
+        *out_path = push_str8_copy(arena, source_path);
     }
 
-    last_backslash = strrchr(exe_path, '\\');
-    if (last_backslash)
-    {
-        *last_backslash = '\0';
-    }
-
-    last_backslash = strrchr(exe_path, '\\');
-    if (last_backslash)
-    {
-        *last_backslash = '\0';
-    }
-
-    last_backslash = strrchr(exe_path, '\\');
-    if (last_backslash)
-    {
-        *last_backslash = '\0';
-    }
-
-    if (strlen(exe_path) >= out_size)
-    {
-        return false;
-    }
-
-    snprintf(out_path, out_size, "%s", exe_path);
-    return true;
-#else
-    return PROJECT_GETCWD(out_path, out_size) != NULL;
-#endif
-}
-
-static bool
-resolve_project_path(const char* relative_path, char* out_path, size_t out_size)
-{
-    char project_root[1024];
-
-    if (!relative_path || !out_path || out_size == 0)
-    {
-        return false;
-    }
-
-    if (!get_project_root(project_root, sizeof(project_root)))
-    {
-        return false;
-    }
-
-    snprintf(out_path, out_size, "%s/%s", project_root, relative_path);
-    return true;
+    B32 path_exists = os_file_path_exists(*out_path);
+    return out_path->size > 0 && path_exists;
 }
 
 static bool
@@ -235,49 +186,37 @@ prepare_sql_statement(sqlite3* db, const char* sql, sqlite3_stmt** stmt)
 static void
 server_mutex_init(struct websocket_server* server)
 {
-#ifdef _WIN32
-    InitializeCriticalSection(&server->mutex);
-#else
-    pthread_mutex_init(&server->mutex, NULL);
-#endif
+    server->mutex = OS_MutexAlloc();
 }
 
 static void
 server_mutex_destroy(struct websocket_server* server)
 {
-#ifdef _WIN32
-    DeleteCriticalSection(&server->mutex);
-#else
-    pthread_mutex_destroy(&server->mutex);
-#endif
+    if (server && server->mutex.u64[0] != 0)
+    {
+        OS_MutexRelease(server->mutex);
+        server->mutex = {};
+    }
 }
 
 static void
 server_lock(struct websocket_server* server)
 {
-    if (!server)
+    if (!server || server->mutex.u64[0] == 0)
     {
         return;
     }
-#ifdef _WIN32
-    EnterCriticalSection(&server->mutex);
-#else
-    pthread_mutex_lock(&server->mutex);
-#endif
+    os_mutex_take(server->mutex);
 }
 
 static void
 server_unlock(struct websocket_server* server)
 {
-    if (!server)
+    if (!server || server->mutex.u64[0] == 0)
     {
         return;
     }
-#ifdef _WIN32
-    LeaveCriticalSection(&server->mutex);
-#else
-    pthread_mutex_unlock(&server->mutex);
-#endif
+    os_mutex_drop(server->mutex);
 }
 
 static bool
@@ -330,6 +269,40 @@ pick_sqlite_db_file(char* out_path, size_t out_size)
 
     return len > 0;
 }
+#elif defined(_WIN32) && !defined(ASAN_ENABLED)
+static bool
+pick_sqlite_db_file(char* out_path, size_t out_size)
+{
+    wchar_t selected_path[1024] = {};
+    OPENFILENAMEW dialog = {};
+    dialog.lStructSize = sizeof(dialog);
+    dialog.lpstrFilter = L"SQLite databases (*.sqlite;*.sqlite3;*.db)\0*.sqlite;*.sqlite3;*.db\0All files (*.*)\0*.*\0";
+    dialog.lpstrFile = selected_path;
+    dialog.nMaxFile = ArrayCount(selected_path);
+    dialog.lpstrTitle = L"Select SQLite playback DB";
+    dialog.lpstrDefExt = L"sqlite";
+    dialog.Flags = OFN_FILEMUSTEXIST | OFN_PATHMUSTEXIST | OFN_NOCHANGEDIR;
+
+    if (!out_path || out_size == 0)
+    {
+        return false;
+    }
+
+    BOOL file_selected = GetOpenFileNameW(&dialog);
+    if (!file_selected)
+    {
+        return false;
+    }
+
+    int utf8_size = WideCharToMultiByte(CP_UTF8, 0, selected_path, -1, NULL, 0, NULL, NULL);
+    if (utf8_size <= 0 || (size_t)utf8_size > out_size)
+    {
+        return false;
+    }
+
+    int converted_size = WideCharToMultiByte(CP_UTF8, 0, selected_path, -1, out_path, utf8_size, NULL, NULL);
+    return converted_size > 0;
+}
 #endif
 
 static bool
@@ -354,7 +327,7 @@ text_contains_ci(const char* text, const char* pattern)
     {
         size_t i = 0;
 
-        while (i < pattern_length && cursor[i] && tolower((unsigned char)cursor[i]) == tolower((unsigned char)pattern[i]))
+        while (i < pattern_length && cursor[i] && char_to_lower((U8)cursor[i]) == char_to_lower((U8)pattern[i]))
         {
             i += 1;
         }
@@ -371,20 +344,18 @@ text_contains_ci(const char* text, const char* pattern)
 static void
 string_list_clear(struct string_list* list)
 {
-    int i = 0;
-
     if (!list)
     {
         return;
     }
 
-    for (i = 0; i < list->count; ++i)
+    if (list->arena)
     {
-        free(list->items[i]);
-        list->items[i] = NULL;
+        arena_clear(list->arena);
     }
-
+    list->items = NULL;
     list->count = 0;
+    list->capacity = 0;
 }
 
 static void
@@ -395,9 +366,13 @@ string_list_free(struct string_list* list)
         return;
     }
 
-    string_list_clear(list);
-    free(list->items);
+    if (list->arena)
+    {
+        arena_release(list->arena);
+    }
+    list->arena = NULL;
     list->items = NULL;
+    list->count = 0;
     list->capacity = 0;
 }
 
@@ -434,7 +409,7 @@ string_list_ensure_capacity(struct string_list* list, int required_count)
     int new_capacity = 0;
     char** resized_items = NULL;
 
-    if (!list)
+    if (!list || !list->arena)
     {
         return false;
     }
@@ -451,14 +426,17 @@ string_list_ensure_capacity(struct string_list* list, int required_count)
         new_capacity *= 2;
     }
 
-    resized_items = (char**)realloc(list->items, (size_t)new_capacity * sizeof(char*));
+    resized_items = PushArray(list->arena, char*, new_capacity);
 
     if (!resized_items)
     {
         return false;
     }
 
-    memset(resized_items + list->capacity, 0, (size_t)(new_capacity - list->capacity) * sizeof(char*));
+    if (list->items && list->count > 0)
+    {
+        MemoryCopyTyped(resized_items, list->items, list->count);
+    }
     list->items = resized_items;
     list->capacity = new_capacity;
     return true;
@@ -484,13 +462,16 @@ string_list_append_unique(struct string_list* list, const char* value)
         return false;
     }
 
-    copy = PROJECT_STRDUP(value);
+    size_t value_size = strlen(value);
+    copy = PushArrayNoZero(list->arena, char, value_size + 1);
 
     if (!copy)
     {
         return false;
     }
 
+    MemoryCopy(copy, value, value_size);
+    copy[value_size] = 0;
     list->items[list->count++] = copy;
     return true;
 }
@@ -512,8 +493,6 @@ string_list_remove(struct string_list* list, const char* value)
     {
         return false;
     }
-
-    free(list->items[index]);
 
     for (i = index; i < list->count - 1; ++i)
     {
@@ -710,7 +689,7 @@ server_websocket_data_handler(struct mg_connection* conn, int bits, char* data, 
     }
 
     copy_len = data_len < sizeof(payload_text) - 1 ? data_len : sizeof(payload_text) - 1;
-    memcpy(payload_text, data, copy_len);
+    MemoryCopy(payload_text, data, copy_len);
     payload_text[copy_len] = '\0';
 
     server_lock(server);
@@ -744,32 +723,27 @@ server_init(struct websocket_server* server, uint16_t port)
 {
     const char* options[11];
     char port_option[64];
-    char document_root[1024];
     struct mg_callbacks callbacks;
     struct mg_init_data init_data;
     struct mg_error_data error_data;
     char error_text[256];
     int option_index = 0;
 
-    memset(server, 0, sizeof(*server));
+    MemoryZeroStruct(server);
     server_mutex_init(server);
 
-    if (!get_project_root(document_root, sizeof(document_root)))
-    {
-        copy_status(server->status_line, sizeof(server->status_line), "Could not resolve project directory for CivetWeb.");
-        server_mutex_destroy(server);
-        return false;
-    }
+    String8 document_root = str8_c_string(DTCITY_PROJECT_ROOT);
+    copy_status(server->status_line, sizeof(server->status_line), "Could not resolve project directory for CivetWeb.");
 
     snprintf(port_option, sizeof(port_option), "%u", (unsigned int)port);
-    memset(&callbacks, 0, sizeof(callbacks));
-    memset(&init_data, 0, sizeof(init_data));
-    memset(&error_data, 0, sizeof(error_data));
+    MemoryZeroStruct(&callbacks);
+    MemoryZeroStruct(&init_data);
+    MemoryZeroStruct(&error_data);
     error_data.text = error_text;
     error_data.text_buffer_size = sizeof(error_text);
 
     options[option_index++] = "document_root";
-    options[option_index++] = document_root;
+    options[option_index++] = (char*)document_root.str;
     options[option_index++] = "enable_directory_listing";
     options[option_index++] = "no";
     options[option_index++] = "index_files";
@@ -798,7 +772,6 @@ server_init(struct websocket_server* server, uint16_t port)
         {
             copy_status(server->status_line, sizeof(server->status_line), "Could not start embedded CivetWeb server on 127.0.0.1:8080.");
         }
-        server_mutex_destroy(server);
         return false;
     }
 
@@ -830,13 +803,17 @@ server_poll(struct websocket_server* server)
 static void
 stream_init(struct vehicle_stream* stream)
 {
-    memset(stream, 0, sizeof(*stream));
+    MemoryZeroStruct(stream);
+    ArenaParams arena_params = {.reserve_size = MB(8), .commit_size = KB(64)};
+    stream->visible_vehicle_ids.arena = arena_alloc(&arena_params);
+    stream->selected_vehicle_ids.arena = arena_alloc(&arena_params);
+    stream->preview_arena = arena_alloc(&arena_params);
     stream->fps = DEFAULT_FPS;
     stream->vehicle_count = DEFAULT_VEHICLE_COUNT;
 }
 
 static void
-playback_db_init(struct playback_db* playback_db, const char* db_path)
+playback_db_init(struct playback_db* playback_db, String8 path)
 {
     sqlite3_stmt* range_stmt = NULL;
     bool using_legacy_index_plan = false;
@@ -977,24 +954,38 @@ playback_db_init(struct playback_db* playback_db, const char* db_path)
                                         "p2.point_index = bounds.p2_index "
                                         "ORDER BY bounds.vehicle_numeric_id, bounds.vehicle";
 
-    memset(playback_db, 0, sizeof(*playback_db));
-    if (!resolve_project_path((db_path && db_path[0]) ? db_path : DEFAULT_DB_PATH, playback_db->path, sizeof(playback_db->path)))
+    Arena* arena = playback_db->arena;
+    if (arena)
     {
-        snprintf(playback_db->status_line, sizeof(playback_db->status_line), "Could not resolve database path");
+        arena_clear(arena);
+    }
+    else
+    {
+        arena = arena_alloc();
+    }
+
+    MemoryZeroStruct(playback_db);
+    playback_db->arena = arena;
+
+    bool path_resolved = resolve_db_path(playback_db->arena, path, &playback_db->path);
+    if (playback_db->path.size >= sizeof(playback_db->path_input))
+    {
+        snprintf(playback_db->status_line, sizeof(playback_db->status_line), "Database path is too long");
         return;
     }
 
-    db_path = playback_db->path;
+    MemoryCopy(playback_db->path_input, playback_db->path.str, playback_db->path.size);
+    playback_db->path_input[playback_db->path.size] = 0;
 
-    if (!file_exists(db_path))
+    if (!path_resolved)
     {
-        snprintf(playback_db->status_line, sizeof(playback_db->status_line), "SQLite playback DB not found: %s", db_path);
+        snprintf(playback_db->status_line, sizeof(playback_db->status_line), "Database does not exist: %s", playback_db->path_input);
         return;
     }
 
-    if (sqlite3_open_v2(db_path, &playback_db->db, SQLITE_OPEN_READONLY, NULL) != SQLITE_OK)
+    if (sqlite3_open_v2((char*)playback_db->path.str, &playback_db->db, SQLITE_OPEN_READONLY, NULL) != SQLITE_OK)
     {
-        snprintf(playback_db->status_line, sizeof(playback_db->status_line), "Could not open %s.", db_path);
+        snprintf(playback_db->status_line, sizeof(playback_db->status_line), "Could not open %s.", (char*)playback_db->path.str);
         return;
     }
 
@@ -1037,7 +1028,7 @@ playback_db_init(struct playback_db* playback_db, const char* db_path)
 
     playback_db->ready = true;
     snprintf(playback_db->status_line, sizeof(playback_db->status_line),
-             using_legacy_index_plan ? "SQLite OSM-geometry playback ready (legacy index plan): %s" : "SQLite OSM-geometry playback ready: %s", db_path);
+             using_legacy_index_plan ? "SQLite OSM-geometry playback ready (legacy index plan): %s" : "SQLite OSM-geometry playback ready: %s", (char*)playback_db->path.str);
 }
 
 static void
@@ -1064,13 +1055,13 @@ playback_db_shutdown(struct playback_db* playback_db)
     playback_db->ready = false;
 }
 
-#ifdef __APPLE__
 static void
 reload_playback_db(struct playback_db* playback_db, struct vehicle_stream* stream, struct websocket_server* server, const char* db_path)
 {
-    char chosen_path[sizeof(playback_db->path)];
+    char chosen_path[MAX_PATH_TEXT];
 
     snprintf(chosen_path, sizeof(chosen_path), "%s", (db_path && db_path[0]) ? db_path : DEFAULT_DB_PATH);
+    String8 str_path = str8_c_string(chosen_path);
 
     if (stream)
     {
@@ -1082,7 +1073,7 @@ reload_playback_db(struct playback_db* playback_db, struct vehicle_stream* strea
     }
 
     playback_db_shutdown(playback_db);
-    playback_db_init(playback_db, chosen_path);
+    playback_db_init(playback_db, str_path);
 
     if (stream && playback_db->ready)
     {
@@ -1094,24 +1085,23 @@ reload_playback_db(struct playback_db* playback_db, struct vehicle_stream* strea
         copy_status(server->status_line, sizeof(server->status_line), playback_db->status_line);
     }
 }
-#endif
 
 static void
 stream_free(struct vehicle_stream* stream)
 {
-    if (stream->last_snapshot_preview)
+    if (stream->preview_arena)
     {
-        free(stream->last_snapshot_preview);
-        stream->last_snapshot_preview = NULL;
+        arena_release(stream->preview_arena);
     }
 
-    stream->last_snapshot_preview_capacity = 0;
+    stream->preview_arena = NULL;
+    stream->last_snapshot_preview = NULL;
     string_list_free(&stream->visible_vehicle_ids);
     string_list_free(&stream->selected_vehicle_ids);
 }
 
 static bool
-format_snapshot_preview(const char* snapshot, char** formatted_preview, size_t* formatted_length)
+format_snapshot_preview(Arena* arena, const char* snapshot, char** formatted_preview, size_t* formatted_length)
 {
     yyjson_doc* doc = NULL;
     yyjson_val* root = NULL;
@@ -1122,7 +1112,7 @@ format_snapshot_preview(const char* snapshot, char** formatted_preview, size_t* 
     size_t index = 0;
     size_t max = 0;
 
-    if (!snapshot || !formatted_preview || !formatted_length)
+    if (!arena || !snapshot || !formatted_preview || !formatted_length)
     {
         return false;
     }
@@ -1144,7 +1134,7 @@ format_snapshot_preview(const char* snapshot, char** formatted_preview, size_t* 
     }
 
     preview_capacity = strlen(snapshot) + (yyjson_arr_size(root) * 4) + 8;
-    preview = (char*)malloc(preview_capacity);
+    preview = PushArrayNoZero(arena, char, preview_capacity);
     if (!preview)
     {
         yyjson_doc_free(doc);
@@ -1161,7 +1151,6 @@ format_snapshot_preview(const char* snapshot, char** formatted_preview, size_t* 
         vehicle_json = yyjson_val_write(vehicle, 0, &vehicle_length);
         if (!vehicle_json)
         {
-            free(preview);
             yyjson_doc_free(doc);
             return false;
         }
@@ -1169,7 +1158,6 @@ format_snapshot_preview(const char* snapshot, char** formatted_preview, size_t* 
         if (offset + vehicle_length + 4 >= preview_capacity)
         {
             free(vehicle_json);
-            free(preview);
             yyjson_doc_free(doc);
             return false;
         }
@@ -1180,7 +1168,7 @@ format_snapshot_preview(const char* snapshot, char** formatted_preview, size_t* 
             preview[offset++] = '\n';
         }
 
-        memcpy(preview + offset, vehicle_json, vehicle_length);
+        MemoryCopy(preview + offset, vehicle_json, vehicle_length);
         offset += vehicle_length;
         preview[offset] = '\0';
         free(vehicle_json);
@@ -1188,7 +1176,6 @@ format_snapshot_preview(const char* snapshot, char** formatted_preview, size_t* 
 
     if (offset + 3 >= preview_capacity)
     {
-        free(preview);
         yyjson_doc_free(doc);
         return false;
     }
@@ -1207,41 +1194,27 @@ static bool
 stream_store_snapshot_preview(struct vehicle_stream* stream, const char* snapshot)
 {
     char* formatted_preview = NULL;
-    size_t required_capacity = 0;
     size_t formatted_length = 0;
-    const char* preview_source = snapshot;
 
-    if (!snapshot)
+    if (!stream->preview_arena || !snapshot)
     {
         return false;
     }
 
-    if (format_snapshot_preview(snapshot, &formatted_preview, &formatted_length))
+    arena_clear(stream->preview_arena);
+    if (format_snapshot_preview(stream->preview_arena, snapshot, &formatted_preview, &formatted_length))
     {
-        preview_source = formatted_preview;
-        required_capacity = formatted_length;
+        stream->last_snapshot_preview = formatted_preview;
     }
     else
     {
-        required_capacity = strlen(snapshot) + 1;
+        arena_clear(stream->preview_arena);
+        size_t snapshot_size = strlen(snapshot);
+        stream->last_snapshot_preview = PushArrayNoZero(stream->preview_arena, char, snapshot_size + 1);
+        MemoryCopy(stream->last_snapshot_preview, snapshot, snapshot_size);
+        stream->last_snapshot_preview[snapshot_size] = 0;
     }
 
-    if (required_capacity > stream->last_snapshot_preview_capacity)
-    {
-        char* resized_buffer = (char*)realloc(stream->last_snapshot_preview, required_capacity);
-
-        if (!resized_buffer)
-        {
-            free(formatted_preview);
-            return false;
-        }
-
-        stream->last_snapshot_preview = resized_buffer;
-        stream->last_snapshot_preview_capacity = required_capacity;
-    }
-
-    memcpy(stream->last_snapshot_preview, preview_source, required_capacity);
-    free(formatted_preview);
     return true;
 }
 
@@ -1284,6 +1257,7 @@ stream_update_clock(struct vehicle_stream* stream, uint64_t now_ms)
 static bool
 append_snapshot_vehicle(yyjson_mut_doc* doc, yyjson_mut_val* snapshot_array, const char* vehicle_id, double lat, double lon)
 {
+    prof_scope_marker;
     yyjson_mut_val* vehicle = NULL;
 
     if (!doc || !snapshot_array || !vehicle_id)
@@ -1318,6 +1292,7 @@ append_snapshot_vehicle(yyjson_mut_doc* doc, yyjson_mut_val* snapshot_array, con
 static int
 build_database_snapshot(struct vehicle_stream* stream, struct playback_db* playback_db, yyjson_mut_doc* doc, yyjson_mut_val* snapshot_array)
 {
+    prof_scope_marker;
     int row_count = 0;
     int sent_row_count = 0;
     sqlite3_stmt* active_stmt = NULL;
@@ -1342,6 +1317,7 @@ build_database_snapshot(struct vehicle_stream* stream, struct playback_db* playb
 
     while (sqlite3_step(active_stmt) == SQLITE_ROW)
     {
+        prof_scope_marker;
         const unsigned char* vehicle_id = sqlite3_column_text(active_stmt, 0);
         const char* vehicle_id_text = vehicle_id ? (const char*)vehicle_id : "unknown";
         double lat1 = sqlite3_column_double(active_stmt, 1);
@@ -1400,6 +1376,7 @@ build_database_snapshot(struct vehicle_stream* stream, struct playback_db* playb
 static bool
 stream_send_current_snapshot(struct vehicle_stream* stream, struct websocket_server* server, struct playback_db* playback_db)
 {
+    prof_scope_marker;
     yyjson_mut_doc* doc = NULL;
     yyjson_mut_val* snapshot_array = NULL;
     char* snapshot = NULL;
@@ -1499,6 +1476,7 @@ stream_send_frame(struct vehicle_stream* stream, struct websocket_server* server
 
     if (!stream_send_current_snapshot(stream, server, playback_db))
     {
+        printf("Stream Send Snapshot\n");
         return;
     }
 
@@ -1538,7 +1516,7 @@ draw_preview_lines(struct nk_context* ctx, const char* text)
                 char line_buffer[512];
                 size_t chunk_length = line_length < sizeof(line_buffer) - 1 ? line_length : sizeof(line_buffer) - 1;
 
-                memcpy(line_buffer, cursor, chunk_length);
+                MemoryCopy(line_buffer, cursor, chunk_length);
                 line_buffer[chunk_length] = '\0';
 
                 nk_layout_row_dynamic(ctx, row_height, 1);
@@ -1780,6 +1758,7 @@ draw_visible_vehicle_group(struct nk_context* ctx, struct vehicle_stream* stream
 static void
 draw_ui(struct nk_context* ctx, struct websocket_server* server, struct vehicle_stream* stream, struct playback_db* playback_db, bool* timeline_changed, int window_width, int window_height)
 {
+    prof_scope_marker;
     struct nk_rect bounds = nk_rect(0, 0, (float)window_width, (float)window_height);
     float title_row_height = ui_input_row_height(ctx);
     float text_row_height = ui_text_row_height(ctx);
@@ -1810,25 +1789,33 @@ draw_ui(struct nk_context* ctx, struct websocket_server* server, struct vehicle_
         nk_layout_row_dynamic(ctx, text_row_height, 1);
         nk_label(ctx, "Playback DB:", NK_TEXT_LEFT);
 
-        nk_layout_row_begin(ctx, NK_DYNAMIC, slider_row_height, 2);
-        nk_layout_row_push(ctx, 0.75f);
-        nk_edit_string_zero_terminated(ctx, (nk_flags)NK_EDIT_FIELD | (nk_flags)NK_EDIT_CLIPBOARD, playback_db->path, sizeof(playback_db->path), nk_filter_default);
-#ifdef __APPLE__
-        nk_layout_row_push(ctx, 0.25f);
+        nk_layout_row_begin(ctx, NK_DYNAMIC, slider_row_height, 3);
+        nk_layout_row_push(ctx, 0.60f);
+        nk_edit_string_zero_terminated(ctx, (nk_flags)NK_EDIT_FIELD | (nk_flags)NK_EDIT_CLIPBOARD, playback_db->path_input, sizeof(playback_db->path_input), nk_filter_default);
+        nk_layout_row_push(ctx, 0.18f);
+        if (nk_button_label(ctx, "Load DB"))
+        {
+            reload_playback_db(playback_db, stream, server, playback_db->path_input);
+            *timeline_changed = playback_db->ready;
+        }
+#if defined(__APPLE__) || (defined(_WIN32) && !defined(ASAN_ENABLED))
+        nk_layout_row_push(ctx, 0.22f);
         if (nk_button_label(ctx, "Choose DB"))
         {
-            char chosen_path[sizeof(playback_db->path)];
-
+            char chosen_path[MAX_PATH_TEXT];
             if (pick_sqlite_db_file(chosen_path, sizeof(chosen_path)))
             {
-                snprintf(playback_db->path, sizeof(playback_db->path), "%s", chosen_path);
-                reload_playback_db(playback_db, stream, server, playback_db->path);
+                reload_playback_db(playback_db, stream, server, chosen_path);
                 *timeline_changed = playback_db->ready;
             }
         }
 #else
-        nk_layout_row_push(ctx, 0.25f);
-        nk_label(ctx, "Choose DB unavailable", NK_TEXT_LEFT);
+        nk_layout_row_push(ctx, 0.22f);
+#if defined(_WIN32) && defined(ASAN_ENABLED)
+        nk_label(ctx, "Picker disabled with ASan", NK_TEXT_LEFT);
+#else
+        nk_label(ctx, "Picker unavailable", NK_TEXT_LEFT);
+#endif
 #endif
         nk_layout_row_end(ctx);
 
@@ -1886,9 +1873,8 @@ draw_ui(struct nk_context* ctx, struct websocket_server* server, struct vehicle_
                       stream->last_sent_vehicle_count);
 
             nk_layout_row_dynamic(ctx, slider_row_height, 1);
-            nk_slider_float(ctx, timeline_min, &timeline_value, timeline_max, 1.0f);
-
-            if ((double)timeline_value != stream->simulated_seconds)
+            nk_bool timeline_slider_changed = nk_slider_float(ctx, timeline_min, &timeline_value, timeline_max, 1.0f);
+            if (timeline_slider_changed)
             {
                 stream->simulated_seconds = (double)timeline_value;
                 stream->next_frame_at_ms = 0.0;
@@ -1919,15 +1905,17 @@ glfw_error_callback(int code, const char* description)
 }
 
 int
-main(void)
+App(int argc, char** argv)
 {
+    (void)argc;
+    (void)argv;
     GLFWwindow* window = NULL;
     struct nk_glfw glfw_backend = {0};
     struct nk_context* ctx = NULL;
     struct nk_font_atlas* atlas = NULL;
     struct websocket_server server;
     struct vehicle_stream stream;
-    struct playback_db playback_db;
+    struct playback_db playback_db = {};
     bool running = true;
     struct nk_font* custom_font = NULL;
     int window_width = WINDOW_WIDTH;
@@ -1990,11 +1978,13 @@ main(void)
     nk_glfw3_font_stash_begin(&glfw_backend, &atlas);
     if (atlas)
     {
-        char resolved_font_path[1024];
+        ScratchScope scratch = ScratchScope(0, 0);
         float font_size = CUSTOM_FONT_SIZE * font_scale;
-        if (resolve_project_path(CUSTOM_FONT_PATH, resolved_font_path, sizeof(resolved_font_path)) && file_exists(resolved_font_path))
+        String8 abs_font_path = str_abs_path_from_relative(scratch.arena, str8_c_string(CUSTOM_FONT_PATH));
+        B32 file_exists = os_file_path_exists(abs_font_path);
+        if (abs_font_path.size > 0 && file_exists)
         {
-            custom_font = nk_font_atlas_add_from_file(atlas, resolved_font_path, font_size, NULL);
+            custom_font = nk_font_atlas_add_from_file(atlas, (char*)abs_font_path.str, font_size, NULL);
         }
         else
         {
@@ -2017,15 +2007,21 @@ main(void)
         fprintf(stderr, "%s\n", server.status_line);
     }
     stream_init(&stream);
-    playback_db_init(&playback_db, DEFAULT_DB_PATH);
+    playback_db_init(&playback_db, str8_c_string(DEFAULT_DB_PATH));
     if (playback_db.ready)
     {
         stream.simulated_seconds = playback_db.min_time;
     }
 
+    Arena* frame_arena = arena_alloc();
+
     while (running && !glfwWindowShouldClose(window))
     {
-        uint64_t now_ms = (uint64_t)llround(glfwGetTime() * 1000.0);
+        arena_clear(frame_arena);
+        prof_frame_marker;
+        prof_scope_marker_named("simulator_frame");
+        U64 now_us = os_now_microseconds();
+        uint64_t now_ms = now_us / 1000;
         bool timeline_changed = false;
         int framebuffer_width = 0;
         int framebuffer_height = 0;
@@ -2054,6 +2050,7 @@ main(void)
 
         if (timeline_changed)
         {
+            printf("Timeline Changed\n");
             stream_send_current_snapshot(&stream, &server, &playback_db);
         }
 
@@ -2067,6 +2064,7 @@ main(void)
 
     server_shutdown(&server);
     playback_db_shutdown(&playback_db);
+    arena_release(playback_db.arena);
     stream_free(&stream);
     nk_glfw3_shutdown(&glfw_backend);
     glfwDestroyWindow(window);

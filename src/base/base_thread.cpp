@@ -110,7 +110,7 @@ slow_barrier_release(Barrier barrier)
 lib_internal void
 slow_barrier_wait(Barrier barrier)
 {
-    prof_frame_marker;
+    prof_scope_marker;
     BarrierNode* n = (BarrierNode*)barrier.u64[0];
     U64 threads_left_to_enter = ins_atomic_u64_dec_eval(&n->threads_left_to_enter);
 

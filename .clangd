@@ -40,3 +40,10 @@ If:
 CompileFlags:
   CompilationDatabase: build/win/debug-tests
   Add: [/FIC:/repos/DTCity/tests/test_inc.hpp]
+
+---
+If:
+  PathMatch: simulator/.*
+CompileFlags:
+  CompilationDatabase: simulator/build/win/profile
+  Remove: [/FI*]

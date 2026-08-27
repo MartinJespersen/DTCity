@@ -60,6 +60,20 @@
       }
     },
     {
+      "name": "debug-simulator-windows",
+      "displayName": "Debug Simulator (Windows)",
+      "binaryDir": "${sourceDir}/simulator/build/win/debug",
+      "generator": "Ninja",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "BUILD_DEBUG": "ON",
+        "ASAN_ENABLED": "ON",
+        "BUILD_CITY": "OFF",
+        "BUILD_SIMULATOR": "ON",
+        "TRACY_PROFILE_ENABLE": "OFF"
+      }
+    },
+    {
       "name": "debug-linux",
       "displayName": "Debug (Linux)",
       "inherits": "debug-base",
@@ -91,6 +105,19 @@
       }
     },
     {
+      "name": "profile-simulator-windows",
+      "displayName": "Profile Simulator (Windows)",
+      "binaryDir": "${sourceDir}/simulator/build/win/profile",
+      "generator": "Ninja",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "RelWithDebInfo",
+        "TRACY_PROFILE_ENABLE": "ON",
+        "ASAN_ENABLED": "OFF",
+        "BUILD_CITY": "OFF",
+        "BUILD_SIMULATOR": "ON"
+      }
+    },
+    {
       "name": "profile-windows",
       "displayName": "Profile (Windows)",
       "inherits": "profile-base",
@@ -112,6 +139,24 @@
       "cacheVariables": {
         "VCPKG_TARGET_TRIPLET": "x64-linux"
       }
+    }
+  ],
+  "buildPresets": [
+    {
+      "name": "debug-simulator-windows",
+      "configurePreset": "debug-simulator-windows",
+      "targets": [
+        "Simulator"
+      ],
+      "jobs": 0
+    },
+    {
+      "name": "profile-simulator-windows",
+      "configurePreset": "profile-simulator-windows",
+      "targets": [
+        "Simulator"
+      ],
+      "jobs": 0
     }
   ]
 }
