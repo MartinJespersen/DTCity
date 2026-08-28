@@ -54,8 +54,10 @@
 #define MAX_PATH_TEXT 1024
 #define DEFAULT_FPS 20
 #define DEFAULT_VEHICLE_COUNT 200
-#define DEFAULT_DB_PATH "simulator/database/eskiltuna_playback.sqlite"
+#define DEFAULT_DB_PATH "simulator/database/eskiltuna_full_playback.sqlite"
 #define CUSTOM_FONT_PATH "simulator/fonts/segoeuithis.ttf"
+#define AGENT_PATH_SEGMENT_TABLE_NAME "agent_path_segment"
+#define AGENT_PATH_INFO_TABLE_NAME "vehicle_info"
 #define CUSTOM_FONT_SIZE 18.0f
 #define DEFAULT_WS_PATH "/ws"
 #define APP_BG_R 45
@@ -89,9 +91,9 @@ struct vehicle_stream
     uint64_t frames_sent;
     uint64_t packets_sent;
     int last_sent_vehicle_count;
-    uint64_t last_tick_ms;
+    U64 last_tick_us;
     double simulated_seconds;
-    double next_frame_at_ms;
+    U64 next_frame_at_us;
     Arena* preview_arena;
     char* last_snapshot_preview;
     char vehicle_search[128];
@@ -103,12 +105,10 @@ struct playback_db
 {
     Arena* arena;
     sqlite3* db;
-    sqlite3_stmt* active_start_stmt;
-    sqlite3_stmt* active_end_stmt;
+    sqlite3_stmt* active_stmt;
     bool ready;
     double min_time;
     double max_time;
-    double midpoint_time;
     String8 path;
     char path_input[MAX_PATH_TEXT];
     char status_line[256];
@@ -169,6 +169,7 @@ resolve_db_path(Arena* arena, String8 path, String8* out_path)
 static bool
 prepare_sql_statement(sqlite3* db, const char* sql, sqlite3_stmt** stmt)
 {
+    prof_frame_marker;
     if (!db || !sql || !stmt)
     {
         return false;
@@ -811,148 +812,21 @@ stream_init(struct vehicle_stream* stream)
     stream->fps = DEFAULT_FPS;
     stream->vehicle_count = DEFAULT_VEHICLE_COUNT;
 }
-
 static void
 playback_db_init(struct playback_db* playback_db, String8 path)
 {
+    prof_scope_marker;
     sqlite3_stmt* range_stmt = NULL;
-    bool using_legacy_index_plan = false;
-    const char* active_start_sql = "WITH active AS ("
-                                   "  SELECT rs.vehicle, rs.vehicle_numeric_id, rs.geometry_id, "
-                                   "  CASE WHEN rs.duration <= 0 THEN g.total_distance "
-                                   "  ELSE g.total_distance * max(0.0, min(1.0, (?1 - rs.time_start) / "
-                                   "rs.duration)) END "
-                                   "  AS target_distance "
-                                   "  FROM route_segments AS rs INDEXED BY "
-                                   "idx_route_segments_vehicle_numeric_start_end "
-                                   "  JOIN geometries g ON g.geometry_id = rs.geometry_id "
-                                   "  WHERE rs.time_start <= ?1 AND rs.time_end > ?1 "
-                                   "  ORDER BY rs.vehicle_numeric_id, rs.vehicle "
-                                   "  LIMIT ?2"
-                                   "), bounds AS ("
-                                   "  SELECT active.vehicle, active.vehicle_numeric_id, active.geometry_id, "
-                                   "active.target_distance, "
-                                   "  (SELECT point_index FROM geometry_points "
-                                   "   WHERE geometry_id = active.geometry_id AND distance <= "
-                                   "active.target_distance "
-                                   "   ORDER BY distance DESC, point_index DESC LIMIT 1) AS p1_index, "
-                                   "  (SELECT point_index FROM geometry_points "
-                                   "   WHERE geometry_id = active.geometry_id AND distance >= "
-                                   "active.target_distance "
-                                   "   ORDER BY distance ASC, point_index ASC LIMIT 1) AS p2_index "
-                                   "  FROM active"
-                                   ") "
-                                   "SELECT bounds.vehicle, "
-                                   "p1.lat, p1.lon, p2.lat, p2.lon, "
-                                   "bounds.target_distance, p1.distance, p2.distance "
-                                   "FROM bounds "
-                                   "JOIN geometry_points p1 ON p1.geometry_id = bounds.geometry_id AND "
-                                   "p1.point_index = bounds.p1_index "
-                                   "JOIN geometry_points p2 ON p2.geometry_id = bounds.geometry_id AND "
-                                   "p2.point_index = bounds.p2_index "
-                                   "ORDER BY bounds.vehicle_numeric_id, bounds.vehicle";
-    const char* active_end_sql = "WITH active AS ("
-                                 "  SELECT rs.vehicle, rs.vehicle_numeric_id, rs.geometry_id, "
-                                 "  CASE WHEN rs.duration <= 0 THEN g.total_distance "
-                                 "  ELSE g.total_distance * max(0.0, min(1.0, (?1 - rs.time_start) / "
-                                 "rs.duration)) END "
-                                 "  AS target_distance "
-                                 "  FROM route_segments AS rs INDEXED BY "
-                                 "idx_route_segments_vehicle_numeric_end_start "
-                                 "  JOIN geometries g ON g.geometry_id = rs.geometry_id "
-                                 "  WHERE rs.time_start <= ?1 AND rs.time_end > ?1 "
-                                 "  ORDER BY rs.vehicle_numeric_id, rs.vehicle "
-                                 "  LIMIT ?2"
-                                 "), bounds AS ("
-                                 "  SELECT active.vehicle, active.vehicle_numeric_id, active.geometry_id, "
-                                 "active.target_distance, "
-                                 "  (SELECT point_index FROM geometry_points "
-                                 "   WHERE geometry_id = active.geometry_id AND distance <= "
-                                 "active.target_distance "
-                                 "   ORDER BY distance DESC, point_index DESC LIMIT 1) AS p1_index, "
-                                 "  (SELECT point_index FROM geometry_points "
-                                 "   WHERE geometry_id = active.geometry_id AND distance >= "
-                                 "active.target_distance "
-                                 "   ORDER BY distance ASC, point_index ASC LIMIT 1) AS p2_index "
-                                 "  FROM active"
-                                 ") "
-                                 "SELECT bounds.vehicle, "
-                                 "p1.lat, p1.lon, p2.lat, p2.lon, "
-                                 "bounds.target_distance, p1.distance, p2.distance "
-                                 "FROM bounds "
-                                 "JOIN geometry_points p1 ON p1.geometry_id = bounds.geometry_id AND "
-                                 "p1.point_index = bounds.p1_index "
-                                 "JOIN geometry_points p2 ON p2.geometry_id = bounds.geometry_id AND "
-                                 "p2.point_index = bounds.p2_index "
-                                 "ORDER BY bounds.vehicle_numeric_id, bounds.vehicle";
-    const char* legacy_active_start_sql = "WITH active AS ("
-                                          "  SELECT rs.vehicle, rs.vehicle_numeric_id, rs.geometry_id, "
-                                          "  CASE WHEN rs.duration <= 0 THEN g.total_distance "
-                                          "  ELSE g.total_distance * max(0.0, min(1.0, (?1 - rs.time_start) / "
-                                          "rs.duration)) END "
-                                          "  AS target_distance "
-                                          "  FROM route_segments AS rs INDEXED BY "
-                                          "idx_route_segments_start_vehicle_numeric "
-                                          "  JOIN geometries g ON g.geometry_id = rs.geometry_id "
-                                          "  WHERE rs.time_start <= ?1 AND rs.time_end > ?1 "
-                                          "  ORDER BY rs.vehicle_numeric_id, rs.vehicle "
-                                          "  LIMIT ?2"
-                                          "), bounds AS ("
-                                          "  SELECT active.vehicle, active.vehicle_numeric_id, active.geometry_id, "
-                                          "active.target_distance, "
-                                          "  (SELECT point_index FROM geometry_points "
-                                          "   WHERE geometry_id = active.geometry_id AND distance <= "
-                                          "active.target_distance "
-                                          "   ORDER BY distance DESC, point_index DESC LIMIT 1) AS p1_index, "
-                                          "  (SELECT point_index FROM geometry_points "
-                                          "   WHERE geometry_id = active.geometry_id AND distance >= "
-                                          "active.target_distance "
-                                          "   ORDER BY distance ASC, point_index ASC LIMIT 1) AS p2_index "
-                                          "  FROM active"
-                                          ") "
-                                          "SELECT bounds.vehicle, "
-                                          "p1.lat, p1.lon, p2.lat, p2.lon, "
-                                          "bounds.target_distance, p1.distance, p2.distance "
-                                          "FROM bounds "
-                                          "JOIN geometry_points p1 ON p1.geometry_id = bounds.geometry_id AND "
-                                          "p1.point_index = bounds.p1_index "
-                                          "JOIN geometry_points p2 ON p2.geometry_id = bounds.geometry_id AND "
-                                          "p2.point_index = bounds.p2_index "
-                                          "ORDER BY bounds.vehicle_numeric_id, bounds.vehicle";
-    const char* legacy_active_end_sql = "WITH active AS ("
-                                        "  SELECT rs.vehicle, rs.vehicle_numeric_id, rs.geometry_id, "
-                                        "  CASE WHEN rs.duration <= 0 THEN g.total_distance "
-                                        "  ELSE g.total_distance * max(0.0, min(1.0, (?1 - rs.time_start) / "
-                                        "rs.duration)) END "
-                                        "  AS target_distance "
-                                        "  FROM route_segments AS rs INDEXED BY "
-                                        "idx_route_segments_end_vehicle_numeric "
-                                        "  JOIN geometries g ON g.geometry_id = rs.geometry_id "
-                                        "  WHERE rs.time_start <= ?1 AND rs.time_end > ?1 "
-                                        "  ORDER BY rs.vehicle_numeric_id, rs.vehicle "
-                                        "  LIMIT ?2"
-                                        "), bounds AS ("
-                                        "  SELECT active.vehicle, active.vehicle_numeric_id, active.geometry_id, "
-                                        "active.target_distance, "
-                                        "  (SELECT point_index FROM geometry_points "
-                                        "   WHERE geometry_id = active.geometry_id AND distance <= "
-                                        "active.target_distance "
-                                        "   ORDER BY distance DESC, point_index DESC LIMIT 1) AS p1_index, "
-                                        "  (SELECT point_index FROM geometry_points "
-                                        "   WHERE geometry_id = active.geometry_id AND distance >= "
-                                        "active.target_distance "
-                                        "   ORDER BY distance ASC, point_index ASC LIMIT 1) AS p2_index "
-                                        "  FROM active"
-                                        ") "
-                                        "SELECT bounds.vehicle, "
-                                        "p1.lat, p1.lon, p2.lat, p2.lon, "
-                                        "bounds.target_distance, p1.distance, p2.distance "
-                                        "FROM bounds "
-                                        "JOIN geometry_points p1 ON p1.geometry_id = bounds.geometry_id AND "
-                                        "p1.point_index = bounds.p1_index "
-                                        "JOIN geometry_points p2 ON p2.geometry_id = bounds.geometry_id AND "
-                                        "p2.point_index = bounds.p2_index "
-                                        "ORDER BY bounds.vehicle_numeric_id, bounds.vehicle";
+    const char* active_sql = "WITH active AS ("
+                             "  SELECT agent, from_lat, from_lon, to_lat, to_lon, "
+                             "  CASE WHEN time_end <= time_start THEN 1.0 "
+                             "  ELSE max(0.0, min(1.0, (?1 - time_start) / (time_end - time_start))) END AS progress "
+                             "  FROM " AGENT_PATH_SEGMENT_TABLE_NAME "  WHERE time_start <= ?1 AND time_end > ?1 )"
+                             "SELECT agent, "
+                             "from_lat + (to_lat - from_lat) * progress AS lat, "
+                             "from_lon + (to_lon - from_lon) * progress AS lon "
+                             "FROM active "
+                             "ORDER BY agent";
 
     Arena* arena = playback_db->arena;
     if (arena)
@@ -991,14 +865,18 @@ playback_db_init(struct playback_db* playback_db, String8 path)
 
     sqlite3_busy_timeout(playback_db->db, 5000);
 
-    if (sqlite3_prepare_v2(playback_db->db, "SELECT MIN(time_start), MAX(time_end) FROM route_segments", -1, &range_stmt, NULL) != SQLITE_OK)
     {
-        snprintf(playback_db->status_line, sizeof(playback_db->status_line), "Could not prepare playback time range query: %s", sqlite3_errmsg(playback_db->db));
-        sqlite3_finalize(range_stmt);
-        return;
+        prof_scope_marker_named("sqlite3_prepare_v2");
+        if (sqlite3_prepare_v2(playback_db->db, "SELECT MIN(time_start), MAX(time_end) FROM " AGENT_PATH_INFO_TABLE_NAME, -1, &range_stmt, NULL) != SQLITE_OK)
+        {
+            snprintf(playback_db->status_line, sizeof(playback_db->status_line), "Could not prepare playback time range query: %s", sqlite3_errmsg(playback_db->db));
+            sqlite3_finalize(range_stmt);
+            return;
+        }
     }
 
     {
+        prof_scope_marker_named("sqlite3_step");
         int step_result = sqlite3_step(range_stmt);
 
         if (step_result != SQLITE_ROW)
@@ -1011,39 +889,28 @@ playback_db_init(struct playback_db* playback_db, String8 path)
 
     playback_db->min_time = sqlite3_column_double(range_stmt, 0);
     playback_db->max_time = sqlite3_column_double(range_stmt, 1);
-    playback_db->midpoint_time = playback_db->min_time + ((playback_db->max_time - playback_db->min_time) / 2.0);
     sqlite3_finalize(range_stmt);
 
-    if (!prepare_sql_statement(playback_db->db, active_start_sql, &playback_db->active_start_stmt) || !prepare_sql_statement(playback_db->db, active_end_sql, &playback_db->active_end_stmt))
     {
-        using_legacy_index_plan = true;
-
-        if (!prepare_sql_statement(playback_db->db, legacy_active_start_sql, &playback_db->active_start_stmt) ||
-            !prepare_sql_statement(playback_db->db, legacy_active_end_sql, &playback_db->active_end_stmt))
+        prof_scope_marker_named("prepare_sql_statement");
+        if (!prepare_sql_statement(playback_db->db, active_sql, &playback_db->active_stmt))
         {
-            snprintf(playback_db->status_line, sizeof(playback_db->status_line), "Could not prepare detailed geometry playback query: %s", sqlite3_errmsg(playback_db->db));
+            snprintf(playback_db->status_line, sizeof(playback_db->status_line), "Could not prepare agent playback query: %s", sqlite3_errmsg(playback_db->db));
             return;
         }
     }
 
     playback_db->ready = true;
-    snprintf(playback_db->status_line, sizeof(playback_db->status_line),
-             using_legacy_index_plan ? "SQLite OSM-geometry playback ready (legacy index plan): %s" : "SQLite OSM-geometry playback ready: %s", (char*)playback_db->path.str);
+    snprintf(playback_db->status_line, sizeof(playback_db->status_line), "SQLite agent playback ready: %s", (char*)playback_db->path.str);
 }
 
 static void
 playback_db_shutdown(struct playback_db* playback_db)
 {
-    if (playback_db->active_start_stmt)
+    if (playback_db->active_stmt)
     {
-        sqlite3_finalize(playback_db->active_start_stmt);
-        playback_db->active_start_stmt = NULL;
-    }
-
-    if (playback_db->active_end_stmt)
-    {
-        sqlite3_finalize(playback_db->active_end_stmt);
-        playback_db->active_end_stmt = NULL;
+        sqlite3_finalize(playback_db->active_stmt);
+        playback_db->active_stmt = NULL;
     }
 
     if (playback_db->db)
@@ -1066,8 +933,8 @@ reload_playback_db(struct playback_db* playback_db, struct vehicle_stream* strea
     if (stream)
     {
         stream_stop(stream);
-        stream->next_frame_at_ms = 0.0;
-        stream->last_tick_ms = 0;
+        stream->next_frame_at_us = 0.0;
+        stream->last_tick_us = 0;
         stream->last_sent_vehicle_count = 0;
         string_list_clear(&stream->visible_vehicle_ids);
     }
@@ -1222,35 +1089,29 @@ static void
 stream_start(struct vehicle_stream* stream)
 {
     stream->streaming = true;
-    stream->next_frame_at_ms = 0.0;
+    stream->next_frame_at_us = 0.0;
 }
 
 static void
 stream_stop(struct vehicle_stream* stream)
 {
     stream->streaming = false;
-    stream->next_frame_at_ms = 0.0;
+    stream->next_frame_at_us = 0.0;
 }
 
 static void
-stream_update_clock(struct vehicle_stream* stream, uint64_t now_ms)
+stream_update_clock(struct vehicle_stream* stream, U64 now_us)
 {
-    if (!stream->streaming)
+    if (!stream->streaming || (stream->last_tick_us == 0))
     {
-        stream->last_tick_ms = now_ms;
+        stream->last_tick_us = now_us;
         return;
     }
 
-    if (stream->last_tick_ms == 0)
+    if (now_us > stream->last_tick_us)
     {
-        stream->last_tick_ms = now_ms;
-        return;
-    }
-
-    if (now_ms > stream->last_tick_ms)
-    {
-        stream->simulated_seconds += (double)(now_ms - stream->last_tick_ms) / 1000.0;
-        stream->last_tick_ms = now_ms;
+        stream->simulated_seconds += (F64)(now_us - stream->last_tick_us) / 1'000'000.0;
+        stream->last_tick_us = now_us;
     }
 }
 
@@ -1295,62 +1156,33 @@ build_database_snapshot(struct vehicle_stream* stream, struct playback_db* playb
     prof_scope_marker;
     int row_count = 0;
     int sent_row_count = 0;
-    sqlite3_stmt* active_stmt = NULL;
-
     if (!playback_db->ready)
     {
         return -1;
     }
 
-    active_stmt = stream->simulated_seconds <= playback_db->midpoint_time ? playback_db->active_start_stmt : playback_db->active_end_stmt;
-
-    if (!active_stmt)
+    if (!playback_db->active_stmt)
     {
         return -1;
     }
 
-    sqlite3_reset(active_stmt);
-    sqlite3_clear_bindings(active_stmt);
-    sqlite3_bind_double(active_stmt, 1, stream->simulated_seconds);
-    sqlite3_bind_int(active_stmt, 2, stream->vehicle_count);
+    sqlite3_reset(playback_db->active_stmt);
+    sqlite3_clear_bindings(playback_db->active_stmt);
+    sqlite3_bind_double(playback_db->active_stmt, 1, stream->simulated_seconds);
+    sqlite3_bind_int(playback_db->active_stmt, 2, stream->vehicle_count);
     string_list_clear(&stream->visible_vehicle_ids);
 
-    while (sqlite3_step(active_stmt) == SQLITE_ROW)
+    while (sqlite3_step(playback_db->active_stmt) == SQLITE_ROW)
     {
-        prof_scope_marker;
-        const unsigned char* vehicle_id = sqlite3_column_text(active_stmt, 0);
+        prof_scope_marker_named("row loop (build_database_snapshot)");
+        const unsigned char* vehicle_id = sqlite3_column_text(playback_db->active_stmt, 0);
         const char* vehicle_id_text = vehicle_id ? (const char*)vehicle_id : "unknown";
-        double lat1 = sqlite3_column_double(active_stmt, 1);
-        double lon1 = sqlite3_column_double(active_stmt, 2);
-        double lat2 = sqlite3_column_double(active_stmt, 3);
-        double lon2 = sqlite3_column_double(active_stmt, 4);
-        double target_distance = sqlite3_column_double(active_stmt, 5);
-        double distance1 = sqlite3_column_double(active_stmt, 6);
-        double distance2 = sqlite3_column_double(active_stmt, 7);
-        double segment_progress = 0.0;
-        double lat = lat1;
-        double lon = lon1;
+        double lat = sqlite3_column_double(playback_db->active_stmt, 1);
+        double lon = sqlite3_column_double(playback_db->active_stmt, 2);
 
         if (!string_list_append_unique(&stream->visible_vehicle_ids, vehicle_id_text))
         {
             return -3;
-        }
-
-        if (distance2 > distance1)
-        {
-            segment_progress = (target_distance - distance1) / (distance2 - distance1);
-
-            if (segment_progress < 0.0)
-            {
-                segment_progress = 0.0;
-            }
-            else if (segment_progress > 1.0)
-            {
-                segment_progress = 1.0;
-            }
-
-            lat = lat1 + (lat2 - lat1) * segment_progress;
-            lon = lon1 + (lon2 - lon1) * segment_progress;
         }
 
         row_count += 1;
@@ -1457,34 +1289,36 @@ stream_send_current_snapshot(struct vehicle_stream* stream, struct websocket_ser
 }
 
 static void
-stream_send_frame(struct vehicle_stream* stream, struct websocket_server* server, struct playback_db* playback_db, uint64_t now_ms)
+stream_send_frame(struct vehicle_stream* stream, struct websocket_server* server, struct playback_db* playback_db, U64 now_us)
 {
+    prof_scope_marker;
     if (!stream->streaming || stream->fps <= 0 || stream->vehicle_count <= 0)
     {
         return;
     }
 
-    if (stream->next_frame_at_ms <= 0.0)
+    if (stream->next_frame_at_us <= 0.0)
     {
-        stream->next_frame_at_ms = (double)now_ms;
+        stream->next_frame_at_us = now_us;
     }
 
-    if ((double)now_ms + 0.001 < stream->next_frame_at_ms)
+    if (now_us < stream->next_frame_at_us)
     {
         return;
     }
 
     if (!stream_send_current_snapshot(stream, server, playback_db))
     {
-        printf("Stream Send Snapshot\n");
         return;
     }
 
-    stream->next_frame_at_ms += 1000.0 / (double)stream->fps;
+    F64 frame_us = 1'000'000.0 / (F64)stream->fps;
+    stream->next_frame_at_us += frame_us;
 
-    if (stream->next_frame_at_ms < (double)now_ms - 1000.0)
+    constexpr U64 max_lag_us = 1'000'000; // maximum lag in microseconds before need to catch up
+    if ((now_us > stream->next_frame_at_us) && (now_us - stream->next_frame_at_us) > max_lag_us)
     {
-        stream->next_frame_at_ms = (double)now_ms;
+        stream->next_frame_at_us = now_us;
     }
 }
 
@@ -1845,7 +1679,7 @@ draw_ui(struct nk_context* ctx, struct websocket_server* server, struct vehicle_
             if (playback_db->ready)
             {
                 stream->simulated_seconds = playback_db->min_time;
-                stream->next_frame_at_ms = 0.0;
+                stream->next_frame_at_us = 0.0;
                 *timeline_changed = true;
                 copy_status(server->status_line, sizeof(server->status_line), "Playback time reset.");
             }
@@ -1877,7 +1711,7 @@ draw_ui(struct nk_context* ctx, struct websocket_server* server, struct vehicle_
             if (timeline_slider_changed)
             {
                 stream->simulated_seconds = (double)timeline_value;
-                stream->next_frame_at_ms = 0.0;
+                stream->next_frame_at_us = 0.0;
                 *timeline_changed = true;
             }
         }
@@ -1907,6 +1741,7 @@ glfw_error_callback(int code, const char* description)
 int
 App(int argc, char** argv)
 {
+    prof_scope_marker;
     (void)argc;
     (void)argv;
     GLFWwindow* window = NULL;
@@ -2021,7 +1856,6 @@ App(int argc, char** argv)
         prof_frame_marker;
         prof_scope_marker_named("simulator_frame");
         U64 now_us = os_now_microseconds();
-        uint64_t now_ms = now_us / 1000;
         bool timeline_changed = false;
         int framebuffer_width = 0;
         int framebuffer_height = 0;
@@ -2043,9 +1877,9 @@ App(int argc, char** argv)
             window_height = 320;
         }
 
-        stream_update_clock(&stream, now_ms);
+        stream_update_clock(&stream, now_us);
         server_poll(&server);
-        stream_send_frame(&stream, &server, &playback_db, now_ms);
+        stream_send_frame(&stream, &server, &playback_db, now_us);
         draw_ui(ctx, &server, &stream, &playback_db, &timeline_changed, window_width, window_height);
 
         if (timeline_changed)

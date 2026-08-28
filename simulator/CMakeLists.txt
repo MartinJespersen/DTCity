@@ -64,6 +64,11 @@ target_include_directories(sqlite3
         ${CMAKE_CURRENT_SOURCE_DIR}/third_party/sqlite
 )
 
+target_compile_definitions(sqlite3
+    PRIVATE
+        SQLITE_ENABLE_RTREE
+)
+
 target_link_libraries(sqlite3 PUBLIC Threads::Threads)
 
 if(NOT WIN32)

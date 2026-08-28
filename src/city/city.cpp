@@ -436,7 +436,7 @@ city_update(City* city, Buffer<city::Coordinate> new_agent_coords, async::Thread
             }
             for (Agent& agent : *agent_sim->agents_active)
             {
-                if (((S64)ctx->io->frame_count - (S64)agent.latest_update_frame) < (frame_rate * 10)) // Do not add agent.fter 2 seconds without a streaming update
+                if (((S64)ctx->io->frame_count - (S64)agent.latest_update_frame) < (frame_rate * 2)) // Do not add agent after 2 seconds without a streaming update
                 {
                     B32 visible = ui::frustum_check_from_bounding_box(&camera->frustum_planes, agent.world_bounds);
                     constexpr F32 hover_icon_scale_factor = 10.0f;
@@ -447,16 +447,16 @@ city_update(City* city, Buffer<city::Coordinate> new_agent_coords, async::Thread
                         chunk_list_insert(scratch.arena, transform_list, agent.model_matrix);
                     }
                 }
-            }
 
-            for (U32 agent_cfg_idx = 0; agent_cfg_idx < ArrayCount(agent_sim->agent_config); ++agent_cfg_idx)
-            {
-                AgentModelRenderInfo* model_render_info = &models[agent_cfg_idx];
+                for (U32 agent_cfg_idx = 0; agent_cfg_idx < ArrayCount(agent_sim->agent_config); ++agent_cfg_idx)
+                {
+                    AgentModelRenderInfo* model_render_info = &models[agent_cfg_idx];
 
-                Buffer<render::Transform> transform_buffer = buffer_from_chunk_list(draw::draw_frame_arena_get(), transform_lists[agent_cfg_idx]);
-                render::BufferInfo instance_buffer_info = render::BufferInfo(transform_buffer, render::BufferType_Vertex | render::BufferType_StorageBuffer);
+                    Buffer<render::Transform> transform_buffer = buffer_from_chunk_list(draw::draw_frame_arena_get(), transform_lists[agent_cfg_idx]);
+                    render::BufferInfo instance_buffer_info = render::BufferInfo(transform_buffer, render::BufferType_Vertex | render::BufferType_StorageBuffer);
 
-                city::agent_draw(camera_handle_void, model_render_info->geometry, model_render_info->texture_handles, &instance_buffer_info);
+                    city::agent_draw(camera_handle_void, model_render_info->geometry, model_render_info->texture_handles, &instance_buffer_info);
+                }
             }
         }
     }

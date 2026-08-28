@@ -95,6 +95,20 @@
       }
     },
     {
+      "name": "release-simulator-windows",
+      "displayName": "Release Simulator (Windows)",
+      "binaryDir": "${sourceDir}/simulator/build/win/release",
+      "generator": "Ninja",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "BUILD_DEBUG": "OFF",
+        "ASAN_ENABLED": "OFF",
+        "BUILD_CITY": "OFF",
+        "BUILD_SIMULATOR": "ON",
+        "TRACY_PROFILE_ENABLE": "OFF"
+      }
+    },
+    {
       "name": "release-linux",
       "displayName": "Release (Linux)",
       "inherits": "release-base",
@@ -153,6 +167,14 @@
     {
       "name": "profile-simulator-windows",
       "configurePreset": "profile-simulator-windows",
+      "targets": [
+        "Simulator"
+      ],
+      "jobs": 0
+    },
+    {
+      "name": "release-simulator-windows",
+      "configurePreset": "release-simulator-windows",
       "targets": [
         "Simulator"
       ],
