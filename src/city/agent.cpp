@@ -165,7 +165,7 @@ agent_sim_update(AgentSim* agent_sim, cesium::TilesetRenderer* renderer, Buffer<
             agent_ptr = map_insert(agent_sim->agent_map, coord->id, agent_map_item);
 
             agent->cartographic_coords = glm::dvec2(coord->lon, coord->lat);
-            _agent_height_update_async(renderer, agent);
+            _agent_height_updates_start(agent_sim, renderer);
         }
         agent->cartographic_coords = glm::dvec2(coord->lon, coord->lat);
 
@@ -221,75 +221,78 @@ agent_draw(render::MappedHandle<void> camera_handle, Buffer<render::AgentModelIn
 g_internal void
 _agent_height_updates_start(AgentSim* agent_sim, cesium::TilesetRenderer* renderer)
 {
-    if (agent_sim->agents_active == 0)
+    if (agent_sim->agents_active == 0 || agent_sim->agents_active->size == 0 || agent_sim->height_update_in_flight)
     {
         return;
     }
 
-    for (Agent& agent : *agent_sim->agents_active)
-    {
-        agent.height_stop = false;
-        _agent_height_update_async(renderer, &agent);
-    }
+    agent_sim->height_updates_stop = false;
+    _agent_height_update_async(renderer, agent_sim);
 }
 
 g_internal void
 _agent_height_updates_stop(AgentSim* agent_sim)
 {
-    for (Agent& agent : *agent_sim->agents_active)
-    {
-        agent.height_stop = true;
-    }
+    agent_sim->height_updates_stop = true;
 }
 
 // TODO: This could be written as a general height calculation inside the cesium layer
 g_internal void
-_agent_height_update_async(cesium::TilesetRenderer* renderer, Agent* agent)
+_agent_height_update_async(cesium::TilesetRenderer* renderer, AgentSim* agent_sim)
 {
-    if (agent->height_stop || renderer->height_sample_stop)
+    if (agent_sim->height_updates_stop || renderer->height_sample_stop)
     {
+        agent_sim->height_update_in_flight = false;
         return;
     }
 
-    std::vector<CesiumAsync::Future<Cesium3DTilesSelection::SampleHeightResult>> height_futures;
+    std::vector<CesiumGeospatial::Cartographic> agent_positions;
+    std::vector<Agent*> sampled_agents;
+    agent_positions.reserve(agent_sim->agents_active->size);
+    sampled_agents.reserve(agent_sim->agents_active->size);
 
-    CesiumGeospatial::Cartographic agent_pos(glm::radians(agent->cartographic_coords.x), glm::radians(agent->cartographic_coords.y), 0);
-    for (U64 i = 0; i < renderer->tilesets.size; ++i)
+    for (Agent& agent : *agent_sim->agents_active)
     {
-        height_futures.emplace_back(renderer->tilesets.data[i]->sampleHeightMostDetailed({agent_pos}));
+        if (!agent.done)
+        {
+            CesiumGeospatial::Cartographic agent_position(glm::radians(agent.cartographic_coords.x), glm::radians(agent.cartographic_coords.y), 0.0);
+            agent_positions.emplace_back(agent_position);
+            sampled_agents.emplace_back(&agent);
+        }
     }
 
-    renderer->async_system.all(std::move(height_futures))
+    if (agent_positions.empty())
+    {
+        agent_sim->height_update_in_flight = false;
+        return;
+    }
+
+    agent_sim->height_update_in_flight = true;
+    CesiumAsync::Future<Cesium3DTilesSelection::SampleHeightResult> height_future = renderer->tilesets.data[0]->sampleHeightMostDetailed(std::move(agent_positions));
+    std::move(height_future)
         .thenInMainThread(
-            [renderer, agent](std::vector<Cesium3DTilesSelection::SampleHeightResult>&& results)
+            [renderer, agent_sim, sampled_agents = std::move(sampled_agents)](Cesium3DTilesSelection::SampleHeightResult&& result)
             {
-                F64 max_height = 0.0;
-                B32 has_height = false;
-                for (U32 i = 0; i < results.size(); ++i)
+                Assert(result.positions.size() == sampled_agents.size());
+                Assert(result.sampleSuccess.size() == sampled_agents.size());
+                for (U64 agent_idx = 0; agent_idx < sampled_agents.size(); ++agent_idx)
                 {
-                    Cesium3DTilesSelection::SampleHeightResult* result = &results[i];
-                    B32 result_success = result->sampleSuccess.size() > 0 && result->sampleSuccess[0];
-                    if (result_success)
+                    if (result.sampleSuccess[agent_idx])
                     {
-                        F64 height = cesium::sample_height_from_result(*result, "agent");
-                        if (!has_height || height > max_height)
-                        {
-                            max_height = height;
-                            has_height = true;
-                        }
+                        Agent* agent = sampled_agents[agent_idx];
+                        agent->height = (F32)result.positions[agent_idx].height;
                     }
                 }
 
-                if (has_height)
-                {
-                    agent->height = (F32)max_height;
-                }
-                if (!agent->height_stop)
-                {
-                    _agent_height_update_async(renderer, agent);
-                }
+                agent_sim->height_update_in_flight = false;
+                _agent_height_update_async(renderer, agent_sim);
             })
-        .catchInMainThread([](std::exception&& e) { DEBUG_LOG("Height offset sampling failed: %s\n", e.what()); });
+        .catchInMainThread(
+            [agent_sim](std::exception&& e)
+            {
+                agent_sim->height_update_in_flight = false;
+                DEBUG_LOG("Agent height sampling failed: %s\n", e.what());
+            });
 }
 
 // assumes forward direction is in the x direction and model coordinate system having +Y as upd and +Z being up in world coordinate system.

@@ -39,6 +39,7 @@ struct Camera
     F32 fov;
     F32 yaw;
     F32 pitch;
+    Vec2U32 cur_framebuffer_extent;
 };
 
 g_internal void
@@ -53,4 +54,6 @@ frustum_check_from_bounding_box(Frustum* frustum, Rng3F32 bbox);
 
 g_internal void
 _frustum_planes_calculate(Frustum* out_frustum, const glm::mat4 matrix);
+g_internal bool
+is_bounding_sphere_to_be_culled(Camera& camera, Rng3F32& bbox);
 } // namespace ui

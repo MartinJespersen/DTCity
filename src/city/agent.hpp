@@ -18,7 +18,7 @@ struct Agent
     U64 latest_update_frame;
     VehicleType vehicle_type;
     F32 height;
-    B32 height_stop;
+    bool done;
 
     // updated per frame
     Rng3F32 world_bounds;
@@ -50,6 +50,8 @@ struct AgentSim
     String8 texture_dir;
     U32 agent_count;
     U32 max_agent_count;
+    B32 height_updates_stop;
+    B32 height_update_in_flight;
 
     AgentConfig agent_config[(S32)VehicleType::Count];
     AgentModelRenderInfo models[(S32)VehicleType::Count];
@@ -75,5 +77,5 @@ _agent_height_updates_start(AgentSim* agent_sim, cesium::TilesetRenderer* render
 g_internal void
 _agent_height_updates_stop(AgentSim* agent_sim);
 g_internal void
-_agent_height_update_async(cesium::TilesetRenderer* renderer, Agent* agent);
+_agent_height_update_async(cesium::TilesetRenderer* renderer, AgentSim* agent_sim);
 } // namespace city

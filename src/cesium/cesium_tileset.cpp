@@ -934,8 +934,8 @@ tile_render_data_from_gltf(const CesiumGltf::Model& model, const glm::dmat4& ece
 // Tileset Renderer Lifecycle
 //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-g_internal TilesetRendererCreateContext
-_tileset_renderer_create_context(TilesetRenderer* tileset, async::ThreadPool* threads, F64 origin_longitude, F64 origin_latitude, F64 origin_height)
+g_internal void
+_tileset_renderer_initialize(TilesetRenderer* tileset, async::ThreadPool* threads, F64 origin_longitude, F64 origin_latitude, F64 origin_height)
 {
     // Register all tile content types
     Cesium3DTilesContent::registerAllTileContentTypes();
@@ -945,15 +945,10 @@ _tileset_renderer_create_context(TilesetRenderer* tileset, async::ThreadPool* th
     tileset->task_processor = task_processor;
     std::shared_ptr<CesiumAsync::ITaskProcessor> task_processor_ref(tileset->task_processor, [](CesiumAsync::ITaskProcessor*) {});
 
-    // Create asset accessor using CesiumCurl
-    std::shared_ptr<CesiumAsync::IAssetAccessor> asset_accessor = std::make_shared<CesiumCurl::CurlAssetAccessor>();
-
     // Create async system
     tileset->allocator->place(&tileset->async_system, task_processor_ref);
 
     tileset->credit_system = tileset->allocator->place<CesiumUtility::CreditSystem>();
-
-    std::shared_ptr<CesiumUtility::CreditSystem> credit_system_ref(tileset->credit_system, [](CesiumUtility::CreditSystem*) {});
 
     // Set up local coordinate system centered at the origin
     CesiumGeospatial::Cartographic origin_cartographic(glm::radians(origin_longitude), glm::radians(origin_latitude), origin_height);
@@ -962,6 +957,14 @@ _tileset_renderer_create_context(TilesetRenderer* tileset, async::ThreadPool* th
                                                                          CesiumGeospatial::LocalDirection::Up);
     tileset->ecef_to_local = local_coord_system.getEcefToLocalTransformation();
     tileset->local_to_ecef = local_coord_system.getLocalToEcefTransformation();
+}
+
+g_internal Cesium3DTilesSelection::TilesetExternals
+_tileset_externals_create(TilesetRenderer* tileset)
+{
+    std::shared_ptr<CesiumAsync::IAssetAccessor> asset_accessor = std::make_shared<CesiumCurl::CurlAssetAccessor>();
+    std::shared_ptr<CesiumAsync::ITaskProcessor> task_processor_ref(tileset->task_processor, [](CesiumAsync::ITaskProcessor*) {});
+    std::shared_ptr<CesiumUtility::CreditSystem> credit_system_ref(tileset->credit_system, [](CesiumUtility::CreditSystem*) {});
 
     // Create prepare renderer resources (pass coordinate system for ECEF->local transforms)
     auto prepare_renderer_resources = std::make_shared<DTCityPrepareRendererResources>(tileset->ecef_to_local, tileset);
@@ -973,13 +976,24 @@ _tileset_renderer_create_context(TilesetRenderer* tileset, async::ThreadPool* th
         logger->flush_on(spdlog::level::warn);
     }
 
-    Cesium3DTilesSelection::TilesetExternals externals{asset_accessor, prepare_renderer_resources, tileset->async_system, credit_system_ref, logger, nullptr};
+    Cesium3DTilesSelection::TilesetExternals result{asset_accessor, prepare_renderer_resources, tileset->async_system, credit_system_ref, logger, nullptr};
+    return result;
+}
 
-    Cesium3DTilesSelection::TilesetOptions options;
-    options.maximumScreenSpaceError = 16.0;
-    options.maximumSimultaneousTileLoads = 6;
-    options.loadingDescendantLimit = 6;
-    options.loadErrorCallback = [](const Cesium3DTilesSelection::TilesetLoadFailureDetails& details)
+g_internal Cesium3DTilesSelection::TilesetOptions
+_tileset_options_create(U64 cache_byte_size)
+{
+    Cesium3DTilesSelection::TilesetOptions result;
+    result.enableLodTransitionPeriod = true;
+    result.lodTransitionLength = 0.35f;
+    result.maximumScreenSpaceError = 16.0;
+    result.preloadSiblings = true;
+    result.maximumSimultaneousTileLoads = 6;
+    result.loadingDescendantLimit = 6;
+    result.forbidHoles = true;
+    result.renderTilesUnderCamera = false;
+    result.maximumCachedBytes = cache_byte_size;
+    result.loadErrorCallback = [](const Cesium3DTilesSelection::TilesetLoadFailureDetails& details)
     {
         const char* load_type = "Unknown";
         switch (details.type)
@@ -992,8 +1006,6 @@ _tileset_renderer_create_context(TilesetRenderer* tileset, async::ThreadPool* th
 
         exit_with_error("Cesium load error: type=%s status=%u message=%s\n", load_type, (U32)details.statusCode, details.message.c_str());
     };
-
-    TilesetRendererCreateContext result = {tileset, externals, options};
     return result;
 }
 
@@ -1011,6 +1023,24 @@ sample_height_from_result(const Cesium3DTilesSelection::SampleHeightResult& resu
         DEBUG_LOG("Tileset height sample [%s] warning: %s\n", label, warning.c_str());
     }
     return sampled_height;
+}
+
+g_internal Rng3F32
+_tile_local_bounds_get(const Cesium3DTilesSelection::Tile& tile, const CesiumGeospatial::Ellipsoid& ellipsoid, const glm::dmat4& ecef_to_local)
+{
+    const Cesium3DTilesSelection::BoundingVolume& bounding_volume = tile.getBoundingVolume();
+    CesiumGeometry::OrientedBoundingBox tile_box_ecef = Cesium3DTilesSelection::getOrientedBoundingBoxFromBoundingVolume(bounding_volume, ellipsoid);
+    CesiumGeometry::OrientedBoundingBox tile_box_local = tile_box_ecef.transform(ecef_to_local);
+    CesiumGeometry::AxisAlignedBox tile_aabb_local = tile_box_local.toAxisAligned();
+
+    Rng3F32 result = {};
+    result.x0 = (F32)tile_aabb_local.minimumX;
+    result.y0 = (F32)tile_aabb_local.minimumY;
+    result.z0 = (F32)tile_aabb_local.minimumZ;
+    result.x1 = (F32)tile_aabb_local.maximumX;
+    result.y1 = (F32)tile_aabb_local.maximumY;
+    result.z1 = (F32)tile_aabb_local.maximumZ;
+    return result;
 }
 
 // samples the custom-geometry and terrain surface heights at the city center and
@@ -1076,40 +1106,32 @@ tileset_renderer_create(TilesetRenderer* tileset, async::ThreadPool* threads, St
         }
     }
 
-    // setup tilesets
-    TilesetRendererCreateContext create_context = _tileset_renderer_create_context(tileset, threads, origin_longitude, origin_latitude, origin_height);
-    create_context.options.enableLodTransitionPeriod = true;
-    create_context.options.lodTransitionLength = 0.35f;
-
-    create_context.options.maximumScreenSpaceError = 16;
-    create_context.options.preloadSiblings = true;
-    create_context.options.loadingDescendantLimit = 6;
-    create_context.options.forbidHoles = true;
     U32 tileset_count = 1;
     if (custom_geometry_enabled)
     {
         tileset_count = 2;
         cache_byte_size = cache_byte_size >> 1; // divide by two
     }
-    create_context.options.maximumCachedBytes = cache_byte_size;
-    create_context.renderer->tilesets = buffer_alloc<Cesium3DTilesSelection::Tileset*>(tileset->allocator->arena, tileset_count);
+
+    // setup tilesets
+    _tileset_renderer_initialize(tileset, threads, origin_longitude, origin_latitude, origin_height);
+    Cesium3DTilesSelection::TilesetExternals externals = _tileset_externals_create(tileset);
+    Cesium3DTilesSelection::TilesetOptions options = _tileset_options_create(cache_byte_size);
+    tileset->tilesets = buffer_alloc<Cesium3DTilesSelection::Tileset*>(tileset->allocator->arena, tileset_count);
 
     bool is_map_tile = true;
-    create_context.options.rendererOptions = is_map_tile;
-    create_context.renderer->tilesets.data[0] =
-        tileset->allocator->place<Cesium3DTilesSelection::Tileset>(create_context.externals, ion_terrain_asset_id, _std_string_from_str8(ion_access_token), create_context.options);
-    _ion_raster_overlay_example_add_if_present(create_context.renderer->tilesets.data[0]);
+    options.rendererOptions = is_map_tile;
+    tileset->tilesets.data[0] = tileset->allocator->place<Cesium3DTilesSelection::Tileset>(externals, ion_terrain_asset_id, _std_string_from_str8(ion_access_token), options);
+    _ion_raster_overlay_example_add_if_present(tileset->tilesets.data[0]);
 
     // Create the tileset for custom geometry
-    if (create_context.renderer->tilesets.size > 1)
+    if (tileset->tilesets.size > 1)
     {
         is_map_tile = false;
-        create_context.options.rendererOptions = is_map_tile;
-        create_context.options.loadingDescendantLimit = 6;
-        create_context.options.maximumScreenSpaceError = 16;
-        create_context.renderer->tilesets.data[1] = tileset->allocator->place<Cesium3DTilesSelection::Tileset>(create_context.externals, (const char*)url.str, create_context.options);
+        options.rendererOptions = is_map_tile;
+        tileset->tilesets.data[1] = tileset->allocator->place<Cesium3DTilesSelection::Tileset>(externals, (const char*)url.str, options);
         CesiumGeospatial::Cartographic center_position(glm::radians(origin_longitude), glm::radians(origin_latitude), 0.0);
-        _height_offset_sample_async(create_context.renderer, center_position);
+        _height_offset_sample_async(tileset, center_position);
     }
 }
 
@@ -1277,11 +1299,12 @@ tileset_update_view(TilesetRenderer* renderer, ui::Camera* camera, Vec2U32 viewp
     // Compute unflipped projection matrix for Cesium (without Vulkan Y-flip)
     F64 aspect_ratio = Max(1, (F64)viewport_size.x) / Max(1.0, (F64)viewport_size.y);
     F64 fov_rad = glm::radians((F64)camera->fov);
+    F64 horizontal_fov = 2.0 * atan(tan(fov_rad * 0.5) * aspect_ratio);
 
     // Use the position/direction/up ViewState constructor
     Cesium3DTilesSelection::ViewState view_state = Cesium3DTilesSelection::ViewState(camera_pos_ecef, camera_dir_ecef, camera_up_ecef, glm::dvec2(viewport_size.x, viewport_size.y),
-                                                                                     fov_rad * aspect_ratio, // horizontal FOV
-                                                                                     fov_rad);               // vertical FOV
+                                                                                     horizontal_fov, // horizontal FOV
+                                                                                     fov_rad);       // vertical FOV
 
     renderer->async_system.dispatchMainThreadTasks();
 
@@ -1295,11 +1318,26 @@ tileset_update_view(TilesetRenderer* renderer, ui::Camera* camera, Vec2U32 viewp
         prof_scope_marker_named("tile load loop");
         for (U32 i = 0; i < renderer->tilesets.size; ++i)
         {
+            prof_scope_marker_named("Tile Load Loop Iteration");
             const Cesium3DTilesSelection::ViewUpdateResult& result = renderer->tilesets.data[i]->updateViewGroup(renderer->tilesets.data[i]->getDefaultViewGroup(), views, (F32)delta_time);
-            renderer->tilesets.data[i]->loadTiles();
+
+            {
+                prof_scope_marker_named("Cesium LoadTiles");
+                renderer->tilesets.data[i]->loadTiles();
+            }
 
             for (const Cesium3DTilesSelection::Tile* tile : result.tilesToRenderThisFrame)
             {
+                prof_scope_marker_named("Tile to Short");
+                const CesiumGeospatial::Ellipsoid& ellipsoid = renderer->tilesets.data[i]->getEllipsoid();
+                Rng3F32 tile_bounds = _tile_local_bounds_get(*tile, ellipsoid, renderer->ecef_to_local);
+
+                B32 visible = ui::frustum_check_from_bounding_box(&camera->frustum_planes, tile_bounds);
+
+                if (!visible)
+                {
+                    continue;
+                }
                 _tileset_renderer_tile_to_show_push(renderer, *tile, false);
             }
 

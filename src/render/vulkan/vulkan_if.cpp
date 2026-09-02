@@ -798,8 +798,10 @@ tile_pipeline_add(render::TilePipelineData* pipeline_input)
     }
     else
     {
-        DEBUG_LOG("overlay texture: %d, vertex buffer: %d, index buffer: %d, base texture: %d, colormap texture: %d", overlay_tex_loaded, vertex_loaded, index_loaded, base_texture_loaded,
-                  colormap_loaded);
+        static U32 count = 0;
+        count++;
+        INFO_LOG("overlay texture: %d, vertex buffer: %d, index buffer: %d, base texture: %d, colormap texture: %d, count: %d", overlay_tex_loaded, vertex_loaded, index_loaded, base_texture_loaded,
+                 colormap_loaded, count);
     }
 }
 

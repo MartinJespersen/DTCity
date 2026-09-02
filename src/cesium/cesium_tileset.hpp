@@ -96,13 +96,6 @@ struct TilesetRenderer
     RasterRenderResource* active_raster_resource_first;
 };
 
-struct TilesetRendererCreateContext
-{
-    TilesetRenderer* renderer;
-    Cesium3DTilesSelection::TilesetExternals externals;
-    Cesium3DTilesSelection::TilesetOptions options;
-};
-
 // Lifecycle
 g_internal void
 tileset_renderer_create(TilesetRenderer* tileset, async::ThreadPool* threads, String8 url, F64 origin_longitude, F64 origin_latitude, F64 origin_height, bool custom_geometry_enabled,
@@ -132,6 +125,18 @@ tileset_renderer_free_handles(TileRenderResources* list);
 
 g_internal void
 tileset_render_resources_release(TileRenderResources* list);
+
+g_internal Rng3F32
+_tile_local_bounds_get(const Cesium3DTilesSelection::Tile& tile, const CesiumGeospatial::Ellipsoid& ellipsoid, const glm::dmat4& ecef_to_local);
+
+g_internal void
+_tileset_renderer_initialize(TilesetRenderer* tileset, async::ThreadPool* threads, F64 origin_longitude, F64 origin_latitude, F64 origin_height);
+
+g_internal Cesium3DTilesSelection::TilesetExternals
+_tileset_externals_create(TilesetRenderer* tileset);
+
+g_internal Cesium3DTilesSelection::TilesetOptions
+_tileset_options_create(U64 cache_byte_size);
 
 g_internal void
 _tileset_renderer_tile_to_show_push(TilesetRenderer* renderer, const Cesium3DTilesSelection::Tile& tile, B32 is_fading_out);

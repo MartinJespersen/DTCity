@@ -440,11 +440,14 @@ city_update(City* city, Buffer<city::Coordinate> new_agent_coords, async::Thread
                 {
                     B32 visible = ui::frustum_check_from_bounding_box(&camera->frustum_planes, agent.world_bounds);
                     constexpr F32 hover_icon_scale_factor = 10.0f;
-                    agent_icon_add(agent, hover_icon_mesh_handle, hover_icon_scale_factor);
+                    agent_icon_add(agent, hover_icon_mesh_handle, hover_icon_scale_factor); // TODO: Frustum cull icon as well
                     if (visible)
                     {
-                        ChunkList<render::Transform>* transform_list = transform_lists[enum_idx(agent.vehicle_type)];
-                        chunk_list_insert(scratch.arena, transform_list, agent.model_matrix);
+                        if (ui::is_bounding_sphere_to_be_culled(*camera, agent.world_bounds) == false)
+                        {
+                            ChunkList<render::Transform>* transform_list = transform_lists[enum_idx(agent.vehicle_type)];
+                            chunk_list_insert(scratch.arena, transform_list, agent.model_matrix);
+                        }
                     }
                 }
 

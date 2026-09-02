@@ -67,6 +67,8 @@ camera_update(Camera* camera, io::IO* input, F64 time, Vec2S32 extent, bool enab
     camera->projection_matrix = glm::perspective(glm::radians(camera->fov), aspect_ratio, 0.1f, 5000.0f);
     camera->projection_matrix[1][1] *= -1.0f;
 
+    camera->cur_framebuffer_extent = vec_2u32((U32)Max(extent.x, 0), (U32)Max(extent.y, 0));
+
     Vec2U32 camera_framebuffer_dim = vec_2u32((U32)Max(extent.x, 1), (U32)Max(extent.y, 1));
     render::MappedHandle<ui::CameraUniformBuffer> camera_handle = camera->mut_handles;
     glm::mat4 transform = camera->projection_matrix * camera->view_matrix;
@@ -86,6 +88,32 @@ _camera_uniform_buffer_update(ui::Camera* camera, render::MappedHandle<CameraUni
     ubo.proj = camera->projection_matrix;
     ubo.frustum = camera->frustum_planes;
     render::mapped_buffer_add(mut_handle, &ubo);
+}
+
+g_internal bool
+is_bounding_sphere_to_be_culled(Camera& camera, Rng3F32& bbox)
+{
+    glm::vec3 bbox_min = glm::vec3(bbox.x0, bbox.y0, bbox.z0);
+    glm::vec3 bbox_max = glm::vec3(bbox.x1, bbox.y1, bbox.z1);
+    glm::vec3 center = (bbox_min + bbox_max) * 0.5f;
+
+    F32 world_diameter = glm::length(bbox_max - bbox_min);
+    F32 radius = world_diameter * 0.5f;
+
+    glm::vec3 view_space_center = glm::vec3(camera.view_matrix * glm::vec4(center, 1.0f));
+
+    F32 depth = -view_space_center.z;
+    F32 nearest_depth = depth - radius;
+
+    if (nearest_depth <= 0.0f)
+    {
+        return false;
+    }
+
+    F32 projection_scale = AbsF32(camera.projection_matrix[1][1]);
+    F32 pixel_diameter = world_diameter * (F32)camera.cur_framebuffer_extent.y * projection_scale / (2.0f * nearest_depth);
+
+    return pixel_diameter < 10.0f;
 }
 
 g_internal bool
@@ -132,10 +160,10 @@ _frustum_planes_calculate(Frustum* out_frustum, const glm::mat4 matrix)
     out_frustum->planes[PlaneType_Btm].z = matrix[2].w + matrix[2].y;
     out_frustum->planes[PlaneType_Btm].w = matrix[3].w + matrix[3].y;
 
-    out_frustum->planes[PlaneType_Back].x = matrix[0].w + matrix[0].z;
-    out_frustum->planes[PlaneType_Back].y = matrix[1].w + matrix[1].z;
-    out_frustum->planes[PlaneType_Back].z = matrix[2].w + matrix[2].z;
-    out_frustum->planes[PlaneType_Back].w = matrix[3].w + matrix[3].z;
+    out_frustum->planes[PlaneType_Back].x = matrix[0].z;
+    out_frustum->planes[PlaneType_Back].y = matrix[1].z;
+    out_frustum->planes[PlaneType_Back].z = matrix[2].z;
+    out_frustum->planes[PlaneType_Back].w = matrix[3].z;
 
     out_frustum->planes[PlaneType_Front].x = matrix[0].w - matrix[0].z;
     out_frustum->planes[PlaneType_Front].y = matrix[1].w - matrix[1].z;
