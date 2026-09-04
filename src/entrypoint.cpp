@@ -207,8 +207,7 @@ dt_main_loop(void* ptr)
 
     constexpr F32 agent_hover_icon_radius = 1.0f;
     constexpr F32 agent_hover_icon_height = 2.0f;
-    render::PrimitiveMesh agent_hover_icon_mesh =
-        geometry::hover_icon_mesh_create(ctx->arena, agent_hover_icon_radius, agent_hover_icon_height, 0.0f, city::agent_hover_icon_color);
+    render::PrimitiveMesh agent_hover_icon_mesh = geometry::hover_icon_mesh_create(ctx->arena, agent_hover_icon_radius, agent_hover_icon_height, 0.0f, city::agent_hover_icon_color);
     render::MeshHandle agent_hover_icon_mesh_handle = render::mesh_handles_create_and_upload(agent_hover_icon_mesh);
 
     // city building ////////////////////////////////////////////
@@ -355,7 +354,9 @@ dt_main_loop(void* ptr)
     while (thread_pool_has_pending_work(ctx->thread_pool))
     {
     }
+    render::gpu_work_update();
     render::gpu_work_done_wait();
+    render::gpu_work_update();
     for (U32 i = 0; i < ctx->camera_container->size; ++i)
     {
         ItemHeader<ui::Camera>* camera_item = &ctx->camera_container->items[i];
@@ -372,7 +373,8 @@ dt_main_loop(void* ptr)
     render::handle_destroy(agent_hover_icon_mesh_handle.index_buffer_handle);
     while (ctx->tile_count > 0)
     {
-        city::tile_load_update();
+        render::gpu_work_update();
+        city::tile_load_pending_work_update();
     }
     render::gpu_work_done_wait();
     draw::draw_release();

@@ -13,7 +13,7 @@ In the src directory all sub-directories are layers that are all responsible for
 - Avoid making small function that just returns a single value. Instead just create a variable.
 - You should never sleep at any point as it will block other stuff that needs to run. Find another way or cry to me about it.
 - functions that are not used outside a namespace (private) should have a name starting with an underscore.
-- All private functions should be placed at the bottom of the header file (declaration).
+- All private functions should be placed at the bottom of the header file (declaration) and source file.
 - When opening a file or other resource that needs a close immediatly use the defer function.
 - Make sure to use the base layer or os_core functions as when needed.
 - When you make changes to one OS in the os_core layers always make sure the changes work for the other OS present.
@@ -28,6 +28,8 @@ In the src directory all sub-directories are layers that are all responsible for
 - Always look for ways to merge code paths and avoid duplication of code.
 - For long code snippets, make sure to add comments to code sections.
 - For the most part use Assert instead of AssertAlways
+- limit the number of memory arena's, and only create a new one when another arena does not have a similar lifetime.
+- The frame loop should never wait for resources, task, etc. All blocking operations should be avoided.
 
 # Code Suggestions
 - When you find a name (e.g. variable or function) that is not concise or explanatory enough, then suggest a better name.
@@ -40,10 +42,9 @@ In the src directory all sub-directories are layers that are all responsible for
 
 # Permissions
 - Never ask for read permission
-- Make your preferred changes instead of writing it in the chat.
 
 # My Setup
-- I mainly use windows and rarely linux.
+- I mainly use windows.
 - I use the Zed editor: https://zed.dev/docs
 
 # Code Design Inspiration Repos

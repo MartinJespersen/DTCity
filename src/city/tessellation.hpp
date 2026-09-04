@@ -114,6 +114,7 @@ struct Bvh
 {
     Arena* arena;
     U32 loads_in_flight;
+    B32 deletion_requested;
 
     RoadSegmentNode* root;
     Buffer<RoadSegmentCorners> road_segment_buffer_sorted;
@@ -132,7 +133,7 @@ struct TileVertexFace
 };
 
 g_internal render::TileMesh
-tessellate_tile_face_for_roads(Arena* arena, city::RoadSegmentNode* root, Buffer<city::RoadSegmentCorners> road_buffer, TileVertexFace& face, U32 MAX_ROADS_PER_FACE = 100);
+tessellate_tile_face_for_roads(Arena* arena, city::RoadSegmentNode* root, Buffer<city::RoadSegmentCorners> road_buffer, TileVertexFace& face);
 
 g_internal bool
 tesselate_roads(Arena* arena, Buffer<render::TileVertex> vertices, Buffer<U32> indices, Bvh& bvh_result, render::TileMesh* out_mesh);

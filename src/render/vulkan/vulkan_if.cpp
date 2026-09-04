@@ -253,12 +253,9 @@ static void
 render_frame(Vec2U32 framebuffer_dim, B32* in_out_framebuffer_resized, Vec2S64 mouse_cursor_pos)
 {
     prof_scope_marker;
+    prof_frame_marker;
     ScratchScope scratch = ScratchScope(0, 0);
     vulkan::Context* vk_ctx = vulkan::ctx_get();
-
-    prof_frame_marker;
-    vulkan::asset_manager_execute_cmds();
-    vulkan::asset_manager_cmd_done_check();
 
     U64 frame_index = vk_ctx->current_frame;
     vmaSetCurrentFrameIndex(vk_ctx->asset_manager->allocator, frame_index);
@@ -379,6 +376,16 @@ render_frame(Vec2U32 framebuffer_dim, B32* in_out_framebuffer_resized, Vec2S64 m
     {
         exit_with_error("failed to present swap chain image!");
     }
+
+    // Finish commands for the next render frame.
+    gpu_work_update();
+}
+
+static void
+gpu_work_update()
+{
+    vulkan::asset_manager_execute_cmds();
+    vulkan::asset_manager_cmd_done_check();
 }
 
 static void

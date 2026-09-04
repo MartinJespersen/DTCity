@@ -136,7 +136,7 @@ _mesh_append(Arena* arena, ChunkList<render::TileVertex>* vertices_chunk_list, C
 }
 
 g_internal render::TileMesh
-tessellate_tile_face_for_roads(Arena* arena, city::RoadSegmentNode* root, Buffer<city::RoadSegmentCorners> road_buffer, TileVertexFace& face, U32 MAX_ROADS_PER_FACE)
+tessellate_tile_face_for_roads(Arena* arena, city::RoadSegmentNode* root, Buffer<city::RoadSegmentCorners> road_buffer, TileVertexFace& face)
 {
     prof_scope_marker;
     ScratchScope scratch = ScratchScope(&arena, 1);
@@ -218,13 +218,17 @@ tessellate_tile_face_for_roads(Arena* arena, city::RoadSegmentNode* root, Buffer
         return {};
     }
 
-    Buffer<geometry::Quad2d> quad_buffer = buffer_from_chunk_list(scratch.arena, candidate_quads);
-    Buffer<U32> road_index_buffer = buffer_from_chunk_list(scratch.arena, candidate_road_indices);
-
-    if (quad_buffer.size > MAX_ROADS_PER_FACE) // Too large triangle faces with too many road crossings should be rejected to reduce tesselation times
+    // Dense, low-detail tile faces can overlap a very large number of roads.
+    // Leave those faces unchanged so tessellation cannot monopolize a worker
+    // indefinitely and delay Cesium tile loading.
+    constexpr U64 maximum_road_intersection_count = 100;
+    if (candidate_quads->total_count > maximum_road_intersection_count)
     {
         return {};
     }
+
+    Buffer<geometry::Quad2d> quad_buffer = buffer_from_chunk_list(scratch.arena, candidate_quads);
+    Buffer<U32> road_index_buffer = buffer_from_chunk_list(scratch.arena, candidate_road_indices);
 
     Buffer<geometry::ClassifiedTriangle2d> partition = geometry::triangle_partition_by_quads(scratch.arena, projected_tri, quad_buffer);
 

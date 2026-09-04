@@ -26,7 +26,7 @@ city_area_streaming_begin(async::ThreadPool* thread_pool, City* city, const Area
     if (ctx->tileset_pool->item_from_handle(city->tileset_handle, &tileset))
     {
         Vec2F64 bbox_center = {.x = (city->bbox.min.x + city->bbox.max.x) * 0.5, .y = (city->bbox.min.y + city->bbox.max.y) * 0.5};
-        cesium::tileset_renderer_create(tileset, thread_pool, city->tileset_url, bbox_center.x, bbox_center.y, 0.0, area_config->custom_geometry_enabled, MB(256));
+        cesium::tileset_renderer_create(tileset, city->tileset_handle, thread_pool, city->tileset_url, bbox_center.x, bbox_center.y, 0.0, area_config->custom_geometry_enabled, MB(256));
         if (city->cars_creation_done)
         {
             _agent_height_updates_start(&city->car_sim, tileset);
@@ -166,7 +166,7 @@ _tile_pipeline_add(cesium::TileDrawBatch* tile, City* city, render::MappedHandle
     }
     tile->render_data.colormap_handle = city->road.colormap_handle;
     tile->render_data.road_segment_buffer_handle = city->road.segment_buffer_handle;
-    tile->render_data.road_test_enabled = city->road_building_done;
+    tile->render_data.road_test_enabled = city->road_building_done && road_overlay_option_idx != RoadOverlayOption_None;
     tile->render_data.camera_handle = render::mapped_handle_erased(camera_handle);
     tile->render_data.overlay_option_idx = road_overlay_option_idx;
     render::tile_pipeline_add(&tile->render_data);
@@ -275,23 +275,21 @@ city_update(City* city, Buffer<city::Coordinate> new_agent_coords, async::Thread
     // - texture handle of texture to use
     //
 
-    // Update and render Cesium 3D Tiles ////////////
-    if (city->road_building_done)
+    cesium::TilesetRenderer* tileset = {};
+    B32 tileset_exists = ctx->tileset_pool->item_from_handle(city->tileset_handle, &tileset);
+
+    if (tileset_exists)
     {
-        city->road.overlay_option_cur = neta_overlay_option;
+        tile_load_update(city, tileset, camera, framebuffer_dim, neta_overlay_option);
+    }
+    else
+    {
+        tile_load_pending_work_update();
     }
 
-    tile_load_update();
-
-    cesium::TilesetRenderer* tileset = {};
-    if (ctx->tileset_pool->item_from_handle(city->tileset_handle, &tileset))
+    // Update and render Cesium 3D Tiles ////////////
+    if (tileset_exists)
     {
-        cesium::tileset_update_view(tileset, camera, framebuffer_dim, ctx->time->time_delta_constant_sec);
-
-        if (city->road_building_done)
-        {
-            tile_load_async(city->road.bvh_handle);
-        }
         if (city->osm_task_done)
         {
             if (!city->no_gui_focus)
@@ -473,18 +471,20 @@ city_release(City* city)
     {
         _agent_height_updates_stop(&city->car_sim);
     }
-    if (city->road.arena)
-    {
-        road_destroy(&city->road);
-    }
-    if (city->osm_network)
-    {
-        osm::osm_release(city->osm_network);
-    }
+
     cesium::TilesetRenderer* tileset = {};
     if (ctx->tileset_pool->item_from_handle(city->tileset_handle, &tileset))
     {
         cesium::tileset_renderer_destroy(tileset);
+    }
+    if (city->road.arena)
+    {
+        road_destroy(&city->road);
+        tile_load_pending_work_update();
+    }
+    if (city->osm_network)
+    {
+        osm::osm_release(city->osm_network);
     }
     if (city->car_sim.allocator)
     {
@@ -561,8 +561,12 @@ road_destroy(Road* road)
     Bvh* bvh = 0;
     if (ctx->polygon_bvh_pool->item_from_handle(road->bvh_handle, &bvh))
     {
-        arena_release(bvh->arena);
-        ctx->polygon_bvh_pool->item_free(road->bvh_handle);
+        bvh->deletion_requested = true;
+        if (bvh->loads_in_flight == 0)
+        {
+            arena_release(bvh->arena);
+            ctx->polygon_bvh_pool->item_free(road->bvh_handle);
+        }
     }
     render::handle_destroy(road->vertex_buffer_handle);
     render::handle_destroy(road->index_buffer_handle);

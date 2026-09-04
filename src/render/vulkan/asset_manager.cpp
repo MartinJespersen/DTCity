@@ -820,6 +820,11 @@ asset_manager_cmd_done_check()
             Assert(thread_input->handles.count > 0);
             render::handle_done_loading(thread_input->handles);
 
+            if (thread_input->gpu_work_done_func)
+            {
+                thread_input->gpu_work_done_func(thread_input);
+            }
+
             for (render::HandleNode* node = thread_input->handles.first; node; node = node->next)
             {
                 if (node->work_on_gpu_done)

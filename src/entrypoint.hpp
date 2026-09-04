@@ -39,6 +39,7 @@ struct Context
     ArrayResourcePool<cesium::TilesetRenderer>* tileset_pool;
     Pow2Freelist* pow2_freelist;
 
+    cesium::TileRenderResources* gpu_work_stack;
     cesium::TileRenderResources* tile_first;
     cesium::TileRenderResources* tile_last;
     U32 tile_count;

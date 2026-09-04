@@ -1,3 +1,10 @@
+# Important changes before committing:
+- make sure the vulkan function are not used in city layer
+
+# Regressions
+* [Medium] Include GPU-pending tile replacements in the global reprocessing limit. Counting only active CPU task nodes allows staging buffers and Vulkan submissions to accumulate after the CPU tasks finish.
+* [Medium] Increment the tile mesh processor generation only when mesh classification inputs change. Changing or re-enabling a shader overlay option should not re-tessellate every tile.
+
 # Project TODO:
 - Improve performance to be able to visualize large simulations.
   - multithreaded addition
@@ -10,8 +17,6 @@
 # Tessellation review findings
 * Keep the current tile buffers active until replacement uploads have completed on the GPU.
 
-# Less urgent changes
-* Reconsider the number of descriptor pools (whether 1 is enough) and the descriptor numbers
 
 # features
 * Some roads are close to brown. Why? OOB?

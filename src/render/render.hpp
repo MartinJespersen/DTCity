@@ -101,7 +101,7 @@ struct HandleList
 ////////////////////////////////
 struct ThreadWorkerCmdCtx;
 typedef void (*ThreadLoadingFunc)(void* data, ThreadWorkerCmdCtx* thread_input);
-typedef void (*ThreadDoneLoadingFunc)(HandleList handles);
+typedef void (*ThreadGpuWorkDoneFunc)(ThreadWorkerCmdCtx* thread_input);
 struct ThreadWorkerCmdCtx
 {
     Arena* arena;
@@ -111,6 +111,7 @@ struct ThreadWorkerCmdCtx
     void* cmd_buffer;
     void* user_data;
     ThreadLoadingFunc loading_func;
+    ThreadGpuWorkDoneFunc gpu_work_done_func;
 };
 /////////////////////////////////
 
@@ -439,6 +440,8 @@ render_ctx_destroy();
 static void
 render_frame(Vec2U32 framebuffer_dim, B32* in_out_framebuffer_resized, Vec2S64 mouse_cursor_pos);
 
+static void
+gpu_work_update();
 static void
 gpu_work_done_wait();
 static void
