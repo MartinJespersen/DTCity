@@ -36,17 +36,7 @@ struct Context
     io::IO* io;
     dt_Time* time;
     ResourcePool<ui::Camera>* camera_container;
-    ArrayResourcePool<cesium::TilesetRenderer>* tileset_pool;
-    Pow2Freelist* pow2_freelist;
-
-    cesium::TileRenderResources* gpu_work_stack;
-    cesium::TileRenderResources* tile_first;
-    cesium::TileRenderResources* tile_last;
-    U32 tile_count;
-    city::TileLoadTaskStateNode* tile_load_task_first;
-    city::TileLoadTaskStateNode* tile_load_task_last;
-    city::TileLoadTaskStateNode* tile_load_task_free_list;
-    ArrayResourcePool<city::Bvh>* polygon_bvh_pool;
+    city::TileLoadState* tile_load_state;
 
     async::ThreadPool* thread_pool;
 };

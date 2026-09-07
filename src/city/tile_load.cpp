@@ -1,24 +1,99 @@
 namespace city
 {
 
+g_internal TileLoadState*
+tile_load_create(async::ThreadPool* thread_pool, U32 tileset_capacity)
+{
+    Assert(thread_pool);
+
+    Arena* arena = arena_alloc();
+    Debug_SetName(arena, "Tile Load State arena");
+    TileLoadState* state = PushStruct(arena, TileLoadState);
+    state->arena = arena;
+    state->thread_pool = thread_pool;
+    state->tileset_pool = ArrayResourcePool<cesium::TilesetRenderer>::create(arena, tileset_capacity);
+    state->polygon_bvh_pool = ArrayResourcePool<Bvh>::create(arena, tileset_capacity);
+    return state;
+}
+
+g_internal void
+tile_load_destroy(TileLoadState* state)
+{
+    Assert(state);
+
+    while (state->task_first || state->tile_count > 0)
+    {
+        render::gpu_work_update();
+        _tile_load_task_completions_update(state);
+    }
+
+    render::gpu_work_done_wait();
+    render::gpu_work_update();
+    arena_release(state->arena);
+}
+
+g_internal ArrayResourcePoolHandle
+tile_load_streaming_begin(TileLoadState* state, String8 tileset_url, Rng2F64 bounds, B32 custom_geometry_enabled, U64 cache_byte_size)
+{
+    Assert(state);
+
+    ArrayResourcePoolHandle tileset_handle = state->tileset_pool->handle_get();
+    cesium::TilesetRenderer* tileset = {};
+    B32 tileset_exists = state->tileset_pool->item_from_handle(tileset_handle, &tileset);
+    Assert(tileset_exists);
+
+    Vec2F64 bounds_center = {.x = (bounds.min.x + bounds.max.x) * 0.5, .y = (bounds.min.y + bounds.max.y) * 0.5};
+    cesium::tileset_renderer_create(tileset, tileset_handle, state->thread_pool, tileset_url, bounds_center.x, bounds_center.y, 0.0, custom_geometry_enabled, cache_byte_size);
+    return tileset_handle;
+}
+
+g_internal void
+tile_load_streaming_end(TileLoadState* state, ArrayResourcePoolHandle tileset_handle)
+{
+    Assert(state);
+
+    cesium::TilesetRenderer* tileset = {};
+    B32 tileset_exists = state->tileset_pool->item_from_handle(tileset_handle, &tileset);
+    if (tileset_exists)
+    {
+        cesium::tileset_renderer_destroy(tileset);
+        state->tileset_pool->item_free(tileset_handle);
+    }
+}
+
 // NOTE: To be called every frame on the render thread for an active city.
 g_internal void
-tile_load_update(City* city, cesium::TilesetRenderer* tileset, ui::Camera* camera, Vec2U32 framebuffer_dim, RoadOverlayOption road_overlay_option)
+tile_load_update(TileLoadState* state, ArrayResourcePoolHandle tileset_handle, ArrayResourcePoolHandle bvh_handle, B32 road_building_done, B32 road_overlay_changed,
+                 RoadOverlayOption road_overlay_option, ui::Camera* camera, F64 delta_time)
 {
-    Assert(city);
-    Assert(tileset);
+    Assert(state);
     Assert(camera);
 
-    Context* ctx = dt_ctx_get();
-    cesium::tileset_update_view(tileset, camera, framebuffer_dim, ctx->time->time_delta_constant_sec);
-    _tile_load_task_completions_update();
+    for (cesium::TilesetRenderer& registered_tileset : *state->tileset_pool)
+    {
+        cesium::tileset_pump_async(&registered_tileset);
+    }
 
-    if (city->road_building_done)
+    cesium::TilesetRenderer* tileset = {};
+    B32 tileset_exists = state->tileset_pool->item_from_handle(tileset_handle, &tileset);
+    if (tileset_exists)
+    {
+        cesium::tileset_update_view(tileset, camera, camera->cur_framebuffer_extent, delta_time);
+    }
+
+    _tile_load_task_completions_update(state);
+
+    if (tileset_exists == false)
+    {
+        return;
+    }
+
+    if (road_building_done)
     {
         if (tileset->tile_mesh_processor.func == 0)
         {
             Bvh* bvh = {};
-            B32 bvh_exists = ctx->polygon_bvh_pool->item_from_handle(city->road.bvh_handle, &bvh);
+            B32 bvh_exists = state->polygon_bvh_pool->item_from_handle(bvh_handle, &bvh);
             Assert(bvh_exists);
 
             cesium::TileMeshProcessor mesh_processor = {_tile_load_road_mesh_process, bvh};
@@ -27,8 +102,7 @@ tile_load_update(City* city, cesium::TilesetRenderer* tileset, ui::Camera* camer
 
         B32 road_overlay_enabled = road_overlay_option != RoadOverlayOption_None;
         B32 road_overlay_was_enabled = tileset->tile_mesh_processor_enabled.load(std::memory_order_acquire);
-        B32 road_overlay_option_changed = city->road.overlay_option_cur != road_overlay_option;
-        B32 mesh_processor_changed = road_overlay_was_enabled == false || road_overlay_option_changed;
+        B32 mesh_processor_changed = road_overlay_was_enabled == false || road_overlay_changed;
         if (road_overlay_enabled && mesh_processor_changed)
         {
             tileset->tile_mesh_processor_generation.fetch_add(1, std::memory_order_release);
@@ -37,28 +111,34 @@ tile_load_update(City* city, cesium::TilesetRenderer* tileset, ui::Camera* camer
         if (road_overlay_enabled)
         {
             U64 mesh_processor_generation = tileset->tile_mesh_processor_generation.load(std::memory_order_acquire);
-            _tile_load_stale_meshes_schedule(tileset, city->tileset_handle, city->road.bvh_handle, mesh_processor_generation);
+            _tile_load_stale_meshes_schedule(state, tileset, tileset_handle, bvh_handle, mesh_processor_generation);
         }
-        city->road.overlay_option_cur = road_overlay_option;
     }
 }
 
 g_internal void
-tile_load_pending_work_update()
+tile_load_debug_ui_draw(TileLoadState* state, ArrayResourcePoolHandle tileset_handle)
 {
-    _tile_load_task_completions_update();
+    Assert(state);
+
+    ImGui::Text("Cesium Tiles Alive: List Count: %d", state->tile_count);
+
+    cesium::TilesetRenderer* tileset = {};
+    B32 tileset_exists = state->tileset_pool->item_from_handle(tileset_handle, &tileset);
+    if (tileset_exists)
+    {
+        ImGui::Text("Tileset Renderer Show: %d active", tileset->tiles_to_show_count);
+    }
 }
 
 g_internal void
-_tile_load_stale_meshes_schedule(cesium::TilesetRenderer* tileset, ArrayResourcePoolHandle tileset_handle, ArrayResourcePoolHandle& bvh_handle, U64 mesh_processor_generation)
+_tile_load_stale_meshes_schedule(TileLoadState* state, cesium::TilesetRenderer* tileset, ArrayResourcePoolHandle tileset_handle, ArrayResourcePoolHandle bvh_handle, U64 mesh_processor_generation)
 {
-    Context* ctx = dt_ctx_get();
-
     Bvh* bvh = 0;
-    if (ctx->polygon_bvh_pool->item_from_handle(bvh_handle, &bvh) && bvh->deletion_requested == false)
+    if (state->polygon_bvh_pool->item_from_handle(bvh_handle, &bvh) && bvh->deletion_requested == false)
     {
         U32 active_task_count = 0;
-        for (TileLoadTaskStateNode* node = ctx->tile_load_task_first; node; node = node->next)
+        for (TileLoadTaskStateNode* node = state->task_first; node; node = node->next)
         {
             active_task_count++;
         }
@@ -66,7 +146,7 @@ _tile_load_stale_meshes_schedule(cesium::TilesetRenderer* tileset, ArrayResource
         // Tile mesh processing shares this pool with Cesium loading. Reserve at
         // least half of the workers so a bulk overlay update cannot stall tile
         // downloads and content preparation.
-        U32 maximum_task_count = ctx->thread_pool->thread_count / 2;
+        U32 maximum_task_count = state->thread_pool->thread_count / 2;
         if (maximum_task_count == 0)
         {
             maximum_task_count = 1;
@@ -82,12 +162,12 @@ _tile_load_stale_meshes_schedule(cesium::TilesetRenderer* tileset, ArrayResource
         // Schedule visible tiles before cached tiles so an overlay change is reflected on screen first.
         for (cesium::TileRenderResources* tile = tileset->tile_to_show_first; tile && tasks_started_count < available_task_count; tile = tile->render_next)
         {
-            tasks_started_count += _tile_load_mesh_reprocess_task_start(tile, tileset_handle, bvh, bvh_handle, mesh_processor_generation);
+            tasks_started_count += _tile_load_mesh_reprocess_task_start(state, tile, tileset_handle, bvh, bvh_handle, mesh_processor_generation);
         }
 
-        for (cesium::TileRenderResources* tile = ctx->tile_first; tile && tasks_started_count < available_task_count; tile = tile->next)
+        for (cesium::TileRenderResources* tile = state->tile_first; tile && tasks_started_count < available_task_count; tile = tile->next)
         {
-            tasks_started_count += _tile_load_mesh_reprocess_task_start(tile, tileset_handle, bvh, bvh_handle, mesh_processor_generation);
+            tasks_started_count += _tile_load_mesh_reprocess_task_start(state, tile, tileset_handle, bvh, bvh_handle, mesh_processor_generation);
         }
 
         if (tasks_started_count > 0)
@@ -98,48 +178,47 @@ _tile_load_stale_meshes_schedule(cesium::TilesetRenderer* tileset, ArrayResource
 }
 
 g_internal B32
-_tile_load_mesh_reprocess_task_start(cesium::TileRenderResources* tile, ArrayResourcePoolHandle tileset_handle, Bvh* bvh, ArrayResourcePoolHandle bvh_handle, U64 mesh_processor_generation)
+_tile_load_mesh_reprocess_task_start(TileLoadState* state, cesium::TileRenderResources* tile, ArrayResourcePoolHandle tileset_handle, Bvh* bvh, ArrayResourcePoolHandle bvh_handle,
+                                     U64 mesh_processor_generation)
 {
     B32 task_started = false;
     if (bvh->deletion_requested == false && tile->tileset_handle == tileset_handle && tile->tile_mesh_processor_generation != mesh_processor_generation &&
         tile->tile_mesh_processor_pending_generation == 0 && tile->to_be_dealloced.load() == false)
     {
-        Context* ctx = dt_ctx_get();
         tile->tile_mesh_processor_pending_generation = mesh_processor_generation;
         Arena* task_arena = arena_alloc();
         Debug_SetName(task_arena, "Tile Load Task arena");
         TileLoadTaskState* tile_task_state = PushStruct(task_arena, TileLoadTaskState);
+        tile_task_state->state = state;
         tile_task_state->tile = tile;
         tile_task_state->bvh = bvh;
         tile_task_state->bvh_handle = bvh_handle;
         tile_task_state->mesh_processor_generation = mesh_processor_generation;
 
-        async::AsyncTaskStatus<TileLoadTaskState>* tile_load_task = async::async_task_run(task_arena, ctx->thread_pool, _tile_load_mesh_reprocess_task, tile_task_state, "Tile Mesh Reprocess Task");
-        TileLoadTaskStateNode* node = ctx->tile_load_task_free_list;
+        async::AsyncTaskStatus<TileLoadTaskState>* tile_load_task = async::async_task_run(task_arena, state->thread_pool, _tile_load_mesh_reprocess_task, tile_task_state, "Tile Mesh Reprocess Task");
+        TileLoadTaskStateNode* node = state->task_free_list;
         if (node)
         {
-            SLLStackPop(ctx->tile_load_task_free_list);
+            SLLStackPop(state->task_free_list);
             MemoryZeroStruct(node);
         }
         else
         {
-            node = PushStruct(ctx->arena, TileLoadTaskStateNode);
+            node = PushStruct(state->arena, TileLoadTaskStateNode);
         }
         node->task_state = tile_load_task;
-        DLLPushBack(ctx->tile_load_task_first, ctx->tile_load_task_last, node);
+        DLLPushBack(state->task_first, state->task_last, node);
         task_started = true;
     }
     return task_started;
 }
 
 g_internal void
-_tile_load_task_completions_update()
+_tile_load_task_completions_update(TileLoadState* state)
 {
-    Context* ctx = dt_ctx_get();
-
     // Tasks that are done should be further processed.
     TileLoadTaskStateNode* next_node;
-    for (TileLoadTaskStateNode* node = ctx->tile_load_task_first; node; node = next_node)
+    for (TileLoadTaskStateNode* node = state->task_first; node; node = next_node)
     {
         next_node = node->next;
         async::AsyncTaskResult<TileLoadTaskState> result = async::async_task_is_done(node->task_state);
@@ -159,16 +238,16 @@ _tile_load_task_completions_update()
             if (bvh->loads_in_flight == 0 && bvh->deletion_requested)
             {
                 arena_release(bvh->arena);
-                ctx->polygon_bvh_pool->item_free(task_state->bvh_handle);
+                state->polygon_bvh_pool->item_free(task_state->bvh_handle);
             }
 
-            DLLRemove(ctx->tile_load_task_first, ctx->tile_load_task_last, node);
-            SLLStackPush(ctx->tile_load_task_free_list, node);
+            DLLRemove(state->task_first, state->task_last, node);
+            SLLStackPush(state->task_free_list, node);
         }
     }
 
     // Finish jobs whose commands are done executing on the GPU.
-    for (cesium::TileRenderResources* tile = ctx->gpu_work_stack; tile; tile = tile->gpu_work_done_next)
+    for (cesium::TileRenderResources* tile = state->gpu_work_stack; tile; tile = tile->gpu_work_done_next)
     {
         tile->tile_mesh_processor_generation = tile->tile_mesh_processor_pending_generation;
         tile->tile_mesh_processor_pending_generation = 0;
@@ -189,24 +268,22 @@ _tile_load_task_completions_update()
             }
         }
     }
-    ctx->gpu_work_stack = {};
+    state->gpu_work_stack = {};
 
-    _tile_load_deallocated_tiles_release();
+    _tile_load_deallocated_tiles_release(state);
 }
 
 g_internal void
-_tile_load_deallocated_tiles_release()
+_tile_load_deallocated_tiles_release(TileLoadState* state)
 {
-    Context* ctx = dt_ctx_get();
-
     cesium::TileRenderResources* tile_next = {};
-    for (cesium::TileRenderResources* tile = ctx->tile_first; tile; tile = tile_next)
+    for (cesium::TileRenderResources* tile = state->tile_first; tile; tile = tile_next)
     {
         tile_next = tile->next;
         if (tile->to_be_dealloced.load() && tile->tile_mesh_processor_pending_generation == 0)
         {
-            DLLRemove(ctx->tile_first, ctx->tile_last, tile);
-            ctx->tile_count--;
+            DLLRemove(state->tile_first, state->tile_last, tile);
+            state->tile_count--;
             cesium::tileset_render_resources_release(tile);
         }
     }
@@ -223,9 +300,8 @@ _tile_load_road_mesh_process(Arena* arena, Buffer<render::TileVertex> vertices, 
 g_internal void
 _tile_load_gpu_upload_complete(render::ThreadWorkerCmdCtx* thread_ctx)
 {
-    Context* ctx = dt_ctx_get();
-    cesium::TileRenderResources* tile = (cesium::TileRenderResources*)thread_ctx->user_data;
-    SLLStackPush(ctx->gpu_work_stack, tile);
+    TileLoadGpuWork* gpu_work = (TileLoadGpuWork*)thread_ctx->user_data;
+    SLLStackPush_N(gpu_work->state->gpu_work_stack, gpu_work->tile, gpu_work_done_next);
 }
 
 g_internal async::AsyncTaskContinuation<TileLoadTaskState>
@@ -248,7 +324,10 @@ _tile_load_mesh_reprocess_task(async::ThreadInfo info, async::AsyncTaskStatus<Ti
             {
                 thread_ctx = render::thread_ctx_create();
                 render::thread_cmd_buffer_record(thread_ctx);
-                thread_ctx->user_data = tile;
+                TileLoadGpuWork* gpu_work = PushStruct(thread_ctx->arena, TileLoadGpuWork);
+                gpu_work->state = status->user_data->state;
+                gpu_work->tile = tile;
+                thread_ctx->user_data = gpu_work;
                 thread_ctx->gpu_work_done_func = _tile_load_gpu_upload_complete;
                 status->user_data->gpu_upload_submitted = true;
             }

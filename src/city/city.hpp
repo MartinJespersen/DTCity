@@ -196,7 +196,7 @@ road_info_from_edge_id(Arena* arena, osm::Network* network, Buffer<osm::RoadEdge
 g_internal void
 city_build(City* city, Rng2F64 bbox, String8 tileset_url, String8 area);
 g_internal void
-city_area_streaming_begin(async::ThreadPool* thread_pool, City* city, const AreaConfig* area_config);
+city_area_streaming_begin(City* city, const AreaConfig* area_config);
 g_internal void
 city_area_streaming_end(City* city);
 g_internal void

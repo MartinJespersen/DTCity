@@ -434,9 +434,10 @@ class DTCityPrepareRendererResources : public Cesium3DTilesSelection::IPrepareRe
         TileRenderResources* tile_render_resources = static_cast<TileRenderResources*>(pLoadThreadResult);
         Assert(tile_render_resources->load_completion == 0);
         Context* ctx = dt_ctx_get();
+        city::TileLoadState* tile_load = ctx->tile_load_state;
 
-        DLLPushBack(ctx->tile_first, ctx->tile_last, tile_render_resources);
-        ctx->tile_count++;
+        DLLPushBack(tile_load->tile_first, tile_load->tile_last, tile_render_resources);
+        tile_load->tile_count++;
 
         return tile_render_resources;
     }

@@ -37,7 +37,10 @@ ctx_create(io::IO* io_ctx)
     }
     ctx->data_dir = push_str8_copy(app_arena, data_dir);
 
-    dt_DataDirPair subdirs[] = {{dt_DataDirType::Cache, S("cache")}, {dt_DataDirType::Texture, S("textures")}, {dt_DataDirType::Shaders, S("shaders")}, {dt_DataDirType::Assets, S("assets")}};
+    dt_DataDirPair subdirs[] = {{dt_DataDirType::Cache, S("cache")},
+                                {dt_DataDirType::Texture, S("textures")},
+                                {dt_DataDirType::Shaders, S("shaders")},
+                                {dt_DataDirType::Assets, S("assets")}};
     ctx->data_subdirs = dt_dir_create(app_arena, data_dir, subdirs, ArrayCount(subdirs));
     ctx->io = io_ctx;
 
@@ -47,7 +50,6 @@ ctx_create(io::IO* io_ctx)
     U32 main_thread_queue_size = 10;
     ctx->thread_pool = async::thread_pool_create(app_arena, thread_count, queue_size, main_thread_queue_size);
 
-    ctx->pow2_freelist = pow2_freelist_create(app_arena);
     return ctx;
 }
 

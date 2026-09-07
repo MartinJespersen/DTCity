@@ -1,7 +1,4 @@
-BasedOnStyle: LLVM
-
-# Indent using 4 spaces
-IndentWidth: 4
+BasedOnStyle: Microsoft
 
 # Place function return type on a separate line
 AlwaysBreakAfterReturnType: All
@@ -16,7 +13,6 @@ AlwaysBreakTemplateDeclarations: Yes
 IndentCaseLabels: true
 
 # Other common settings (adjust as needed)
-ColumnLimit: 200
 AllowShortCaseLabelsOnASingleLine: true
 AllowShortFunctionsOnASingleLine: None
 KeepEmptyLinesAtTheStartOfBlocks: false

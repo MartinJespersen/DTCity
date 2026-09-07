@@ -14,42 +14,34 @@ city_init(City* city, String8 cache_path)
 }
 
 g_internal void
-city_area_streaming_begin(async::ThreadPool* thread_pool, City* city, const AreaConfig* area_config)
+city_area_streaming_begin(City* city, const AreaConfig* area_config)
 {
     Assert(city);
-    Assert(thread_pool);
     Assert(area_config);
-    Context* ctx = dt_ctx_get();
 
-    city->tileset_handle = ctx->tileset_pool->handle_get();
+    Context* ctx = dt_ctx_get();
+    ArrayResourcePoolHandle tileset_handle = tile_load_streaming_begin(ctx->tile_load_state, city->tileset_url, city->bbox, area_config->custom_geometry_enabled, MB(256));
+    city->tileset_handle = tileset_handle;
+
     cesium::TilesetRenderer* tileset = {};
-    if (ctx->tileset_pool->item_from_handle(city->tileset_handle, &tileset))
+    B32 tileset_exists = ctx->tile_load_state->tileset_pool->item_from_handle(tileset_handle, &tileset);
+    if (city->cars_creation_done && tileset_exists)
     {
-        Vec2F64 bbox_center = {.x = (city->bbox.min.x + city->bbox.max.x) * 0.5, .y = (city->bbox.min.y + city->bbox.max.y) * 0.5};
-        cesium::tileset_renderer_create(tileset, city->tileset_handle, thread_pool, city->tileset_url, bbox_center.x, bbox_center.y, 0.0, area_config->custom_geometry_enabled, MB(256));
-        if (city->cars_creation_done)
-        {
-            _agent_height_updates_start(&city->car_sim, tileset);
-        }
+        _agent_height_updates_start(&city->car_sim, tileset);
     }
 }
 
 g_internal void
 city_area_streaming_end(City* city)
 {
+    Assert(city);
+
     Context* ctx = dt_ctx_get();
     if (city->cars_creation_done)
     {
         _agent_height_updates_stop(&city->car_sim);
     }
-
-    cesium::TilesetRenderer* tileset = {};
-    if (ctx->tileset_pool->item_from_handle(city->tileset_handle, &tileset))
-    {
-        cesium::tileset_renderer_destroy(tileset);
-        ctx->tileset_pool->item_free(city->tileset_handle);
-        city->tileset_handle = {};
-    }
+    tile_load_streaming_end(ctx->tile_load_state, city->tileset_handle);
 }
 
 g_internal void
@@ -253,7 +245,7 @@ city_update(City* city, Buffer<city::Coordinate> new_agent_coords, async::Thread
         road_build_task->road = &city->road;
         road_build_task->network = city->osm_network;
         city::Bvh* bvh = {};
-        if (ctx->polygon_bvh_pool->item_from_handle(city->road.bvh_handle, &bvh))
+        if (ctx->tile_load_state->polygon_bvh_pool->item_from_handle(city->road.bvh_handle, &bvh))
         {
             road_build_task->bvh = bvh;
         }
@@ -275,21 +267,20 @@ city_update(City* city, Buffer<city::Coordinate> new_agent_coords, async::Thread
     // - texture handle of texture to use
     //
 
-    cesium::TilesetRenderer* tileset = {};
-    B32 tileset_exists = ctx->tileset_pool->item_from_handle(city->tileset_handle, &tileset);
-
-    if (tileset_exists)
-    {
-        tile_load_update(city, tileset, camera, framebuffer_dim, neta_overlay_option);
-    }
-    else
-    {
-        tile_load_pending_work_update();
-    }
+    B32 road_overlay_changed = city->road.overlay_option_cur != neta_overlay_option;
+    F64 delta_time = ctx->time->time_delta_constant_sec;
+    tile_load_update(ctx->tile_load_state, city->tileset_handle, city->road.bvh_handle, city->road_building_done, road_overlay_changed, neta_overlay_option, camera, delta_time);
 
     // Update and render Cesium 3D Tiles ////////////
+    cesium::TilesetRenderer* tileset = {};
+    B32 tileset_exists = ctx->tile_load_state->tileset_pool->item_from_handle(city->tileset_handle, &tileset);
     if (tileset_exists)
     {
+        if (city->road_building_done)
+        {
+            city->road.overlay_option_cur = neta_overlay_option;
+        }
+
         if (city->osm_task_done)
         {
             if (!city->no_gui_focus)
@@ -466,21 +457,10 @@ city_update(City* city, Buffer<city::Coordinate> new_agent_coords, async::Thread
 g_internal void
 city_release(City* city)
 {
-    Context* ctx = dt_ctx_get();
-    if (city->cars_creation_done)
-    {
-        _agent_height_updates_stop(&city->car_sim);
-    }
-
-    cesium::TilesetRenderer* tileset = {};
-    if (ctx->tileset_pool->item_from_handle(city->tileset_handle, &tileset))
-    {
-        cesium::tileset_renderer_destroy(tileset);
-    }
+    city_area_streaming_end(city);
     if (city->road.arena)
     {
         road_destroy(&city->road);
-        tile_load_pending_work_update();
     }
     if (city->osm_network)
     {
@@ -559,13 +539,13 @@ road_destroy(Road* road)
     Context* ctx = dt_ctx_get();
 
     Bvh* bvh = 0;
-    if (ctx->polygon_bvh_pool->item_from_handle(road->bvh_handle, &bvh))
+    if (ctx->tile_load_state->polygon_bvh_pool->item_from_handle(road->bvh_handle, &bvh))
     {
         bvh->deletion_requested = true;
         if (bvh->loads_in_flight == 0)
         {
             arena_release(bvh->arena);
-            ctx->polygon_bvh_pool->item_free(road->bvh_handle);
+            ctx->tile_load_state->polygon_bvh_pool->item_free(road->bvh_handle);
         }
     }
     render::handle_destroy(road->vertex_buffer_handle);
@@ -1619,9 +1599,9 @@ road_create(City* city, Road* in_out_road, glm::dmat4& ecef_to_local, String8 ar
     in_out_road->ecef_to_local = ecef_to_local;
     in_out_road->road_height = 10.0f;
     in_out_road->default_road_width = 2.0f;
-    in_out_road->bvh_handle = ctx->polygon_bvh_pool->handle_get();
+    in_out_road->bvh_handle = ctx->tile_load_state->polygon_bvh_pool->handle_get();
     Bvh* bvh = 0;
-    Assert(ctx->polygon_bvh_pool->item_from_handle(in_out_road->bvh_handle, &bvh));
+    Assert(ctx->tile_load_state->polygon_bvh_pool->item_from_handle(in_out_road->bvh_handle, &bvh));
     bvh->arena = arena_alloc();
 
     render::SamplerInfo sampler_info = {

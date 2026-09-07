@@ -136,7 +136,7 @@ _mesh_append(Arena* arena, ChunkList<render::TileVertex>* vertices_chunk_list, C
 }
 
 g_internal render::TileMesh
-tessellate_tile_face_for_roads(Arena* arena, city::RoadSegmentNode* root, Buffer<city::RoadSegmentCorners> road_buffer, TileVertexFace& face)
+_tessellate_tile_face_for_roads(Arena* arena, city::RoadSegmentNode* root, Buffer<city::RoadSegmentCorners> road_buffer, TileVertexFace& face)
 {
     prof_scope_marker;
     ScratchScope scratch = ScratchScope(&arena, 1);
@@ -290,7 +290,7 @@ tesselate_roads(Arena* arena, Buffer<render::TileVertex> vertices, Buffer<U32> i
         face_vertices.v[1] = vertices.data[indices.data[i + 1]];
         face_vertices.v[2] = vertices.data[indices.data[i + 2]];
 
-        render::TileMesh tessellated_mesh = tessellate_tile_face_for_roads(scratch.arena, bvh_result.root, bvh_result.road_segment_buffer_sorted, face_vertices);
+        render::TileMesh tessellated_mesh = _tessellate_tile_face_for_roads(scratch.arena, bvh_result.root, bvh_result.road_segment_buffer_sorted, face_vertices);
         if (tessellated_mesh.indices.size)
         {
             has_road_classification = true;

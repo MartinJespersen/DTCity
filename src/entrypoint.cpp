@@ -136,12 +136,7 @@ imgui_debug_window(city::City* city, async::ThreadPool* thread_pool)
     }
     ImGui::Text("Deletetion Queue Free List: %d active", asset_manager->deletion_queue_free_list_count);
     ImGui::Text("ThreadPool pending tasks: %u", thread_pool->pending_task_count.load());
-    ImGui::Text("Cesium Tiles Alive: List Count: %d", ctx->tile_count);
-    cesium::TilesetRenderer* tileset = {};
-    if (ctx->tileset_pool->item_from_handle(city->tileset_handle, &tileset))
-    {
-        ImGui::Text("Tileset Renderer Show: %d active", tileset->tiles_to_show_count);
-    }
+    city::tile_load_debug_ui_draw(ctx->tile_load_state, city->tileset_handle);
 
     // netascore status
     ImGui::Text("Netascore Status: ");
@@ -227,8 +222,7 @@ dt_main_loop(void* ptr)
                                                  .tileset_path = S("file:///C:/ByModel/eskiltuna/Totalstad_2025_q3/tileset.json")},
                                                 {.name = S("Zurich"), .lon = 8.532010538692882, .lat = 47.40024260563559, .bbox_width_meters = 5000, .bbox_height_meters = 5000}};
 
-    ctx->tileset_pool = ArrayResourcePool<cesium::TilesetRenderer>::create(ctx->arena, ArrayCount(cities_info_arr));
-    ctx->polygon_bvh_pool = ArrayResourcePool<city::Bvh>::create(ctx->arena, ArrayCount(cities_info_arr));
+    ctx->tile_load_state = city::tile_load_create(ctx->thread_pool, ArrayCount(cities_info_arr));
     Buffer<city::City> city_buf = buffer_alloc<city::City>(ctx->arena, ArrayCount(cities_info_arr));
     for (U32 i = 0; i < city_buf.size; ++i)
     {
@@ -260,7 +254,7 @@ dt_main_loop(void* ptr)
     const city::AreaConfig* area_config = &cities_info_arr[cur_area_option];
     city::City* area = city_buf[cur_area_option];
 
-    city_area_streaming_begin(ctx->thread_pool, area, area_config);
+    city_area_streaming_begin(area, area_config);
     while (ctx->running)
     {
         dt_time_update(ctx->io, ctx->time);
@@ -311,7 +305,7 @@ dt_main_loop(void* ptr)
             area = city_buf[cur_area_option];
             area_config = &cities_info_arr[cur_area_option];
 
-            city_area_streaming_begin(ctx->thread_pool, area, area_config);
+            city_area_streaming_begin(area, area_config);
         }
 
         ui::Camera* camera = resource_pool_item_from_idx(ctx->camera_container, area->camera_handle);
@@ -325,18 +319,6 @@ dt_main_loop(void* ptr)
             area->no_gui_focus = true;
         }
         ui::camera_update(camera, ctx->io, ctx->time->frame_timestamp_delta_ms / 1'000'000, vec_2s32(io_ctx->framebuffer_width, io_ctx->framebuffer_height), world_camera_enable);
-        // keep inactive cities' tilesets making progress so their raster overlay
-        // tile providers finish creating in the background; the active city is
-        // pumped by city_update -> tileset_update_view
-        for (U32 i = 0; i < city_buf.size; ++i)
-        {
-            cesium::TilesetRenderer* tileset = {};
-            city::City* city = city_buf[i];
-            if (ctx->tileset_pool->item_from_handle(city->tileset_handle, &tileset))
-            {
-                cesium::tileset_pump_async(tileset);
-            }
-        }
         city::city_update(area, new_agent_coords, ctx->thread_pool, neta_overlay_option, framebuffer_dim, area_config, agent_hover_icon_mesh_handle);
 
         // #if BUILD_DEBUG
@@ -371,12 +353,7 @@ dt_main_loop(void* ptr)
     }
     render::handle_destroy(agent_hover_icon_mesh_handle.vertex_buffer_handle);
     render::handle_destroy(agent_hover_icon_mesh_handle.index_buffer_handle);
-    while (ctx->tile_count > 0)
-    {
-        render::gpu_work_update();
-        city::tile_load_pending_work_update();
-    }
-    render::gpu_work_done_wait();
+    city::tile_load_destroy(ctx->tile_load_state);
     draw::draw_release();
     render::render_ctx_destroy();
     Debug_Frame_End();

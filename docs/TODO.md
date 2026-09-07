@@ -19,7 +19,6 @@
 
 
 # features
-* Some roads are close to brown. Why? OOB?
 * chunk_list should not allow chunk items with count larger than capacity
 * Show a clock in the application allowing 
 * agents cannot be deleted due to caching and cesium async height calculation
@@ -89,3 +88,10 @@
   * SPV_KHR_non_semantic_info (16:06 in video above)
 * What to do about VK_DEVICE_LOST_LOST (video at 18:00)
 * Other tools (video 18:30)
+
+# Steps for new simulator integration:
+- Make visualization run smooth with a large number of agents: 
+  - LOD changes 
+- Create the general API for the simulator.
+- Create a simple flow of: get scenarios -> set scenarios -> start scenario -> stop scenario -> disconnect
+- Make multiple scenarios possible
