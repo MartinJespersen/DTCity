@@ -74,7 +74,13 @@ agents_create(AgentSim* agent_sim)
             Assert(node->tex_idx < model_render_info->texture_handles.size);
 
             // vertex and index extraction
-            Buffer<render::TileVertex> vertex_buffer = vertex_3d_from_gltfw_vertex(agent_sim->allocator->arena, node->vertices);
+            Buffer<render::PrimitiveVertex> vertex_buffer = buffer_alloc<render::PrimitiveVertex>(scratch.arena, node->vertices.size);
+            for (U64 vertex_idx = 0; vertex_idx < node->vertices.size; ++vertex_idx)
+            {
+                gltfw_Vertex3D& source = node->vertices.data[vertex_idx];
+                vertex_buffer.data[vertex_idx] = {.pos = glm::vec3(source.pos.x, source.pos.y, source.pos.z),
+                                                 .normal = glm::vec3(0, 1, 0), .color = node->color, .uv = glm::vec2(source.uv.x, source.uv.y)};
+            }
 
             // offset vertices based on new pivot
             for (U32 vertex_idx = 0; vertex_idx < vertex_buffer.size; vertex_idx++)
@@ -85,11 +91,10 @@ agents_create(AgentSim* agent_sim)
             }
 
             // load geometry and textures
-            render::BufferInfo vertex_buffer_info = render::BufferInfo(vertex_buffer, render::BufferType_Vertex);
-            Buffer<U32> index_buffer = buffer_arena_copy(agent_sim->allocator->arena, node->indices);
-            render::BufferInfo index_buffer_info = render::BufferInfo(index_buffer, render::BufferType_Index);
-            model_render_info->geometry.data[mesh_idx].vertex_handle = render::buffer_load_sync(thread_ctx, &vertex_buffer_info, S("agent_mesh_vertex"));
-            model_render_info->geometry.data[mesh_idx].index_handle = render::buffer_load_sync(thread_ctx, &index_buffer_info, S("agent_mesh_index"));
+            render::MeshletMeshHandle mesh = render::mesh_shader_handles_create_and_upload(vertex_buffer, node->indices, scratch.arena);
+            model_render_info->geometry.data[mesh_idx].vertex_handle = mesh.vertex_buffer_handle;
+            model_render_info->geometry.data[mesh_idx].index_handle = mesh.meshlet_buffer_handle;
+            model_render_info->geometry.data[mesh_idx].meshlet_count = mesh.meshlet_count;
             model_render_info->geometry.data[mesh_idx].texture_handle_idx = node->tex_idx;
             model_render_info->geometry.data[mesh_idx].color = node->color;
 
@@ -209,13 +214,21 @@ g_internal void
 agent_draw(render::MappedHandle<void> camera_handle, Buffer<render::AgentModelInfo> meshes, Buffer<render::Handle> texture_handles, render::BufferInfo* instance_buffer_info)
 {
     draw::DrawFrame* frame = draw::draw_frame_get();
-    U32 align = 16;
-    U32 instance_buffer_offset = frame->total_instance_buffer_byte_count + (align - 1);
-    instance_buffer_offset -= instance_buffer_offset % align;
-
-    frame->total_instance_buffer_byte_count = Max(frame->total_instance_buffer_byte_count, instance_buffer_offset + instance_buffer_info->buffer.size);
-
-    render::agent_instance_render_bucket_add(camera_handle, meshes, texture_handles, instance_buffer_info, instance_buffer_offset);
+    (void)camera_handle; // The draw layer owns the frame camera.
+    Assert(instance_buffer_info->type_size == sizeof(render::Transform));
+    Buffer<render::Transform> transforms = {(render::Transform*)instance_buffer_info->buffer.data, instance_buffer_info->elem_count};
+    Arena* frame_arena = draw::draw_frame_arena_get();
+    Buffer<render::Transform> frame_transforms = buffer_arena_copy(frame_arena, transforms);
+    for (render::AgentModelInfo& mesh : meshes)
+    {
+        render::MeshInstanceBatch batch = {};
+        batch.transforms = frame_transforms;
+        batch.mesh_handle = {mesh.vertex_handle, mesh.index_handle, mesh.meshlet_count};
+        batch.texture_handle = texture_handles.data[mesh.texture_handle_idx];
+        batch.textured = true;
+        batch.lod_error_pixels = 1.0f;
+        chunk_list_insert(frame_arena, frame->mesh_instance_batches, batch);
+    }
 }
 
 g_internal void

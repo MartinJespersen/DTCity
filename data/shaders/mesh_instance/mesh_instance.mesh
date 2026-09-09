@@ -1,0 +1,72 @@
+#version 460
+#extension GL_EXT_mesh_shader : require
+
+layout(local_size_x = 32) in;
+layout(triangles, max_vertices = 64, max_primitives = 64) out;
+layout(location = 0) out vec4 out_color[];
+layout(location = 1) out vec3 out_normal[];
+layout(location = 2) out vec2 out_uv[];
+
+layout(set = 0, binding = 0) uniform UBO_Camera
+{
+    mat4 view;
+    mat4 projection;
+    vec4 frustum_planes[6];
+    vec2 viewport_dim;
+} camera_ubo;
+// Word offsets honor the CPU PrimitiveVertex layout, including GLM padding.
+layout(std430, set = 0, binding = 1) readonly buffer Vertices { uint words[]; } vertices;
+layout(std430, set = 0, binding = 2) readonly buffer Meshlets { uint words[]; } meshlets;
+layout(std430, set = 0, binding = 3) readonly buffer Transforms { mat4 models[]; } transforms;
+layout(push_constant) uniform PushConstants
+{
+    uint first_meshlet;
+    uint first_instance;
+    uint transform_offset;
+    uint vertex_stride;
+    uint position_offset;
+    uint normal_offset;
+    uint color_offset;
+    uint uv_offset;
+    uint texture_index;
+    uint textured;
+    float lod_error_pixels;
+} pc;
+
+struct LodPayload { uint descriptor; uint instance_index; };
+taskPayloadSharedEXT LodPayload payload;
+
+vec3 read_vec3(uint offset)
+{
+    return uintBitsToFloat(uvec3(vertices.words[offset], vertices.words[offset + 1], vertices.words[offset + 2]));
+}
+
+void main()
+{
+    uint descriptor = payload.descriptor + gl_WorkGroupID.x * 4;
+    uint vertex_offset = meshlets.words[descriptor];
+    uint triangle_offset = meshlets.words[descriptor + 1];
+    uint vertex_count = meshlets.words[descriptor + 2];
+    uint triangle_count = meshlets.words[descriptor + 3];
+    SetMeshOutputsEXT(vertex_count, triangle_count);
+    uint lane = gl_LocalInvocationIndex;
+
+    mat4 model = transforms.models[payload.instance_index];
+    mat3 normal_matrix = transpose(inverse(mat3(model)));
+    // Each shared vertex is transformed once per meshlet instance.
+    for (uint output_index = lane; output_index < vertex_count; output_index += 32)
+    {
+        uint vertex = meshlets.words[vertex_offset + output_index];
+        uint base = vertex * pc.vertex_stride;
+        vec3 position = read_vec3(base + pc.position_offset);
+        gl_MeshVerticesEXT[output_index].gl_Position = camera_ubo.projection * camera_ubo.view * model * vec4(position, 1.0);
+        out_normal[output_index] = normal_matrix * read_vec3(base + pc.normal_offset);
+        out_uv[output_index] = uintBitsToFloat(uvec2(vertices.words[base + pc.uv_offset], vertices.words[base + pc.uv_offset + 1]));
+        out_color[output_index] = vec4(read_vec3(base + pc.color_offset), uintBitsToFloat(vertices.words[base + pc.color_offset + 3]));
+    }
+    for (uint triangle = lane; triangle < triangle_count; triangle += 32)
+    {
+        uint packed = meshlets.words[triangle_offset + triangle];
+        gl_PrimitiveTriangleIndicesEXT[triangle] = uvec3(packed & 255u, (packed >> 8) & 255u, (packed >> 16) & 255u);
+    }
+}

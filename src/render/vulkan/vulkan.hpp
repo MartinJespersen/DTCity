@@ -248,9 +248,12 @@ struct Context
     Arena* render_frame_arena;
     RenderFrame* render_frame;
     Pipeline model_3D_pipeline;
-    Pipeline car_instance_pipeline;
     Pipeline blend_3d_pipeline;
     Pipeline primitive_pipeline;
+    Pipeline mesh_instance_pipeline;
+    VkDescriptorSetLayout mesh_instance_descriptor_set_layout;
+    VkPhysicalDeviceMeshShaderPropertiesEXT mesh_shader_properties;
+    PFN_vkCmdDrawMeshTasksEXT cmd_draw_mesh_tasks_ext;
     Pipeline line_pipeline;
     Pipeline bbox_pipeline;
     VkDescriptorSetLayout road_segment_descriptor_set_layout;
@@ -258,6 +261,7 @@ struct Context
     VkDescriptorSetLayout car_height_calculate_descriptor_set_layout;
     render::Handle model_3D_instance_buffer[render::MAX_FRAMES_IN_FLIGHT];
     render::Handle primitive_instance_buffer[render::MAX_FRAMES_IN_FLIGHT];
+    render::Handle mesh_instance_buffer[render::MAX_FRAMES_IN_FLIGHT];
     render::Handle line_buffer_handle[render::MAX_FRAMES_IN_FLIGHT];
     LinkedList<MappedHandleTransfer> mapped_handle_list; // mapped handles
 };

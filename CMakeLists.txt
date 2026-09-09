@@ -141,18 +141,22 @@ if(BUILD_TESTS)
 endif()
 
 if(BUILD_CITY)
+  find_package(meshoptimizer CONFIG REQUIRED)
   add_executable(city)
+  target_link_libraries(city PRIVATE meshoptimizer::meshoptimizer)
   list(APPEND ALL_TARGETS city)
 
   include_directories(${CMAKE_CURRENT_SOURCE_DIR}/src ${CMAKE_CURRENT_SOURCE_DIR}/src/third_party/imgui)
 
 # compile shaders
-file(GLOB_RECURSE GLSL_SOURCE_FILES
+file(GLOB_RECURSE GLSL_SOURCE_FILES CONFIGURE_DEPENDS
     "${SHADER_DIR}/*.vert"
     "${SHADER_DIR}/*.frag"
     "${SHADER_DIR}/*.comp"
     "${SHADER_DIR}/*.tesc"
     "${SHADER_DIR}/*.tese"
+    "${SHADER_DIR}/*.mesh"
+    "${SHADER_DIR}/*.task"
 )
 
 
@@ -166,10 +170,14 @@ foreach(GLSL ${GLSL_SOURCE_FILES})
   get_filename_component(EXT_WITH_DOT ${GLSL} EXT)
   string(SUBSTRING ${EXT_WITH_DOT} 1 -1 EXT)
   set(SPIRV "${SHADER_BINARY_DIR}/${FILE_NAME}_${EXT}.spv")
+  set(SHADER_TARGET_FLAGS "")
+  if(EXT STREQUAL "mesh" OR EXT STREQUAL "task")
+    list(APPEND SHADER_TARGET_FLAGS --target-env vulkan1.2)
+  endif()
   add_custom_command(
         OUTPUT ${SPIRV}
         COMMAND ${CMAKE_COMMAND} -E make_directory "${SHADER_BINARY_DIR}"
-        COMMAND ${GLSL_VALIDATOR} -V ${GLSL} ${GLSL_SHADER_FLAGS} -o ${SPIRV}
+        COMMAND ${GLSL_VALIDATOR} -V ${GLSL} ${GLSL_SHADER_FLAGS} ${SHADER_TARGET_FLAGS} -o ${SPIRV}
         DEPENDS ${GLSL}
         COMMENT "Compiling ${FILE_NAME} to SPIR-V"
     )

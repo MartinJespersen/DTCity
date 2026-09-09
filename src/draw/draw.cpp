@@ -29,6 +29,7 @@ draw_new_frame()
     arena_clear(g_draw_ctx.frame_arena);
     g_draw_ctx.frame = PushStruct(g_draw_ctx.frame_arena, DrawFrame);
     g_draw_ctx.frame->line_vertex_chunk_list = chunk_list_create<render::LineVertex>(g_draw_ctx.frame_arena, 200);
+    g_draw_ctx.frame->mesh_instance_batches = chunk_list_create<render::MeshInstanceBatch>(g_draw_ctx.frame_arena, 32);
 }
 
 g_internal Arena*
@@ -96,6 +97,20 @@ primitive_draw(glm::vec3 location, F32 scale_factor, render::MeshHandle mesh_han
     }
 
     chunk_list_insert(g_draw_ctx.frame_arena, matching_instance->location_chunk_list, location);
+}
+
+g_internal void
+draw_mesh_instances(render::MeshletMeshHandle mesh_handle, Buffer<render::Transform> transforms)
+{
+    if (transforms.size == 0)
+    {
+        return;
+    }
+
+    DrawFrame* frame = draw_frame_get();
+    Buffer<render::Transform> frame_transforms = buffer_arena_copy(g_draw_ctx.frame_arena, transforms);
+    render::MeshInstanceBatch batch = {.transforms = frame_transforms, .mesh_handle = mesh_handle};
+    chunk_list_insert(g_draw_ctx.frame_arena, frame->mesh_instance_batches, batch);
 }
 
 } // namespace draw

@@ -100,7 +100,8 @@ required_instance_extensions_validate(Arena* arena, Buffer<String8> required_ext
 }
 
 static VkResult
-create_debug_utils_messenger_ext(VkInstance instance, const VkDebugUtilsMessengerCreateInfoEXT* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkDebugUtilsMessengerEXT* pDebugMessenger)
+create_debug_utils_messenger_ext(VkInstance instance, const VkDebugUtilsMessengerCreateInfoEXT* pCreateInfo,
+                                 const VkAllocationCallbacks* pAllocator, VkDebugUtilsMessengerEXT* pDebugMessenger)
 {
     auto func = (PFN_vkCreateDebugUtilsMessengerEXT)vkGetInstanceProcAddr(instance, "vkCreateDebugUtilsMessengerEXT");
     if (func != nullptr)
@@ -114,7 +115,8 @@ create_debug_utils_messenger_ext(VkInstance instance, const VkDebugUtilsMessenge
 }
 
 static void
-destroy_debug_utils_messenger_ext(VkInstance instance, VkDebugUtilsMessengerEXT debugMessenger, const VkAllocationCallbacks* pAllocator)
+destroy_debug_utils_messenger_ext(VkInstance instance, VkDebugUtilsMessengerEXT debugMessenger,
+                                  const VkAllocationCallbacks* pAllocator)
 {
     auto func = (PFN_vkDestroyDebugUtilsMessengerEXT)vkGetInstanceProcAddr(instance, "vkDestroyDebugUtilsMessengerEXT");
     if (func != nullptr)
@@ -125,7 +127,8 @@ destroy_debug_utils_messenger_ext(VkInstance instance, VkDebugUtilsMessengerEXT 
 
 // queue family
 static VkFormat
-supported_format(VkPhysicalDevice physical_device, VkFormat* candidates, U32 candidate_count, VkImageTiling tiling, VkFormatFeatureFlags features)
+supported_format(VkPhysicalDevice physical_device, VkFormat* candidates, U32 candidate_count, VkImageTiling tiling,
+                 VkFormatFeatureFlags features)
 {
     bool found = false;
     VkFormat out_format = {};
@@ -134,7 +137,8 @@ supported_format(VkPhysicalDevice physical_device, VkFormat* candidates, U32 can
         VkFormatProperties props;
         vkGetPhysicalDeviceFormatProperties(physical_device, candidates[i], &props);
 
-        if (tiling == VK_IMAGE_TILING_LINEAR && ((props.linearTilingFeatures & features) == features) || ((props.optimalTilingFeatures & features) == features))
+        if (tiling == VK_IMAGE_TILING_LINEAR && ((props.linearTilingFeatures & features) == features) ||
+            ((props.optimalTilingFeatures & features) == features))
         {
             found = true;
             out_format = candidates[i];
@@ -156,17 +160,21 @@ depth_resources_create(Context* vk_ctx, SwapchainResources* swapchain_resources)
         VK_FORMAT_D16_UNORM,
     };
 
-    VkFormat depth_format = supported_format(vk_ctx->physical_device, depth_formats, ArrayCount(depth_formats), VK_IMAGE_TILING_OPTIMAL, VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT);
+    VkFormat depth_format = supported_format(vk_ctx->physical_device, depth_formats, ArrayCount(depth_formats),
+                                             VK_IMAGE_TILING_OPTIMAL, VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT);
     swapchain_resources->depth_format = depth_format;
 
     VmaAllocationCreateInfo vma_info = {
         .usage = VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE,
     };
 
-    ImageAllocation image_alloc = image_allocation_create(swapchain_resources->swapchain_extent.width, swapchain_resources->swapchain_extent.height, vk_ctx->msaa_samples, depth_format,
-                                                          VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT, 1, vma_info, "depth image");
+    ImageAllocation image_alloc = image_allocation_create(
+        swapchain_resources->swapchain_extent.width, swapchain_resources->swapchain_extent.height, vk_ctx->msaa_samples,
+        depth_format, VK_IMAGE_TILING_OPTIMAL,
+        VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT, 1, vma_info, "depth image");
 
-    ImageViewResource image_view_resource = image_view_resource_create(vk_ctx->device, image_alloc.image, depth_format, VK_IMAGE_ASPECT_DEPTH_BIT, 1);
+    ImageViewResource image_view_resource =
+        image_view_resource_create(vk_ctx->device, image_alloc.image, depth_format, VK_IMAGE_ASPECT_DEPTH_BIT, 1);
 
     swapchain_resources->depth_image_resource = ImageResource(image_alloc, image_view_resource);
 }
@@ -178,12 +186,17 @@ object_id_image_resource_create(SwapchainResources* swapchain_resources, U32 ima
     Context* vk_ctx = ctx_get();
     VkFormat attachment_formats[] = {vk_ctx->object_id_format};
 
-    VkFormat attachment_format = supported_format(vk_ctx->physical_device, attachment_formats, ArrayCount(attachment_formats), tiling, VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BIT);
+    VkFormat attachment_format =
+        supported_format(vk_ctx->physical_device, attachment_formats, ArrayCount(attachment_formats), tiling,
+                         VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BIT);
 
-    VmaAllocationCreateInfo vma_info = {.flags = VMA_ALLOCATION_CREATE_DEDICATED_MEMORY_BIT, .usage = VMA_MEMORY_USAGE_AUTO, .priority = 1.0f};
+    VmaAllocationCreateInfo vma_info = {
+        .flags = VMA_ALLOCATION_CREATE_DEDICATED_MEMORY_BIT, .usage = VMA_MEMORY_USAGE_AUTO, .priority = 1.0f};
 
-    ::Buffer<ImageResource> object_id_image_resources = buffer_alloc<ImageResource>(swapchain_resources->arena, image_count);
-    ::Buffer<ImageResource> object_id_image_resolve_resources = buffer_alloc<ImageResource>(swapchain_resources->arena, image_count);
+    ::Buffer<ImageResource> object_id_image_resources =
+        buffer_alloc<ImageResource>(swapchain_resources->arena, image_count);
+    ::Buffer<ImageResource> object_id_image_resolve_resources =
+        buffer_alloc<ImageResource>(swapchain_resources->arena, image_count);
 
     U32 buffer_size = 0;
     for (U32 i = 0; i < image_count; i++)
@@ -193,20 +206,28 @@ object_id_image_resource_create(SwapchainResources* swapchain_resources, U32 ima
         ImageAllocation* image_alloc = &object_id_image_resource->image_alloc;
         ImageViewResource* image_view_res = &object_id_image_resource->image_view_resource;
 
-        *image_alloc = image_allocation_create(swapchain_resources->swapchain_extent.width, swapchain_resources->swapchain_extent.height, vk_ctx->msaa_samples, attachment_format, tiling,
-                                               VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT, 1, vma_info, "object_id image");
+        *image_alloc = image_allocation_create(
+            swapchain_resources->swapchain_extent.width, swapchain_resources->swapchain_extent.height,
+            vk_ctx->msaa_samples, attachment_format, tiling,
+            VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT, 1,
+            vma_info, "object_id image");
 
-        *image_view_res = image_view_resource_create(vk_ctx->device, image_alloc->image, attachment_format, VK_IMAGE_ASPECT_COLOR_BIT, 1);
+        *image_view_res = image_view_resource_create(vk_ctx->device, image_alloc->image, attachment_format,
+                                                     VK_IMAGE_ASPECT_COLOR_BIT, 1);
 
         // resolve image
         ImageResource* object_id_image_resolve_resource = &object_id_image_resolve_resources.data[i];
         ImageAllocation* image_resolve_alloc = &object_id_image_resolve_resource->image_alloc;
         ImageViewResource* image_resolve_view_resource = &object_id_image_resolve_resource->image_view_resource;
 
-        *image_resolve_alloc = image_allocation_create(swapchain_resources->swapchain_extent.width, swapchain_resources->swapchain_extent.height, VK_SAMPLE_COUNT_1_BIT, attachment_format, tiling,
-                                                       VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT, 1, vma_info, "object_id resolve image");
+        *image_resolve_alloc = image_allocation_create(
+            swapchain_resources->swapchain_extent.width, swapchain_resources->swapchain_extent.height,
+            VK_SAMPLE_COUNT_1_BIT, attachment_format, tiling,
+            VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT, 1,
+            vma_info, "object_id resolve image");
 
-        *image_resolve_view_resource = image_view_resource_create(vk_ctx->device, image_resolve_alloc->image, attachment_format, VK_IMAGE_ASPECT_COLOR_BIT, 1);
+        *image_resolve_view_resource = image_view_resource_create(vk_ctx->device, image_resolve_alloc->image,
+                                                                  attachment_format, VK_IMAGE_ASPECT_COLOR_BIT, 1);
 
         buffer_size = image_resolve_alloc->size;
     }
@@ -218,7 +239,8 @@ object_id_image_resource_create(SwapchainResources* swapchain_resources, U32 ima
 
     for (U32 i = 0; i < ArrayCount(swapchain_resources->object_id_buffer_readback); i++)
     {
-        buffer_readback_create(buffer_size, VK_BUFFER_USAGE_TRANSFER_DST_BIT, &swapchain_resources->object_id_buffer_readback[i]);
+        buffer_readback_create(buffer_size, VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+                               &swapchain_resources->object_id_buffer_readback[i]);
     }
 }
 
@@ -288,10 +310,12 @@ create_instance(Context* vk_ctx)
     if (vk_ctx->enable_gpu_assisted_validation)
     {
         validation_feature_enables[validation_feature_count++] = VK_VALIDATION_FEATURE_ENABLE_GPU_ASSISTED_EXT;
-        validation_feature_enables[validation_feature_count++] = VK_VALIDATION_FEATURE_ENABLE_GPU_ASSISTED_RESERVE_BINDING_SLOT_EXT;
+        validation_feature_enables[validation_feature_count++] =
+            VK_VALIDATION_FEATURE_ENABLE_GPU_ASSISTED_RESERVE_BINDING_SLOT_EXT;
     }
     validation_feature_enables[validation_feature_count++] = VK_VALIDATION_FEATURE_ENABLE_DEBUG_PRINTF_EXT;
-    validation_feature_enables[validation_feature_count++] = VK_VALIDATION_FEATURE_ENABLE_SYNCHRONIZATION_VALIDATION_EXT;
+    validation_feature_enables[validation_feature_count++] =
+        VK_VALIDATION_FEATURE_ENABLE_SYNCHRONIZATION_VALIDATION_EXT;
 
     VkValidationFeaturesEXT validation_features{};
     validation_features.sType = VK_STRUCTURE_TYPE_VALIDATION_FEATURES_EXT;
@@ -359,7 +383,33 @@ logical_device_create(Arena* arena, Context* vk_ctx)
     VkPhysicalDeviceFeatures2 supported_features2{};
     supported_features2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
     supported_features2.pNext = &timeline_semaphore_supported;
+    VkPhysicalDeviceMeshShaderFeaturesEXT mesh_features = {};
+    mesh_features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MESH_SHADER_FEATURES_EXT;
+    timeline_semaphore_supported.pNext = &mesh_features;
+    // Nonsemantic shader debug information can contain forward references.
+    VkPhysicalDeviceShaderRelaxedExtendedInstructionFeaturesKHR relaxed_instruction_features = {};
+    relaxed_instruction_features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_RELAXED_EXTENDED_INSTRUCTION_FEATURES_KHR;
+    mesh_features.pNext = &relaxed_instruction_features;
     vkGetPhysicalDeviceFeatures2(vk_ctx->physical_device, &supported_features2);
+    if (!relaxed_instruction_features.shaderRelaxedExtendedInstruction)
+    {
+        exit_with_error("Selected Vulkan device does not support shaderRelaxedExtendedInstruction required by shader debug information");
+    }
+    if (!mesh_features.meshShader || !mesh_features.taskShader)
+    {
+        exit_with_error("Selected Vulkan device requires VK_EXT_mesh_shader meshShader and taskShader");
+    }
+    vk_ctx->mesh_shader_properties.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MESH_SHADER_PROPERTIES_EXT;
+    VkPhysicalDeviceProperties2 mesh_properties = {};
+    mesh_properties.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2;
+    mesh_properties.pNext = &vk_ctx->mesh_shader_properties;
+    vkGetPhysicalDeviceProperties2(vk_ctx->physical_device, &mesh_properties);
+    mesh_features = {};
+    mesh_features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MESH_SHADER_FEATURES_EXT;
+    mesh_features.meshShader = VK_TRUE;
+    mesh_features.taskShader = VK_TRUE;
+    relaxed_instruction_features.shaderRelaxedExtendedInstruction = VK_TRUE;
+    mesh_features.pNext = &relaxed_instruction_features;
     if (!timeline_semaphore_supported.timelineSemaphore)
     {
         exit_with_error("Selected Vulkan physical device does not support timeline semaphores");
@@ -377,6 +427,7 @@ logical_device_create(Arena* arena, Context* vk_ctx)
     VkPhysicalDeviceBufferDeviceAddressFeatures buffer_device_address_features{};
     buffer_device_address_features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_BUFFER_DEVICE_ADDRESS_FEATURES;
     buffer_device_address_features.bufferDeviceAddress = VK_TRUE;
+    buffer_device_address_features.pNext = &mesh_features;
 
     VkPhysicalDeviceColorWriteEnableFeaturesEXT colorWriteEnableFeatures = {
         .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_COLOR_WRITE_ENABLE_FEATURES_EXT,
@@ -444,27 +495,39 @@ logical_device_create(Arena* arena, Context* vk_ctx)
     }
 
     vkGetDeviceQueue(vk_ctx->device, queueFamilyIndicies.graphicsFamilyIndex, 0, &vk_ctx->graphics_queue);
+    vk_ctx->cmd_draw_mesh_tasks_ext =
+        (PFN_vkCmdDrawMeshTasksEXT)vkGetDeviceProcAddr(vk_ctx->device, "vkCmdDrawMeshTasksEXT");
+    if (!vk_ctx->cmd_draw_mesh_tasks_ext)
+    {
+        exit_with_error("Could not load vkCmdDrawMeshTasksEXT");
+    }
     vkGetDeviceQueue(vk_ctx->device, queueFamilyIndicies.presentFamilyIndex, 0, &vk_ctx->present_queue);
-    cmd_set_color_write_enable_ext = (PFN_vkCmdSetColorWriteEnableEXT)vkGetDeviceProcAddr(vk_ctx->device, "vkCmdSetColorWriteEnableEXT");
+    cmd_set_color_write_enable_ext =
+        (PFN_vkCmdSetColorWriteEnableEXT)vkGetDeviceProcAddr(vk_ctx->device, "vkCmdSetColorWriteEnableEXT");
     if (!cmd_set_color_write_enable_ext)
     {
         exit_with_error("Could not load vkCmdSetColorWriteEnableEXT");
     }
-    cmd_push_descriptor_set_khr = (PFN_vkCmdPushDescriptorSetKHR)vkGetDeviceProcAddr(vk_ctx->device, "vkCmdPushDescriptorSetKHR");
+    cmd_push_descriptor_set_khr =
+        (PFN_vkCmdPushDescriptorSetKHR)vkGetDeviceProcAddr(vk_ctx->device, "vkCmdPushDescriptorSetKHR");
     if (!cmd_push_descriptor_set_khr)
     {
         exit_with_error("Could not load vkCmdPushDescriptorSetKHR");
     }
 #if BUILD_DEBUG
-    cmd_begin_debug_utils_label_ext = (PFN_vkCmdBeginDebugUtilsLabelEXT)vkGetDeviceProcAddr(vk_ctx->device, "vkCmdBeginDebugUtilsLabelEXT");
-    cmd_end_debug_utils_label_ext = (PFN_vkCmdEndDebugUtilsLabelEXT)vkGetDeviceProcAddr(vk_ctx->device, "vkCmdEndDebugUtilsLabelEXT");
+    cmd_begin_debug_utils_label_ext =
+        (PFN_vkCmdBeginDebugUtilsLabelEXT)vkGetDeviceProcAddr(vk_ctx->device, "vkCmdBeginDebugUtilsLabelEXT");
+    cmd_end_debug_utils_label_ext =
+        (PFN_vkCmdEndDebugUtilsLabelEXT)vkGetDeviceProcAddr(vk_ctx->device, "vkCmdEndDebugUtilsLabelEXT");
     if (!cmd_begin_debug_utils_label_ext)
     {
-        cmd_begin_debug_utils_label_ext = (PFN_vkCmdBeginDebugUtilsLabelEXT)vkGetInstanceProcAddr(vk_ctx->instance, "vkCmdBeginDebugUtilsLabelEXT");
+        cmd_begin_debug_utils_label_ext =
+            (PFN_vkCmdBeginDebugUtilsLabelEXT)vkGetInstanceProcAddr(vk_ctx->instance, "vkCmdBeginDebugUtilsLabelEXT");
     }
     if (!cmd_end_debug_utils_label_ext)
     {
-        cmd_end_debug_utils_label_ext = (PFN_vkCmdEndDebugUtilsLabelEXT)vkGetInstanceProcAddr(vk_ctx->instance, "vkCmdEndDebugUtilsLabelEXT");
+        cmd_end_debug_utils_label_ext =
+            (PFN_vkCmdEndDebugUtilsLabelEXT)vkGetInstanceProcAddr(vk_ctx->instance, "vkCmdEndDebugUtilsLabelEXT");
     }
 #endif
 }
@@ -575,13 +638,15 @@ required_extensions_get(Context* vk_ctx)
 }
 
 static VKAPI_ATTR VkBool32 VKAPI_CALL
-debug_callback(VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity, VkDebugUtilsMessageTypeFlagsEXT messageType, const VkDebugUtilsMessengerCallbackDataEXT* pCallbackData, void* pUserData)
+debug_callback(VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity, VkDebugUtilsMessageTypeFlagsEXT messageType,
+               const VkDebugUtilsMessengerCallbackDataEXT* pCallbackData, void* pUserData)
 {
     (void)pCallbackData;
     (void)pUserData;
     (void)messageType;
     (void)messageSeverity;
-    B32 ignore_message = c_str_equal(pCallbackData->pMessageIdName ? pCallbackData->pMessageIdName : "", "VUID-vkCmdDispatch-storageBuffers-06936");
+    B32 ignore_message = c_str_equal(pCallbackData->pMessageIdName ? pCallbackData->pMessageIdName : "",
+                                     "VUID-vkCmdDispatch-storageBuffers-06936");
 
     if (!ignore_message)
     {
@@ -598,7 +663,8 @@ debug_messenger_setup(Context* vk_ctx)
         return;
     VkDebugUtilsMessengerCreateInfoEXT createInfo;
     populate_debug_messenger_create_info(createInfo);
-    if (create_debug_utils_messenger_ext(vk_ctx->instance, &createInfo, nullptr, &vk_ctx->debug_messenger) != VK_SUCCESS)
+    if (create_debug_utils_messenger_ext(vk_ctx->instance, &createInfo, nullptr, &vk_ctx->debug_messenger) !=
+        VK_SUCCESS)
     {
         exit_with_error("failed to set up debug messenger!");
     }
@@ -609,9 +675,12 @@ populate_debug_messenger_create_info(VkDebugUtilsMessengerCreateInfoEXT& createI
 {
     createInfo = {};
     createInfo.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT;
-    createInfo.messageSeverity = VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_SEVERITY_INFO_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT |
-                                 VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT;
-    createInfo.messageType = VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT;
+    createInfo.messageSeverity =
+        VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_SEVERITY_INFO_BIT_EXT |
+        VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT;
+    createInfo.messageType = VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT |
+                             VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT |
+                             VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT;
     createInfo.pfnUserCallback = debug_callback;
 }
 
@@ -711,10 +780,7 @@ shader_module_create(VkDevice device, ::Buffer<U8> buffer)
     createInfo.pCode = reinterpret_cast<const U32*>(buffer.data);
 
     VkShaderModule shaderModule;
-    if (vkCreateShaderModule(device, &createInfo, nullptr, &shaderModule) != VK_SUCCESS)
-    {
-        exit_with_error("failed to create shader module!");
-    }
+    VK_CHECK_RESULT(vkCreateShaderModule(device, &createInfo, nullptr, &shaderModule));
 
     return shaderModule;
 }
@@ -790,7 +856,8 @@ is_device_suitable(Context* vk_ctx, VkPhysicalDevice device, QueueFamilyIndexBit
     VkPhysicalDeviceFeatures supportedFeatures;
     vkGetPhysicalDeviceFeatures(device, &supportedFeatures);
 
-    return queue_family_is_complete(indexBits) && extensionsSupported && swapChainAdequate && supportedFeatures.samplerAnisotropy;
+    return queue_family_is_complete(indexBits) && extensionsSupported && swapChainAdequate &&
+           supportedFeatures.samplerAnisotropy;
 }
 
 static bool
@@ -825,7 +892,8 @@ query_swapchain_support(Arena* arena, VkPhysicalDevice device, VkSurfaceKHR surf
     if (presentModeCount != 0)
     {
         details.presentModes = buffer_alloc<VkPresentModeKHR>(arena, presentModeCount);
-        VK_CHECK_RESULT(vkGetPhysicalDeviceSurfacePresentModesKHR(device, surface, &presentModeCount, details.presentModes.data))
+        VK_CHECK_RESULT(
+            vkGetPhysicalDeviceSurfacePresentModesKHR(device, surface, &presentModeCount, details.presentModes.data))
     }
 
     return details;
@@ -842,7 +910,8 @@ image_view_resource_destroy(ImageViewResource image_view_resource)
     }
 }
 
-ImageViewResource::ImageViewResource(VkDevice device, VkImage image, VkFormat format, VkImageAspectFlags aspect_mask, U32 mipmap_level, VkImageViewType image_type)
+ImageViewResource::ImageViewResource(VkDevice device, VkImage image, VkFormat format, VkImageAspectFlags aspect_mask,
+                                     U32 mipmap_level, VkImageViewType image_type)
 {
     VkImageViewCreateInfo viewInfo{};
     viewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
@@ -864,13 +933,15 @@ ImageViewResource::ImageViewResource(VkDevice device, VkImage image, VkFormat fo
 }
 
 static ImageViewResource
-image_view_resource_create(VkDevice device, VkImage image, VkFormat format, VkImageAspectFlags aspect_mask, U32 mipmap_level, VkImageViewType image_type)
+image_view_resource_create(VkDevice device, VkImage image, VkFormat format, VkImageAspectFlags aspect_mask,
+                           U32 mipmap_level, VkImageViewType image_type)
 {
     return ImageViewResource(device, image, format, aspect_mask, mipmap_level, image_type);
 }
 
 g_internal void
-blit_transition_image(VkCommandBuffer cmd_buf, VkImage image, VkImageLayout src_layout, VkImageLayout dst_layout, U32 mip_level)
+blit_transition_image(VkCommandBuffer cmd_buf, VkImage image, VkImageLayout src_layout, VkImageLayout dst_layout,
+                      U32 mip_level)
 {
     // ~mgj: Transition color attachment images for presentation or transfer
     VkImageMemoryBarrier2 barrier{};
@@ -882,10 +953,16 @@ blit_transition_image(VkCommandBuffer cmd_buf, VkImage image, VkImageLayout src_
     barrier.oldLayout = src_layout;
     barrier.newLayout = dst_layout;
     barrier.image = image;
-    barrier.subresourceRange = {.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT, .baseMipLevel = mip_level, .levelCount = 1, .baseArrayLayer = 0, .layerCount = 1};
+    barrier.subresourceRange = {.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+                                .baseMipLevel = mip_level,
+                                .levelCount = 1,
+                                .baseArrayLayer = 0,
+                                .layerCount = 1};
 
     VkImageMemoryBarrier2 barriers[] = {barrier};
-    VkDependencyInfo layout_transition_info = {.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO, .imageMemoryBarrierCount = ArrayCount(barriers), .pImageMemoryBarriers = barriers};
+    VkDependencyInfo layout_transition_info = {.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
+                                               .imageMemoryBarrierCount = ArrayCount(barriers),
+                                               .pImageMemoryBarriers = barriers};
 
     vkCmdPipelineBarrier2(cmd_buf, &layout_transition_info);
 }
@@ -899,10 +976,13 @@ color_resources_create(Context* vk_ctx, SwapchainResources* swapchain_resources)
         .usage = VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE,
     };
 
-    ImageAllocation image_alloc = image_allocation_create(swapchain_resources->swapchain_extent.width, swapchain_resources->swapchain_extent.height, vk_ctx->msaa_samples, colorFormat,
-                                                          VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT, 1, vma_info, "color image");
+    ImageAllocation image_alloc = image_allocation_create(
+        swapchain_resources->swapchain_extent.width, swapchain_resources->swapchain_extent.height, vk_ctx->msaa_samples,
+        colorFormat, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT, 1,
+        vma_info, "color image");
 
-    ImageViewResource color_image_view = image_view_resource_create(vk_ctx->device, image_alloc.image, colorFormat, VK_IMAGE_ASPECT_COLOR_BIT, 1);
+    ImageViewResource color_image_view =
+        image_view_resource_create(vk_ctx->device, image_alloc.image, colorFormat, VK_IMAGE_ASPECT_COLOR_BIT, 1);
 
     swapchain_resources->color_image_resource = ImageResource(image_alloc, color_image_view);
 }
@@ -912,7 +992,8 @@ swapchain_image_resource_create(VkDevice device, SwapchainResources* swapchain_r
 {
     ScratchScope scratch = ScratchScope(0, 0);
 
-    swapchain_resources->image_resources = buffer_alloc<ImageSwapchainResource>(swapchain_resources->arena, image_count);
+    swapchain_resources->image_resources =
+        buffer_alloc<ImageSwapchainResource>(swapchain_resources->arena, image_count);
 
     VkImage* images = PushArray(scratch.arena, VkImage, image_count);
     if (vkGetSwapchainImagesKHR(device, swapchain_resources->swapchain, &image_count, images) != VK_SUCCESS)
@@ -922,7 +1003,8 @@ swapchain_image_resource_create(VkDevice device, SwapchainResources* swapchain_r
 
     for (uint32_t i = 0; i < image_count; i++)
     {
-        ImageViewResource image_view_res = image_view_resource_create(device, images[i], swapchain_resources->swapchain_image_format, VK_IMAGE_ASPECT_COLOR_BIT, 1);
+        ImageViewResource image_view_res = image_view_resource_create(
+            device, images[i], swapchain_resources->swapchain_image_format, VK_IMAGE_ASPECT_COLOR_BIT, 1);
 
         swapchain_resources->image_resources.data[i] = {.image = images[i], .image_view_resource = image_view_res};
     }
@@ -934,7 +1016,8 @@ choose_swap_surface_format(::Buffer<VkSurfaceFormatKHR> availableFormats)
 {
     for (U32 i = 0; i < availableFormats.size; i++)
     {
-        if (availableFormats.data[i].format == VK_FORMAT_R8G8B8A8_SRGB && availableFormats.data[i].colorSpace == VK_COLOR_SPACE_SRGB_NONLINEAR_KHR)
+        if (availableFormats.data[i].format == VK_FORMAT_R8G8B8A8_SRGB &&
+            availableFormats.data[i].colorSpace == VK_COLOR_SPACE_SRGB_NONLINEAR_KHR)
         {
             return availableFormats.data[i];
         }
@@ -966,8 +1049,10 @@ choose_swap_extent(Vec2U32 framebuffer_dim, const VkSurfaceCapabilitiesKHR& capa
     {
         VkExtent2D actualExtent = {0, 0};
 
-        actualExtent.width = Clamp(capabilities.minImageExtent.width, framebuffer_dim.x, capabilities.maxImageExtent.width);
-        actualExtent.height = Clamp(capabilities.minImageExtent.height, framebuffer_dim.y, capabilities.maxImageExtent.height);
+        actualExtent.width =
+            Clamp(capabilities.minImageExtent.width, framebuffer_dim.x, capabilities.maxImageExtent.width);
+        actualExtent.height =
+            Clamp(capabilities.minImageExtent.height, framebuffer_dim.y, capabilities.maxImageExtent.height);
 
         return actualExtent;
     }
@@ -979,7 +1064,8 @@ max_usable_sample_count_get(VkPhysicalDevice device)
     VkPhysicalDeviceProperties physicalDeviceProperties;
     vkGetPhysicalDeviceProperties(device, &physicalDeviceProperties);
 
-    VkSampleCountFlags counts = physicalDeviceProperties.limits.framebufferColorSampleCounts & physicalDeviceProperties.limits.framebufferDepthSampleCounts;
+    VkSampleCountFlags counts = physicalDeviceProperties.limits.framebufferColorSampleCounts &
+                                physicalDeviceProperties.limits.framebufferDepthSampleCounts;
     if (counts & VK_SAMPLE_COUNT_64_BIT)
     {
         return VK_SAMPLE_COUNT_64_BIT;
@@ -1050,7 +1136,8 @@ swapchain_create(Context* vk_ctx, SwapChainSupportDetails* swapchain_info, VkExt
 
     if (queueFamilyIndices.graphicsFamilyIndex != queueFamilyIndices.presentFamilyIndex)
     {
-        U32 queueFamilyIndicesSame[] = {vk_ctx->queue_family_indices.graphicsFamilyIndex, vk_ctx->queue_family_indices.presentFamilyIndex};
+        U32 queueFamilyIndicesSame[] = {vk_ctx->queue_family_indices.graphicsFamilyIndex,
+                                        vk_ctx->queue_family_indices.presentFamilyIndex};
         createInfo.imageSharingMode = VK_SHARING_MODE_CONCURRENT;
         createInfo.queueFamilyIndexCount = 2;
         createInfo.pQueueFamilyIndices = queueFamilyIndicesSame;
@@ -1085,13 +1172,15 @@ swapchain_create(Context* vk_ctx, SwapChainSupportDetails* swapchain_info, VkExt
     depth_resources_create(vk_ctx, swapchain_resources);
     object_id_image_resource_create(swapchain_resources, swapchain_image_count);
 
-    swapchain_resources->render_finished_semaphores = buffer_alloc<VkSemaphore>(swapchain_resources->arena, swapchain_image_count);
+    swapchain_resources->render_finished_semaphores =
+        buffer_alloc<VkSemaphore>(swapchain_resources->arena, swapchain_image_count);
 
     VkSemaphoreCreateInfo semaphore_info{};
     semaphore_info.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
     for (U32 i = 0; i < swapchain_image_count; i++)
     {
-        VK_CHECK_RESULT(vkCreateSemaphore(vk_ctx->device, &semaphore_info, nullptr, &swapchain_resources->render_finished_semaphores.data[i]));
+        VK_CHECK_RESULT(vkCreateSemaphore(vk_ctx->device, &semaphore_info, nullptr,
+                                          &swapchain_resources->render_finished_semaphores.data[i]));
     }
 
     return swapchain_resources;
@@ -1131,7 +1220,8 @@ swapchain_recreate(Vec2U32 framebuffer_dim)
 
     swapchain_cleanup(vk_ctx->device, vk_ctx->swapchain_resources);
     vk_ctx->swapchain_resources = 0;
-    SwapChainSupportDetails swapchain_details = query_swapchain_support(scratch.arena, vk_ctx->physical_device, vk_ctx->surface);
+    SwapChainSupportDetails swapchain_details =
+        query_swapchain_support(scratch.arena, vk_ctx->physical_device, vk_ctx->surface);
     VkExtent2D swapchain_extent = choose_swap_extent(framebuffer_dim, swapchain_details.capabilities);
 
     if (swapchain_extent.width != 0 && swapchain_extent.height != 0)
@@ -1170,7 +1260,8 @@ descriptor_pool_create(Context* vk_ctx, U32 max_textures)
     poolInfo.poolSizeCount = pool_size_count;
     poolInfo.pPoolSizes = pool_sizes;
     // Enable update after bind for descriptor indexing support
-    poolInfo.flags = VK_DESCRIPTOR_POOL_CREATE_UPDATE_AFTER_BIND_BIT | VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT;
+    poolInfo.flags =
+        VK_DESCRIPTOR_POOL_CREATE_UPDATE_AFTER_BIND_BIT | VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT;
     poolInfo.maxSets = max_textures;
 
     if (vkCreateDescriptorPool(vk_ctx->device, &poolInfo, nullptr, &vk_ctx->descriptor_pool) != VK_SUCCESS)
@@ -1182,7 +1273,8 @@ descriptor_pool_create(Context* vk_ctx, U32 max_textures)
 // ~mgj: Descriptor Indexing / Bindless Descriptor Set Layout Creation
 // Creates a descriptor set layout with descriptor indexing flags for bindless resources
 static VkDescriptorSetLayout
-descriptor_set_layout_create_bindless(VkDevice device, VkDescriptorSetLayoutBinding* bindings, VkDescriptorBindingFlags* binding_flags, U32 binding_count)
+descriptor_set_layout_create_bindless(VkDevice device, VkDescriptorSetLayoutBinding* bindings,
+                                      VkDescriptorBindingFlags* binding_flags, U32 binding_count)
 {
     VkDescriptorSetLayoutBindingFlagsCreateInfo binding_flags_info{};
     binding_flags_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_BINDING_FLAGS_CREATE_INFO;
@@ -1207,7 +1299,8 @@ descriptor_set_layout_create_bindless(VkDevice device, VkDescriptorSetLayoutBind
 
 // Creates a descriptor set layout for bindless textures
 static VkDescriptorSetLayout
-descriptor_set_layout_create_bindless_textures(VkDevice device, U32 texture_binding, U32 max_textures, VkShaderStageFlags stage_flags)
+descriptor_set_layout_create_bindless_textures(VkDevice device, U32 texture_binding, U32 max_textures,
+                                               VkShaderStageFlags stage_flags)
 {
     VkDescriptorSetLayoutBinding binding{};
     binding.binding = texture_binding;
@@ -1216,14 +1309,17 @@ descriptor_set_layout_create_bindless_textures(VkDevice device, U32 texture_bind
     binding.stageFlags = stage_flags;
     binding.pImmutableSamplers = nullptr;
 
-    VkDescriptorBindingFlags flags = VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT | VK_DESCRIPTOR_BINDING_UPDATE_AFTER_BIND_BIT | VK_DESCRIPTOR_BINDING_VARIABLE_DESCRIPTOR_COUNT_BIT;
+    VkDescriptorBindingFlags flags = VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT |
+                                     VK_DESCRIPTOR_BINDING_UPDATE_AFTER_BIND_BIT |
+                                     VK_DESCRIPTOR_BINDING_VARIABLE_DESCRIPTOR_COUNT_BIT;
 
     return descriptor_set_layout_create_bindless(device, &binding, &flags, 1);
 }
 
 // Allocates a descriptor set with variable descriptor count for bindless arrays
 static VkDescriptorSet
-descriptor_set_allocate_bindless(VkDevice device, VkDescriptorPool desc_pool, VkDescriptorSetLayout desc_set_layout, U32 variable_count)
+descriptor_set_allocate_bindless(VkDevice device, VkDescriptorPool desc_pool, VkDescriptorSetLayout desc_set_layout,
+                                 U32 variable_count)
 {
     VkDescriptorSetVariableDescriptorCountAllocateInfo variable_count_info{};
     variable_count_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_VARIABLE_DESCRIPTOR_COUNT_ALLOCATE_INFO;

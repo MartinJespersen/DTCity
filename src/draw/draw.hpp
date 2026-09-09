@@ -73,6 +73,7 @@ struct DrawFrame
     RoadIntersectionList road_intersection_list;
     ChunkList<render::LineVertex>* line_vertex_chunk_list;
     PrimitiveInstanceList primitive_instance_list;
+    ChunkList<render::MeshInstanceBatch>* mesh_instance_batches;
     render::MappedHandle<void> camera_handle;
 };
 
@@ -100,6 +101,9 @@ g_internal void
 draw_line(render::Line& line);
 g_internal void
 primitive_draw(glm::vec3 location, F32 scale_factor, render::MeshHandle mesh_handle);
+
+g_internal void
+draw_mesh_instances(render::MeshletMeshHandle mesh_handle, Buffer<render::Transform> transforms);
 
 g_internal void
 draw_blend_3d(render::Blend3DPipelineData pipeline_input);

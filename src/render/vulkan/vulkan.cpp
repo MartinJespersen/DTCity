@@ -244,40 +244,10 @@ command_buffer_record(U32 image_index, U32 current_frame, Vec2S64 mouse_cursor_p
             VkDebugUtilsLabelEXT debug_label{};
             debug_label.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_LABEL_EXT;
 
-            vk_ctx->model_3D_instance_buffer[vk_ctx->current_frame] =
-                buffer_alloc_create_or_resize(vk_ctx->render_frame->car_instance_render_list.total_instance_buffer_byte_count, vk_ctx->model_3D_instance_buffer[vk_ctx->current_frame],
-                                              VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT);
-
-            render::AssetItem<BufferHandle>* model_3D_instance_buffer = vulkan::asset_manager_buffer_item_get(vk_ctx->model_3D_instance_buffer[vk_ctx->current_frame]);
-            if (model_3D_instance_buffer)
-            {
-                BufferAllocation instance_buffer_alloc = model_3D_instance_buffer->item.buffer_alloc;
-                VkBuffer instance_buffer = instance_buffer_alloc.buffer;
-                for (CarInstanceRenderNode* node = vk_ctx->render_frame->car_instance_render_list.list.first; node; node = node->next)
-                {
-                    // All compute shader from car_instance_compute() should have finished
-                    VkBufferMemoryBarrier2 barrier = {.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER_2,
-                                                      .srcStageMask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
-                                                      .srcAccessMask = VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT,
-                                                      .dstStageMask = VK_PIPELINE_STAGE_2_VERTEX_INPUT_BIT,
-                                                      .dstAccessMask = VK_ACCESS_2_VERTEX_ATTRIBUTE_READ_BIT,
-                                                      .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-                                                      .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-                                                      .buffer = instance_buffer,
-                                                      .offset = node->instance_buffer_offset,
-                                                      .size = node->instance_buffer_info.buffer.size};
-                    VkDependencyInfo dep_info = {.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO, .bufferMemoryBarrierCount = 1, .pBufferMemoryBarriers = &barrier};
-                    vkCmdPipelineBarrier2(current_cmd_buf, &dep_info);
-                }
-            }
 
             // ~mgj: Render pass
             vkCmdBeginRendering(current_cmd_buf, &rendering_info);
 
-            debug_label.pLabelName = "Car Instance Rendering";
-            CMD_BEGIN_DEBUG_UTILS_LABEL_EXT(current_cmd_buf, &debug_label);
-            agent_instance_rendering();
-            CMD_END_DEBUG_UTILS_LABEL_EXT(current_cmd_buf);
 
             debug_label.pLabelName = "Model 3D Rendering";
             CMD_BEGIN_DEBUG_UTILS_LABEL_EXT(current_cmd_buf, &debug_label);
@@ -301,6 +271,12 @@ command_buffer_record(U32 image_index, U32 current_frame, Vec2S64 mouse_cursor_p
                 }
             }
             primitive_rendering(primitive_instances, draw_frame->camera_handle);
+
+            if (draw_frame->mesh_instance_batches->total_count > 0)
+            {
+                Buffer<render::MeshInstanceBatch> mesh_batches = buffer_from_chunk_list(vk_ctx->render_frame_arena, draw_frame->mesh_instance_batches);
+                mesh_instance_rendering(mesh_batches, draw_frame->camera_handle);
+            }
 
             if (draw_frame->line_vertex_chunk_list->total_count > 0)
             {

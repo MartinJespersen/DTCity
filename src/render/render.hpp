@@ -205,6 +205,7 @@ struct AgentModelInfo
 {
     render::Handle vertex_handle;
     render::Handle index_handle;
+    U32 meshlet_count;
     U32 texture_handle_idx;
     glm::vec4 color;
 };
@@ -318,6 +319,7 @@ struct PrimitiveVertex
     glm::vec3 pos;
     glm::vec3 normal;
     glm::vec4 color;
+    glm::vec2 uv;
 };
 
 struct PrimitiveMesh
@@ -373,6 +375,25 @@ struct PrimitiveInstance
     Buffer<glm::vec3> locations;
     F32 scale_factor;
     MeshHandle mesh_handle;
+};
+
+struct MeshletMeshHandle
+{
+    Handle vertex_buffer_handle;
+    Handle meshlet_buffer_handle;
+    U32 meshlet_count; // Maximum meshlets in any LOD, used to size task dispatches.
+};
+
+// Mesh handles must be created by mesh_shader_handles_create_and_upload.
+// Uses PrimitiveVertex meshes and one non-singular, orientation-preserving
+// affine model-to-world transform per instance (translation, rotation, scale).
+struct MeshInstanceBatch
+{
+    Buffer<Transform> transforms;
+    MeshletMeshHandle mesh_handle;
+    Handle texture_handle;
+    B32 textured;
+    F32 lod_error_pixels; // Zero keeps full detail; otherwise maximum projected simplification error.
 };
 
 struct TextureUploadData
@@ -518,4 +539,10 @@ is_resource_loaded(Handle handle);
 
 g_internal render::MeshHandle
 mesh_handles_create_and_upload(render::PrimitiveMesh& prim_mesh);
+g_internal MeshletMeshHandle
+mesh_shader_handles_create_and_upload(PrimitiveMesh& mesh);
+g_internal MeshletMeshHandle
+mesh_shader_handles_create_and_upload(Buffer<PrimitiveVertex> vertices, Buffer<U32> indices, Arena* source_arena = 0);
+g_internal void
+mesh_shader_handles_destroy(MeshletMeshHandle mesh);
 } // namespace render

@@ -13,10 +13,12 @@ null_texture_create(vulkan::Context* vk_ctx)
     };
     // Create a 1x1 RGBA8 image
     VmaAllocationCreateInfo vma_info = {.usage = VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE};
-    vulkan::ImageAllocation image_alloc = vulkan::image_allocation_create(1, 1, VK_SAMPLE_COUNT_1_BIT, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_TILING_OPTIMAL,
-                                                                          VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT, 1, vma_info, "null_texture image");
+    vulkan::ImageAllocation image_alloc = vulkan::image_allocation_create(
+        1, 1, VK_SAMPLE_COUNT_1_BIT, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_TILING_OPTIMAL,
+        VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT, 1, vma_info, "null_texture image");
 
-    vulkan::ImageViewResource image_view_resource = vulkan::image_view_resource_create(vk_ctx->device, image_alloc.image, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_ASPECT_COLOR_BIT, 1);
+    vulkan::ImageViewResource image_view_resource = vulkan::image_view_resource_create(
+        vk_ctx->device, image_alloc.image, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_ASPECT_COLOR_BIT, 1);
 
     // Transition image to SHADER_READ_ONLY_OPTIMAL
     VkCommandBuffer cmd;
@@ -47,7 +49,8 @@ null_texture_create(vulkan::Context* vk_ctx)
     barrier.srcAccessMask = 0;
     barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
 
-    vkCmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0, 0, nullptr, 0, nullptr, 1, &barrier);
+    vkCmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0, 0, nullptr,
+                         0, nullptr, 1, &barrier);
 
     vkEndCommandBuffer(cmd);
 
@@ -61,13 +64,15 @@ null_texture_create(vulkan::Context* vk_ctx)
     vkFreeCommandBuffers(vk_ctx->device, vk_ctx->command_pool, 1, &cmd);
 
     vk_ctx->null_texture_handle = render::texture_handle_create(&sampler_info);
-    render::AssetItem<vulkan::TextureHandle>* tex_asset = vulkan::asset_manager_texture_item_get(vk_ctx->null_texture_handle);
+    render::AssetItem<vulkan::TextureHandle>* tex_asset =
+        vulkan::asset_manager_texture_item_get(vk_ctx->null_texture_handle);
     AssertAlways(tex_asset);
     tex_asset->item.image_resource = vulkan::ImageResource(image_alloc, image_view_resource);
     tex_asset->item.staging_allocation = {};
     tex_asset->is_loaded = 1;
 
-    vulkan::descriptor_set_update_bindless_texture(tex_asset->item.descriptor_set_idx, image_view_resource.image_view, tex_asset->item.sampler);
+    vulkan::descriptor_set_update_bindless_texture(tex_asset->item.descriptor_set_idx, image_view_resource.image_view,
+                                                   tex_asset->item.sampler);
 }
 
 // ~mgj: Vulkan Interface
@@ -91,9 +96,15 @@ render_ctx_create(String8 shader_path, io::IO* io_ctx, async::ThreadPool* thread
         vk_ctx->validation_layers.data[i] = {str8_c_string(validation_layers[i])};
     }
 
-    const char* device_extensions[] = {VK_KHR_SWAPCHAIN_EXTENSION_NAME,           VK_KHR_DYNAMIC_RENDERING_EXTENSION_NAME, VK_EXT_COLOR_WRITE_ENABLE_EXTENSION_NAME,
-                                       VK_EXT_DESCRIPTOR_INDEXING_EXTENSION_NAME, VK_KHR_PUSH_DESCRIPTOR_EXTENSION_NAME,   VK_EXT_MEMORY_BUDGET_EXTENSION_NAME,
-                                       VK_KHR_TIMELINE_SEMAPHORE_EXTENSION_NAME};
+    const char* device_extensions[] = {VK_KHR_SWAPCHAIN_EXTENSION_NAME,
+                                       VK_KHR_DYNAMIC_RENDERING_EXTENSION_NAME,
+                                       VK_EXT_COLOR_WRITE_ENABLE_EXTENSION_NAME,
+                                       VK_EXT_DESCRIPTOR_INDEXING_EXTENSION_NAME,
+                                       VK_KHR_PUSH_DESCRIPTOR_EXTENSION_NAME,
+                                       VK_EXT_MEMORY_BUDGET_EXTENSION_NAME,
+                                       VK_KHR_TIMELINE_SEMAPHORE_EXTENSION_NAME,
+                                       VK_EXT_MESH_SHADER_EXTENSION_NAME,
+                                       VK_KHR_SHADER_RELAXED_EXTENDED_INSTRUCTION_EXTENSION_NAME};
     vk_ctx->device_extensions = buffer_alloc<String8>(vk_ctx->arena, ArrayCount(device_extensions));
     for (U32 i = 0; i < ArrayCount(device_extensions); i++)
     {
@@ -121,18 +132,22 @@ render_ctx_create(String8 shader_path, io::IO* io_ctx, async::ThreadPool* thread
     vulkan::descriptor_pool_create(vk_ctx, vk_ctx->max_texture_count);
 
     // ~mgj: Create asset manager (includes VMA allocator)
-    vk_ctx->asset_manager = vulkan::asset_manager_create(vk_ctx->physical_device, vk_ctx->device, vk_ctx->instance, vk_ctx->graphics_queue, vk_ctx->queue_family_indices.graphicsFamilyIndex,
-                                                         thread_pool, GB(1), vk_ctx->descriptor_pool);
+    vk_ctx->asset_manager = vulkan::asset_manager_create(
+        vk_ctx->physical_device, vk_ctx->device, vk_ctx->instance, vk_ctx->graphics_queue,
+        vk_ctx->queue_family_indices.graphicsFamilyIndex, thread_pool, GB(1), vk_ctx->descriptor_pool);
 
     constexpr U64 dummy_storage_buffer_size = 64;
     U8 dummy_storage_buffer_data[dummy_storage_buffer_size] = {};
     Buffer<U8> dummy_storage_buffer = {.data = dummy_storage_buffer_data, .size = dummy_storage_buffer_size};
-    render::BufferInfo dummy_storage_buffer_info = render::BufferInfo(dummy_storage_buffer, render::BufferType_StorageBuffer);
-    vk_ctx->dummy_storage_buffer_handle = render::buffer_load_immediate(&dummy_storage_buffer_info, S("dummy storage buffer"));
+    render::BufferInfo dummy_storage_buffer_info =
+        render::BufferInfo(dummy_storage_buffer, render::BufferType_StorageBuffer);
+    vk_ctx->dummy_storage_buffer_handle =
+        render::buffer_load_immediate(&dummy_storage_buffer_info, S("dummy storage buffer"));
 
     Vec2S32 vk_framebuffer_dim_s32 = io::wait_for_valid_framebuffer_size(io_ctx);
     Vec2U32 vk_framebuffer_dim_u32 = {(U32)vk_framebuffer_dim_s32.x, (U32)vk_framebuffer_dim_s32.y};
-    vulkan::SwapChainSupportDetails swapchain_details = vulkan::query_swapchain_support(scratch.arena, vk_ctx->physical_device, vk_ctx->surface);
+    vulkan::SwapChainSupportDetails swapchain_details =
+        vulkan::query_swapchain_support(scratch.arena, vk_ctx->physical_device, vk_ctx->surface);
     VkExtent2D swapchain_extent = vulkan::choose_swap_extent(vk_framebuffer_dim_u32, swapchain_details.capabilities);
     vk_ctx->swapchain_resources = vulkan::swapchain_create(vk_ctx, &swapchain_details, swapchain_extent);
 
@@ -149,9 +164,11 @@ render_ctx_create(String8 shader_path, io::IO* io_ctx, async::ThreadPool* thread
     // ~mgj: Drawing (TODO: Move out of vulkan context to own module)
 
     vk_ctx->texture_binding = 0;
-    vk_ctx->bindless_descriptor_set_layout = vulkan::descriptor_set_layout_create_bindless_textures(vk_ctx->device, vk_ctx->texture_binding, vk_ctx->max_texture_count,
-                                                                                                    VK_SHADER_STAGE_ALL); // TODO: VK_SHADER_STAGE_ALL is probably not the best flag
-    vk_ctx->bindless_descriptor_set = vulkan::descriptor_set_allocate_bindless(vk_ctx->device, vk_ctx->descriptor_pool, vk_ctx->bindless_descriptor_set_layout, vk_ctx->max_texture_count);
+    vk_ctx->bindless_descriptor_set_layout = vulkan::descriptor_set_layout_create_bindless_textures(
+        vk_ctx->device, vk_ctx->texture_binding, vk_ctx->max_texture_count,
+        VK_SHADER_STAGE_ALL); // TODO: VK_SHADER_STAGE_ALL is probably not the best flag
+    vk_ctx->bindless_descriptor_set = vulkan::descriptor_set_allocate_bindless(
+        vk_ctx->device, vk_ctx->descriptor_pool, vk_ctx->bindless_descriptor_set_layout, vk_ctx->max_texture_count);
     camera_descriptor_set_layout_create(vk_ctx);
 
     null_texture_create(vk_ctx);
@@ -159,9 +176,9 @@ render_ctx_create(String8 shader_path, io::IO* io_ctx, async::ThreadPool* thread
     vk_ctx->render_frame_arena = arena_alloc();
     Debug_SetName(vk_ctx->render_frame_arena, "vulkan render frame arena");
     vk_ctx->model_3D_pipeline = vulkan::tile_pipeline_create(vk_ctx, shader_path);
-    vk_ctx->car_instance_pipeline = vulkan::agent_instance_pipeline_create(vk_ctx, shader_path);
     vk_ctx->blend_3d_pipeline = vulkan::blend_3d_pipeline_create(shader_path);
     vk_ctx->primitive_pipeline = vulkan::primitive_pipeline_create(shader_path);
+    vk_ctx->mesh_instance_pipeline = vulkan::mesh_instance_pipeline_create(shader_path);
     vk_ctx->line_pipeline = vulkan::line_pipeline_create(vk_ctx, shader_path);
 
     // sync objects
@@ -172,7 +189,8 @@ render_ctx_create(String8 shader_path, io::IO* io_ctx, async::ThreadPool* thread
     VkSemaphoreCreateInfo fence_sem_info{};
     fence_sem_info.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
     fence_sem_info.pNext = &type_create_info;
-    VK_CHECK_RESULT(vkCreateSemaphore(vk_ctx->device, &fence_sem_info, nullptr, &vk_ctx->in_flight_fence_sem.semaphore));
+    VK_CHECK_RESULT(
+        vkCreateSemaphore(vk_ctx->device, &fence_sem_info, nullptr, &vk_ctx->in_flight_fence_sem.semaphore));
     vk_ctx->in_flight_fence_sem.count = 0;
 
     vk_ctx->image_available_semaphores = buffer_alloc<VkSemaphore>(vk_ctx->arena, MAX_FRAMES_IN_FLIGHT);
@@ -180,7 +198,8 @@ render_ctx_create(String8 shader_path, io::IO* io_ctx, async::ThreadPool* thread
     semaphore_info.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
     for (U32 i = 0; i < vk_ctx->image_available_semaphores.size; i++)
     {
-        VK_CHECK_RESULT(vkCreateSemaphore(vk_ctx->device, &semaphore_info, nullptr, &vk_ctx->image_available_semaphores.data[i]));
+        VK_CHECK_RESULT(
+            vkCreateSemaphore(vk_ctx->device, &semaphore_info, nullptr, &vk_ctx->image_available_semaphores.data[i]));
     }
 }
 
@@ -203,6 +222,7 @@ render_ctx_destroy()
     {
         render::handle_destroy_deferred(vk_ctx->model_3D_instance_buffer[i]);
         render::handle_destroy_deferred(vk_ctx->primitive_instance_buffer[i]);
+        render::handle_destroy_deferred(vk_ctx->mesh_instance_buffer[i]);
         render::handle_destroy_deferred(vk_ctx->line_buffer_handle[i]);
     }
 
@@ -218,9 +238,10 @@ render_ctx_destroy()
     vkDestroyDescriptorPool(vk_ctx->device, vk_ctx->descriptor_pool, 0);
 
     vulkan::pipeline_destroy(&vk_ctx->model_3D_pipeline);
-    vulkan::pipeline_destroy(&vk_ctx->car_instance_pipeline);
     vulkan::pipeline_destroy(&vk_ctx->blend_3d_pipeline);
     vulkan::pipeline_destroy(&vk_ctx->primitive_pipeline);
+    vulkan::pipeline_destroy(&vk_ctx->mesh_instance_pipeline);
+    vkDestroyDescriptorSetLayout(vk_ctx->device, vk_ctx->mesh_instance_descriptor_set_layout, nullptr);
     vulkan::pipeline_destroy(&vk_ctx->line_pipeline);
     vulkan::pipeline_destroy(&vk_ctx->bbox_pipeline);
 
@@ -283,7 +304,8 @@ render_frame(Vec2U32 framebuffer_dim, B32* in_out_framebuffer_resized, Vec2S64 m
     vulkan::SwapchainResources* swapchain_resources = vk_ctx->swapchain_resources;
     if (!swapchain_resources)
     {
-        vulkan::SwapChainSupportDetails swapchain_details = vulkan::query_swapchain_support(scratch.arena, vk_ctx->physical_device, vk_ctx->surface);
+        vulkan::SwapChainSupportDetails swapchain_details =
+            vulkan::query_swapchain_support(scratch.arena, vk_ctx->physical_device, vk_ctx->surface);
         VkExtent2D swapchain_extent = vulkan::choose_swap_extent(framebuffer_dim, swapchain_details.capabilities);
         if (swapchain_extent.width != 0 && swapchain_extent.height != 0)
             vk_ctx->swapchain_resources = vulkan::swapchain_create(vk_ctx, &swapchain_details, swapchain_extent);
@@ -301,7 +323,8 @@ render_frame(Vec2U32 framebuffer_dim, B32* in_out_framebuffer_resized, Vec2S64 m
         {
             VkSemaphore image_available_semaphore = vk_ctx->image_available_semaphores.data[frame_index];
             prof_scope_marker_named("Acquire Next Image");
-            VkResult result = vkAcquireNextImageKHR(vk_ctx->device, vk_ctx->swapchain_resources->swapchain, UINT64_MAX, image_available_semaphore, VK_NULL_HANDLE, &image_idx);
+            VkResult result = vkAcquireNextImageKHR(vk_ctx->device, vk_ctx->swapchain_resources->swapchain, UINT64_MAX,
+                                                    image_available_semaphore, VK_NULL_HANDLE, &image_idx);
             if (result == VK_ERROR_OUT_OF_DATE_KHR)
             {
                 vulkan::swapchain_recreate(framebuffer_dim);
@@ -494,9 +517,11 @@ texture_load_sync(render::SamplerInfo* sampler_info, TextureUploadData* tex_data
 
     {
         Assert(tex_data);
-        vulkan::ImageAllocationResource image_allocation_resource = vulkan::texture_upload_with_blitting((VkCommandBuffer)cmd, tex_data);
+        vulkan::ImageAllocationResource image_allocation_resource =
+            vulkan::texture_upload_with_blitting((VkCommandBuffer)cmd, tex_data);
 
-        render::AssetItem<vulkan::TextureHandle>* tex_asset = vulkan::asset_manager_item_get<vulkan::TextureHandle>(handle);
+        render::AssetItem<vulkan::TextureHandle>* tex_asset =
+            vulkan::asset_manager_item_get<vulkan::TextureHandle>(handle);
         if (tex_asset)
         {
             tex_asset->item.image_resource = image_allocation_resource.image_resource;
@@ -533,7 +558,8 @@ mapped_buffer_add(MappedHandle<T> mut_handle, T* data)
     vulkan::Context* vk_ctx = vulkan::ctx_get();
     String8 buffer = str8((U8*)data, sizeof(T));
     String8 source = push_str8_copy(vk_ctx->render_frame_arena, buffer);
-    LinkedListNode<vulkan::MappedHandleTransfer>* mut_handle_node = PushStruct(vk_ctx->render_frame_arena, LinkedListNode<vulkan::MappedHandleTransfer>);
+    LinkedListNode<vulkan::MappedHandleTransfer>* mut_handle_node =
+        PushStruct(vk_ctx->render_frame_arena, LinkedListNode<vulkan::MappedHandleTransfer>);
     render::MappedHandle<void> handle_void = render::mapped_handle_erased(mut_handle);
     mut_handle_node->v.mapped_handle = handle_void;
     mut_handle_node->v.source = source;
@@ -545,7 +571,8 @@ g_internal MappedHandle<T>
 mapped_buffer_create(Arena* arena, render::ThreadWorkerCmdCtx* thread_ctx, BufferType buffer_type, String8 debug_name)
 {
     ScratchScope scratch = ScratchScope(0, 0);
-    Buffer<MappedHandleFrame<T>> handle_buffer = buffer_alloc<MappedHandleFrame<T>>(arena, render::MAX_FRAMES_IN_FLIGHT);
+    Buffer<MappedHandleFrame<T>> handle_buffer =
+        buffer_alloc<MappedHandleFrame<T>>(arena, render::MAX_FRAMES_IN_FLIGHT);
 
     for (U32 frame_idx = 0; frame_idx < handle_buffer.size; ++frame_idx)
     {
@@ -557,7 +584,8 @@ mapped_buffer_create(Arena* arena, render::ThreadWorkerCmdCtx* thread_ctx, Buffe
 
         BufferInfo buffer_info = BufferInfo::empty_buffer_info<T>(arena, buffer_type);
         content->handle = vulkan::asset_manager_buffer_allocation_create(thread_ctx, &buffer_info, vma_info);
-        render::AssetItem<vulkan::BufferHandle>* asset_item_buffer = vulkan::asset_manager_buffer_item_get(content->handle);
+        render::AssetItem<vulkan::BufferHandle>* asset_item_buffer =
+            vulkan::asset_manager_buffer_item_get(content->handle);
         vulkan::BufferHandle* buffer_handle = &asset_item_buffer->item;
 
 #if BUILD_DEBUG
@@ -603,7 +631,8 @@ _buffer_load_sync(render::ThreadWorkerCmdCtx* thread_ctx, render::BufferInfo* bu
     vulkan::BufferHandle* buffer_handle = &asset_item_buffer->item;
 
     // ~mgj: Create staging buffer allocation
-    buffer_handle->staging_buffer = vulkan::asset_manager_buffer_from_staging((VkCommandBuffer)thread_ctx->cmd_buffer, buffer_info, buffer_handle->buffer_alloc.buffer);
+    buffer_handle->staging_buffer = vulkan::asset_manager_buffer_from_staging(
+        (VkCommandBuffer)thread_ctx->cmd_buffer, buffer_info, buffer_handle->buffer_alloc.buffer);
 
 #if BUILD_DEBUG
     ScratchScope scratch = ScratchScope(0, 0);
@@ -659,7 +688,8 @@ buffer_load_async(render::BufferInfo* buffer_info)
     if (buffer_type & render::BufferType_StorageBuffer)
         usage_flags |= VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
     Assert(usage_flags != 0);
-    vulkan::BufferAllocation buffer = vulkan::_buffer_allocation_create(buffer_info->buffer.size, usage_flags | VK_BUFFER_USAGE_TRANSFER_DST_BIT, &vma_info, nullptr);
+    vulkan::BufferAllocation buffer = vulkan::_buffer_allocation_create(
+        buffer_info->buffer.size, usage_flags | VK_BUFFER_USAGE_TRANSFER_DST_BIT, &vma_info, nullptr);
 
     // ~mgj: Prepare buffer asset item
     os_mutex_scope_w(asset_manager->buffer_mutex)
@@ -691,10 +721,12 @@ buffer_load_async(render::BufferInfo* buffer_info)
 }
 
 g_internal bool
-agent_instance_render_bucket_add(render::MappedHandle<void> camera_handle, Buffer<render::AgentModelInfo> meshes, Buffer<render::Handle> texture_handles, render::BufferInfo* instance_buffer_info,
+agent_instance_render_bucket_add(render::MappedHandle<void> camera_handle, Buffer<render::AgentModelInfo> meshes,
+                                 Buffer<render::Handle> texture_handles, render::BufferInfo* instance_buffer_info,
                                  U32 instance_buffer_offset)
 {
-    if (instance_buffer_info->buffer.size == 0 || instance_buffer_info->elem_count == 0 || meshes.size == 0 || texture_handles.size == 0)
+    if (instance_buffer_info->buffer.size == 0 || instance_buffer_info->elem_count == 0 || meshes.size == 0 ||
+        texture_handles.size == 0)
     {
         return false;
     }
@@ -712,7 +744,8 @@ agent_instance_render_bucket_add(render::MappedHandle<void> camera_handle, Buffe
             return false;
         }
         render::Handle texture_handle = texture_handles.data[mesh->texture_handle_idx];
-        resources_loaded = resources_loaded && render::is_resource_loaded(mesh->vertex_handle) && render::is_resource_loaded(mesh->index_handle) && render::is_resource_loaded(texture_handle);
+        resources_loaded = resources_loaded && render::is_resource_loaded(mesh->vertex_handle) &&
+                           render::is_resource_loaded(mesh->index_handle) && render::is_resource_loaded(texture_handle);
     }
 
     if (resources_loaded)
@@ -724,7 +757,9 @@ agent_instance_render_bucket_add(render::MappedHandle<void> camera_handle, Buffe
         node->instance_buffer_info = *instance_buffer_info;
         node->instance_buffer_offset = instance_buffer_offset;
         node->camera_handle = camera_handle;
-        instance_draw->total_instance_buffer_byte_count = Max(instance_draw->total_instance_buffer_byte_count, instance_buffer_offset + instance_buffer_info->buffer.size);
+        instance_draw->total_instance_buffer_byte_count =
+            Max(instance_draw->total_instance_buffer_byte_count,
+                instance_buffer_offset + instance_buffer_info->buffer.size);
 
         // push work
         SLLQueuePush(instance_draw->list.first, instance_draw->list.last, node);
@@ -751,8 +786,10 @@ tile_pipeline_add(render::TilePipelineData* pipeline_input)
     B32 overlay_tex_loaded = render::is_resource_loaded(pipeline_input->overlay_texture_handle, &overlay_tex);
     B32 vertex_loaded = render::is_resource_loaded(pipeline_input->vertex_buffer_render_handle, &asset_vertex_buffer);
     B32 index_loaded = render::is_resource_loaded(pipeline_input->index_buffer_render_handle, &asset_index_buffer);
-    B32 road_segment_loaded = render::is_resource_loaded(pipeline_input->road_segment_buffer_handle, &asset_road_segment_buffer);
-    B32 dummy_storage_buffer_loaded = render::is_resource_loaded(vk_ctx->dummy_storage_buffer_handle, &asset_dummy_storage_buffer);
+    B32 road_segment_loaded =
+        render::is_resource_loaded(pipeline_input->road_segment_buffer_handle, &asset_road_segment_buffer);
+    B32 dummy_storage_buffer_loaded =
+        render::is_resource_loaded(vk_ctx->dummy_storage_buffer_handle, &asset_dummy_storage_buffer);
     AssertAlways(dummy_storage_buffer_loaded);
     B32 base_texture_loaded = render::is_resource_loaded(pipeline_input->texture_handle, &asset_base_texture);
     B32 colormap_loaded = render::is_resource_loaded(pipeline_input->colormap_handle, &asset_colormap);
@@ -763,7 +800,8 @@ tile_pipeline_add(render::TilePipelineData* pipeline_input)
     if (vertex_loaded && index_loaded && base_texture_loaded && colormap_ready)
     {
         B32 overlay_uv_enabled = has_flag(pipeline_input->pipeline_bits, render::TilePipelineBits::OverlayEnabled);
-        if (overlay_uv_enabled && pipeline_input->overlay_texture_coordinate_id == 0 && render::is_handle_zero(pipeline_input->overlay_texture_handle) == false)
+        if (overlay_uv_enabled && pipeline_input->overlay_texture_coordinate_id == 0 &&
+            render::is_handle_zero(pipeline_input->overlay_texture_handle) == false)
         {
             overlay_enabled = overlay_tex_loaded;
         }
@@ -807,8 +845,9 @@ tile_pipeline_add(render::TilePipelineData* pipeline_input)
     {
         static U32 count = 0;
         count++;
-        INFO_LOG("overlay texture: %d, vertex buffer: %d, index buffer: %d, base texture: %d, colormap texture: %d, count: %d", overlay_tex_loaded, vertex_loaded, index_loaded, base_texture_loaded,
-                 colormap_loaded, count);
+        INFO_LOG("overlay texture: %d, vertex buffer: %d, index buffer: %d, base texture: %d, colormap texture: %d, "
+                 "count: %d",
+                 overlay_tex_loaded, vertex_loaded, index_loaded, base_texture_loaded, colormap_loaded, count);
     }
 }
 
@@ -819,10 +858,13 @@ blend_3d_draw(render::Blend3DPipelineData pipeline_input)
     render::AssetItem<vulkan::BufferHandle>* asset_index_buffer = 0;
     render::AssetItem<vulkan::TextureHandle>* asset_texture = 0;
     render::AssetItem<vulkan::TextureHandle>* asset_colormap = 0;
-    if (render::is_resource_loaded(pipeline_input.index_buffer_handle, &asset_index_buffer) && render::is_resource_loaded(pipeline_input.vertex_buffer_handle, &asset_vertex_buffer) &&
-        render::is_resource_loaded(pipeline_input.texture_handle, &asset_texture) && render::is_resource_loaded(pipeline_input.colormap_handle, &asset_colormap))
+    if (render::is_resource_loaded(pipeline_input.index_buffer_handle, &asset_index_buffer) &&
+        render::is_resource_loaded(pipeline_input.vertex_buffer_handle, &asset_vertex_buffer) &&
+        render::is_resource_loaded(pipeline_input.texture_handle, &asset_texture) &&
+        render::is_resource_loaded(pipeline_input.colormap_handle, &asset_colormap))
     {
-        vulkan::blend_3d_bucket_add(&asset_vertex_buffer->item.buffer_alloc, &asset_index_buffer->item.buffer_alloc, pipeline_input.texture_handle, pipeline_input.colormap_handle,
+        vulkan::blend_3d_bucket_add(&asset_vertex_buffer->item.buffer_alloc, &asset_index_buffer->item.buffer_alloc,
+                                    pipeline_input.texture_handle, pipeline_input.colormap_handle,
                                     pipeline_input.camera_handle);
     }
 }
@@ -889,7 +931,8 @@ Handle::texture_handle_create()
 {
     vulkan::AssetManager* asset_manager = vulkan::asset_manager_get();
     os_rw_mutex_take_w(asset_manager->texture_mutex);
-    Handle handle = asset_manager_item_create(&asset_manager->texture_list, &asset_manager->texture_free_list, render::HandleType::Texture);
+    Handle handle = asset_manager_item_create(&asset_manager->texture_list, &asset_manager->texture_free_list,
+                                              render::HandleType::Texture);
     os_rw_mutex_drop_w(asset_manager->texture_mutex);
     return handle;
 }
@@ -899,7 +942,8 @@ Handle::buffer_handle_create(BufferType buffer_type)
 {
     vulkan::AssetManager* asset_manager = vulkan::asset_manager_get();
     os_rw_mutex_take_w(asset_manager->buffer_mutex);
-    Handle handle = asset_manager_item_create(&asset_manager->buffer_list, &asset_manager->buffer_free_list, render::HandleType::Buffer);
+    Handle handle = asset_manager_item_create(&asset_manager->buffer_list, &asset_manager->buffer_free_list,
+                                              render::HandleType::Buffer);
     render::AssetItem<vulkan::BufferHandle>* asset_item = (render::AssetItem<vulkan::BufferHandle>*)handle.ptr;
     asset_item->item.type = buffer_type;
 
@@ -914,7 +958,8 @@ thread_cmd_buffer_record(ThreadWorkerCmdCtx* thread_ctx)
 
     U32 thread_local_id = async::t_cur_thread_id;
     // ~mgj: Record the command buffer
-    vulkan::AssetManagerCommandPool thread_cmd_pool = vulkan::asset_manager_cmd_pool_get(asset_manager, thread_local_id);
+    vulkan::AssetManagerCommandPool thread_cmd_pool =
+        vulkan::asset_manager_cmd_pool_get(asset_manager, thread_local_id);
     thread_ctx->cmd_buffer = begin_command(asset_manager->device, &thread_cmd_pool);
 }
 
@@ -923,12 +968,16 @@ thread_cmd_buffer_end(ThreadWorkerCmdCtx* cmd_ctx)
 {
     U32 thread_local_id = async::t_cur_thread_id;
     vulkan::AssetManager* asset_manager = vulkan::asset_manager_get();
-    vulkan::AssetManagerCommandPool thread_cmd_pool = vulkan::asset_manager_cmd_pool_get(asset_manager, thread_local_id);
+    vulkan::AssetManagerCommandPool thread_cmd_pool =
+        vulkan::asset_manager_cmd_pool_get(asset_manager, thread_local_id);
     end_command(&thread_cmd_pool, (VkCommandBuffer)cmd_ctx->cmd_buffer);
-    Assert(cmd_ctx->handles.count);
     if (cmd_ctx->handles.count)
     {
         vulkan::asset_cmd_queue_item_enqueue(thread_local_id, cmd_ctx);
+    }
+    else
+    {
+        DEBUG_LOG("No handles submitted\n");
     }
 }
 
@@ -958,7 +1007,9 @@ handle_done_loading(render::HandleList handles)
                 if (asset)
                 {
                     vulkan::TextureHandle* texture = &asset->item;
-                    vulkan::descriptor_set_update_bindless_texture(texture->descriptor_set_idx, texture->image_resource.image_view_resource.image_view, texture->sampler);
+                    vulkan::descriptor_set_update_bindless_texture(
+                        texture->descriptor_set_idx, texture->image_resource.image_view_resource.image_view,
+                        texture->sampler);
                     buffer_destroy(&asset->item.staging_allocation);
                     asset->is_loaded = 1;
                     node->work_on_gpu_done = 1;
@@ -985,6 +1036,155 @@ mesh_handles_create_and_upload(PrimitiveMesh& prim_mesh)
     Handle index_handle = buffer_load_sync(thread_ctx, &index_buffer_info, S("Primitive Index Buffer Handle"));
 
     return render::MeshHandle{vertex_handle, index_handle};
+}
+
+g_internal MeshletMeshHandle
+mesh_shader_handles_create_and_upload(PrimitiveMesh& mesh)
+{
+    ScratchScope scratch = ScratchScope(0, 0);
+    Assert(mesh.indices.size % 3 == 0);
+    // Expand the convenience PrimitiveMesh indices for the meshlet builder.
+    Buffer<U32> indices = buffer_alloc<U32>(scratch.arena, mesh.indices.size);
+    for (U64 i = 0; i < mesh.indices.size; ++i)
+    {
+        Assert(mesh.indices.data[i] < mesh.vertices.size);
+        indices.data[i] = mesh.indices.data[i];
+    }
+    MeshletMeshHandle result = mesh_shader_handles_create_and_upload(mesh.vertices, indices, scratch.arena);
+    return result;
+}
+
+g_internal MeshletMeshHandle
+mesh_shader_handles_create_and_upload(Buffer<PrimitiveVertex> vertices, Buffer<U32> indices, Arena* source_arena)
+{
+    prof_scope_marker;
+    if (indices.size == 0)
+    {
+        return {};
+    }
+    Assert(vertices.size > 0 && indices.size % 3 == 0);
+    for (U32 index : indices)
+    {
+        Assert(index < vertices.size);
+    }
+    ScratchScope scratch = ScratchScope(&source_arena, 1);
+    // Output limits match mesh_instance.mesh. Build once, not per instance.
+    constexpr U32 max_vertices = 64;
+    constexpr U32 max_triangles = 64;
+    constexpr U32 max_lods = 4;
+    constexpr U32 header_words = 8 + max_lods * 4;
+    Buffer<meshopt_Meshlet> lod_meshlets[max_lods] = {};
+    Buffer<U32> lod_vertex_refs[max_lods] = {};
+    Buffer<U8> lod_triangles[max_lods] = {};
+    F32 lod_errors[max_lods] = {};
+    U32 lod_count = 0;
+    U32 max_meshlet_count = 0;
+    U64 word_count = header_words;
+    F32 error_scale = meshopt_simplifyScale(&vertices.data[0].pos.x, vertices.size, sizeof(PrimitiveVertex));
+    U64 previous_index_count = indices.size + 1;
+    for (U32 lod = 0; lod < max_lods; ++lod)
+    {
+        Buffer<U32> lod_indices = indices;
+        if (lod > 0)
+        {
+            lod_indices = buffer_alloc<U32>(scratch.arena, indices.size);
+            U64 target_count = (indices.size >> lod) / 3 * 3;
+            if (target_count < 3)
+            {
+                break;
+            }
+            // Simplify against the original so errors do not accumulate between LODs.
+            // Locked borders retain material boundaries and UV seams.
+            F32 relative_error = 0;
+            lod_indices.size = meshopt_simplify(lod_indices.data, indices.data, indices.size, &vertices.data[0].pos.x,
+                                                vertices.size, sizeof(PrimitiveVertex), target_count, 0.05f,
+                                                meshopt_SimplifyLockBorder, &relative_error);
+            lod_errors[lod] = relative_error * error_scale;
+        }
+        if (lod_indices.size == 0 || lod_indices.size >= previous_index_count)
+        {
+            break;
+        }
+        previous_index_count = lod_indices.size;
+        U64 capacity = meshopt_buildMeshletsBound(lod_indices.size, max_vertices, max_triangles);
+        lod_meshlets[lod] = buffer_alloc<meshopt_Meshlet>(scratch.arena, capacity);
+        lod_vertex_refs[lod] = buffer_alloc<U32>(scratch.arena, capacity * max_vertices);
+        lod_triangles[lod] = buffer_alloc<U8>(scratch.arena, capacity * max_triangles * 3);
+        lod_meshlets[lod].size =
+            meshopt_buildMeshlets(lod_meshlets[lod].data, lod_vertex_refs[lod].data, lod_triangles[lod].data,
+                                  lod_indices.data, lod_indices.size, &vertices.data[0].pos.x, vertices.size,
+                                  sizeof(PrimitiveVertex), max_vertices, max_triangles, 0.0f);
+        max_meshlet_count = Max(max_meshlet_count, (U32)lod_meshlets[lod].size);
+        for (meshopt_Meshlet& meshlet : lod_meshlets[lod])
+        {
+            word_count += 4 + meshlet.vertex_count + meshlet.triangle_count;
+        }
+        ++lod_count;
+    }
+    Assert(word_count <= max_U32 / sizeof(U32));
+    Buffer<U32> meshlet_words = buffer_alloc<U32>(scratch.arena, word_count);
+    glm::vec3 minimum = vertices.data[0].pos;
+    glm::vec3 maximum = minimum;
+    for (PrimitiveVertex& vertex : vertices)
+    {
+        minimum = (glm::min)(minimum, vertex.pos);
+        maximum = (glm::max)(maximum, vertex.pos);
+    }
+    glm::vec3 center = (minimum + maximum) * 0.5f;
+    F32 radius = glm::length(maximum - center);
+    // Header: bounding sphere, LOD count, then [descriptor offset, count, error, reserved].
+    MemoryCopy(meshlet_words.data, &center.x, 3 * sizeof(F32));
+    MemoryCopy(meshlet_words.data + 3, &radius, sizeof(F32));
+    meshlet_words.data[4] = lod_count;
+    U32 offset = header_words;
+    for (U32 lod = 0; lod < lod_count; ++lod)
+    {
+        U32 descriptors = offset;
+        meshlet_words.data[8 + lod * 4] = descriptors;
+        meshlet_words.data[9 + lod * 4] = (U32)lod_meshlets[lod].size;
+        MemoryCopy(meshlet_words.data + 10 + lod * 4, &lod_errors[lod], sizeof(F32));
+        offset += (U32)lod_meshlets[lod].size * 4;
+        for (U64 i = 0; i < lod_meshlets[lod].size; ++i)
+        {
+            meshopt_Meshlet& meshlet = lod_meshlets[lod].data[i];
+            U32* vertex_refs = lod_vertex_refs[lod].data + meshlet.vertex_offset;
+            U8* triangles = lod_triangles[lod].data + meshlet.triangle_offset;
+            meshopt_optimizeMeshlet(vertex_refs, triangles, meshlet.triangle_count, meshlet.vertex_count);
+            meshlet_words.data[descriptors + i * 4 + 0] = offset;
+            meshlet_words.data[descriptors + i * 4 + 1] = offset + meshlet.vertex_count;
+            meshlet_words.data[descriptors + i * 4 + 2] = meshlet.vertex_count;
+            meshlet_words.data[descriptors + i * 4 + 3] = meshlet.triangle_count;
+            for (U32 v = 0; v < meshlet.vertex_count; ++v)
+            {
+                meshlet_words.data[offset++] = vertex_refs[v];
+            }
+            for (U32 t = 0; t < meshlet.triangle_count; ++t)
+            {
+                U8* triangle = triangles + t * 3;
+                meshlet_words.data[offset++] = U32(triangle[0]) | (U32(triangle[1]) << 8) | (U32(triangle[2]) << 16);
+            }
+        }
+    }
+    Assert(offset == word_count);
+    BufferInfo vertex_info = BufferInfo(vertices, BufferType_StorageBuffer);
+    BufferInfo index_info = BufferInfo(meshlet_words, BufferType_StorageBuffer);
+    ThreadWorkerCmdCtx* thread_ctx = thread_ctx_create();
+    thread_cmd_buffer_record(thread_ctx);
+    defer(thread_cmd_buffer_end(thread_ctx));
+    Handle vertex_handle = buffer_load_sync(thread_ctx, &vertex_info, S("Mesh Shader Vertices"));
+    Handle index_handle = buffer_load_sync(thread_ctx, &index_info, S("Mesh Shader Meshlets"));
+    MeshletMeshHandle result = {vertex_handle, index_handle, max_meshlet_count};
+    return result;
+}
+
+g_internal void
+mesh_shader_handles_destroy(MeshletMeshHandle mesh)
+{
+    if (mesh.meshlet_count > 0)
+    {
+        handle_destroy_deferred(mesh.vertex_buffer_handle);
+        handle_destroy_deferred(mesh.meshlet_buffer_handle);
+    }
 }
 
 } // namespace render

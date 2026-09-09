@@ -95,3 +95,6 @@
 - Create the general API for the simulator.
 - Create a simple flow of: get scenarios -> set scenarios -> start scenario -> stop scenario -> disconnect
 - Make multiple scenarios possible
+
+# Techniques to understand
+- Hierarchical Z-Buffer
