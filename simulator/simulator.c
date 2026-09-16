@@ -1,4 +1,5 @@
 #include <initializer_list>
+#include <atomic>
 #include <memory>
 #include <new>
 #include <utility>
@@ -6,10 +7,17 @@
 #define DEBUG_LOG(...)
 #define ERROR_LOG(...)
 
+#include "third_party/symbol_set/symbol_set.h"
+#include "third_party/simdjson/simdjson.h"
+#include "third_party/simdjson/simdjson.cpp"
+using namespace simdjson;
 #include "base/base_inc.hpp"
 #include "os_core/os_core_inc.hpp"
 
 #include "base/base_inc.cpp"
+#define SY__MAIN 1
+#include "city/simulator_shared_interface.hpp"
+#include "city/simulator_shared_interface.cpp"
 
 #define NK_INCLUDE_FIXED_TYPES
 #define NK_INCLUDE_STANDARD_IO
@@ -41,6 +49,11 @@
 #include <GLFW/glfw3.h>
 
 #include <civetweb.h>
+
+static void*
+_server_thread_init(const struct mg_context* context, int thread_type);
+static void
+_server_thread_exit(const struct mg_context* context, int thread_type, void* thread_pointer);
 #include <nuklear.h>
 #include <nuklear_glfw_gl3.h>
 #include <yyjson.h>
@@ -54,10 +67,9 @@
 #define MAX_PATH_TEXT 1024
 #define DEFAULT_FPS 20
 #define DEFAULT_VEHICLE_COUNT 200
-#define DEFAULT_DB_PATH "simulator/database/eskiltuna_full_playback.sqlite"
+#define DEFAULT_DB_PATH "simulator/database/eskiltuna.sqlite"
 #define CUSTOM_FONT_PATH "simulator/fonts/segoeuithis.ttf"
 #define AGENT_PATH_SEGMENT_TABLE_NAME "agent_path_segment"
-#define AGENT_PATH_INFO_TABLE_NAME "vehicle_info"
 #define CUSTOM_FONT_SIZE 18.0f
 #define DEFAULT_WS_PATH "/ws"
 #define APP_BG_R 45
@@ -545,7 +557,8 @@ build_selected_summary(const struct string_list* selected_vehicle_ids, char* buf
         const char* vehicle_id = selected_vehicle_ids->items[i];
         int written = 0;
 
-        written = snprintf(buffer + offset, buffer_size - offset, "%s%s", i == 0 ? "" : ", ", vehicle_id ? vehicle_id : "unknown");
+        written = snprintf(buffer + offset, buffer_size - offset, "%s%s", i == 0 ? "" : ", ",
+                           vehicle_id ? vehicle_id : "unknown");
 
         if (written < 0 || (size_t)written >= buffer_size - offset)
         {
@@ -565,7 +578,8 @@ server_close_client(struct websocket_server* server)
 {
     server_lock(server);
     server->client_connection = NULL;
-    copy_status(server->status_line, sizeof(server->status_line), "Waiting for WebSocket client. Map viewer: http://127.0.0.1:8080");
+    copy_status(server->status_line, sizeof(server->status_line),
+                "Waiting for WebSocket client. Map viewer: http://127.0.0.1:8080");
     server_unlock(server);
 }
 
@@ -635,11 +649,14 @@ server_websocket_connect_handler(const struct mg_connection* conn, void* cbdata)
     if (server->client_connection == NULL)
     {
         accepted = true;
-        copy_status(server->status_line, sizeof(server->status_line), user_agent && strstr(user_agent, "Mozilla") ? "Browser viewer connecting..." : "External WebSocket client connecting...");
+        copy_status(server->status_line, sizeof(server->status_line),
+                    user_agent && strstr(user_agent, "Mozilla") ? "Browser viewer connecting..."
+                                                                : "External WebSocket client connecting...");
     }
     else
     {
-        copy_status(server->status_line, sizeof(server->status_line), "Rejected WebSocket client: another client is already connected.");
+        copy_status(server->status_line, sizeof(server->status_line),
+                    "Rejected WebSocket client: another client is already connected.");
     }
     server_unlock(server);
 
@@ -660,20 +677,71 @@ server_websocket_ready_handler(struct mg_connection* conn, void* cbdata)
     server_lock(server);
     server->client_connection = conn;
     copy_status(server->status_line, sizeof(server->status_line),
-                user_agent && strstr(user_agent, "Mozilla") ? "Browser viewer connected. Map server: http://127.0.0.1:8080" : "External WebSocket client connected on ws://127.0.0.1:8080/ws");
+                user_agent && strstr(user_agent, "Mozilla")
+                    ? "Browser viewer connected. Map server: http://127.0.0.1:8080"
+                    : "External WebSocket client connected on ws://127.0.0.1:8080/ws");
     server_unlock(server);
 }
 
+g_internal String8
+options_reply(Arena* arena, String8* scenario_arr, U32 num_scenarios)
+{
+    String8 reply_str = {};
+    yyjson_mut_doc* reply_doc = yyjson_mut_doc_new(NULL);
+    if (!reply_doc)
+    {
+        return {};
+    }
+    defer(yyjson_mut_doc_free(reply_doc));
+
+    yyjson_mut_val* reply_root = yyjson_mut_obj(reply_doc);
+    if (!reply_root)
+    {
+        return {};
+    }
+    yyjson_mut_doc_set_root(reply_doc, reply_root);
+    String8 msg_id_name = SIMULATION_FIELD_NAME(MsgId);
+    bool id_added = yyjson_mut_obj_add_uint(reply_doc, reply_root, (const char*)msg_id_name.str,
+                                            (U64)city::SimulationMessageKind::Options);
+    if (!id_added)
+    {
+        return {};
+    }
+    String8 options_name = SIMULATION_FIELD_NAME(Options);
+    yyjson_mut_val* reply_list = yyjson_mut_obj_add_arr(reply_doc, reply_root, (const char*)options_name.str);
+    if (!reply_list)
+    {
+        return {};
+    }
+    for (U32 i = 0; i < num_scenarios; i++)
+    {
+        bool item_added = yyjson_mut_arr_add_str(reply_doc, reply_list, (char*)scenario_arr[i].str);
+        if (!item_added)
+        {
+            return {};
+        }
+    }
+
+    size_t reply_size = 0;
+    char* reply = yyjson_mut_write(reply_doc, 0, &reply_size);
+    if (!reply)
+    {
+        return {};
+    }
+    defer(free(reply));
+
+    reply_str = push_str8_copy(arena, str8((U8*)reply, reply_size));
+
+    return reply_str;
+}
+
+std::atomic<U32> cur_simulation_scenario{1};
 static int
 server_websocket_data_handler(struct mg_connection* conn, int bits, char* data, size_t data_len, void* cbdata)
 {
+    ScratchScope scratch = ScratchScope(0, 0);
     struct websocket_server* server = (struct websocket_server*)cbdata;
     int opcode = bits & 0x0F;
-    size_t copy_len = 0;
-    char payload_text[MAX_STATUS_TEXT];
-
-    (void)conn;
-
     if (!server)
     {
         return 0;
@@ -684,20 +752,68 @@ server_websocket_data_handler(struct mg_connection* conn, int bits, char* data, 
         return 0;
     }
 
-    if (opcode != MG_WEBSOCKET_OPCODE_TEXT || !data || data_len == 0)
+    if (opcode == MG_WEBSOCKET_OPCODE_TEXT)
     {
-        return 1;
+        // The callback data has an explicit length and need not be null-terminated.
+        size_t copy_len = Min(data_len, sizeof(server->last_received) - 1);
+        server_lock(server);
+        MemoryCopy(server->last_received, data, copy_len);
+        server->last_received[copy_len] = '\0';
+        server_unlock(server);
+
+        ondemand::parser parser;
+        ondemand::document doc;
+        String8 msg = str8((U8*)data, data_len);
+        error_code json_error = city::simulator_prepare_json_doc(scratch.arena, msg, parser, doc);
+        if (json_error)
+        {
+            return 0;
+        }
+
+        U64 msg_id = {};
+        String8 msg_id_name = SIMULATION_FIELD_NAME(MsgId);
+        json_error = doc[(const char*)msg_id_name.str].get_uint64().get(msg_id);
+        if (json_error)
+        {
+            return 0;
+        }
+        int sent = 0;
+        switch ((city::SimulationMessageKind)msg_id)
+        {
+            case city::SimulationMessageKind::Options:
+            {
+                String8 test_reply_msg[] = {S("test reply scenario")};
+                String8 json_str = options_reply(scratch.arena, test_reply_msg, ArrayCount(test_reply_msg));
+                if (json_str.size == 0)
+                {
+                    return 0;
+                }
+                sent = mg_websocket_write(conn, MG_WEBSOCKET_OPCODE_TEXT, (char*)json_str.str, json_str.size);
+
+                return sent > 0 ? 1 : 0;
+            };
+            break;
+            case city::SimulationMessageKind::ChangeScenario:
+            {
+                U64 cur_scenario_id = 0;
+                String8 scenario_id_name = SIMULATION_FIELD_NAME(ScenarioId);
+                json_error = doc[(const char*)scenario_id_name.str].get_uint64().get(cur_scenario_id);
+                if (json_error)
+                {
+                    return 0;
+                }
+                cur_simulation_scenario.store((U32)cur_scenario_id, std::memory_order_relaxed);
+                // No reply is needed, but the connection must remain open for streaming.
+                return 1;
+            }
+            break;
+            default: InvalidPath;
+        }
+
+        return sent > 0 ? 1 : 0;
     }
 
-    copy_len = data_len < sizeof(payload_text) - 1 ? data_len : sizeof(payload_text) - 1;
-    MemoryCopy(payload_text, data, copy_len);
-    payload_text[copy_len] = '\0';
-
-    server_lock(server);
-    copy_status(server->last_received, sizeof(server->last_received), payload_text);
-    copy_status(server->status_line, sizeof(server->status_line), "Message received from WebSocket client.");
-    server_unlock(server);
-    return 1;
+    return 0;
 }
 
 static void
@@ -715,7 +831,8 @@ server_websocket_close_handler(const struct mg_connection* conn, void* cbdata)
     {
         server->client_connection = NULL;
     }
-    copy_status(server->status_line, sizeof(server->status_line), "Waiting for WebSocket client. Map viewer: http://127.0.0.1:8080");
+    copy_status(server->status_line, sizeof(server->status_line),
+                "Waiting for WebSocket client. Map viewer: http://127.0.0.1:8080");
     server_unlock(server);
 }
 
@@ -738,6 +855,8 @@ server_init(struct websocket_server* server, uint16_t port)
 
     snprintf(port_option, sizeof(port_option), "%u", (unsigned int)port);
     MemoryZeroStruct(&callbacks);
+    callbacks.init_thread = _server_thread_init;
+    callbacks.exit_thread = _server_thread_exit;
     MemoryZeroStruct(&init_data);
     MemoryZeroStruct(&error_data);
     error_data.text = error_text;
@@ -767,19 +886,24 @@ server_init(struct websocket_server* server, uint16_t port)
     {
         if (error_text[0] != '\0')
         {
-            snprintf(server->status_line, sizeof(server->status_line), "Could not start embedded CivetWeb server: %s", error_text);
+            snprintf(server->status_line, sizeof(server->status_line), "Could not start embedded CivetWeb server: %s",
+                     error_text);
         }
         else
         {
-            copy_status(server->status_line, sizeof(server->status_line), "Could not start embedded CivetWeb server on 127.0.0.1:8080.");
+            copy_status(server->status_line, sizeof(server->status_line),
+                        "Could not start embedded CivetWeb server on 127.0.0.1:8080.");
         }
         return false;
     }
 
     mg_set_request_handler(server->context, "/health", server_health_handler, server);
-    mg_set_websocket_handler(server->context, DEFAULT_WS_PATH, server_websocket_connect_handler, server_websocket_ready_handler, server_websocket_data_handler, server_websocket_close_handler, server);
+    mg_set_websocket_handler(server->context, DEFAULT_WS_PATH, server_websocket_connect_handler,
+                             server_websocket_ready_handler, server_websocket_data_handler,
+                             server_websocket_close_handler, server);
 
-    copy_status(server->status_line, sizeof(server->status_line), "Listening on http://127.0.0.1:8080 and ws://127.0.0.1:8080/ws");
+    copy_status(server->status_line, sizeof(server->status_line),
+                "Listening on http://127.0.0.1:8080 and ws://127.0.0.1:8080/ws");
     return true;
 }
 
@@ -853,13 +977,15 @@ playback_db_init(struct playback_db* playback_db, String8 path)
 
     if (!path_resolved)
     {
-        snprintf(playback_db->status_line, sizeof(playback_db->status_line), "Database does not exist: %s", playback_db->path_input);
+        snprintf(playback_db->status_line, sizeof(playback_db->status_line), "Database does not exist: %s",
+                 playback_db->path_input);
         return;
     }
 
     if (sqlite3_open_v2((char*)playback_db->path.str, &playback_db->db, SQLITE_OPEN_READONLY, NULL) != SQLITE_OK)
     {
-        snprintf(playback_db->status_line, sizeof(playback_db->status_line), "Could not open %s.", (char*)playback_db->path.str);
+        snprintf(playback_db->status_line, sizeof(playback_db->status_line), "Could not open %s.",
+                 (char*)playback_db->path.str);
         return;
     }
 
@@ -867,9 +993,12 @@ playback_db_init(struct playback_db* playback_db, String8 path)
 
     {
         prof_scope_marker_named("sqlite3_prepare_v2");
-        if (sqlite3_prepare_v2(playback_db->db, "SELECT MIN(time_start), MAX(time_end) FROM " AGENT_PATH_INFO_TABLE_NAME, -1, &range_stmt, NULL) != SQLITE_OK)
+        if (sqlite3_prepare_v2(playback_db->db,
+                               "SELECT MIN(time_start), MAX(time_end) FROM " AGENT_PATH_SEGMENT_TABLE_NAME, -1,
+                               &range_stmt, NULL) != SQLITE_OK)
         {
-            snprintf(playback_db->status_line, sizeof(playback_db->status_line), "Could not prepare playback time range query: %s", sqlite3_errmsg(playback_db->db));
+            snprintf(playback_db->status_line, sizeof(playback_db->status_line),
+                     "Could not prepare playback time range query: %s", sqlite3_errmsg(playback_db->db));
             sqlite3_finalize(range_stmt);
             return;
         }
@@ -881,7 +1010,8 @@ playback_db_init(struct playback_db* playback_db, String8 path)
 
         if (step_result != SQLITE_ROW)
         {
-            snprintf(playback_db->status_line, sizeof(playback_db->status_line), "Could not read playback time range: %s", sqlite3_errstr(step_result));
+            snprintf(playback_db->status_line, sizeof(playback_db->status_line),
+                     "Could not read playback time range: %s", sqlite3_errstr(step_result));
             sqlite3_finalize(range_stmt);
             return;
         }
@@ -895,13 +1025,15 @@ playback_db_init(struct playback_db* playback_db, String8 path)
         prof_scope_marker_named("prepare_sql_statement");
         if (!prepare_sql_statement(playback_db->db, active_sql, &playback_db->active_stmt))
         {
-            snprintf(playback_db->status_line, sizeof(playback_db->status_line), "Could not prepare agent playback query: %s", sqlite3_errmsg(playback_db->db));
+            snprintf(playback_db->status_line, sizeof(playback_db->status_line),
+                     "Could not prepare agent playback query: %s", sqlite3_errmsg(playback_db->db));
             return;
         }
     }
 
     playback_db->ready = true;
-    snprintf(playback_db->status_line, sizeof(playback_db->status_line), "SQLite agent playback ready: %s", (char*)playback_db->path.str);
+    snprintf(playback_db->status_line, sizeof(playback_db->status_line), "SQLite agent playback ready: %s",
+             (char*)playback_db->path.str);
 }
 
 static void
@@ -923,7 +1055,8 @@ playback_db_shutdown(struct playback_db* playback_db)
 }
 
 static void
-reload_playback_db(struct playback_db* playback_db, struct vehicle_stream* stream, struct websocket_server* server, const char* db_path)
+reload_playback_db(struct playback_db* playback_db, struct vehicle_stream* stream, struct websocket_server* server,
+                   const char* db_path)
 {
     char chosen_path[MAX_PATH_TEXT];
 
@@ -994,6 +1127,22 @@ format_snapshot_preview(Arena* arena, const char* snapshot, char** formatted_pre
     }
 
     root = yyjson_doc_get_root(doc);
+    if (yyjson_is_obj(root))
+    {
+        size_t json_length = 0;
+        char* json_text = yyjson_write(doc, YYJSON_WRITE_PRETTY, &json_length);
+        yyjson_doc_free(doc);
+        if (!json_text)
+        {
+            return false;
+        }
+        defer(free(json_text));
+        String8 json_view = str8((U8*)json_text, json_length);
+        String8 json_copy = push_str8_copy(arena, json_view);
+        *formatted_preview = (char*)json_copy.str;
+        *formatted_length = json_length + 1;
+        return true;
+    }
     if (!yyjson_is_arr(root))
     {
         yyjson_doc_free(doc);
@@ -1116,7 +1265,8 @@ stream_update_clock(struct vehicle_stream* stream, U64 now_us)
 }
 
 static bool
-append_snapshot_vehicle(yyjson_mut_doc* doc, yyjson_mut_val* snapshot_array, const char* vehicle_id, double lat, double lon)
+append_snapshot_vehicle(yyjson_mut_doc* doc, yyjson_mut_val* snapshot_array, const char* vehicle_id, double lat,
+                        double lon)
 {
     prof_scope_marker;
     yyjson_mut_val* vehicle = NULL;
@@ -1151,7 +1301,8 @@ append_snapshot_vehicle(yyjson_mut_doc* doc, yyjson_mut_val* snapshot_array, con
 }
 
 static int
-build_database_snapshot(struct vehicle_stream* stream, struct playback_db* playback_db, yyjson_mut_doc* doc, yyjson_mut_val* snapshot_array)
+build_database_snapshot(struct vehicle_stream* stream, struct playback_db* playback_db, yyjson_mut_doc* doc,
+                        yyjson_mut_val* snapshot_array)
 {
     prof_scope_marker;
     int row_count = 0;
@@ -1206,9 +1357,17 @@ build_database_snapshot(struct vehicle_stream* stream, struct playback_db* playb
 }
 
 static bool
-stream_send_current_snapshot(struct vehicle_stream* stream, struct websocket_server* server, struct playback_db* playback_db)
+stream_send_current_snapshot(struct vehicle_stream* stream, struct websocket_server* server,
+                             struct playback_db* playback_db)
 {
     prof_scope_marker;
+    U32 scenario_idx = 0;
+    scenario_idx = cur_simulation_scenario.load(std::memory_order_relaxed);
+    if (scenario_idx == 0)
+    {
+        return false;
+    }
+
     yyjson_mut_doc* doc = NULL;
     yyjson_mut_val* snapshot_array = NULL;
     char* snapshot = NULL;
@@ -1233,14 +1392,32 @@ stream_send_current_snapshot(struct vehicle_stream* stream, struct websocket_ser
         return false;
     }
 
-    snapshot_array = yyjson_mut_arr(doc);
+    // Wrap coordinates in the shared stream protocol.
+    yyjson_mut_val* snapshot_root = yyjson_mut_obj(doc);
+    if (!snapshot_root)
+    {
+        yyjson_mut_doc_free(doc);
+        return false;
+    }
+    yyjson_mut_doc_set_root(doc, snapshot_root);
+    String8 msg_id_name = SIMULATION_FIELD_NAME(MsgId);
+    String8 scenario_id_name = SIMULATION_FIELD_NAME(ScenarioId);
+    String8 stream_name = SIMULATION_FIELD_NAME(Stream);
+    bool id_added = yyjson_mut_obj_add_uint(doc, snapshot_root, (const char*)msg_id_name.str,
+                                            (U64)city::SimulationMessageKind::Stream);
+    bool scenario_added = yyjson_mut_obj_add_uint(doc, snapshot_root, (const char*)scenario_id_name.str, scenario_idx);
+    if (!id_added || !scenario_added)
+    {
+        yyjson_mut_doc_free(doc);
+        return false;
+    }
+    snapshot_array = yyjson_mut_obj_add_arr(doc, snapshot_root, (const char*)stream_name.str);
     if (!snapshot_array)
     {
         yyjson_mut_doc_free(doc);
         copy_status(server->status_line, sizeof(server->status_line), "Failed to allocate JSON snapshot array.");
         return false;
     }
-    yyjson_mut_doc_set_root(doc, snapshot_array);
 
     {
         int database_rows = build_database_snapshot(stream, playback_db, doc, snapshot_array);
@@ -1289,7 +1466,8 @@ stream_send_current_snapshot(struct vehicle_stream* stream, struct websocket_ser
 }
 
 static void
-stream_send_frame(struct vehicle_stream* stream, struct websocket_server* server, struct playback_db* playback_db, U64 now_us)
+stream_send_frame(struct vehicle_stream* stream, struct websocket_server* server, struct playback_db* playback_db,
+                  U64 now_us)
 {
     prof_scope_marker;
     if (!stream->streaming || stream->fps <= 0 || stream->vehicle_count <= 0)
@@ -1450,28 +1628,39 @@ apply_ui_style_overrides(struct nk_context* ctx, float ui_scale)
     ctx->style.slider.cursor_size = nk_vec2(slider_cursor, slider_cursor);
 
     ctx->style.window.padding = nk_vec2(ctx->style.window.padding.x * ui_scale, ctx->style.window.padding.y * ui_scale);
-    ctx->style.window.group_padding = nk_vec2(ctx->style.window.group_padding.x * ui_scale, ctx->style.window.group_padding.y * ui_scale);
-    ctx->style.window.popup_padding = nk_vec2(ctx->style.window.popup_padding.x * ui_scale, ctx->style.window.popup_padding.y * ui_scale);
+    ctx->style.window.group_padding =
+        nk_vec2(ctx->style.window.group_padding.x * ui_scale, ctx->style.window.group_padding.y * ui_scale);
+    ctx->style.window.popup_padding =
+        nk_vec2(ctx->style.window.popup_padding.x * ui_scale, ctx->style.window.popup_padding.y * ui_scale);
     ctx->style.window.spacing = nk_vec2(ctx->style.window.spacing.x * ui_scale, ctx->style.window.spacing.y * ui_scale);
-    ctx->style.window.scrollbar_size = nk_vec2(ctx->style.window.scrollbar_size.x * ui_scale, ctx->style.window.scrollbar_size.y * ui_scale);
+    ctx->style.window.scrollbar_size =
+        nk_vec2(ctx->style.window.scrollbar_size.x * ui_scale, ctx->style.window.scrollbar_size.y * ui_scale);
 
     ctx->style.button.padding = nk_vec2(ctx->style.button.padding.x * ui_scale, ctx->style.button.padding.y * ui_scale);
-    ctx->style.button.image_padding = nk_vec2(ctx->style.button.image_padding.x * ui_scale, ctx->style.button.image_padding.y * ui_scale);
-    ctx->style.button.touch_padding = nk_vec2(ctx->style.button.touch_padding.x * ui_scale, ctx->style.button.touch_padding.y * ui_scale);
+    ctx->style.button.image_padding =
+        nk_vec2(ctx->style.button.image_padding.x * ui_scale, ctx->style.button.image_padding.y * ui_scale);
+    ctx->style.button.touch_padding =
+        nk_vec2(ctx->style.button.touch_padding.x * ui_scale, ctx->style.button.touch_padding.y * ui_scale);
 
     ctx->style.edit.padding = nk_vec2(ctx->style.edit.padding.x * ui_scale, ctx->style.edit.padding.y * ui_scale);
-    ctx->style.property.padding = nk_vec2(ctx->style.property.padding.x * ui_scale, ctx->style.property.padding.y * ui_scale);
-    ctx->style.combo.button_padding = nk_vec2(ctx->style.combo.button_padding.x * ui_scale, ctx->style.combo.button_padding.y * ui_scale);
-    ctx->style.combo.content_padding = nk_vec2(ctx->style.combo.content_padding.x * ui_scale, ctx->style.combo.content_padding.y * ui_scale);
+    ctx->style.property.padding =
+        nk_vec2(ctx->style.property.padding.x * ui_scale, ctx->style.property.padding.y * ui_scale);
+    ctx->style.combo.button_padding =
+        nk_vec2(ctx->style.combo.button_padding.x * ui_scale, ctx->style.combo.button_padding.y * ui_scale);
+    ctx->style.combo.content_padding =
+        nk_vec2(ctx->style.combo.content_padding.x * ui_scale, ctx->style.combo.content_padding.y * ui_scale);
 
-    ctx->style.selectable.padding = nk_vec2(ctx->style.selectable.padding.x * ui_scale, ctx->style.selectable.padding.y * ui_scale);
-    ctx->style.selectable.touch_padding = nk_vec2(ctx->style.selectable.touch_padding.x * ui_scale, ctx->style.selectable.touch_padding.y * ui_scale);
+    ctx->style.selectable.padding =
+        nk_vec2(ctx->style.selectable.padding.x * ui_scale, ctx->style.selectable.padding.y * ui_scale);
+    ctx->style.selectable.touch_padding =
+        nk_vec2(ctx->style.selectable.touch_padding.x * ui_scale, ctx->style.selectable.touch_padding.y * ui_scale);
 
     ctx->style.chart.padding = nk_vec2(ctx->style.chart.padding.x * ui_scale, ctx->style.chart.padding.y * ui_scale);
 }
 
 static void
-draw_visible_vehicle_group(struct nk_context* ctx, struct vehicle_stream* stream, bool* timeline_changed, float panel_height)
+draw_visible_vehicle_group(struct nk_context* ctx, struct vehicle_stream* stream, bool* timeline_changed,
+                           float panel_height)
 {
     int i = 0;
     int matching_vehicle_count = 0;
@@ -1495,7 +1684,8 @@ draw_visible_vehicle_group(struct nk_context* ctx, struct vehicle_stream* stream
     nk_label(ctx, "Search vehicle ID:", NK_TEXT_LEFT);
 
     nk_layout_row_dynamic(ctx, input_row_height, 1);
-    nk_edit_string_zero_terminated(ctx, (nk_flags)NK_EDIT_FIELD | (nk_flags)NK_EDIT_CLIPBOARD, stream->vehicle_search, sizeof(stream->vehicle_search), nk_filter_default);
+    nk_edit_string_zero_terminated(ctx, (nk_flags)NK_EDIT_FIELD | (nk_flags)NK_EDIT_CLIPBOARD, stream->vehicle_search,
+                                   sizeof(stream->vehicle_search), nk_filter_default);
 
     nk_layout_row_dynamic(ctx, text_row_height, 1);
     nk_labelf(ctx, NK_TEXT_LEFT, "Selected: %s", selected_summary);
@@ -1527,7 +1717,8 @@ draw_visible_vehicle_group(struct nk_context* ctx, struct vehicle_stream* stream
     nk_layout_row_dynamic(ctx, text_row_height, 1);
     nk_labelf(ctx, NK_TEXT_LEFT, "Visible vehicles: %d / %d", matching_vehicle_count, total_visible_vehicle_count);
 
-    used_height = text_row_height + input_row_height + text_row_height + button_row_height + text_row_height + (ui_small_spacer_height(ctx) * 2.0f) + 28.0f;
+    used_height = text_row_height + input_row_height + text_row_height + button_row_height + text_row_height +
+                  (ui_small_spacer_height(ctx) * 2.0f) + 28.0f;
 
     vehicle_list_height = (int)(panel_height - used_height);
     if (vehicle_list_height < 160)
@@ -1567,7 +1758,8 @@ draw_visible_vehicle_group(struct nk_context* ctx, struct vehicle_stream* stream
                 is_selected = string_list_contains(&stream->selected_vehicle_ids, vehicle_id);
 
                 nk_layout_row_dynamic(ctx, list_row_height, 1);
-                snprintf(vehicle_button, sizeof(vehicle_button), "%s%s", is_selected ? "* " : "", vehicle_id ? vehicle_id : "unknown");
+                snprintf(vehicle_button, sizeof(vehicle_button), "%s%s", is_selected ? "* " : "",
+                         vehicle_id ? vehicle_id : "unknown");
 
                 if (nk_button_label(ctx, vehicle_button))
                 {
@@ -1590,7 +1782,8 @@ draw_visible_vehicle_group(struct nk_context* ctx, struct vehicle_stream* stream
 }
 
 static void
-draw_ui(struct nk_context* ctx, struct websocket_server* server, struct vehicle_stream* stream, struct playback_db* playback_db, bool* timeline_changed, int window_width, int window_height)
+draw_ui(struct nk_context* ctx, struct websocket_server* server, struct vehicle_stream* stream,
+        struct playback_db* playback_db, bool* timeline_changed, int window_width, int window_height)
 {
     prof_scope_marker;
     struct nk_rect bounds = nk_rect(0, 0, (float)window_width, (float)window_height);
@@ -1600,7 +1793,10 @@ draw_ui(struct nk_context* ctx, struct websocket_server* server, struct vehicle_
     float slider_row_height = ui_input_row_height(ctx);
     float spacer_height = ui_small_spacer_height(ctx);
     float window_safety_margin = title_row_height + text_row_height + spacer_height + 24.0f;
-    float top_reserved_height = (title_row_height * 2.0f) + (text_row_height * 8.0f) + (button_row_height * 3.0f) + (slider_row_height * 4.0f) + window_safety_margin;
+    float top_reserved_height = (title_row_height * 2.0f) + (text_row_height * 8.0f) + (button_row_height * 3.0f) +
+                                (slider_row_height * 4.0f) + window_safety_margin;
+    float received_message_height = text_row_height * 4.0f;
+    top_reserved_height += text_row_height + received_message_height;
     float preview_height = bounds.h - top_reserved_height;
 
     if (preview_height < 120.0f)
@@ -1616,16 +1812,33 @@ draw_ui(struct nk_context* ctx, struct websocket_server* server, struct vehicle_
         nk_label_wrap(ctx, server->status_line);
 
         nk_layout_row_dynamic(ctx, text_row_height, 1);
-        nk_label(ctx, server_has_client(server) ? "WebSocket client: connected" : "WebSocket client: not connected", NK_TEXT_LEFT);
+        nk_label(ctx, server_has_client(server) ? "WebSocket client: connected" : "WebSocket client: not connected",
+                 NK_TEXT_LEFT);
         nk_label(ctx, stream->streaming ? "Streaming: active" : "Streaming: stopped", NK_TEXT_LEFT);
         nk_label(ctx, playback_db->status_line, NK_TEXT_LEFT);
+
+        // Copy the callback-owned text before drawing, keeping the mutex hold short.
+        char last_received[sizeof(server->last_received)];
+        server_lock(server);
+        MemoryCopy(last_received, server->last_received, sizeof(last_received));
+        server_unlock(server);
+
+        nk_layout_row_dynamic(ctx, text_row_height, 1);
+        nk_label(ctx, "Last message from client:", NK_TEXT_LEFT);
+        nk_layout_row_dynamic(ctx, received_message_height, 1);
+        if (nk_group_begin(ctx, "Received client message", NK_WINDOW_BORDER))
+        {
+            draw_preview_lines(ctx, last_received);
+            nk_group_end(ctx);
+        }
 
         nk_layout_row_dynamic(ctx, text_row_height, 1);
         nk_label(ctx, "Playback DB:", NK_TEXT_LEFT);
 
         nk_layout_row_begin(ctx, NK_DYNAMIC, slider_row_height, 3);
         nk_layout_row_push(ctx, 0.60f);
-        nk_edit_string_zero_terminated(ctx, (nk_flags)NK_EDIT_FIELD | (nk_flags)NK_EDIT_CLIPBOARD, playback_db->path_input, sizeof(playback_db->path_input), nk_filter_default);
+        nk_edit_string_zero_terminated(ctx, (nk_flags)NK_EDIT_FIELD | (nk_flags)NK_EDIT_CLIPBOARD,
+                                       playback_db->path_input, sizeof(playback_db->path_input), nk_filter_default);
         nk_layout_row_push(ctx, 0.18f);
         if (nk_button_label(ctx, "Load DB"))
         {
@@ -1703,7 +1916,8 @@ draw_ui(struct nk_context* ctx, struct websocket_server* server, struct vehicle_
             float timeline_min = (float)playback_db->min_time;
             float timeline_max = (float)playback_db->max_time;
 
-            nk_labelf(ctx, NK_TEXT_LEFT, "Simulation time: %.1f / %.1f, active vehicles: %d, sent: %d", stream->simulated_seconds, playback_db->max_time, playback_db->last_active_count,
+            nk_labelf(ctx, NK_TEXT_LEFT, "Simulation time: %.1f / %.1f, active vehicles: %d, sent: %d",
+                      stream->simulated_seconds, playback_db->max_time, playback_db->last_active_count,
                       stream->last_sent_vehicle_count);
 
             nk_layout_row_dynamic(ctx, slider_row_height, 1);
@@ -1904,4 +2118,25 @@ App(int argc, char** argv)
     glfwDestroyWindow(window);
     glfwTerminate();
     return 0;
+}
+
+// CivetWeb creates its own threads, bypassing the os_core thread entry point.
+static void*
+_server_thread_init(const struct mg_context* context, int thread_type)
+{
+    (void)context;
+    (void)thread_type;
+    static thread_static TCTX thread_context;
+    TCTX_InitAndEquip(&thread_context);
+    return &thread_context;
+}
+
+static void
+_server_thread_exit(const struct mg_context* context, int thread_type, void* thread_pointer)
+{
+    (void)context;
+    (void)thread_type;
+    TCTX* thread_context = TCTX_Get();
+    Assert(thread_context == thread_pointer);
+    TCTX_Release();
 }

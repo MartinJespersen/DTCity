@@ -83,7 +83,6 @@ enum class AsyncTaskType : U32
     Road,
     CarSim,
     Cached,
-
 };
 
 struct RoadBuildTask
@@ -161,22 +160,25 @@ struct City
 g_internal void
 road_destroy(Road* road);
 g_internal city::RoadBuildResult
-road_segment_build(Arena* arena, osm::Network* network, Buffer<osm::RoadEdge> edge_buffer, F32 default_road_width, F32 road_height, glm::dmat4& ecef_to_local,
-                   Map<osm::EdgeId, RoadInfo>* road_info_map);
+road_segment_build(Arena* arena, osm::Network* network, Buffer<osm::RoadEdge> edge_buffer, F32 default_road_width,
+                   F32 road_height, glm::dmat4& ecef_to_local, Map<osm::EdgeId, RoadInfo>* road_info_map);
 
 g_internal AsyncCityTask*
 _cache_and_parse_osm_json(async::ThreadPool* thread_pool, Road* road, osm::Network* osm_network);
 g_internal void
-quad_to_buffer_add(RoadSegmentCorners* road_segment, Buffer<render::Vertex3DBlend> buffer, Buffer<U32> indices, U64 edge_id, F32 road_height, U32* cur_vertex_idx, U32* cur_index_idx);
+quad_to_buffer_add(RoadSegmentCorners* road_segment, Buffer<render::Vertex3DBlend> buffer, Buffer<U32> indices,
+                   U64 edge_id, F32 road_height, U32* cur_vertex_idx, U32* cur_index_idx);
 // ~mgj: Buildings
 g_internal Buildings*
 buildings_create(String8 cache_path, String8 texture_path, Rng2F64 bbox);
 g_internal void
-buildings_build(City* city, osm::Network* osm_network, render::SamplerInfo* sampler_info, glm::dmat4& ecef_to_local, F32 road_height);
+buildings_build(City* city, osm::Network* osm_network, render::SamplerInfo* sampler_info, glm::dmat4& ecef_to_local,
+                F32 road_height);
 g_internal void
 building_destroy(City* city);
 g_internal void
-buildings_buffers_create(Arena* arena, osm::Network* network, F32 road_height, glm::dmat4& ecef_to_local, BuildingRenderInfo* out_render_info);
+buildings_buffers_create(Arena* arena, osm::Network* network, F32 road_height, glm::dmat4& ecef_to_local,
+                         BuildingRenderInfo* out_render_info);
 g_internal Buffer<U32>
 EarClipping(Arena* arena, Buffer<Vec2F64> node_buffer);
 
@@ -192,7 +194,8 @@ agent_sim_build(async::ThreadInfo info, async::AsyncTaskStatus<AgentSim>* status
 g_internal void
 road_create(City* city, Road* in_out_road, glm::dmat4& ecef_to_local, String8 area, String8 bbox_cache_str);
 g_internal Map<osm::EdgeId, RoadInfo>*
-road_info_from_edge_id(Arena* arena, osm::Network* network, Buffer<osm::RoadEdge> road_edge_buf, Map<S64, neta::EdgeList>* neta_edge_map);
+road_info_from_edge_id(Arena* arena, osm::Network* network, Buffer<osm::RoadEdge> road_edge_buf,
+                       Map<S64, neta::EdgeList>* neta_edge_map);
 g_internal void
 city_build(City* city, Rng2F64 bbox, String8 tileset_url, String8 area);
 g_internal void
@@ -200,7 +203,8 @@ city_area_streaming_begin(City* city, const AreaConfig* area_config);
 g_internal void
 city_area_streaming_end(City* city);
 g_internal void
-city_update(City* city, Buffer<city::Coordinate> new_agent_coords, async::ThreadPool* thread_pool, RoadOverlayOption neta_overlay_option, Vec2U32 framebuffer_dim, const AreaConfig* city_config,
+city_update(City* city, Buffer<city::Coordinate> new_agent_coords, async::ThreadPool* thread_pool,
+            RoadOverlayOption neta_overlay_option, Vec2U32 framebuffer_dim, const AreaConfig* city_config,
             render::MeshHandle hover_icon_mesh_handle);
 g_internal void
 city_init(City* city, String8 cache_path);
@@ -214,7 +218,8 @@ g_internal Buffer<render::TileVertex>
 vertex_3d_from_gltfw_vertex(Arena* arena, Buffer<gltfw_Vertex3D> in_vertex_buffer);
 
 g_internal void
-road_segment_from_road_nodes(RoadSegment* out_road_segment, osm::EcefLocation node_0, osm::EcefLocation node_1, F32 road_width);
+road_segment_from_road_nodes(RoadSegment* out_road_segment, osm::EcefLocation node_0, osm::EcefLocation node_1,
+                             F32 road_width);
 g_internal void
 road_segments_coalesce(RoadSegment* in_out_road_segment_0, RoadSegment* in_out_road_segment_1, F32 road_width);
 g_internal F32
@@ -260,11 +265,6 @@ NodeBufferPrintDebug(Buffer<Vec2F64> node_buffer);
 
 // coordinates from str list
 
-g_internal Buffer<Coordinate>
-_city_coordinate_buffer_from_str(Arena* arena, String8 json);
-
-g_internal Buffer<Coordinate>
-city_latest_coordinates_buffer_from_str8_list(Arena* arena, String8List* list);
 
 g_internal Rng3F32
 _agent_world_bounds_from_transform(Rng3F32 model_bounds, glm::mat4 model_transform);

@@ -107,7 +107,6 @@ enum class AsyncResult : U32
     TimeoutError,
     Expecting_Websocket,
     WebsocketDisconnected
-
 };
 
 enum class CurlCodeType : U32
@@ -135,7 +134,8 @@ struct AsyncError
 };
 
 g_internal AsyncError
-async_error(AsyncResult result, CurlCodeType curl_code_type, U32 curl_code, const char* file, U32 line, String8 error_msg)
+async_error(AsyncResult result, CurlCodeType curl_code_type, U32 curl_code, const char* file, U32 line,
+            String8 error_msg)
 {
     return {result, curl_code_type, curl_code, file, line, error_msg};
 }
@@ -150,7 +150,6 @@ async_error(AsyncResult result, CurlCodeType curl_code_type, U32 curl_code, cons
 #define async_error_set(o, e) ((o)->error = (e))
 // clang-format on
 
-typedef size_t (*CurlWriteCallback)(void* contents, size_t size, size_t nmemb, void* userp);
 struct CurlContext
 {
     Arena* arena;
@@ -201,8 +200,10 @@ struct AsyncHttpTaskStateConfig
     U32 max_task_retries;
     U32 timeout_sec;
 
-    AsyncHttpTaskStateConfig(AsyncWorkFunc<T> first_func, T* user_data, U32 max_http_retries, U32 max_task_retries, U32 timeout_sec = 0)
-        : first_func(first_func), max_http_retries(max_http_retries), max_task_retries(max_task_retries), timeout_sec(timeout_sec), user_data(user_data)
+    AsyncHttpTaskStateConfig(AsyncWorkFunc<T> first_func, T* user_data, U32 max_http_retries, U32 max_task_retries,
+                             U32 timeout_sec = 0)
+        : first_func(first_func), max_http_retries(max_http_retries), max_task_retries(max_task_retries),
+          timeout_sec(timeout_sec), user_data(user_data)
     {
     }
 };
@@ -229,10 +230,12 @@ struct LibCurlCallbackData
 };
 
 g_internal HttpInfo*
-http_info_create(Arena* arena, HTTP_Method http_method, String8 http_path, String8 content_type, std::initializer_list<String8> additional_headers, std::initializer_list<String8> params_list);
+http_info_create(Arena* arena, HTTP_Method http_method, String8 http_path, String8 content_type,
+                 std::initializer_list<String8> additional_headers, std::initializer_list<String8> params_list);
 
 g_internal HttpInfo*
-http_info_create_get(Arena* arena, String8 http_path, std::initializer_list<String8> additional_headers = {}, std::initializer_list<String8> params_list = {}, String8 content_type = {});
+http_info_create_get(Arena* arena, String8 http_path, std::initializer_list<String8> additional_headers = {},
+                     std::initializer_list<String8> params_list = {}, String8 content_type = {});
 
 g_internal String8
 _http_content_type_header_create(Arena* arena, String8 content_type);
@@ -250,11 +253,13 @@ _http_main(ThreadInfo thread_info, AsyncTaskStatus<T>* task_status);
 
 template <typename T>
 g_internal AsyncTaskContinuation<T>
-_async_http_task_continuation(AsyncHttpTaskState<T>* http_ctx, AsyncWorkFunc<T> func, HttpInfo* http_info, S64 us_delay = 0);
+_async_http_task_continuation(AsyncHttpTaskState<T>* http_ctx, AsyncWorkFunc<T> func, HttpInfo* http_info,
+                              S64 us_delay = 0);
 
 template <typename T>
 g_internal void
-_async_thread_pool_push(ThreadPool* thread_pool, AsyncTaskStatus<T>* task, AsyncWorkFunc<T> func, HttpInfo* http_info, S64 us_delay = 0);
+_async_thread_pool_push(ThreadPool* thread_pool, AsyncTaskStatus<T>* task, AsyncWorkFunc<T> func, HttpInfo* http_info,
+                        S64 us_delay = 0);
 
 template <typename T>
 WorkerResult
@@ -273,19 +278,17 @@ _curl_reset(CurlContext* curl_ctx);
 g_internal void
 _curl_context_cleanup(CurlContext* curl_ctx);
 
-template <typename T>
 g_internal AsyncError
-_async_http_configure(Arena* arena, AsyncHttpTaskState<T>* http_ctx, HttpInfo* http_info);
-
-g_internal AsyncError
-_async_http_configure(Arena* arena, CurlContext* curl_ctx, HttpInfo* http_info, CurlWriteCallback curl_write_callback, void* callback_data);
+async_http_configure(Arena* arena, CurlContext* curl_ctx, HttpInfo* http_info);
 
 template <typename T>
 g_internal AsyncHttpTaskCreateResult<T>
-async_http_task_run(Arena* arena, ThreadPool* thread_pool, HttpInfo* http_info, AsyncHttpTaskStateConfig<T>* config, const char* task_name);
+async_http_task_run(Arena* arena, ThreadPool* thread_pool, HttpInfo* http_info, AsyncHttpTaskStateConfig<T>* config,
+                    const char* task_name);
 
 template <typename T>
 g_internal AsyncHttpTaskCreateResult<T>
-async_http_task_run(ThreadPool* thread_pool, HttpInfo* http_info, AsyncHttpTaskStateConfig<T>* config, const char* task_name);
+async_http_task_run(ThreadPool* thread_pool, HttpInfo* http_info, AsyncHttpTaskStateConfig<T>* config,
+                    const char* task_name);
 
 } // namespace async

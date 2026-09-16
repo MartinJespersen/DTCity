@@ -42,10 +42,9 @@ node_buffer_from_simd_json(Arena* arena, String8 json, U64 node_hashmap_size)
                 osm::WgsNode* node = PushStruct(arena, osm::WgsNode);
                 U64 id;
                 F64 lat, lon;
-                auto item_value = item.value();
-                error_num |= item_value["id"].get(id);
-                error_num |= item_value["lat"].get_double().get(lat);
-                error_num |= item_value["lon"].get_double().get(lon);
+                error_num |= item_object.find_field("id").get(id);
+                error_num |= item_object.find_field("lat").get_double().get(lat);
+                error_num |= item_object.find_field("lon").get_double().get(lon);
                 if (error_num)
                 {
                     goto early_ret;
@@ -114,24 +113,31 @@ way_buffer_from_simd_json(Arena* arena, String8 json)
         if (elem_key == "way")
         {
             // ~mgj: Insert into hashmap
-            U64 way_id = elem["id"].get_uint64();
+            U64 way_id = 0;
+            error = elem["id"].get_uint64().get(way_id);
+            if (error) { goto early_ret; }
             osm::Way* way = &way_buffer.data[way_index];
 
             way->id = way_id;
             // Get the nodes array and count elements
-            auto nodes_array = elem["nodes"].get_array();
+            simdjson::dom::array nodes_array;
+            error = elem["nodes"].get_array().get(nodes_array);
+            if (error) { goto early_ret; }
             way->node_count = nodes_array.size();
 
             way->node_ids = PushArray(arena, U64, way->node_count);
             U32 node_index = 0;
             for (auto node_id : nodes_array)
             {
-                way->node_ids[node_index] = node_id.get_uint64();
+                error = node_id.get_uint64().get(way->node_ids[node_index]);
+                if (error) { goto early_ret; }
                 node_index++;
             }
 
             // Count tags by iterating through the object
-            auto tags_object = elem["tags"].get_object();
+            simdjson::dom::object tags_object;
+            error = elem["tags"].get_object().get(tags_object);
+            if (error) { goto early_ret; }
             U64 tag_count = 0;
             for (auto _ : tags_object)
             {
@@ -140,7 +146,6 @@ way_buffer_from_simd_json(Arena* arena, String8 json)
             }
 
             // Reset and iterate again to store the tags
-            tags_object = elem["tags"].get_object();
             way->tags = buffer_alloc<osm::Tag>(arena, tag_count);
             U64 tag_cur_index = 0;
             for (auto tag : tags_object)
@@ -148,11 +153,13 @@ way_buffer_from_simd_json(Arena* arena, String8 json)
                 // Get key and value as string_view
 
                 auto key_view = tag.key;
-                auto value_view = tag.value.get_string();
+                std::string_view value_view;
+                error = tag.value.get_string().get(value_view);
+                if (error) { goto early_ret; }
 
                 // Convert to String8
                 String8 temp_key = str8((U8*)key_view.data(), key_view.size());
-                String8 temp_value = str8((U8*)value_view.value().data(), value_view.value().size());
+                String8 temp_value = str8((U8*)value_view.data(), value_view.size());
 
                 // Copy to arena
                 way->tags.data[tag_cur_index].key = push_str8_copy(arena, temp_key);

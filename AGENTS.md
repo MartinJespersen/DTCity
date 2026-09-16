@@ -31,6 +31,10 @@ In the src directory all sub-directories are layers that are all responsible for
 - limit the number of memory arena's, and only create a new one when another arena does not have a similar lifetime.
 - The frame loop should never wait for resources, task, etc. All blocking operations should be avoided.
 
+# Important cleanup before committing 
+- move types and declarations into the headers and additional create declarations of functions if not already done, but only if the functions and types are public otherwise move them to the top of the cpp file.
+- Make suggestions for better naming of all symbols if you believe they do not capture the context.
+
 # Code Suggestions
 - When you find a name (e.g. variable or function) that is not concise or explanatory enough, then suggest a better name.
 

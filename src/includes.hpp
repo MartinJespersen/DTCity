@@ -1,6 +1,7 @@
 #pragma once
 
 #include "pch.hpp"
+#include "third_party/symbol_set/symbol_set.h"
 
 DISABLE_WARNINGS_PUSH
 #define OS_FEATURE_GRAPHICAL 1

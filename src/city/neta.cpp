@@ -63,15 +63,19 @@ _edge_in_osm_area(Arena* arena, osm::Network* network, simdjson::ondemand::docum
             err |= geometry.error();
             break;
         }
-        U64 size = geometry.count_elements();
+        size_t size = 0;
+        err |= geometry.count_elements().get(size);
+        if (err) { break; }
         Buffer<Vec2F64> coords_buf = buffer_alloc<Vec2F64>(arena, size);
         U64 coord_idx = 0;
         for (auto point : geometry)
         {
             auto coords = point.get_array();
-            if (coords.error() != simdjson::error_code::SUCCESS || coords.value().count_elements() != 2)
+            size_t coord_count = 0;
+            simdjson::error_code coord_error = coords.count_elements().get(coord_count);
+            if (coord_error != simdjson::error_code::SUCCESS || coord_count != 2)
             {
-                err |= coords.error();
+                err |= coord_error != simdjson::error_code::SUCCESS ? coord_error : simdjson::error_code::INCORRECT_TYPE;
                 continue;
             }
             U32 arr_idx = 0;

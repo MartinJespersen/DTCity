@@ -1,13 +1,15 @@
-# Important changes before committing:
-- make sure the vulkan function are not used in city layer
 
 # Regressions
+* [Medium] Restore macOS portability for the simulator message symbol sets. `symbol_set.h` only implements Windows and Linux section handling; its unconditional inclusion causes a compile-time `#error` on macOS. Add Mach-O support or replace these registries with portable tables.
 * [Medium] Include GPU-pending tile replacements in the global reprocessing limit. Counting only active CPU task nodes allows staging buffers and Vulkan submissions to accumulate after the CPU tasks finish.
 * [Medium] Increment the tile mesh processor generation only when mesh classification inputs change. Changing or re-enabling a shader overlay option should not re-tessellate every tile.
 
 # Project TODO:
+- Agents need to be added and removed 
+- Make debug logging internal to layer.
 - Improve performance to be able to visualize large simulations.
   - multithreaded addition
+- make sure the vulkan function are not used in city layer
 - Ability to change camera for each agent?
 - Visualize multiple scenarios (with dashboard for changing them)
   - Visualization -> simulation communication for scenario change 

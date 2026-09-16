@@ -7,6 +7,7 @@
     { "name": "curl", "features": ["websockets"] },
     "cesium-native",
     "meshoptimizer",
+    "mimalloc",
     "abseil",
     "cdt"
   ],

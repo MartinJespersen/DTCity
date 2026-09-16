@@ -142,8 +142,12 @@ endif()
 
 if(BUILD_CITY)
   find_package(meshoptimizer CONFIG REQUIRED)
+  find_package(mimalloc CONFIG REQUIRED)
   add_executable(city)
+  # Use simdjson's explicit error-code API in both the application and library sources.
+  target_compile_definitions(city PRIVATE SIMDJSON_EXCEPTIONS=0)
   target_link_libraries(city PRIVATE meshoptimizer::meshoptimizer)
+  target_link_libraries(city PRIVATE $<IF:$<TARGET_EXISTS:mimalloc-static>,mimalloc-static,mimalloc>)
   list(APPEND ALL_TARGETS city)
 
   include_directories(${CMAKE_CURRENT_SOURCE_DIR}/src ${CMAKE_CURRENT_SOURCE_DIR}/src/third_party/imgui)

@@ -45,7 +45,8 @@ dt_time_update(io::IO* io, dt_Time* time)
     time->frame_timestamp_ms = (F64)os_now_microseconds();
     U64 time_delta_ms = time->frame_timestamp_ms - prev_timestamp;
 
-    time->frame_timestamp_delta_ms = Clamp(1'000'000 / max_refresh_rate, (F64)time_delta_ms, 1'000'000 / min_refresh_rate);
+    time->frame_timestamp_delta_ms =
+        Clamp(1'000'000 / max_refresh_rate, (F64)time_delta_ms, 1'000'000 / min_refresh_rate);
 
     F64 refresh_rate = Clamp(min_refresh_rate, (F64)io->frame_rate.load(), max_refresh_rate);
     time->time_delta_constant_sec = 1.0 / refresh_rate;
@@ -104,10 +105,11 @@ dt_imgui_setup(vulkan::Context* vk_ctx, io::IO* io_ctx)
     init_info.Allocator = VK_NULL_HANDLE;
     init_info.PipelineInfoMain.RenderPass = VK_NULL_HANDLE;
     init_info.PipelineInfoMain.Subpass = 0;
-    init_info.PipelineInfoMain.PipelineRenderingCreateInfo = {.sType = VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO_KHR,
-                                                              .colorAttachmentCount = 1,
-                                                              .pColorAttachmentFormats = &vk_ctx->swapchain_resources->color_format,
-                                                              .depthAttachmentFormat = vk_ctx->swapchain_resources->depth_format};
+    init_info.PipelineInfoMain.PipelineRenderingCreateInfo = {
+        .sType = VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO_KHR,
+        .colorAttachmentCount = 1,
+        .pColorAttachmentFormats = &vk_ctx->swapchain_resources->color_format,
+        .depthAttachmentFormat = vk_ctx->swapchain_resources->depth_format};
     init_info.PipelineInfoMain.MSAASamples = VK_SAMPLE_COUNT_1_BIT;
     init_info.CheckVkResultFn = CheckVkResult;
     init_info.UseDynamicRendering = VK_TRUE;
@@ -122,14 +124,17 @@ imgui_debug_window(city::City* city, async::ThreadPool* thread_pool)
     vulkan::AssetManager* asset_manager = vulkan::asset_manager_get();
     const ImGuiViewport* viewport = ImGui::GetMainViewport();
     F32 max_debug_window_width = ClampTop(720.0f, viewport->WorkSize.x * 0.6f);
-    ImGui::SetNextWindowPos(ImVec2(viewport->WorkPos.x, viewport->WorkPos.y + viewport->WorkSize.y), ImGuiCond_Always, ImVec2(0.0f, 1.0f));
+    ImGui::SetNextWindowPos(ImVec2(viewport->WorkPos.x, viewport->WorkPos.y + viewport->WorkSize.y), ImGuiCond_Always,
+                            ImVec2(0.0f, 1.0f));
     ImGui::SetNextWindowSizeConstraints(ImVec2(0.0f, 0.0f), ImVec2(max_debug_window_width, FLT_MAX));
 
     ImGui::Begin("Debug Info", nullptr, ImGuiWindowFlags_None);
     ImGui::Text("FPS: %f", ImGui::GetIO().Framerate);
     ImGui::Text("VSync FPS: %d", ctx->io->frame_rate.load());
-    ImGui::Text("Textures:       %d active, %d free", asset_manager->texture_list.count, asset_manager->texture_free_list.count);
-    ImGui::Text("Buffers:        %d active, %d free", asset_manager->buffer_list.count, asset_manager->buffer_free_list.count);
+    ImGui::Text("Textures:       %d active, %d free", asset_manager->texture_list.count,
+                asset_manager->texture_free_list.count);
+    ImGui::Text("Buffers:        %d active, %d free", asset_manager->buffer_list.count,
+                asset_manager->buffer_free_list.count);
     for (U32 i = 0; i < ArrayCount(asset_manager->deletion_queues); i++)
     {
         ImGui::Text("Deletion Queue %d: %d active", i, asset_manager->deletion_queues[i].list_count);
@@ -178,7 +183,8 @@ imgui_debug_window(city::City* city, async::ThreadPool* thread_pool)
         {
             free_mb = (budgets[i].budget - budgets[i].usage) / MB(1);
         }
-        ImGui::Text("Heap %u%s: %llu / %llu MB used, %llu MB free", i, device_local ? " device" : "", usage_mb, budget_mb, free_mb);
+        ImGui::Text("Heap %u%s: %llu / %llu MB used, %llu MB free", i, device_local ? " device" : "", usage_mb,
+                    budget_mb, free_mb);
     }
 
     ImGui::End();
@@ -202,25 +208,31 @@ dt_main_loop(void* ptr)
 
     constexpr F32 agent_hover_icon_radius = 1.0f;
     constexpr F32 agent_hover_icon_height = 2.0f;
-    render::PrimitiveMesh agent_hover_icon_mesh = geometry::hover_icon_mesh_create(ctx->arena, agent_hover_icon_radius, agent_hover_icon_height, 0.0f, city::agent_hover_icon_color);
+    render::PrimitiveMesh agent_hover_icon_mesh = geometry::hover_icon_mesh_create(
+        ctx->arena, agent_hover_icon_radius, agent_hover_icon_height, 0.0f, city::agent_hover_icon_color);
     render::MeshHandle agent_hover_icon_mesh_handle = render::mesh_handles_create_and_upload(agent_hover_icon_mesh);
 
     // city building ////////////////////////////////////////////
-    const city::AreaConfig cities_info_arr[] = {{.name = S("Aarhus"),
-                                                 .lon = 10.291206,
-                                                 .lat = 56.253108,
-                                                 .bbox_width_meters = 5000,
-                                                 .bbox_height_meters = 5000,
-                                                 .tileset_path = S("file:///C:/ByModel/5km_6235_580/tileset.json"),
-                                                 .bbox_clipping_enabled = true,
-                                                 .custom_geometry_enabled = true},
-                                                {.name = S("Eskiltuna"),
-                                                 .lon = 16.49952138067,
-                                                 .lat = 59.36163877297,
-                                                 .bbox_width_meters = 5000,
-                                                 .bbox_height_meters = 5000,
-                                                 .tileset_path = S("file:///C:/ByModel/eskiltuna/Totalstad_2025_q3/tileset.json")},
-                                                {.name = S("Zurich"), .lon = 8.532010538692882, .lat = 47.40024260563559, .bbox_width_meters = 5000, .bbox_height_meters = 5000}};
+    const city::AreaConfig cities_info_arr[] = {
+        {.name = S("Aarhus"),
+         .lon = 10.291206,
+         .lat = 56.253108,
+         .bbox_width_meters = 5000,
+         .bbox_height_meters = 5000,
+         .tileset_path = S("file:///C:/ByModel/5km_6235_580/tileset.json"),
+         .bbox_clipping_enabled = true,
+         .custom_geometry_enabled = true},
+        {.name = S("Eskiltuna"),
+         .lon = 16.49952138067,
+         .lat = 59.36163877297,
+         .bbox_width_meters = 5000,
+         .bbox_height_meters = 5000,
+         .tileset_path = S("file:///C:/ByModel/eskiltuna/Totalstad_2025_q3/tileset.json")},
+        {.name = S("Zurich"),
+         .lon = 8.532010538692882,
+         .lat = 47.40024260563559,
+         .bbox_width_meters = 5000,
+         .bbox_height_meters = 5000}};
 
     ctx->tile_load_state = city::tile_load_create(ctx->thread_pool, ArrayCount(cities_info_arr));
     Buffer<city::City> city_buf = buffer_alloc<city::City>(ctx->arena, ArrayCount(cities_info_arr));
@@ -233,7 +245,8 @@ dt_main_loop(void* ptr)
         ui::Camera* camera = resource_pool_item_from_idx(ctx->camera_container, city->camera_handle);
         ui::camera_init(ctx->arena, camera);
 
-        Rng2F64 bbox = util::wgs84_bbox_from_btm_right_corner(city_config->lon, city_config->lat, city_config->bbox_width_meters, city_config->bbox_height_meters);
+        Rng2F64 bbox = util::wgs84_bbox_from_btm_right_corner(
+            city_config->lon, city_config->lat, city_config->bbox_width_meters, city_config->bbox_height_meters);
         city::city_init(city, ctx->data_subdirs.data[dt_DataDirType::Cache]);
         city->bbox = bbox;
         city->tileset_url = city_config->tileset_path;
@@ -241,12 +254,9 @@ dt_main_loop(void* ptr)
         ////////////////////////////////////////////////////////
     }
 
-    async::WebsocketConnection ws_task_result = async::async_websocket_start(S("ws://127.0.0.1:8080/ws"));
-    if (ws_task_result.has_error())
-    {
-        ERROR_LOG("Error from websocket");
-    }
-
+    city::Simulator simulator = {};
+    city::SimulationError simulator_connection_error = simulator.simulator_connect(60);
+    U32 simulator_scenario_idx = 0;
     city::RoadOverlayOption neta_overlay_option = city::RoadOverlayOption_None;
     S32 cur_area_option = 1;
     S32 area_option = cur_area_option;
@@ -266,12 +276,42 @@ dt_main_loop(void* ptr)
         ImGui::NewFrame();
         async::thread_pool_main_thread_queue_drain(ctx->thread_pool);
 
-        String8List ws_msgs = ws_task_result.read(ctx->arena_frame);
-        Buffer<city::Coordinate> new_agent_coords = city::city_latest_coordinates_buffer_from_str8_list(ctx->arena_frame, &ws_msgs);
+        String8List msg_list = {};
+        String8 ws_msg = {};
+        static U32 message_frame_counter = 0;
+        if (message_frame_counter % 60 == 0)
+        {
+            ws_msg = push_str8f(ctx->arena_frame, "test message to server: %u\n", message_frame_counter);
+            str8_list_push(ctx->arena_frame, &msg_list, ws_msg);
+        }
+        message_frame_counter++;
+        Buffer<city::Coordinate> new_agent_coords = {};
+        String8List simulator_options = {};
+        simulator.simulator_update(ctx->arena_frame, &new_agent_coords, &simulator_options, simulator_scenario_idx,
+                                   io_ctx->frame_count);
+
         Vec2U32 framebuffer_dim = {(U32)io_ctx->framebuffer_width, (U32)io_ctx->framebuffer_height};
 
         ImGui::Begin("Interaction", nullptr);
 
+        ImGui::SeparatorText("Scenarios");
+        if (simulator_options.node_count && simulator_scenario_idx >= simulator_options.node_count)
+        {
+            simulator_scenario_idx = 0;
+        }
+        U32 scenario_idx = 0;
+        for (String8Node* scenario_node = simulator_options.first; scenario_node; scenario_node = scenario_node->next)
+        {
+            ImGui::PushID((int)scenario_idx);
+            bool selected = simulator_scenario_idx == scenario_idx;
+            bool clicked = ImGui::RadioButton((const char*)scenario_node->string.str, selected);
+            if (clicked)
+            {
+                simulator_scenario_idx = scenario_idx;
+            }
+            ImGui::PopID();
+            ++scenario_idx;
+        }
         ImGui::SeparatorText("Area");
         for (U32 i = 0; i < ArrayCount(cities_info_arr); i++)
         {
@@ -318,8 +358,10 @@ dt_main_loop(void* ptr)
         {
             area->no_gui_focus = true;
         }
-        ui::camera_update(camera, ctx->io, ctx->time->frame_timestamp_delta_ms / 1'000'000, vec_2s32(io_ctx->framebuffer_width, io_ctx->framebuffer_height), world_camera_enable);
-        city::city_update(area, new_agent_coords, ctx->thread_pool, neta_overlay_option, framebuffer_dim, area_config, agent_hover_icon_mesh_handle);
+        ui::camera_update(camera, ctx->io, ctx->time->frame_timestamp_delta_ms / 1'000'000,
+                          vec_2s32(io_ctx->framebuffer_width, io_ctx->framebuffer_height), world_camera_enable);
+        city::city_update(area, new_agent_coords, ctx->thread_pool, neta_overlay_option, framebuffer_dim, area_config,
+                          agent_hover_icon_mesh_handle);
 
         // #if BUILD_DEBUG
         imgui_debug_window(area, ctx->thread_pool);
