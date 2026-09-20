@@ -33,7 +33,7 @@ tile_load_destroy(TileLoadState* state)
 }
 
 g_internal ArrayResourcePoolHandle
-tile_load_streaming_begin(TileLoadState* state, String8 tileset_url, Rng2F64 bounds, B32 custom_geometry_enabled, U64 cache_byte_size)
+tile_load_streaming_begin(TileLoadState* state, String8 tileset_url, Rng2F64 bounds, S64 tileset_ion_asset_id, U64 cache_byte_size)
 {
     Assert(state);
 
@@ -43,7 +43,7 @@ tile_load_streaming_begin(TileLoadState* state, String8 tileset_url, Rng2F64 bou
     Assert(tileset_exists);
 
     Vec2F64 bounds_center = {.x = (bounds.min.x + bounds.max.x) * 0.5, .y = (bounds.min.y + bounds.max.y) * 0.5};
-    cesium::tileset_renderer_create(tileset, tileset_handle, state->thread_pool, tileset_url, bounds_center.x, bounds_center.y, 0.0, custom_geometry_enabled, cache_byte_size);
+    cesium::tileset_renderer_create(tileset, tileset_handle, state->thread_pool, tileset_url, bounds_center.x, bounds_center.y, 0.0, tileset_ion_asset_id, cache_byte_size);
     return tileset_handle;
 }
 

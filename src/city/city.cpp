@@ -1,6 +1,22 @@
 namespace city
 {
 
+g_internal Vec2F64
+city_area_wgs84_get(const AreaConfig* config)
+{
+    switch (config->coordinate_type)
+    {
+        case AreaCoordinateType::Wgs84: return config->wgs84;
+        case AreaCoordinateType::Utm:
+        {
+            Vec2F64 wgs84 = util::util_wgs84_from_utm(config->utm);
+            return wgs84;
+        }
+        default: InvalidPath;
+    }
+    return {};
+}
+
 g_internal void
 city_init(City* city, String8 cache_path)
 {
@@ -19,9 +35,27 @@ city_area_streaming_begin(City* city, const AreaConfig* area_config)
     Assert(city);
     Assert(area_config);
 
+    String8 tileset_url = {};
+    S64 ion_asset_id = 0;
+    switch (area_config->tileset_source)
+    {
+        case AreaTilesetSource::Terrain: break;
+        case AreaTilesetSource::Path:
+        {
+            tileset_url = area_config->tileset_path;
+            Assert(tileset_url.size > 0);
+        } break;
+        case AreaTilesetSource::IonAsset:
+        {
+            ion_asset_id = area_config->tileset_ion_asset_id;
+            Assert(ion_asset_id > 0);
+        } break;
+        default: InvalidPath;
+    }
+
     Context* ctx = dt_ctx_get();
     ArrayResourcePoolHandle tileset_handle = tile_load_streaming_begin(
-        ctx->tile_load_state, city->tileset_url, city->bbox, area_config->custom_geometry_enabled, MB(256));
+        ctx->tile_load_state, tileset_url, city->bbox, ion_asset_id, MB(256));
     city->tileset_handle = tileset_handle;
 
     cesium::TilesetRenderer* tileset = {};
@@ -297,6 +331,7 @@ city_update(City* city, Buffer<city::Coordinate> new_agent_coords, async::Thread
         {
             if (!city->no_gui_focus)
             {
+                ImGui::PushFont(nullptr, 18.0f);
                 osm::RoadEdge** edge_ptr = map_get(&city->osm_network->edge_structure.edge_map, (S64)hovered_object_id);
                 if (edge_ptr)
                 {
@@ -306,7 +341,10 @@ city_update(City* city, Buffer<city::Coordinate> new_agent_coords, async::Thread
 
                     bool open = true;
                     ImGuiWindowFlags object_info_flags = ImGuiWindowFlags_AlwaysAutoResize;
-                    ImGui::Begin("Object Info", &open, object_info_flags);
+                    ImGui::PushFont(nullptr, 22.0f);
+                    ImGui::Begin("Road Info", &open, object_info_flags);
+                    ImGui::PopFont();
+
                     for (osm::Tag& tag : way->tags)
                     {
                         ImGui::Text("%s: %s", (char*)tag.key.str, (char*)tag.value.str);
@@ -334,7 +372,10 @@ city_update(City* city, Buffer<city::Coordinate> new_agent_coords, async::Thread
                     ImGuiWindowFlags object_info_flags = ImGuiWindowFlags_AlwaysAutoResize |
                                                          ImGuiWindowFlags_NoMouseInputs |
                                                          ImGuiWindowFlags_NoFocusOnAppearing;
-                    ImGui::Begin("Object Info", &open, object_info_flags);
+
+                    ImGui::PushFont(nullptr, 22.0f);
+                    ImGui::Begin("Road Info", &open, object_info_flags);
+                    ImGui::PopFont();
                     for (U32 tag_idx = 0; tag_idx < way->tags.size; tag_idx += 1)
                     {
                         osm::Tag* tag = &way->tags.data[tag_idx];
@@ -346,6 +387,7 @@ city_update(City* city, Buffer<city::Coordinate> new_agent_coords, async::Thread
 
                     ImGui::End();
                 }
+                ImGui::PopFont();
             }
         }
         // always drawn tiles

@@ -213,26 +213,32 @@ dt_main_loop(void* ptr)
     render::MeshHandle agent_hover_icon_mesh_handle = render::mesh_handles_create_and_upload(agent_hover_icon_mesh);
 
     // city building ////////////////////////////////////////////
-    const city::AreaConfig cities_info_arr[] = {
-        {.name = S("Aarhus"),
-         .lon = 10.291206,
-         .lat = 56.253108,
-         .bbox_width_meters = 5000,
-         .bbox_height_meters = 5000,
-         .tileset_path = S("file:///C:/ByModel/5km_6235_580/tileset.json"),
-         .bbox_clipping_enabled = true,
-         .custom_geometry_enabled = true},
-        {.name = S("Eskiltuna"),
-         .lon = 16.49952138067,
-         .lat = 59.36163877297,
-         .bbox_width_meters = 5000,
-         .bbox_height_meters = 5000,
-         .tileset_path = S("file:///C:/ByModel/eskiltuna/Totalstad_2025_q3/tileset.json")},
-        {.name = S("Zurich"),
-         .lon = 8.532010538692882,
-         .lat = 47.40024260563559,
-         .bbox_width_meters = 5000,
-         .bbox_height_meters = 5000}};
+    const city::AreaConfig cities_info_arr[] = {{.name = S("Aarhus"),
+                                                 .coordinate_type = city::AreaCoordinateType::Utm,
+                                                 .utm = {575000, 6220000, 32},
+                                                 .bbox_width_meters = 5000,
+                                                 .bbox_height_meters = 5000,
+                                                 .tileset_source = city::AreaTilesetSource::Path,
+                                                 .tileset_path = S("file:///C:/ByModel/tileset.json"),
+                                                 .bbox_clipping_enabled = true,
+                                                 .custom_geometry_enabled = true},
+                                                {.name = S("Eskiltuna"),
+                                                 .wgs84 = {16.49952138067, 59.36163877297},
+                                                 .bbox_width_meters = 5000,
+                                                 .bbox_height_meters = 5000},
+                                                {.name = S("Zurich"),
+                                                 .wgs84 = {8.532010538692882, 47.40024260563559},
+                                                 .bbox_width_meters = 5000,
+                                                 .bbox_height_meters = 5000},
+                                                {.name = S("Aarhus (ion)"),
+                                                 .coordinate_type = city::AreaCoordinateType::Utm,
+                                                 .utm = {575000, 6220000, 32},
+                                                 .bbox_width_meters = 5000,
+                                                 .bbox_height_meters = 5000,
+                                                 .tileset_source = city::AreaTilesetSource::IonAsset,
+                                                 .tileset_ion_asset_id = 5898353,
+                                                 .bbox_clipping_enabled = true,
+                                                 .custom_geometry_enabled = true}};
 
     ctx->tile_load_state = city::tile_load_create(ctx->thread_pool, ArrayCount(cities_info_arr));
     Buffer<city::City> city_buf = buffer_alloc<city::City>(ctx->arena, ArrayCount(cities_info_arr));
@@ -245,12 +251,17 @@ dt_main_loop(void* ptr)
         ui::Camera* camera = resource_pool_item_from_idx(ctx->camera_container, city->camera_handle);
         ui::camera_init(ctx->arena, camera);
 
-        Rng2F64 bbox = util::wgs84_bbox_from_btm_right_corner(
-            city_config->lon, city_config->lat, city_config->bbox_width_meters, city_config->bbox_height_meters);
+        Vec2F64 wgs84 = city::city_area_wgs84_get(city_config);
+        Rng2F64 bbox = util::wgs84_bbox_from_btm_right_corner(wgs84.x, wgs84.y, city_config->bbox_width_meters,
+                                                              city_config->bbox_height_meters);
         city::city_init(city, ctx->data_subdirs.data[dt_DataDirType::Cache]);
         city->bbox = bbox;
-        city->tileset_url = city_config->tileset_path;
-        city::city_build(city, bbox, city_config->tileset_path, city_config->name);
+        String8 tileset_path = {};
+        if (city_config->tileset_source == city::AreaTilesetSource::Path)
+        {
+            tileset_path = city_config->tileset_path;
+        }
+        city::city_build(city, bbox, tileset_path, city_config->name);
         ////////////////////////////////////////////////////////
     }
 
@@ -292,9 +303,14 @@ dt_main_loop(void* ptr)
 
         Vec2U32 framebuffer_dim = {(U32)io_ctx->framebuffer_width, (U32)io_ctx->framebuffer_height};
 
+        ImGui::PushFont(nullptr, 18);
+        ImGui::PushFont(nullptr, 24.0f);
         ImGui::Begin("Interaction", nullptr);
+        ImGui::PopFont();
 
+        ImGui::PushFont(nullptr, 22.0f);
         ImGui::SeparatorText("Scenarios");
+        ImGui::PopFont();
         if (simulator_options.node_count && simulator_scenario_idx >= simulator_options.node_count)
         {
             simulator_scenario_idx = 0;
@@ -312,13 +328,18 @@ dt_main_loop(void* ptr)
             ImGui::PopID();
             ++scenario_idx;
         }
+        ImGui::PushFont(nullptr, 22.0f);
         ImGui::SeparatorText("Area");
+        ImGui::PopFont();
         for (U32 i = 0; i < ArrayCount(cities_info_arr); i++)
         {
             ImGui::RadioButton((const char*)cities_info_arr[i].name.str, (int*)&area_option, (int)i);
         }
 
-        ImGui::SeparatorText("Netascore");
+        ImGui::PushFont(nullptr, 22.0f);
+        ImGui::SeparatorText("NetAScore");
+        ImGui::PopFont();
+
         ImGui::SetWindowPos(ImVec2(0, 0));
 
         for (U32 i = 0; i < city::RoadOverlayOption_Count; i++)
@@ -334,6 +355,7 @@ dt_main_loop(void* ptr)
         }
 
         ImGui::End();
+        ImGui::PopFont();
 
         if (cur_area_option != area_option)
         {

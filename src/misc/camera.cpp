@@ -6,7 +6,7 @@ camera_init(Arena* arena, Camera* camera)
 {
     camera->move_sensitivity = 300.0f;
     camera->fov = 45.0;
-    camera->position = glm::vec3(0.0f, 0.0f, 1000.0f);
+    camera->position = glm::vec3(-1416.47f, -1720.0f, 2216.42f);
     camera->yaw = 0.0f;
     camera->pitch = -60.0f; // Look downward at the ground
     camera->view_dir = geometry::ui_direction_normal_from_euler_angles(camera->yaw, camera->pitch);
@@ -16,7 +16,8 @@ camera_init(Arena* arena, Camera* camera)
     defer(render::thread_cmd_buffer_end(thread_ctx));
     render::BufferType buffer_type = render::BufferType_Uniform;
     String8 debug_name = push_str8f(arena, "camera_uniform_buffer");
-    camera->mut_handles = render::mapped_buffer_create<ui::CameraUniformBuffer>(arena, thread_ctx, buffer_type, debug_name);
+    camera->mut_handles =
+        render::mapped_buffer_create<ui::CameraUniformBuffer>(arena, thread_ctx, buffer_type, debug_name);
 }
 
 static void
@@ -64,7 +65,7 @@ camera_update(Camera* camera, io::IO* input, F64 time, Vec2S32 extent, bool enab
     camera->view_matrix = glm::lookAt(camera->position, camera->position + camera->view_dir, camera_up);
 
     F32 aspect_ratio = (F32)Max(extent.x, 1) / (F32)Max(extent.y, 1);
-    camera->projection_matrix = glm::perspective(glm::radians(camera->fov), aspect_ratio, 0.1f, 5000.0f);
+    camera->projection_matrix = glm::perspective(glm::radians(camera->fov), aspect_ratio, 0.1f, 10000.0f);
     camera->projection_matrix[1][1] *= -1.0f;
 
     camera->cur_framebuffer_extent = vec_2u32((U32)Max(extent.x, 0), (U32)Max(extent.y, 0));
@@ -77,7 +78,8 @@ camera_update(Camera* camera, io::IO* input, F64 time, Vec2S32 extent, bool enab
 }
 
 g_internal void
-_camera_uniform_buffer_update(ui::Camera* camera, render::MappedHandle<CameraUniformBuffer> mut_handle, Vec2U32 screen_res)
+_camera_uniform_buffer_update(ui::Camera* camera, render::MappedHandle<CameraUniformBuffer> mut_handle,
+                              Vec2U32 screen_res)
 {
     ScratchScope scratch = ScratchScope(0, 0);
 
@@ -111,7 +113,8 @@ is_bounding_sphere_to_be_culled(Camera& camera, Rng3F32& bbox)
     }
 
     F32 projection_scale = AbsF32(camera.projection_matrix[1][1]);
-    F32 pixel_diameter = world_diameter * (F32)camera.cur_framebuffer_extent.y * projection_scale / (2.0f * nearest_depth);
+    F32 pixel_diameter =
+        world_diameter * (F32)camera.cur_framebuffer_extent.y * projection_scale / (2.0f * nearest_depth);
 
     return pixel_diameter < 10.0f;
 }
@@ -172,7 +175,9 @@ _frustum_planes_calculate(Frustum* out_frustum, const glm::mat4 matrix)
 
     for (size_t i = 0; i < ArrayCount(out_frustum->planes); i++)
     {
-        float length = sqrtf(out_frustum->planes[i].x * out_frustum->planes[i].x + out_frustum->planes[i].y * out_frustum->planes[i].y + out_frustum->planes[i].z * out_frustum->planes[i].z);
+        float length = sqrtf(out_frustum->planes[i].x * out_frustum->planes[i].x +
+                             out_frustum->planes[i].y * out_frustum->planes[i].y +
+                             out_frustum->planes[i].z * out_frustum->planes[i].z);
         out_frustum->planes[i] /= length;
     }
 }

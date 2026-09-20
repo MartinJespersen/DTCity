@@ -114,17 +114,36 @@ struct AsyncCityTaskList
     AsyncCityTask* last;
 };
 
+enum class AreaCoordinateType
+{
+    Wgs84,
+    Utm
+};
+
+enum class AreaTilesetSource
+{
+    Terrain, // Zero initialization selects default ion terrain.
+    Path,
+    IonAsset
+};
+
 struct AreaConfig
 {
     String8 name;
-    F64 lon;
-    F64 lat;
+    AreaCoordinateType coordinate_type;
+    Vec2F64 wgs84; // Longitude (x), latitude (y), in degrees.
+    util::UtmCoordinate utm;
     F32 bbox_width_meters;
     F32 bbox_height_meters;
+    AreaTilesetSource tileset_source;
     String8 tileset_path;
+    S64 tileset_ion_asset_id;
     bool bbox_clipping_enabled;
     bool custom_geometry_enabled;
 };
+
+g_internal Vec2F64
+city_area_wgs84_get(const AreaConfig* config);
 
 struct City
 {
@@ -264,7 +283,6 @@ g_internal void
 NodeBufferPrintDebug(Buffer<Vec2F64> node_buffer);
 
 // coordinates from str list
-
 
 g_internal Rng3F32
 _agent_world_bounds_from_transform(Rng3F32 model_bounds, glm::mat4 model_transform);

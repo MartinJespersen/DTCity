@@ -51,7 +51,7 @@ tile_load_create(async::ThreadPool* thread_pool, U32 tileset_capacity);
 g_internal void
 tile_load_destroy(TileLoadState* state);
 g_internal ArrayResourcePoolHandle
-tile_load_streaming_begin(TileLoadState* state, String8 tileset_url, Rng2F64 bounds, B32 custom_geometry_enabled, U64 cache_byte_size);
+tile_load_streaming_begin(TileLoadState* state, String8 tileset_url, Rng2F64 bounds, S64 tileset_ion_asset_id, U64 cache_byte_size);
 g_internal void
 tile_load_streaming_end(TileLoadState* state, ArrayResourcePoolHandle tileset_handle);
 g_internal void

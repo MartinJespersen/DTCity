@@ -782,7 +782,7 @@ server_websocket_data_handler(struct mg_connection* conn, int bits, char* data, 
         {
             case city::SimulationMessageKind::Options:
             {
-                String8 test_reply_msg[] = {S("test reply scenario")};
+                String8 test_reply_msg[] = {S("1. Scenario")};
                 String8 json_str = options_reply(scratch.arena, test_reply_msg, ArrayCount(test_reply_msg));
                 if (json_str.size == 0)
                 {

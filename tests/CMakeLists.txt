@@ -17,3 +17,7 @@ target_link_libraries(city_tests PRIVATE glm::glm)
 
 enable_testing()
 add_test(NAME city_tests COMMAND city_tests)
+
+add_executable(utm_tests utility/utm_test_main.cpp)
+target_include_directories(utm_tests PRIVATE ${CMAKE_SOURCE_DIR}/src)
+add_test(NAME utm_tests COMMAND utm_tests)

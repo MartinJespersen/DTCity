@@ -281,6 +281,7 @@ _agent_height_update_async(cesium::TilesetRenderer* renderer, AgentSim* agent_si
     }
 
     agent_sim->height_update_in_flight = true;
+    // The single tileset is also the displayed source.
     CesiumAsync::Future<Cesium3DTilesSelection::SampleHeightResult> height_future = renderer->tilesets.data[0]->sampleHeightMostDetailed(std::move(agent_positions));
     std::move(height_future)
         .thenInMainThread(

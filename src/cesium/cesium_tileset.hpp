@@ -94,6 +94,7 @@ struct TilesetRenderer
     std::atomic<B32> tile_mesh_processor_enabled;
     std::atomic<U64> tile_mesh_processor_generation;
 
+    // One entry: custom geometry from URL/ion asset ID, otherwise default ion terrain.
     Buffer<Cesium3DTilesSelection::Tileset*> tilesets;
     CesiumAsync::ITaskProcessor* task_processor;
     CesiumUtility::CreditSystem* credit_system;
@@ -102,8 +103,7 @@ struct TilesetRenderer
     glm::dmat4 ecef_to_local;
     glm::dmat4 local_to_ecef;
 
-    // height delta at the bounding box center between the custom geometry tileset[0]
-    // surface and the cesium ion terrain tileset[1] surface (tileset[0] height - terrain height)
+    // Reserved for terrain/custom height alignment; sampling is disabled with one tileset.
     F64 height_offset;
     // set by tileset_renderer_destroy to end the recurring height_offset sampling loop
     B32 height_sample_stop;
@@ -120,7 +120,7 @@ struct TilesetRenderer
 // Lifecycle
 g_internal void
 tileset_renderer_create(TilesetRenderer* tileset, ArrayResourcePoolHandle tileset_handle, async::ThreadPool* threads, String8 url, F64 origin_longitude, F64 origin_latitude, F64 origin_height,
-                        bool custom_geometry_enabled, U64 cache_byte_size);
+                        S64 tileset_ion_asset_id, U64 cache_byte_size);
 g_internal void
 tileset_renderer_destroy(TilesetRenderer* renderer);
 g_internal void
