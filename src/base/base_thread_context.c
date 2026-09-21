@@ -13,7 +13,10 @@ TCTX_InitAndEquip(TCTX* tctx)
     Arena** arena_ptr = tctx->arenas;
     for (U64 i = 0; i < ArrayCount(tctx->arenas); i += 1, arena_ptr += 1)
     {
-        *arena_ptr = arena_alloc();
+        ArenaParams params = {.reserve_size = arena_default_reserve_size,
+                              .commit_size = MB(1),
+                              .flags = arena_default_flags | ArenaFlag_RetainCommitted};
+        *arena_ptr = arena_alloc(&params);
         Debug_SetName(*arena_ptr, "thread context scratch arena");
     }
     Assert(!tctx->log);

@@ -47,7 +47,7 @@ tile_load_streaming_begin(TileLoadState* state, String8 tileset_url, Rng2F64 bou
     return tileset_handle;
 }
 
-g_internal void
+g_internal B32
 tile_load_streaming_end(TileLoadState* state, ArrayResourcePoolHandle tileset_handle)
 {
     Assert(state);
@@ -56,9 +56,14 @@ tile_load_streaming_end(TileLoadState* state, ArrayResourcePoolHandle tileset_ha
     B32 tileset_exists = state->tileset_pool->item_from_handle(tileset_handle, &tileset);
     if (tileset_exists)
     {
-        cesium::tileset_renderer_destroy(tileset);
+        B32 destroyed = cesium::tileset_renderer_destroy(tileset);
+        if (!destroyed)
+        {
+            return false;
+        }
         state->tileset_pool->item_free(tileset_handle);
     }
+    return true;
 }
 
 // NOTE: To be called every frame on the render thread for an active city.
@@ -76,6 +81,7 @@ tile_load_update(TileLoadState* state, ArrayResourcePoolHandle tileset_handle, A
 
     cesium::TilesetRenderer* tileset = {};
     B32 tileset_exists = state->tileset_pool->item_from_handle(tileset_handle, &tileset);
+    tileset_exists = tileset_exists && !tileset->destruction_requested;
     if (tileset_exists)
     {
         cesium::tileset_update_view(tileset, camera, camera->cur_framebuffer_extent, delta_time);

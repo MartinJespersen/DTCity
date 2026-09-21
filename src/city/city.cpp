@@ -66,7 +66,7 @@ city_area_streaming_begin(City* city, const AreaConfig* area_config)
     }
 }
 
-g_internal void
+g_internal B32
 city_area_streaming_end(City* city)
 {
     Assert(city);
@@ -76,7 +76,8 @@ city_area_streaming_end(City* city)
     {
         _agent_height_updates_stop(&city->car_sim);
     }
-    tile_load_streaming_end(ctx->tile_load_state, city->tileset_handle);
+    B32 destroyed = tile_load_streaming_end(ctx->tile_load_state, city->tileset_handle);
+    return destroyed;
 }
 
 g_internal void
@@ -320,7 +321,7 @@ city_update(City* city, Buffer<city::Coordinate> new_agent_coords, async::Thread
     // Update and render Cesium 3D Tiles ////////////
     cesium::TilesetRenderer* tileset = {};
     B32 tileset_exists = ctx->tile_load_state->tileset_pool->item_from_handle(city->tileset_handle, &tileset);
-    if (tileset_exists)
+    if (tileset_exists && !tileset->destruction_requested)
     {
         if (city->road_building_done)
         {
@@ -527,7 +528,13 @@ city_update(City* city, Buffer<city::Coordinate> new_agent_coords, async::Thread
 g_internal void
 city_release(City* city)
 {
-    city_area_streaming_end(city);
+    // Final shutdown has no frame loop, so drain GPU work explicitly here.
+    B32 streaming_ended = false;
+    while (!streaming_ended)
+    {
+        render::gpu_work_update();
+        streaming_ended = city_area_streaming_end(city);
+    }
     if (city->road.arena)
     {
         road_destroy(&city->road);

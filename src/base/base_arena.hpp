@@ -17,6 +17,7 @@ enum
 {
     ArenaFlag_NoChain = (1 << 0),
     ArenaFlag_LargePages = (1 << 1),
+    ArenaFlag_RetainCommitted = (1 << 2), // Reuse pages and chain blocks until explicitly trimmed.
 };
 
 typedef struct ArenaParams ArenaParams;
@@ -41,10 +42,8 @@ struct Arena
     U64 cmt;
     U64 res;
     U64 destructor_pos;
-#if ARENA_FREE_LIST
     U64 free_size;
     Arena* free_last;
-#endif
 };
 StaticAssert(sizeof(Arena) <= ARENA_HEADER_SIZE, arena_header_size_check);
 
@@ -83,6 +82,10 @@ lib_internal U64
 arena_pos(Arena* arena);
 lib_internal void
 arena_pop_to(Arena* arena, U64 pos);
+// Trim unused commitment and cached blocks, preserving all live allocations.
+// The budget includes live commitment; large-page blocks cannot be partially trimmed.
+lib_internal void
+arena_trim(Arena* arena, U64 retained_size);
 
 //- rjf: arena push/pop helpers
 lib_internal void
@@ -117,5 +120,8 @@ using ArenaUniquePtr = std::unique_ptr<T, ArenaRelease<T>>;
 #define PushArray(a, T, c) PushArrayAligned(a, T, c, Max(8, AlignOf(T)))
 #define PushStructNoZero(a, T) PushArrayNoZeroAligned(a, T, 1, Max(8, AlignOf(T)))
 #define PushStruct(a, T) PushArrayAligned(a, T, 1, Max(8, AlignOf(T)))
+
+lib_internal void
+_arena_trim_block(Arena* block, U64 retained_size);
 
 #endif // BASE_ARENA_H

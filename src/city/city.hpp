@@ -219,7 +219,7 @@ g_internal void
 city_build(City* city, Rng2F64 bbox, String8 tileset_url, String8 area);
 g_internal void
 city_area_streaming_begin(City* city, const AreaConfig* area_config);
-g_internal void
+g_internal B32
 city_area_streaming_end(City* city);
 g_internal void
 city_update(City* city, Buffer<city::Coordinate> new_agent_coords, async::ThreadPool* thread_pool,

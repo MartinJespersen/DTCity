@@ -52,17 +52,15 @@ arena_alloc(ArenaParams* params)
     AsanUnpoisonMemoryRegion(base, commit_size);
     arena->current = arena;
     arena->flags = params->flags;
-    arena->cmt_size = params->commit_size;
-    arena->res_size = params->reserve_size;
+    arena->cmt_size = commit_size;
+    arena->res_size = reserve_size;
     arena->base_pos = 0;
     arena->pos = ARENA_HEADER_SIZE;
     arena->cmt = commit_size;
     arena->res = reserve_size;
     arena->destructor_pos = 0;
-#if ARENA_FREE_LIST
     arena->free_size = 0;
     arena->free_last = 0;
-#endif
     Debug_ArenaCreate_Push(arena, arena->cmt);
     Debug_SetName(arena, "<unnamed>");
     return arena;
@@ -81,6 +79,12 @@ arena_alloc()
 lib_internal void
 arena_release(Arena* arena)
 {
+    for (Arena *n = arena->free_last, *prev = 0; n != 0; n = prev)
+    {
+        prev = n->prev;
+        Debug_ArenaRelease_Push(n);
+        os_release(n, n->res);
+    }
     for (Arena *n = arena->current, *prev = 0; n != 0; n = prev)
     {
         prev = n->prev;
@@ -103,11 +107,11 @@ arena_push(Arena* arena, U64 size, U64 align)
     {
         Arena* new_block = 0;
 
-#if ARENA_FREE_LIST
         Arena* prev_block;
         for (new_block = arena->free_last, prev_block = 0; new_block != 0; prev_block = new_block, new_block = new_block->prev)
         {
-            if (new_block->res >= align_pow2(size, align))
+            U64 block_start = align_pow2(ARENA_HEADER_SIZE, align);
+            if (new_block->res >= block_start + size)
             {
                 if (prev_block)
                 {
@@ -117,21 +121,20 @@ arena_push(Arena* arena, U64 size, U64 align)
                 {
                     arena->free_last = new_block->prev;
                 }
-                arena->free_size -= new_block->res_size;
-                AsanUnpoisonMemoryRegion((U8*)new_block + ARENA_HEADER_SIZE, new_block->res_size - ARENA_HEADER_SIZE);
+                arena->free_size -= new_block->res;
                 break;
             }
         }
-#endif
 
         if (new_block == 0)
         {
             U64 res_size = current->res_size;
             U64 cmt_size = current->cmt_size;
-            if (size + ARENA_HEADER_SIZE > res_size)
+            U64 block_start = align_pow2(ARENA_HEADER_SIZE, align);
+            if (size + block_start > res_size)
             {
-                res_size = align_pow2(size + ARENA_HEADER_SIZE, align);
-                cmt_size = align_pow2(size + ARENA_HEADER_SIZE, align);
+                res_size = size + block_start;
+                cmt_size = res_size;
             }
             ArenaParams params = {.reserve_size = res_size, .commit_size = cmt_size, .flags = current->flags};
             new_block = arena_alloc(&params);
@@ -206,48 +209,69 @@ arena_pop_to(Arena* arena, U64 pos)
     U64 big_pos = ClampBot(ARENA_HEADER_SIZE, pos);
     Arena* current = arena->current;
 
+    B32 retain_committed = (arena->flags & ArenaFlag_RetainCommitted) != 0;
+    B32 cache_blocks = retain_committed;
 #if ARENA_FREE_LIST
+    cache_blocks = true;
+#endif
     for (Arena* prev = 0; current->base_pos >= big_pos; current = prev)
     {
         prev = current->prev;
-        current->pos = ARENA_HEADER_SIZE;
-        arena->free_size += current->res_size;
-        SLLStackPush_N(arena->free_last, current, prev);
-        AsanPoisonMemoryRegion((U8*)current + ARENA_HEADER_SIZE, current->res_size - ARENA_HEADER_SIZE);
-        if (!(current->flags & ArenaFlag_LargePages) && current->cmt > current->cmt_size)
+        if (cache_blocks)
         {
-            U64 decommit_pos = current->cmt_size;
-            U64 decommit_size = current->cmt - decommit_pos;
-            void* decommit_ptr = (U8*)current + decommit_pos;
-            os_decommit(decommit_ptr, decommit_size);
-            current->cmt = decommit_pos;
-            Debug_PageRelease_Push(current, current->cmt);
+            AsanPoisonMemoryRegion((U8*)current + ARENA_HEADER_SIZE, current->pos - ARENA_HEADER_SIZE);
+            current->pos = ARENA_HEADER_SIZE;
+            arena->free_size += current->res;
+            SLLStackPush_N(arena->free_last, current, prev);
+            if (!retain_committed)
+            {
+                _arena_trim_block(current, 0);
+            }
+        }
+        else
+        {
+            Debug_ArenaRelease_Push(current);
+            os_release(current, current->res);
         }
     }
-#else
-    for (Arena* prev = 0; current->base_pos >= big_pos; current = prev)
-    {
-        prev = current->prev;
-        os_release(current, current->res);
-    }
-#endif
     arena->current = current;
     U64 new_pos = big_pos - current->base_pos;
-    AssertAlways(new_pos <= current->pos);
-    AsanPoisonMemoryRegion((U8*)current + new_pos, (current->pos - new_pos));
-    if (!(current->flags & ArenaFlag_LargePages))
+    Assert(new_pos <= current->pos);
+    AsanPoisonMemoryRegion((U8*)current + new_pos, current->pos - new_pos);
+    current->pos = new_pos;
+    if (!retain_committed)
     {
-        U64 decommit_pos = align_pow2(new_pos, current->cmt_size);
-        if (current->cmt > decommit_pos)
+        _arena_trim_block(current, 0);
+    }
+}
+
+// Keep a bounded cache at task/idle boundaries, never inside the face loop.
+lib_internal void
+arena_trim(Arena* arena, U64 retained_size)
+{
+    U64 remaining = retained_size;
+    for (Arena* block = arena->current; block; block = block->prev)
+    {
+        _arena_trim_block(block, remaining);
+        remaining -= Min(remaining, block->cmt);
+    }
+    Arena** link = &arena->free_last;
+    while (*link)
+    {
+        Arena* block = *link;
+        if (block->cmt <= remaining)
         {
-            U64 decommit_size = current->cmt - decommit_pos;
-            void* decommit_ptr = (U8*)current + decommit_pos;
-            os_decommit(decommit_ptr, decommit_size);
-            current->cmt = decommit_pos;
-            Debug_PageRelease_Push(current, current->cmt);
+            remaining -= block->cmt;
+            link = &block->prev;
+        }
+        else
+        {
+            *link = block->prev;
+            arena->free_size -= block->res;
+            Debug_ArenaRelease_Push(block);
+            os_release(block, block->res);
         }
     }
-    current->pos = new_pos;
 }
 
 //- rjf: arena push/pop helpers
@@ -284,4 +308,25 @@ lib_internal void
 temp_end(Temp temp)
 {
     arena_pop_to(temp.arena, temp.pos);
+}
+
+// Decommit only unused pages, rounded to this block's commit increment.
+lib_internal void
+_arena_trim_block(Arena* block, U64 retained_size)
+{
+    if (!(block->flags & ArenaFlag_LargePages))
+    {
+        U64 keep_pos = Max(block->pos, retained_size);
+        keep_pos = Min(keep_pos, block->cmt);
+        U64 decommit_pos = keep_pos + block->cmt_size - 1;
+        decommit_pos -= decommit_pos % block->cmt_size;
+        if (block->cmt > decommit_pos)
+        {
+            U64 decommit_size = block->cmt - decommit_pos;
+            void* decommit_ptr = (U8*)block + decommit_pos;
+            os_decommit(decommit_ptr, decommit_size);
+            block->cmt = decommit_pos;
+            Debug_PageRelease_Push(block, block->cmt);
+        }
+    }
 }

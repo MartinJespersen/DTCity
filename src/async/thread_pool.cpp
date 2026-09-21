@@ -240,6 +240,13 @@ thread_worker(void* data)
             continue;
         }
 
+        // Preserve the usual scratch working set between tasks. Return excess
+        // memory only when idle, outside the work mutex and all tessellation loops.
+        TCTX* thread_context = TCTX_Get();
+        for (Arena* scratch_arena : thread_context->arenas)
+        {
+            arena_trim(scratch_arena, MB(8));
+        }
         U64 next_deadline = _thread_pool_next_deadline(thread_pool);
         os_mutex_take(work_mutex);
         if (!thread_pool->kill_switch && work_generation == thread_pool->work_generation.load(std::memory_order_acquire))

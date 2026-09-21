@@ -241,7 +241,7 @@ TEST_CASE("inner and outer clipping polygons can be tessellated")
         REQUIRE(polygon.size >= 3);
         REQUIRE(polygon.size <= 4);
 
-        geometry::PolygonMesh2d mesh = geometry::polygon_triangulate(arena, polygon);
+        geometry::PolygonMesh2d mesh = geometry::convex_polygon_triangulate(arena, polygon);
 
         REQUIRE(mesh.vertices.size == polygon.size);
         REQUIRE(mesh.indices.size == (polygon.size - 2) * 3);
@@ -300,6 +300,111 @@ TEST_CASE("inner and outer clipping polygons can be tessellated")
         check_polygon_tessellation(outer_polygon);
         outer_polygon_idx++;
     }
+}
+
+TEST_CASE("convex polygon triangulation preserves area and emits counter-clockwise triangles")
+{
+    Arena* arena = arena_alloc();
+    defer(arena_release(arena));
+
+    glm::vec2 vertices[] = {{0, 0}, {2, 0}, {4, 1}, {5, 3}, {4, 5}, {2, 6}, {0, 6}, {-2, 5}, {-3, 3}, {-2, 1}};
+    for (U64 count = 3; count <= ArrayCount(vertices); ++count)
+    {
+        for (U32 reverse = 0; reverse < 2; ++reverse)
+        {
+            CAPTURE(count);
+            CAPTURE(reverse);
+            glm::vec2 ordered[ArrayCount(vertices)] = {};
+            F64 polygon_area = 0.0;
+            for (U64 i = 0; i < count; ++i)
+            {
+                ordered[i] = vertices[reverse ? count - 1 - i : i];
+            }
+            for (U64 i = 0; i < count; ++i)
+            {
+                glm::dvec2 a = ordered[i];
+                glm::dvec2 b = ordered[(i + 1) % count];
+                polygon_area += a.x * b.y - a.y * b.x;
+            }
+            Buffer<glm::vec2> polygon = {.data = ordered, .size = count};
+            geometry::PolygonMesh2d mesh = geometry::convex_polygon_triangulate(arena, polygon);
+            REQUIRE(mesh.indices.size == (count - 2) * 3);
+            F64 triangle_area = 0.0;
+            for (U64 i = 0; i < mesh.indices.size; i += 3)
+            {
+                REQUIRE(mesh.indices.data[i] < count);
+                REQUIRE(mesh.indices.data[i + 1] < count);
+                REQUIRE(mesh.indices.data[i + 2] < count);
+                glm::dvec2 a = mesh.vertices.data[mesh.indices.data[i]];
+                glm::dvec2 b = mesh.vertices.data[mesh.indices.data[i + 1]];
+                glm::dvec2 c = mesh.vertices.data[mesh.indices.data[i + 2]];
+                glm::dvec2 ab = b - a;
+                glm::dvec2 ac = c - a;
+                F64 area = ab.x * ac.y - ab.y * ac.x;
+                CHECK(area > 0.0);
+                triangle_area += area;
+            }
+            CHECK(triangle_area == doctest::Approx(glm::abs(polygon_area)));
+        }
+    }
+
+    glm::vec2 collinear[] = {{0, 0}, {1, 0}, {2, 0}};
+    Buffer<glm::vec2> line = {.data = collinear, .size = ArrayCount(collinear)};
+    geometry::PolygonMesh2d empty = geometry::convex_polygon_triangulate(arena, line);
+    CHECK(empty.indices.size == 0);
+}
+
+TEST_CASE("convex quad triangulation chooses the diagonal with better worst triangle quality")
+{
+    Arena* arena = arena_alloc();
+    defer(arena_release(arena));
+    glm::vec2 vertices[] = {{0, 0}, {4, 0}, {4, 4}, {0, 1}};
+    // The 1--3 diagonal has minimum quality 4/34; 0--2 has 4/58.
+    // Rotate and reverse the input to exercise both index diagonals and winding.
+    for (U32 offset = 0; offset < 4; ++offset)
+    {
+        for (U32 reverse = 0; reverse < 2; ++reverse)
+        {
+            glm::vec2 ordered[4] = {};
+            for (U32 i = 0; i < 4; ++i)
+            {
+                U32 source = (offset + (reverse ? 4 - i : i)) % 4;
+                ordered[i] = vertices[source];
+            }
+            Buffer<glm::vec2> polygon = {.data = ordered, .size = 4};
+            geometry::PolygonMesh2d mesh = geometry::convex_polygon_triangulate(arena, polygon);
+            REQUIRE(mesh.indices.size == 6);
+            F64 worst_quality = 1.0;
+            for (U32 i = 0; i < 6; i += 3)
+            {
+                glm::dvec2 a = mesh.vertices.data[mesh.indices.data[i]];
+                glm::dvec2 b = mesh.vertices.data[mesh.indices.data[i + 1]];
+                glm::dvec2 c = mesh.vertices.data[mesh.indices.data[i + 2]];
+                glm::dvec2 ab = b - a;
+                glm::dvec2 ac = c - a;
+                glm::dvec2 bc = c - b;
+                F64 twice_area = ab.x * ac.y - ab.y * ac.x;
+                F64 ab_squared = glm::dot(ab, ab);
+                F64 ac_squared = glm::dot(ac, ac);
+                F64 bc_squared = glm::dot(bc, bc);
+                F64 quality = twice_area / (ab_squared + ac_squared + bc_squared);
+                worst_quality = Min(worst_quality, quality);
+            }
+            CHECK(worst_quality == doctest::Approx(4.0 / 34.0));
+        }
+    }
+}
+
+TEST_CASE("quad clipping can produce a pentagon")
+{
+    Arena* arena = arena_alloc();
+    defer(arena_release(arena));
+    geometry::Triangle2d triangle = {{{0, 0}, {10, 0}, {0, 10}}};
+    geometry::Quad2d quad = {{{2, -1}, {8, -1}, {8, 6}, {2, 6}}};
+    geometry::ClipResult clip = geometry::quad_to_triangle_clipping(arena, triangle, quad);
+    REQUIRE(clip.inner.size == 5);
+    geometry::PolygonMesh2d mesh = geometry::convex_polygon_triangulate(arena, clip.inner);
+    CHECK(mesh.indices.size == 9);
 }
 
 TEST_CASE("multiple road quads partition a coarse triangle without losing area")

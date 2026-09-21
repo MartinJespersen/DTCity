@@ -1340,31 +1340,27 @@ _tileset_renderer_active_resources_release(TilesetRenderer* renderer)
     }
 }
 
-g_internal void
+g_internal B32
 tileset_renderer_destroy(TilesetRenderer* renderer)
 {
     Assert(renderer);
     // stop the recurring height sampler before tearing down the tilesets
     renderer->height_sample_stop = true;
+    renderer->destruction_requested = true;
 
-    // Cesium tile-load futures are resolved by asset upload fence callbacks.
-    // Keep both systems advancing while waiting so destruction cannot block
-    // the callback required to complete a tile load.
+    // Poll once per frame. The render loop must keep advancing GPU uploads,
+    // worker completions and UI while Cesium drains its outstanding loads.
     constexpr F64 tile_load_poll_timeout_ms = 0.001;
-    B32 tile_loads_complete = false;
-    while (!tile_loads_complete)
+    B32 tile_loads_complete = true;
+    for (U32 i = 0; i < renderer->tilesets.size; ++i)
     {
-        render::gpu_work_update();
-        tile_loads_complete = true;
-        for (U32 i = 0; i < renderer->tilesets.size; ++i)
-        {
-            B32 tileset_loads_complete =
-                renderer->tilesets.data[i]->waitForAllLoadsToComplete(tile_load_poll_timeout_ms);
-            if (!tileset_loads_complete)
-            {
-                tile_loads_complete = false;
-            }
-        }
+        B32 tileset_loads_complete =
+            renderer->tilesets.data[i]->waitForAllLoadsToComplete(tile_load_poll_timeout_ms);
+        tile_loads_complete &= tileset_loads_complete;
+    }
+    if (!tile_loads_complete)
+    {
+        return false;
     }
 
     render::gpu_work_update();
@@ -1373,6 +1369,7 @@ tileset_renderer_destroy(TilesetRenderer* renderer)
 
     _tileset_renderer_active_resources_release(renderer);
     MemoryZeroStruct(renderer);
+    return true;
 }
 
 //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

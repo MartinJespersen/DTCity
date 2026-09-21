@@ -434,7 +434,7 @@ cylinder_mesh_create(Arena* arena, F32 radius, F32 height, U32 side_count, glm::
 }
 
 PolygonMesh2d
-polygon_triangulate(Arena* arena, Buffer<glm::vec2> poly)
+convex_polygon_triangulate(Arena* arena, Buffer<glm::vec2> poly)
 {
     poly = near_duplicate_vertices_discard_inplace(poly);
     if (poly.size < 3)
@@ -442,51 +442,91 @@ polygon_triangulate(Arena* arena, Buffer<glm::vec2> poly)
         return {};
     }
 
-    CDT::Triangulation<F32> cdt;
-    auto vertex_x_get = [](const glm::vec2& vertex) -> F32 { return vertex.x; };
-    auto vertex_y_get = [](const glm::vec2& vertex) -> F32 { return vertex.y; };
-
-    try
-    {
-        cdt.insertVertices(poly.begin(), poly.end(), vertex_x_get, vertex_y_get);
-        cdt.eraseSuperTriangle();
-    }
-    catch (const CDT::IntersectingConstraintsError& error)
-    {
-        const CDT::Edge& edge_0 = error.e1();
-        const CDT::Edge& edge_1 = error.e2();
-        ERROR_LOG("CDT intersecting constraints (%llu, %llu) and (%llu, %llu): %s", (U64)edge_0.v1(), (U64)edge_0.v2(), (U64)edge_1.v1(), (U64)edge_1.v2(), error.what());
-        return {};
-    }
-    catch (const CDT::DuplicateVertexError& error)
-    {
-        ERROR_LOG("CDT duplicate vertices %llu and %llu: %s", (U64)error.v1(), (U64)error.v2(), error.what());
-        return {};
-    }
-    catch (const CDT::Error& error)
-    {
-        ERROR_LOG("CDT triangulation error: %s", error.what());
-        return {};
-    }
-
     PolygonMesh2d mesh = {};
-    mesh.vertices = buffer_alloc<glm::vec2>(arena, cdt.vertices.size());
-    for (CDT::VertInd vertex_idx = 0; vertex_idx < (CDT::VertInd)cdt.vertices.size(); ++vertex_idx)
+    mesh.vertices = buffer_arena_copy(arena, poly);
+    mesh.indices = buffer_alloc<U32>(arena, (poly.size - 2) * 3);
+    // Clipping a triangle by a quad has at most seven vertices. Keep that
+    // common case on the stack; larger convex inputs use temporary arena data.
+    ScratchScope scratch = ScratchScope(&arena, 1);
+    ConvexTriangulationCell local_cells[8 * 8] = {};
+    glm::uvec2 local_ranges[8] = {};
+    U64 count = poly.size;
+    ConvexTriangulationCell* cells = local_cells;
+    glm::uvec2* ranges = local_ranges;
+    if (count > 8)
     {
-        const CDT::V2d<F32>& vertex = cdt.vertices[vertex_idx];
-        mesh.vertices.data[vertex_idx] = glm::vec2(vertex.x, vertex.y);
+        cells = PushArray(scratch.arena, ConvexTriangulationCell, count * count);
+        ranges = PushArray(scratch.arena, glm::uvec2, count);
     }
 
-    mesh.indices = buffer_alloc<U32>(arena, cdt.triangles.size() * 3);
-    U32 output_index_idx = 0;
-    for (const CDT::Triangle& triangle : cdt.triangles)
+    // Dynamic programming maximizes the minimum triangle quality over every
+    // triangulation. Quality is |cross(ab, ac)| / sum(squared edge lengths):
+    // scale independent, largest for equilateral triangles, zero for degenerates.
+    for (U32 first = 0; first + 1 < count; ++first)
     {
-        for (CDT::VertInd vertex_idx : triangle.vertices)
+        cells[first * count + first + 1].quality = 1.0;
+    }
+    for (U32 span = 2; span < count; ++span)
+    {
+        for (U32 first = 0; first + span < count; ++first)
         {
-            mesh.indices.data[output_index_idx++] = (U32)vertex_idx;
+            U32 last = first + span;
+            ConvexTriangulationCell* cell = &cells[first * count + last];
+            cell->quality = -1.0;
+            for (U32 middle = first + 1; middle < last; ++middle)
+            {
+                glm::dvec2 a = glm::dvec2(poly.data[first]);
+                glm::dvec2 b = glm::dvec2(poly.data[middle]);
+                glm::dvec2 c = glm::dvec2(poly.data[last]);
+                glm::dvec2 ab = b - a;
+                glm::dvec2 ac = c - a;
+                glm::dvec2 bc = c - b;
+                F64 twice_area = ab.x * ac.y - ab.y * ac.x;
+                F64 edge_sum = ab.x * ab.x + ab.y * ab.y + ac.x * ac.x + ac.y * ac.y + bc.x * bc.x + bc.y * bc.y;
+                F64 quality = glm::abs(twice_area) / edge_sum;
+                quality = Min(quality, cells[first * count + middle].quality);
+                quality = Min(quality, cells[middle * count + last].quality);
+                if (quality > cell->quality)
+                {
+                    cell->quality = quality;
+                    cell->split = middle;
+                }
+            }
         }
     }
 
+    // Recover the selected triangles without recursion or heap allocations.
+    U64 index_count = 0;
+    U32 range_count = 0;
+    ranges[range_count++] = glm::uvec2(0, count - 1);
+    while (range_count > 0)
+    {
+        glm::uvec2 range = ranges[--range_count];
+        U32 first = range.x;
+        U32 last = range.y;
+        U32 middle = cells[first * count + last].split;
+        glm::dvec2 a = glm::dvec2(poly.data[first]);
+        glm::dvec2 b = glm::dvec2(poly.data[middle]);
+        glm::dvec2 c = glm::dvec2(poly.data[last]);
+        glm::dvec2 ab = b - a;
+        glm::dvec2 ac = c - a;
+        F64 twice_area = ab.x * ac.y - ab.y * ac.x;
+        if (twice_area != 0.0)
+        {
+            mesh.indices.data[index_count++] = first;
+            mesh.indices.data[index_count++] = twice_area > 0.0 ? middle : last;
+            mesh.indices.data[index_count++] = twice_area > 0.0 ? last : middle;
+        }
+        if (middle - first > 1)
+        {
+            ranges[range_count++] = glm::uvec2(first, middle);
+        }
+        if (last - middle > 1)
+        {
+            ranges[range_count++] = glm::uvec2(middle, last);
+        }
+    }
+    mesh.indices.size = index_count;
     return mesh;
 }
 
@@ -511,7 +551,7 @@ triangle_partition_by_quads(Arena* arena, Triangle2d triangle, Buffer<Quad2d> cl
         {
             Triangle2d& remaining_triangle = (*remaining_triangles)[remaining_triangle_idx];
 
-            // Clip and CDT allocations only need to live for this input
+            // Clip and mesh allocations only need to live for this input
             // triangle. Excluding the partition work arena selects the other
             // thread scratch arena and releases it at the end of the iteration.
             ScratchScope triangle_scratch = ScratchScope(&scratch.arena, 1);
@@ -522,7 +562,7 @@ triangle_partition_by_quads(Arena* arena, Triangle2d triangle, Buffer<Quad2d> cl
                 continue;
             }
 
-            PolygonMesh2d inner_mesh = polygon_triangulate(triangle_scratch.arena, clip_result.inner);
+            PolygonMesh2d inner_mesh = convex_polygon_triangulate(triangle_scratch.arena, clip_result.inner);
             if (inner_mesh.indices.size < 3)
             {
                 chunk_list_insert(scratch.arena, next_remaining_triangles, remaining_triangle);
@@ -542,7 +582,7 @@ triangle_partition_by_quads(Arena* arena, Triangle2d triangle, Buffer<Quad2d> cl
                     continue;
                 }
 
-                PolygonMesh2d outer_mesh = polygon_triangulate(triangle_scratch.arena, outer_polygon);
+                PolygonMesh2d outer_mesh = convex_polygon_triangulate(triangle_scratch.arena, outer_polygon);
                 if (outer_mesh.indices.size < 3)
                 {
                     outer_triangulation_succeeded = false;
@@ -677,8 +717,7 @@ subject_to_triangle_clipping(Arena* arena, Triangle2d& clip_triangle, glm::vec2*
     // find the number of quad edges intersecting the triangle. (to determine number of convex polygons outside road)
     // split along each intersecting edge with each inner polygon going through to next intersection test
     // this is to be done for all road quads crossing the triangle
-    // The edges of the inner triangle can now be added as constraints to a constrained delauney triangulation
-    // the outside polygon edges can also be added as constraints
+    // The convex inner and outer polygons can now be triangulated independently.
     // Remove duplicate edges edges and vertices from both inner and outer polygons
     // TODO: What to do about sliver and T-junctions afterwards
     // NOTE: Two adjacent triangles intersected by same edge might share the same vertex and intersection might change based on edge_start and edge_end direction

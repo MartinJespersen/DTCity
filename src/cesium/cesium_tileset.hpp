@@ -107,6 +107,8 @@ struct TilesetRenderer
     F64 height_offset;
     // set by tileset_renderer_destroy to end the recurring height_offset sampling loop
     B32 height_sample_stop;
+    // Main-thread teardown state: stop view updates while outstanding loads drain.
+    B32 destruction_requested;
 
     // tiles access from main thread
     TileRenderResources* tile_to_show_first;
@@ -121,7 +123,8 @@ struct TilesetRenderer
 g_internal void
 tileset_renderer_create(TilesetRenderer* tileset, ArrayResourcePoolHandle tileset_handle, async::ThreadPool* threads, String8 url, F64 origin_longitude, F64 origin_latitude, F64 origin_height,
                         S64 tileset_ion_asset_id, U64 cache_byte_size);
-g_internal void
+// Poll on the render thread until true; keep the renderer alive between calls.
+g_internal B32
 tileset_renderer_destroy(TilesetRenderer* renderer);
 g_internal void
 tileset_tile_mesh_processor_set(TilesetRenderer* renderer, TileMeshProcessor processor);

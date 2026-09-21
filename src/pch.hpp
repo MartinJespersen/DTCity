@@ -11,7 +11,6 @@
 // helper diagnostics
 #include "diagnostics.hpp"
 
-#include <CDT.h>
 #include <meshoptimizer.h>
 // cesium native libraries
 #include "cesium/cesium_native_headers.hpp"

@@ -103,8 +103,10 @@ hover_icon_mesh_create(Arena* arena, F32 radius, F32 height, F32 hover_height, g
 render::PrimitiveMesh
 cylinder_mesh_create(Arena* arena, F32 radius, F32 height, U32 side_count, glm::vec4 color);
 
+// Requires an ordered convex polygon; emits counter-clockwise triangles.
+// Maximizes the minimum area-to-squared-edge-length quality of the triangles.
 PolygonMesh2d
-polygon_triangulate(Arena* arena, Buffer<glm::vec2> poly);
+convex_polygon_triangulate(Arena* arena, Buffer<glm::vec2> poly);
 
 Buffer<ClassifiedTriangle2d>
 triangle_partition_by_quads(Arena* arena, Triangle2d triangle, Buffer<Quad2d> clipping_quads);
@@ -114,4 +116,11 @@ tolerance_calculation(F32* v, U32 v_count, F32 relative_tolerance = 4.0f * std::
 
 g_internal F32
 tolerance_calculation(std::initializer_list<F32> scale_values, F32 relative_tolerance = 4.0f * std::numeric_limits<F32>::epsilon(), F32 absolute_tolerance = 0.001f);
+// Internal state for convex polygon triangulation.
+struct ConvexTriangulationCell
+{
+    F64 quality;
+    U32 split;
+};
+
 } // namespace geometry

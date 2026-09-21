@@ -971,14 +971,9 @@ thread_cmd_buffer_end(ThreadWorkerCmdCtx* cmd_ctx)
     vulkan::AssetManagerCommandPool thread_cmd_pool =
         vulkan::asset_manager_cmd_pool_get(asset_manager, thread_local_id);
     end_command(&thread_cmd_pool, (VkCommandBuffer)cmd_ctx->cmd_buffer);
-    if (cmd_ctx->handles.count)
-    {
-        vulkan::asset_cmd_queue_item_enqueue(thread_local_id, cmd_ctx);
-    }
-    else
-    {
-        DEBUG_LOG("No handles submitted\n");
-    }
+    // Empty tile uploads still carry completion callbacks. Submit every ended
+    // command buffer so callbacks run on the render thread and the context is freed.
+    vulkan::asset_cmd_queue_item_enqueue(thread_local_id, cmd_ctx);
 }
 
 g_internal void

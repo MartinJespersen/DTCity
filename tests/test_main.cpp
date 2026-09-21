@@ -9,6 +9,7 @@
 // test files
 #include "async/test_heap.cpp"
 #include "base/test_allocator.cpp"
+#include "base/test_arena.cpp"
 #include "base/test_container.cpp"
 #include "base/test_math.cpp"
 #include "base/test_strings.cpp"

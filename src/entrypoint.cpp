@@ -271,6 +271,7 @@ dt_main_loop(void* ptr)
     city::RoadOverlayOption neta_overlay_option = city::RoadOverlayOption_None;
     S32 cur_area_option = 1;
     S32 area_option = cur_area_option;
+    B32 area_switch_pending = false;
 
     const city::AreaConfig* area_config = &cities_info_arr[cur_area_option];
     city::City* area = city_buf[cur_area_option];
@@ -336,6 +337,11 @@ dt_main_loop(void* ptr)
             ImGui::RadioButton((const char*)cities_info_arr[i].name.str, (int*)&area_option, (int)i);
         }
 
+        if (area_switch_pending)
+        {
+            ImGui::TextUnformatted("Switching city...");
+        }
+
         ImGui::PushFont(nullptr, 22.0f);
         ImGui::SeparatorText("NetAScore");
         ImGui::PopFont();
@@ -357,17 +363,24 @@ dt_main_loop(void* ptr)
         ImGui::End();
         ImGui::PopFont();
 
-        if (cur_area_option != area_option)
+        // Finish an initiated teardown even if the user selects the old city
+        // again; then open the latest selection with a fresh renderer.
+        if (cur_area_option != area_option || area_switch_pending)
         {
-            city_area_streaming_end(area);
-            Debug_Frame_End();
-            Debug_Memory_Snapshot_Dump();
+            area_switch_pending = true;
+            B32 streaming_ended = city_area_streaming_end(area);
+            if (streaming_ended)
+            {
+                Debug_Frame_End();
+                Debug_Memory_Snapshot_Dump();
 
-            cur_area_option = area_option;
-            area = city_buf[cur_area_option];
-            area_config = &cities_info_arr[cur_area_option];
+                cur_area_option = area_option;
+                area = city_buf[cur_area_option];
+                area_config = &cities_info_arr[cur_area_option];
 
-            city_area_streaming_begin(area, area_config);
+                city_area_streaming_begin(area, area_config);
+                area_switch_pending = false;
+            }
         }
 
         ui::Camera* camera = resource_pool_item_from_idx(ctx->camera_container, area->camera_handle);

@@ -8,8 +8,7 @@
     "cesium-native",
     "meshoptimizer",
     "mimalloc",
-    "abseil",
-    "cdt"
+    "abseil"
   ],
   "overrides": [
     {

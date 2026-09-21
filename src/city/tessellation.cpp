@@ -63,8 +63,10 @@ _polygon_intersection_sat(geometry::Quad2d quad, geometry::Triangle2d face)
         float min_triangle = min(0.0, opposite_dot);
         float max_triangle = max(0.0, opposite_dot);
 
-        float min_seg = min(min(dot(quad.v[0] - p0, n), dot(quad.v[1] - p0, n)), min(dot(quad.v[2] - p0, n), dot(quad.v[3] - p0, n)));
-        float max_seg = max(max(dot(quad.v[0] - p0, n), dot(quad.v[1] - p0, n)), max(dot(quad.v[2] - p0, n), dot(quad.v[3] - p0, n)));
+        float min_seg = min(min(dot(quad.v[0] - p0, n), dot(quad.v[1] - p0, n)),
+                            min(dot(quad.v[2] - p0, n), dot(quad.v[3] - p0, n)));
+        float max_seg = max(max(dot(quad.v[0] - p0, n), dot(quad.v[1] - p0, n)),
+                            max(dot(quad.v[2] - p0, n), dot(quad.v[3] - p0, n)));
 
         if (min_triangle > max_seg || max_triangle < min_seg)
         {
@@ -81,17 +83,22 @@ _face_bounds_overlap(Rng2F32 bounds, geometry::Triangle2d& face)
     glm::vec2 face_min = (glm::min)(face.v[0], (glm::min)(face.v[1], face.v[2]));
     glm::vec2 face_max = (glm::max)(face.v[0], (glm::max)(face.v[1], face.v[2]));
 
-    return face_max.x >= bounds.min.x && face_min.x <= bounds.max.x && face_max.y >= bounds.min.y && face_min.y <= bounds.max.y;
+    return face_max.x >= bounds.min.x && face_min.x <= bounds.max.x && face_max.y >= bounds.min.y &&
+           face_min.y <= bounds.max.y;
 }
 
 g_internal void
-_assign_vertex_values(glm::vec2 v, TileVertexFace& face, geometry::Triangle2d& projected_tri, render::TileVertex* out_vertex)
+_assign_vertex_values(glm::vec2 v, TileVertexFace& face, geometry::Triangle2d& projected_tri,
+                      render::TileVertex* out_vertex)
 {
     glm::vec3 barycentric = geometry::barycentric_2d(v, projected_tri.v[0], projected_tri.v[1], projected_tri.v[2]);
-    glm::vec3 interpolated_pos = barycentric.x * face.v[0].pos + barycentric.y * face.v[1].pos + barycentric.z * face.v[2].pos;
-    glm::vec2 interpolated_uv =
-        barycentric.x * glm::vec2(face.v[0].uv.x, face.v[0].uv.y) + barycentric.y * glm::vec2(face.v[1].uv.x, face.v[1].uv.y) + barycentric.z * glm::vec2(face.v[2].uv.x, face.v[2].uv.y);
-    glm::vec2 interpolated_overlay_uv = barycentric.x * glm::vec2(face.v[0].overlay_uv.x, face.v[0].overlay_uv.y) + barycentric.y * glm::vec2(face.v[1].overlay_uv.x, face.v[1].overlay_uv.y) +
+    glm::vec3 interpolated_pos =
+        barycentric.x * face.v[0].pos + barycentric.y * face.v[1].pos + barycentric.z * face.v[2].pos;
+    glm::vec2 interpolated_uv = barycentric.x * glm::vec2(face.v[0].uv.x, face.v[0].uv.y) +
+                                barycentric.y * glm::vec2(face.v[1].uv.x, face.v[1].uv.y) +
+                                barycentric.z * glm::vec2(face.v[2].uv.x, face.v[2].uv.y);
+    glm::vec2 interpolated_overlay_uv = barycentric.x * glm::vec2(face.v[0].overlay_uv.x, face.v[0].overlay_uv.y) +
+                                        barycentric.y * glm::vec2(face.v[1].overlay_uv.x, face.v[1].overlay_uv.y) +
                                         barycentric.z * glm::vec2(face.v[2].overlay_uv.x, face.v[2].overlay_uv.y);
 
     out_vertex->pos = interpolated_pos;
@@ -102,7 +109,8 @@ _assign_vertex_values(glm::vec2 v, TileVertexFace& face, geometry::Triangle2d& p
 }
 
 render::TileMesh
-_render_mesh_from_2d_mesh(Arena* arena, geometry::PolygonMesh2d& triangulated_poly, TileVertexFace& tri, geometry::Triangle2d& projected_tri)
+_render_mesh_from_2d_mesh(Arena* arena, geometry::PolygonMesh2d& triangulated_poly, TileVertexFace& tri,
+                          geometry::Triangle2d& projected_tri)
 {
     Buffer<render::TileVertex> vertices = buffer_alloc<render::TileVertex>(arena, triangulated_poly.vertices.size);
     for (U32 vertex_idx = 0; vertex_idx < triangulated_poly.vertices.size; ++vertex_idx)
@@ -119,7 +127,8 @@ _render_mesh_from_2d_mesh(Arena* arena, geometry::PolygonMesh2d& triangulated_po
 }
 
 g_internal void
-_mesh_append(Arena* arena, ChunkList<render::TileVertex>* vertices_chunk_list, ChunkList<U32>* indices_chunk_list, render::TileMesh& mesh, U32 road_idx)
+_mesh_append(Arena* arena, ChunkList<render::TileVertex>* vertices_chunk_list, ChunkList<U32>* indices_chunk_list,
+             render::TileMesh& mesh, U32 road_idx)
 {
     U32 base_vertex_idx = vertices_chunk_list->total_count;
     for (auto vert : mesh.vertices)
@@ -136,13 +145,15 @@ _mesh_append(Arena* arena, ChunkList<render::TileVertex>* vertices_chunk_list, C
 }
 
 g_internal render::TileMesh
-_tessellate_tile_face_for_roads(Arena* arena, city::RoadSegmentNode* root, Buffer<city::RoadSegmentCorners> road_buffer, TileVertexFace& face)
+_tessellate_tile_face_for_roads(Arena* arena, city::RoadSegmentNode* root, Buffer<city::RoadSegmentCorners> road_buffer,
+                                Buffer<city::RoadSegmentNode*> node_stack, TileVertexFace& face)
 {
     prof_scope_marker;
     ScratchScope scratch = ScratchScope(&arena, 1);
     constexpr U64 vertex_chunk_capacity = 256;
     constexpr U64 index_chunk_capacity = 512;
-    ChunkList<render::TileVertex>* vertices_chunk_list = chunk_list_create<render::TileVertex>(scratch.arena, vertex_chunk_capacity);
+    ChunkList<render::TileVertex>* vertices_chunk_list =
+        chunk_list_create<render::TileVertex>(scratch.arena, vertex_chunk_capacity);
     ChunkList<U32>* indices_chunk_list = chunk_list_create<U32>(scratch.arena, index_chunk_capacity);
 
     geometry::Triangle2d projected_tri = {};
@@ -157,17 +168,17 @@ _tessellate_tile_face_for_roads(Arena* arena, city::RoadSegmentNode* root, Buffe
 
     // Collect candidate roads without modifying RoadSegmentNode::next. Tile
     // preparation can run concurrently, so the BVH itself must remain read-only.
-    U64 node_stack_capacity = road_buffer.size * 2;
-    city::RoadSegmentNode** node_stack = PushArray(scratch.arena, city::RoadSegmentNode*, node_stack_capacity);
     U64 node_stack_count = 0;
-    node_stack[node_stack_count++] = root;
+    Assert(node_stack.size > 0);
+    node_stack.data[node_stack_count++] = root;
 
     constexpr U64 road_candidate_chunk_capacity = 32;
-    ChunkList<geometry::Quad2d>* candidate_quads = chunk_list_create<geometry::Quad2d>(scratch.arena, road_candidate_chunk_capacity);
+    ChunkList<geometry::Quad2d>* candidate_quads =
+        chunk_list_create<geometry::Quad2d>(scratch.arena, road_candidate_chunk_capacity);
     ChunkList<U32>* candidate_road_indices = chunk_list_create<U32>(scratch.arena, road_candidate_chunk_capacity);
     while (node_stack_count > 0)
     {
-        city::RoadSegmentNode* node = node_stack[--node_stack_count];
+        city::RoadSegmentNode* node = node_stack.data[--node_stack_count];
         if (!_face_bounds_overlap(node->bounds, projected_tri))
         {
             continue;
@@ -176,9 +187,9 @@ _tessellate_tile_face_for_roads(Arena* arena, city::RoadSegmentNode* root, Buffe
         bool is_leaf = node->children[0] == nullptr;
         if (!is_leaf)
         {
-            Assert(node_stack_count + 2 <= node_stack_capacity);
-            node_stack[node_stack_count++] = node->children[1];
-            node_stack[node_stack_count++] = node->children[0];
+            Assert(node_stack_count + 2 <= node_stack.size);
+            node_stack.data[node_stack_count++] = node->children[1];
+            node_stack.data[node_stack_count++] = node->children[0];
             continue;
         }
 
@@ -230,7 +241,8 @@ _tessellate_tile_face_for_roads(Arena* arena, city::RoadSegmentNode* root, Buffe
     Buffer<geometry::Quad2d> quad_buffer = buffer_from_chunk_list(scratch.arena, candidate_quads);
     Buffer<U32> road_index_buffer = buffer_from_chunk_list(scratch.arena, candidate_road_indices);
 
-    Buffer<geometry::ClassifiedTriangle2d> partition = geometry::triangle_partition_by_quads(scratch.arena, projected_tri, quad_buffer);
+    Buffer<geometry::ClassifiedTriangle2d> partition =
+        geometry::triangle_partition_by_quads(scratch.arena, projected_tri, quad_buffer);
 
     bool has_road_triangle = false;
     for (geometry::ClassifiedTriangle2d& classified_triangle : partition)
@@ -253,7 +265,8 @@ _tessellate_tile_face_for_roads(Arena* arena, city::RoadSegmentNode* root, Buffe
             .vertices = {.data = classified_triangle.triangle.v, .size = ArrayCount(classified_triangle.triangle.v)},
             .indices = {.data = triangle_indices, .size = ArrayCount(triangle_indices)},
         };
-        render::TileMesh triangle_mesh = _render_mesh_from_2d_mesh(scratch.arena, triangle_mesh_2d, face, projected_tri);
+        render::TileMesh triangle_mesh =
+            _render_mesh_from_2d_mesh(scratch.arena, triangle_mesh_2d, face, projected_tri);
 
         U32 encoded_road_idx = 0;
         if (classified_triangle.region_idx != 0)
@@ -272,7 +285,8 @@ _tessellate_tile_face_for_roads(Arena* arena, city::RoadSegmentNode* root, Buffe
 }
 
 g_internal bool
-tesselate_roads(Arena* arena, Buffer<render::TileVertex> vertices, Buffer<U32> indices, Bvh& bvh_result, render::TileMesh* out_mesh)
+tesselate_roads(Arena* arena, Buffer<render::TileVertex> vertices, Buffer<U32> indices, Bvh& bvh_result,
+                render::TileMesh* out_mesh)
 {
     ScratchScope scratch = ScratchScope(&arena, 1);
 
@@ -282,6 +296,11 @@ tesselate_roads(Arena* arena, Buffer<render::TileVertex> vertices, Buffer<U32> i
     B32* original_vertex_is_added = PushArray(scratch.arena, B32, vertices.size);
     bool has_road_classification = false;
 
+    // All faces traverse the same BVH. Reuse one stack for the tile task.
+    U64 node_stack_capacity = bvh_result.road_segment_buffer_sorted.size * 2;
+    city::RoadSegmentNode** node_stack_data = PushArrayNoZero(scratch.arena, city::RoadSegmentNode*, node_stack_capacity);
+    Buffer<city::RoadSegmentNode*> node_stack = {.data = node_stack_data, .size = node_stack_capacity};
+
     // iterate faces
     for (U32 i = 0; i < indices.size; i += 3)
     {
@@ -290,13 +309,15 @@ tesselate_roads(Arena* arena, Buffer<render::TileVertex> vertices, Buffer<U32> i
         face_vertices.v[1] = vertices.data[indices.data[i + 1]];
         face_vertices.v[2] = vertices.data[indices.data[i + 2]];
 
-        render::TileMesh tessellated_mesh = _tessellate_tile_face_for_roads(scratch.arena, bvh_result.root, bvh_result.road_segment_buffer_sorted, face_vertices);
+        render::TileMesh tessellated_mesh = _tessellate_tile_face_for_roads(
+            scratch.arena, bvh_result.root, bvh_result.road_segment_buffer_sorted, node_stack, face_vertices);
         if (tessellated_mesh.indices.size)
         {
             has_road_classification = true;
             U32 idx_offset = vertices_chunk_list->total_count;
 
-            for (U32 tessellated_index_idx = 0; tessellated_index_idx < tessellated_mesh.indices.size; ++tessellated_index_idx)
+            for (U32 tessellated_index_idx = 0; tessellated_index_idx < tessellated_mesh.indices.size;
+                 ++tessellated_index_idx)
             {
                 U32 index = tessellated_mesh.indices.data[tessellated_index_idx] + idx_offset;
                 chunk_list_insert(scratch.arena, indices_chunk_list, index);
