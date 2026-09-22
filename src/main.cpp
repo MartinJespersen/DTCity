@@ -18,7 +18,13 @@ ctx_create(io::IO* io_ctx)
     ctx->time = PushStruct(app_arena, dt_Time);
     ctx->cwd = os_current_path_get(scratch.arena);
 
-    String8 data_dir = str8_path_from_str8_list(scratch.arena, {ctx->cwd, S("data")});
+    OS_ProcessInfo* process_info = os_get_process_info();
+    String8 data_dir = str8_path_from_str8_list(scratch.arena, {process_info->binary_path, S("data")});
+    B32 packaged_data = os_folder_path_exists(data_dir);
+    if (!packaged_data)
+    {
+        data_dir = str8_path_from_str8_list(scratch.arena, {ctx->cwd, S("data")});
+    }
     {
         U32 retry_count = 0;
         String8List parent_dir_list = {};
@@ -42,6 +48,11 @@ ctx_create(io::IO* io_ctx)
                                 {dt_DataDirType::Shaders, S("shaders")},
                                 {dt_DataDirType::Assets, S("assets")}};
     ctx->data_subdirs = dt_dir_create(app_arena, data_dir, subdirs, ArrayCount(subdirs));
+    if (!packaged_data)
+    {
+        // Development builds use shaders from their own build configuration.
+        ctx->data_subdirs.data[dt_DataDirType::Shaders] = str8_lit(DTCITY_SHADER_DIR);
+    }
     ctx->io = io_ctx;
 
     // ~mgj: -2 as 2 are used for Main thread and IO thread

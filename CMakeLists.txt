@@ -4,7 +4,7 @@ set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 set(THIRD_PARTY_LIBS_DIR ${CMAKE_CURRENT_SOURCE_DIR}/src/third_party)
 set(SHADER_DIR ${CMAKE_CURRENT_SOURCE_DIR}/data/shaders)
-set(SHADER_BINARY_DIR ${CMAKE_CURRENT_SOURCE_DIR}/data/shaders/bin)
+set(SHADER_BINARY_DIR ${CMAKE_CURRENT_BINARY_DIR}/shaders/bin)
 set(ASAN_LINK_FLAGS "")
 set(ASAN_COMPILE_FLAGS "")
 set(GLSL_SHADER_FLAGS "")
@@ -21,7 +21,8 @@ option(SHADER_DEBUG "Enable Shader Debugging" OFF)
 option(USE_RADLINKER "Use RAD linker for MSVC debug builds" ON)
 
 # cmake macro -> compiler macro
-if(BUILD_DEBUG OR SHADER_DEBUG)
+if(BUILD_DEBUG AND SHADER_DEBUG)
+  add_compile_definitions(SHADER_DEBUG=1)
   list(APPEND GLSL_SHADER_FLAGS -gVS)
 endif()
 
@@ -145,7 +146,8 @@ if(BUILD_CITY)
   find_package(mimalloc CONFIG REQUIRED)
   add_executable(city)
   # Use simdjson's explicit error-code API in both the application and library sources.
-  target_compile_definitions(city PRIVATE SIMDJSON_EXCEPTIONS=0)
+  target_compile_definitions(city PRIVATE SIMDJSON_EXCEPTIONS=0
+      DTCITY_SHADER_DIR="${CMAKE_CURRENT_BINARY_DIR}/shaders")
   target_link_libraries(city PRIVATE meshoptimizer::meshoptimizer)
   target_link_libraries(city PRIVATE $<IF:$<TARGET_EXISTS:mimalloc-static>,mimalloc-static,mimalloc>)
   list(APPEND ALL_TARGETS city)
@@ -320,6 +322,33 @@ endif()
 if(BUILD_SIMULATOR)
   add_subdirectory(simulator)
   list(APPEND ALL_TARGETS Simulator)
+endif()
+
+if(BUILD_CITY AND BUILD_SIMULATOR)
+  set(DTCITY_PACKAGE_DIR "${CMAKE_BINARY_DIR}/dist" CACHE PATH "Directory for the portable application bundle")
+  set(DTCITY_PACKAGE_SIMULATOR_DATABASE "${CMAKE_SOURCE_DIR}/simulator/database/eskiltuna.sqlite"
+      CACHE FILEPATH "Simulator database to package; empty omits the database")
+
+  install(TARGETS city Simulator RUNTIME DESTINATION . COMPONENT Runtime)
+  install(DIRECTORY data/assets data/textures data/fonts DESTINATION data COMPONENT Runtime)
+  install(FILES ${SPIRV_BINARY_FILES} DESTINATION data/shaders/bin COMPONENT Runtime)
+  install(DIRECTORY simulator/fonts DESTINATION simulator COMPONENT Runtime)
+  if(DTCITY_PACKAGE_SIMULATOR_DATABASE)
+    if(EXISTS "${DTCITY_PACKAGE_SIMULATOR_DATABASE}")
+      install(FILES "${DTCITY_PACKAGE_SIMULATOR_DATABASE}" DESTINATION simulator/database
+              RENAME eskiltuna.sqlite COMPONENT Runtime)
+    else()
+      message(STATUS "Packaging without a simulator database: ${DTCITY_PACKAGE_SIMULATOR_DATABASE} does not exist")
+    endif()
+  endif()
+
+  add_custom_target(package-runtime
+    COMMAND ${CMAKE_COMMAND} --install "${CMAKE_BINARY_DIR}" --config "$<CONFIG>"
+            --prefix "${DTCITY_PACKAGE_DIR}" --component Runtime
+    DEPENDS city Simulator
+    COMMENT "Collecting DTCity, Simulator and runtime data in ${DTCITY_PACKAGE_DIR}"
+    VERBATIM
+  )
 endif()
 
 # address sanitizer

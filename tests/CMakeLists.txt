@@ -11,7 +11,7 @@ target_include_directories(city_tests PRIVATE
     ${CMAKE_SOURCE_DIR}/src
 )
 
-target_compile_definitions(city_tests PRIVATE BUILD_TEST=1)
+target_compile_definitions(city_tests PRIVATE BUILD_TEST=1 DTCITY_PROJECT_ROOT="${CMAKE_SOURCE_DIR}")
 
 target_link_libraries(city_tests PRIVATE glm::glm)
 

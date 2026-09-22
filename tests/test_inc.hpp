@@ -12,6 +12,7 @@
 #include "async/thread_pool.hpp"
 #include "render/render.hpp"
 #include "misc/geometry.hpp"
+#include "../simulator/resource_paths.hpp"
 
 #if ASAN_ENABLED
 C_LINKAGE int

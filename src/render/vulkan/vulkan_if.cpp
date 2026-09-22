@@ -96,15 +96,15 @@ render_ctx_create(String8 shader_path, io::IO* io_ctx, async::ThreadPool* thread
         vk_ctx->validation_layers.data[i] = {str8_c_string(validation_layers[i])};
     }
 
-    const char* device_extensions[] = {VK_KHR_SWAPCHAIN_EXTENSION_NAME,
-                                       VK_KHR_DYNAMIC_RENDERING_EXTENSION_NAME,
-                                       VK_EXT_COLOR_WRITE_ENABLE_EXTENSION_NAME,
-                                       VK_EXT_DESCRIPTOR_INDEXING_EXTENSION_NAME,
-                                       VK_KHR_PUSH_DESCRIPTOR_EXTENSION_NAME,
-                                       VK_EXT_MEMORY_BUDGET_EXTENSION_NAME,
-                                       VK_KHR_TIMELINE_SEMAPHORE_EXTENSION_NAME,
-                                       VK_EXT_MESH_SHADER_EXTENSION_NAME,
-                                       VK_KHR_SHADER_RELAXED_EXTENDED_INSTRUCTION_EXTENSION_NAME};
+    const char* device_extensions[] = {
+        VK_KHR_SWAPCHAIN_EXTENSION_NAME,          VK_KHR_DYNAMIC_RENDERING_EXTENSION_NAME,
+        VK_EXT_COLOR_WRITE_ENABLE_EXTENSION_NAME, VK_EXT_DESCRIPTOR_INDEXING_EXTENSION_NAME,
+        VK_KHR_PUSH_DESCRIPTOR_EXTENSION_NAME,    VK_EXT_MEMORY_BUDGET_EXTENSION_NAME,
+        VK_KHR_TIMELINE_SEMAPHORE_EXTENSION_NAME, VK_EXT_MESH_SHADER_EXTENSION_NAME,
+#if BUILD_DEBUG && SHADER_DEBUG
+        VK_KHR_SHADER_RELAXED_EXTENDED_INSTRUCTION_EXTENSION_NAME,
+#endif
+    };
     vk_ctx->device_extensions = buffer_alloc<String8>(vk_ctx->arena, ArrayCount(device_extensions));
     for (U32 i = 0; i < ArrayCount(device_extensions); i++)
     {

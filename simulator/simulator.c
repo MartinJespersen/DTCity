@@ -13,8 +13,10 @@
 using namespace simdjson;
 #include "base/base_inc.hpp"
 #include "os_core/os_core_inc.hpp"
+#include "resource_paths.hpp"
 
 #include "base/base_inc.cpp"
+#include "resource_paths.cpp"
 #define SY__MAIN 1
 #include "city/simulator_shared_interface.hpp"
 #include "city/simulator_shared_interface.cpp"
@@ -150,7 +152,7 @@ copy_status(char* dest, size_t dest_size, const char* src)
 static String8
 str_abs_path_from_relative(Arena* arena, String8 relative_path)
 {
-    String8 project_root = str8_c_string(DTCITY_PROJECT_ROOT);
+    String8 project_root = simulator_resource_root_get(arena);
     String8 result = str8_path_from_str8_list(arena, {project_root, relative_path});
     return result;
 }
@@ -850,7 +852,8 @@ server_init(struct websocket_server* server, uint16_t port)
     MemoryZeroStruct(server);
     server_mutex_init(server);
 
-    String8 document_root = str8_c_string(DTCITY_PROJECT_ROOT);
+    ScratchScope scratch = ScratchScope(0, 0);
+    String8 document_root = simulator_resource_root_get(scratch.arena);
     copy_status(server->status_line, sizeof(server->status_line), "Could not resolve project directory for CivetWeb.");
 
     snprintf(port_option, sizeof(port_option), "%u", (unsigned int)port);

@@ -70,6 +70,7 @@ RUN apt-get update && apt-get install -y \
 RUN mkdir -p /app && mkdir -p /app/data
 COPY --from=builder /app/build/linux/release/city /app
 COPY --from=builder /app/data /app/data
+COPY --from=builder /app/build/linux/release/shaders/bin /app/data/shaders/bin
 
 # Set working directory
 WORKDIR /app

@@ -378,102 +378,123 @@ logical_device_create(Arena* arena, Context* vk_ctx)
         exit_with_error("Selected Vulkan physical device does not support wideLines");
     }
 
-    VkPhysicalDeviceTimelineSemaphoreFeatures timeline_semaphore_supported{};
-    timeline_semaphore_supported.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_TIMELINE_SEMAPHORE_FEATURES;
-    VkPhysicalDeviceFeatures2 supported_features2{};
-    supported_features2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
-    supported_features2.pNext = &timeline_semaphore_supported;
-    VkPhysicalDeviceMeshShaderFeaturesEXT mesh_features = {};
-    mesh_features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MESH_SHADER_FEATURES_EXT;
-    timeline_semaphore_supported.pNext = &mesh_features;
+    // Query support independently from the features we enable below.
+    VkPhysicalDeviceFeatures2 supported_features{};
+    supported_features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
+    VkPhysicalDeviceTimelineSemaphoreFeatures supported_timeline_semaphore{};
+    supported_timeline_semaphore.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_TIMELINE_SEMAPHORE_FEATURES;
+    VkPhysicalDeviceMeshShaderFeaturesEXT supported_mesh_shader{};
+    supported_mesh_shader.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MESH_SHADER_FEATURES_EXT;
+#if BUILD_DEBUG && SHADER_DEBUG
+    VkPhysicalDeviceShaderRelaxedExtendedInstructionFeaturesKHR supported_relaxed_instruction{};
+    supported_relaxed_instruction.sType =
+        VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_RELAXED_EXTENDED_INSTRUCTION_FEATURES_KHR;
+#endif
+
+    // Support-query chain, in traversal order.
+    supported_features.pNext = &supported_timeline_semaphore;
+    supported_timeline_semaphore.pNext = &supported_mesh_shader;
+#if BUILD_DEBUG && SHADER_DEBUG
+    supported_mesh_shader.pNext = &supported_relaxed_instruction;
+#endif
+    vkGetPhysicalDeviceFeatures2(vk_ctx->physical_device, &supported_features);
+
+#if BUILD_DEBUG && SHADER_DEBUG
     // Nonsemantic shader debug information can contain forward references.
-    VkPhysicalDeviceShaderRelaxedExtendedInstructionFeaturesKHR relaxed_instruction_features = {};
-    relaxed_instruction_features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_RELAXED_EXTENDED_INSTRUCTION_FEATURES_KHR;
-    mesh_features.pNext = &relaxed_instruction_features;
-    vkGetPhysicalDeviceFeatures2(vk_ctx->physical_device, &supported_features2);
-    if (!relaxed_instruction_features.shaderRelaxedExtendedInstruction)
+    if (!supported_relaxed_instruction.shaderRelaxedExtendedInstruction)
     {
-        exit_with_error("Selected Vulkan device does not support shaderRelaxedExtendedInstruction required by shader debug information");
+        exit_with_error("Selected Vulkan device does not support shaderRelaxedExtendedInstruction required by shader "
+                        "debug information");
     }
-    if (!mesh_features.meshShader || !mesh_features.taskShader)
+#endif
+    if (!supported_mesh_shader.meshShader || !supported_mesh_shader.taskShader)
     {
         exit_with_error("Selected Vulkan device requires VK_EXT_mesh_shader meshShader and taskShader");
     }
+    if (!supported_timeline_semaphore.timelineSemaphore)
+    {
+        exit_with_error("Selected Vulkan physical device does not support timeline semaphores");
+    }
+
     vk_ctx->mesh_shader_properties.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MESH_SHADER_PROPERTIES_EXT;
     VkPhysicalDeviceProperties2 mesh_properties = {};
     mesh_properties.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2;
     mesh_properties.pNext = &vk_ctx->mesh_shader_properties;
     vkGetPhysicalDeviceProperties2(vk_ctx->physical_device, &mesh_properties);
-    mesh_features = {};
-    mesh_features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MESH_SHADER_FEATURES_EXT;
-    mesh_features.meshShader = VK_TRUE;
-    mesh_features.taskShader = VK_TRUE;
-    relaxed_instruction_features.shaderRelaxedExtendedInstruction = VK_TRUE;
-    mesh_features.pNext = &relaxed_instruction_features;
-    if (!timeline_semaphore_supported.timelineSemaphore)
-    {
-        exit_with_error("Selected Vulkan physical device does not support timeline semaphores");
-    }
 
-    VkPhysicalDeviceFeatures deviceFeatures{};
-    deviceFeatures.samplerAnisotropy = VK_TRUE;
-    deviceFeatures.sampleRateShading = VK_TRUE;
-    deviceFeatures.tessellationShader = VK_TRUE;
-    deviceFeatures.geometryShader = VK_TRUE;
-    deviceFeatures.fillModeNonSolid = VK_TRUE;
-    deviceFeatures.shaderInt64 = VK_TRUE;
-    deviceFeatures.wideLines = VK_TRUE;
-
-    VkPhysicalDeviceBufferDeviceAddressFeatures buffer_device_address_features{};
-    buffer_device_address_features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_BUFFER_DEVICE_ADDRESS_FEATURES;
-    buffer_device_address_features.bufferDeviceAddress = VK_TRUE;
-    buffer_device_address_features.pNext = &mesh_features;
-
-    VkPhysicalDeviceColorWriteEnableFeaturesEXT colorWriteEnableFeatures = {
-        .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_COLOR_WRITE_ENABLE_FEATURES_EXT,
-        .pNext = &buffer_device_address_features,
-        .colorWriteEnable = VK_TRUE,
-    };
-
-    // setup linked list of device features
-    VkPhysicalDeviceDescriptorIndexingFeatures descriptor_indexing_features{};
-    descriptor_indexing_features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_INDEXING_FEATURES;
-    descriptor_indexing_features.shaderSampledImageArrayNonUniformIndexing = VK_TRUE;
-    descriptor_indexing_features.shaderStorageBufferArrayNonUniformIndexing = VK_TRUE;
-    descriptor_indexing_features.shaderStorageImageArrayNonUniformIndexing = VK_FALSE;
-    descriptor_indexing_features.shaderUniformBufferArrayNonUniformIndexing = VK_FALSE;
-    descriptor_indexing_features.descriptorBindingSampledImageUpdateAfterBind = VK_TRUE;
-    descriptor_indexing_features.descriptorBindingStorageImageUpdateAfterBind = VK_FALSE;
-    descriptor_indexing_features.descriptorBindingStorageBufferUpdateAfterBind = VK_TRUE;
-    descriptor_indexing_features.descriptorBindingUniformBufferUpdateAfterBind = VK_FALSE;
-    descriptor_indexing_features.descriptorBindingPartiallyBound = VK_TRUE;
-    descriptor_indexing_features.descriptorBindingVariableDescriptorCount = VK_TRUE;
-    descriptor_indexing_features.runtimeDescriptorArray = VK_TRUE;
-    descriptor_indexing_features.pNext = &colorWriteEnableFeatures;
-
-    VkPhysicalDeviceSynchronization2Features sync2_features{};
-    sync2_features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SYNCHRONIZATION_2_FEATURES;
-    sync2_features.synchronization2 = VK_TRUE;
-    sync2_features.pNext = &descriptor_indexing_features;
-
-    VkPhysicalDeviceTimelineSemaphoreFeatures timeline_semaphore_features{};
-    timeline_semaphore_features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_TIMELINE_SEMAPHORE_FEATURES;
-    timeline_semaphore_features.timelineSemaphore = VK_TRUE;
-    timeline_semaphore_features.pNext = &sync2_features;
+    // Configure requested features. All fields not assigned remain disabled.
+    VkPhysicalDeviceFeatures device_features{};
+    device_features.samplerAnisotropy = VK_TRUE;
+    device_features.sampleRateShading = VK_TRUE;
+    device_features.tessellationShader = VK_TRUE;
+    device_features.geometryShader = VK_TRUE;
+    device_features.fillModeNonSolid = VK_TRUE;
+    device_features.shaderInt64 = VK_TRUE;
+    device_features.wideLines = VK_TRUE;
 
     VkPhysicalDeviceDynamicRenderingFeatures dynamic_rendering_features{};
     dynamic_rendering_features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DYNAMIC_RENDERING_FEATURES;
     dynamic_rendering_features.dynamicRendering = VK_TRUE;
-    dynamic_rendering_features.pNext = &timeline_semaphore_features;
+
+    VkPhysicalDeviceTimelineSemaphoreFeatures timeline_semaphore_features{};
+    timeline_semaphore_features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_TIMELINE_SEMAPHORE_FEATURES;
+    timeline_semaphore_features.timelineSemaphore = VK_TRUE;
+
+    VkPhysicalDeviceSynchronization2Features synchronization2_features{};
+    synchronization2_features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SYNCHRONIZATION_2_FEATURES;
+    synchronization2_features.synchronization2 = VK_TRUE;
+
+    VkPhysicalDeviceDescriptorIndexingFeatures descriptor_indexing_features{};
+    descriptor_indexing_features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_INDEXING_FEATURES;
+    descriptor_indexing_features.shaderSampledImageArrayNonUniformIndexing = VK_TRUE;
+    descriptor_indexing_features.shaderStorageBufferArrayNonUniformIndexing = VK_TRUE;
+    descriptor_indexing_features.descriptorBindingSampledImageUpdateAfterBind = VK_TRUE;
+    descriptor_indexing_features.descriptorBindingStorageBufferUpdateAfterBind = VK_TRUE;
+    descriptor_indexing_features.descriptorBindingPartiallyBound = VK_TRUE;
+    descriptor_indexing_features.descriptorBindingVariableDescriptorCount = VK_TRUE;
+    descriptor_indexing_features.runtimeDescriptorArray = VK_TRUE;
+
+    VkPhysicalDeviceColorWriteEnableFeaturesEXT color_write_enable_features{};
+    color_write_enable_features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_COLOR_WRITE_ENABLE_FEATURES_EXT;
+    color_write_enable_features.colorWriteEnable = VK_TRUE;
+
+    VkPhysicalDeviceBufferDeviceAddressFeatures buffer_device_address_features{};
+    buffer_device_address_features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_BUFFER_DEVICE_ADDRESS_FEATURES;
+    buffer_device_address_features.bufferDeviceAddress = VK_TRUE;
+
+    VkPhysicalDeviceMeshShaderFeaturesEXT mesh_shader_features{};
+    mesh_shader_features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MESH_SHADER_FEATURES_EXT;
+    mesh_shader_features.meshShader = VK_TRUE;
+    mesh_shader_features.taskShader = VK_TRUE;
+
+#if BUILD_DEBUG && SHADER_DEBUG
+    VkPhysicalDeviceShaderRelaxedExtendedInstructionFeaturesKHR relaxed_instruction_features{};
+    relaxed_instruction_features.sType =
+        VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_RELAXED_EXTENDED_INSTRUCTION_FEATURES_KHR;
+    relaxed_instruction_features.shaderRelaxedExtendedInstruction = VK_TRUE;
+#endif
 
     VkDeviceCreateInfo createInfo{};
     createInfo.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
+
+    // Device-creation chain, in traversal order. Keep all links together so
+    // adding or removing a feature does not require searching the initializers.
     createInfo.pNext = &dynamic_rendering_features;
+    dynamic_rendering_features.pNext = &timeline_semaphore_features;
+    timeline_semaphore_features.pNext = &synchronization2_features;
+    synchronization2_features.pNext = &descriptor_indexing_features;
+    descriptor_indexing_features.pNext = &color_write_enable_features;
+    color_write_enable_features.pNext = &buffer_device_address_features;
+    buffer_device_address_features.pNext = &mesh_shader_features;
+#if BUILD_DEBUG && SHADER_DEBUG
+    mesh_shader_features.pNext = &relaxed_instruction_features;
+#endif
+
     createInfo.pQueueCreateInfos = queueCreateInfos;
 
     createInfo.queueCreateInfoCount = uniqueQueueFamiliesCount;
 
-    createInfo.pEnabledFeatures = &deviceFeatures;
+    createInfo.pEnabledFeatures = &device_features;
 
     createInfo.enabledExtensionCount = (U32)vk_ctx->device_extensions.size;
     createInfo.ppEnabledExtensionNames = CStrArrFromStr8Buffer(vk_ctx->arena, vk_ctx->device_extensions);
@@ -552,12 +573,11 @@ physical_device_pick(Context* vk_ctx)
 
     for (U32 i = 0; i < deviceCount; i++)
     {
+        VkPhysicalDeviceProperties properties{};
+        vkGetPhysicalDeviceProperties(devices[i], &properties);
         QueueFamilyIndexBits familyIndexBits = queue_families_find(vk_ctx, devices[i]);
         if (is_device_suitable(vk_ctx, devices[i], familyIndexBits))
         {
-            VkPhysicalDeviceProperties properties{};
-            vkGetPhysicalDeviceProperties(devices[i], &properties);
-
             INFO_LOG("Name of device: %s\nDevice Type: %d\n", properties.deviceName, properties.deviceType);
             vk_ctx->physical_device = devices[i];
             vk_ctx->physical_device_properties = properties;
@@ -695,15 +715,25 @@ check_device_extension_support(Context* vk_ctx, VkPhysicalDevice device)
     vkEnumerateDeviceExtensionProperties(device, nullptr, &extensionCount, availableExtensions);
     const U64 numberOfRequiredExtenstions = vk_ctx->device_extensions.size;
     U64 numberOfRequiredExtenstionsLeft = numberOfRequiredExtenstions;
-    for (U32 i = 0; i < extensionCount; i++)
+    for (U32 j = 0; j < numberOfRequiredExtenstions; j++)
     {
-        for (U32 j = 0; j < numberOfRequiredExtenstions; j++)
+        bool found = false;
+        for (U32 i = 0; i < extensionCount; i++)
         {
             if (c_str_equal((char*)vk_ctx->device_extensions.data[j].str, availableExtensions[i].extensionName))
             {
-                numberOfRequiredExtenstionsLeft--;
+                found = true;
                 break;
             }
+        }
+
+        if (found)
+        {
+            numberOfRequiredExtenstionsLeft--;
+        }
+        else
+        {
+            DEBUG_LOG("Could not find device the extension: %s", vk_ctx->device_extensions.data[j].str);
         }
     }
 

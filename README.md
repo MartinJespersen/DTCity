@@ -59,10 +59,53 @@ The different build configurations are: debug, release and profile.
 To build for debug on either windows or linux, run the following commands:
 - cmake --build build/debug
 
+### Windows release with static dependencies
+
+Build both DTCity and the simulator with static libraries and the static MSVC runtime:
+
+```powershell
+cmake --preset release-static-windows
+cmake --build --preset release-static-windows
+```
+
+The executables are `build/win/release-static/city.exe` and
+`build/win/release-static/Simulator.exe`. The preset disables debug instrumentation,
+AddressSanitizer, and Tracy. It uses `x64-windows-static` instead of
+`x64-windows-static-md`, which still depends on the shared MSVC runtime.
+
+To build and collect both executables and their runtime files into a portable folder:
+
+```powershell
+cmake --build --preset package-release-static-windows
+```
+
+This creates `build/win/release-static/dist` containing both executables, `data/`
+(models, textures, fonts, and compiled shaders), and `simulator/fonts/` and
+`simulator/database/`. Downloaded caches and shader source files are excluded.
+Resource lookup prefers files beside the executables, so the folder can be moved
+and launched from another working directory. Development builds still fall back
+to the source-tree resource paths.
+
+Override the output folder with `-DDTCITY_PACKAGE_DIR=C:/path/to/dist` when configuring.
+By default, the bundle includes `simulator/database/eskiltuna.sqlite` if it exists.
+Set `-DDTCITY_PACKAGE_SIMULATOR_DATABASE=C:/path/to/playback.sqlite` to package another
+database (renamed to `eskiltuna.sqlite`), or set the variable to an empty string to
+omit the database and select one in the simulator UI. Packaging updates existing
+files without deleting the output folder; use a fresh output folder for a clean release.
+
+Windows and graphics driver components (including Vulkan/OpenGL) are still required
+on the destination machine. Cesium ion credentials and network access are not bundled.
+
 ### C Macros
 The following application specific macros are used to enable address sanitization, build tools and profiling:
 * -DBUILD_DEBUG (Additional debug information e.g vulkan validation layer support)
 * -DASAN_ENABLE=ON (enable address sanitizer support)
 * -DTRACY_PROFILE_ENABLE (Enable tracy profiling)
+* -DSHADER_DEBUG=ON (Shader debug information; requires BUILD_DEBUG=ON)
+
+`VK_KHR_shader_relaxed_extended_instruction` is required only when both
+`BUILD_DEBUG` and `SHADER_DEBUG` are enabled. Compiled shaders are kept in each
+build directory under `shaders/bin`, so debug and release builds cannot overwrite
+each other's shaders. Packaging copies the selected build's shaders into `data/shaders/bin`.
 
 CMake presets define these macros based on what type of build configuration is used - debug, release or profile. These defaults can be changed e.g. you might want to enable address sanitization in a profile build.

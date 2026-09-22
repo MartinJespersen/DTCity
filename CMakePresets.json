@@ -42,7 +42,7 @@
       "generator": "Ninja",
       "binaryDir": "${sourceDir}/build/win/debug",
       "cacheVariables": {
-        "ASAN_ENABLED": "ON",
+        "ASAN_ENABLED": "OFF",
         "VCPKG_TARGET_TRIPLET": "x64-windows-static-md",
         "VCPKG_OVERLAY_TRIPLETS": "${sourceDir}/triplets"
       }
@@ -95,6 +95,26 @@
       }
     },
     {
+      "name": "release-static-windows",
+      "displayName": "Release DTCity and Simulator (Windows, static runtime)",
+      "inherits": "release-base",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build/win/release-static",
+      "cacheVariables": {
+        "VCPKG_TARGET_TRIPLET": "x64-windows-static",
+        "CMAKE_MSVC_RUNTIME_LIBRARY": "MultiThreaded",
+        "BUILD_SHARED_LIBS": "OFF",
+        "BUILD_CITY": "ON",
+        "BUILD_SIMULATOR": "ON",
+        "BUILD_TESTS": "OFF",
+        "BUILD_DEBUG": "OFF",
+        "SHADER_DEBUG": "OFF",
+        "ASAN_ENABLED": "OFF",
+        "TRACY_PROFILE_ENABLE": "OFF",
+        "USE_RADLINKER": "OFF"
+      }
+    },
+    {
       "name": "release-simulator-windows",
       "displayName": "Release Simulator (Windows)",
       "binaryDir": "${sourceDir}/simulator/build/win/release",
@@ -138,7 +158,7 @@
       "binaryDir": "${sourceDir}/build/win/profile",
       "generator": "Ninja",
       "cacheVariables": {
-        "SHADER_DEBUG": "ON",
+        "SHADER_DEBUG": "OFF",
         "ASAN_ENABLED": "OFF",
         "VCPKG_TARGET_TRIPLET": "x64-windows-static-md",
         "VCPKG_OVERLAY_TRIPLETS": "${sourceDir}/triplets"
@@ -156,6 +176,21 @@
     }
   ],
   "buildPresets": [
+    {
+      "name": "package-release-static-windows",
+      "configurePreset": "release-static-windows",
+      "targets": ["package-runtime"],
+      "jobs": 0
+    },
+    {
+      "name": "release-static-windows",
+      "configurePreset": "release-static-windows",
+      "targets": [
+        "city",
+        "Simulator"
+      ],
+      "jobs": 0
+    },
     {
       "name": "debug-simulator-windows",
       "configurePreset": "debug-simulator-windows",
