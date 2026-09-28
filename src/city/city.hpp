@@ -103,7 +103,7 @@ struct AsyncCityTask
         async::AsyncTaskStatus<neta::NetaTaskState>* neta;
         async::AsyncTaskStatus<osm::Network>* osm;
         async::AsyncTaskStatus<RoadBuildTask>* road;
-        async::AsyncTaskStatus<city::AgentSim>* agent_sim;
+        async::AsyncTaskStatus<city::AgentSimThread>* agent_sim_task;
         AsyncTaskType cached_type;
     };
 };
@@ -163,7 +163,7 @@ struct City
     bool no_gui_focus;
 
     Road road;
-    AgentSim car_sim;
+    AgentSystem* agent_system;
     F32 all_agent_scale_factor;
     Buildings buildings;
     ArrayResourcePoolHandle tileset_handle;
@@ -208,8 +208,8 @@ g_internal render::SamplerInfo
 sampler_from_cgltf_sampler(gltfw_Sampler sampler);
 g_internal async::AsyncTaskContinuation<RoadBuildTask>
 road_build(async::ThreadInfo info, async::AsyncTaskStatus<RoadBuildTask>* status);
-g_internal async::AsyncTaskContinuation<AgentSim>
-agent_sim_build(async::ThreadInfo info, async::AsyncTaskStatus<AgentSim>* status);
+g_internal async::AsyncTaskContinuation<AgentSimThread>
+agent_sim_build(async::ThreadInfo info, async::AsyncTaskStatus<AgentSimThread>* status);
 g_internal void
 road_create(City* city, Road* in_out_road, glm::dmat4& ecef_to_local, String8 area, String8 bbox_cache_str);
 g_internal Map<osm::EdgeId, RoadInfo>*
@@ -222,7 +222,7 @@ city_area_streaming_begin(City* city, const AreaConfig* area_config);
 g_internal B32
 city_area_streaming_end(City* city);
 g_internal void
-city_update(City* city, Buffer<city::Coordinate> new_agent_coords, async::ThreadPool* thread_pool,
+city_update(City* city, city::CoordinateBatch new_agent_coords, async::ThreadPool* thread_pool,
             RoadOverlayOption neta_overlay_option, Vec2U32 framebuffer_dim, const AreaConfig* city_config,
             render::MeshHandle hover_icon_mesh_handle);
 g_internal void

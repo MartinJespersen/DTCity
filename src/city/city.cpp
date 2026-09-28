@@ -44,25 +44,27 @@ city_area_streaming_begin(City* city, const AreaConfig* area_config)
         {
             tileset_url = area_config->tileset_path;
             Assert(tileset_url.size > 0);
-        } break;
+        }
+        break;
         case AreaTilesetSource::IonAsset:
         {
             ion_asset_id = area_config->tileset_ion_asset_id;
             Assert(ion_asset_id > 0);
-        } break;
+        }
+        break;
         default: InvalidPath;
     }
 
     Context* ctx = dt_ctx_get();
-    ArrayResourcePoolHandle tileset_handle = tile_load_streaming_begin(
-        ctx->tile_load_state, tileset_url, city->bbox, ion_asset_id, MB(256));
+    ArrayResourcePoolHandle tileset_handle =
+        tile_load_streaming_begin(ctx->tile_load_state, tileset_url, city->bbox, ion_asset_id, MB(256));
     city->tileset_handle = tileset_handle;
 
     cesium::TilesetRenderer* tileset = {};
     B32 tileset_exists = ctx->tile_load_state->tileset_pool->item_from_handle(tileset_handle, &tileset);
     if (city->cars_creation_done && tileset_exists)
     {
-        _agent_height_updates_start(&city->car_sim, tileset);
+        city->agent_system->_agent_height_updates_start(tileset);
     }
 }
 
@@ -74,7 +76,7 @@ city_area_streaming_end(City* city)
     Context* ctx = dt_ctx_get();
     if (city->cars_creation_done)
     {
-        _agent_height_updates_stop(&city->car_sim);
+        city->agent_system->_agent_height_updates_stop();
     }
     B32 destroyed = tile_load_streaming_end(ctx->tile_load_state, city->tileset_handle);
     return destroyed;
@@ -209,7 +211,7 @@ _tile_pipeline_add(cesium::TileDrawBatch* tile, City* city, render::MappedHandle
 }
 
 g_internal void
-city_update(City* city, Buffer<city::Coordinate> new_agent_coords, async::ThreadPool* thread_pool,
+city_update(City* city, city::CoordinateBatch new_agent_coords, async::ThreadPool* thread_pool,
             RoadOverlayOption neta_overlay_option, Vec2U32 framebuffer_dim, const AreaConfig* city_config,
             render::MeshHandle hover_icon_mesh_handle)
 {
@@ -251,9 +253,22 @@ city_update(City* city, Buffer<city::Coordinate> new_agent_coords, async::Thread
             break;
             case AsyncTaskType::CarSim:
             {
-                async::AsyncTaskResult<AgentSim> task_result = async::async_task_is_done(task->agent_sim);
+                async::AsyncTaskResult<AgentSimThread> task_result = async::async_task_is_done(task->agent_sim_task);
                 task_done = task_result.done;
                 city->cars_creation_done = task_result.success;
+                if (task_result.done)
+                {
+                    AgentSimThread* agent_sim_thread = task_result.task->user_data;
+                    if (task_result.success)
+                    {
+                        Assert(!city->agent_system);
+                        city->agent_system = new AgentSystem{};
+                        city->agent_system->agent_sim = std::move(agent_sim_thread->agent_sim);
+                        city->agent_system->agent_sim_config =
+                            std::make_unique<AgentSimConfig>(std::move(agent_sim_thread->config));
+                    }
+                    delete agent_sim_thread;
+                }
             }
             break;
             case city::AsyncTaskType::Cached:
@@ -333,7 +348,7 @@ city_update(City* city, Buffer<city::Coordinate> new_agent_coords, async::Thread
             if (!city->no_gui_focus)
             {
                 ImGui::PushFont(nullptr, 18.0f);
-                osm::RoadEdge** edge_ptr = map_get(&city->osm_network->edge_structure.edge_map, (S64)hovered_object_id);
+                osm::RoadEdge** edge_ptr = city->osm_network->edge_structure.edge_map.get((S64)hovered_object_id);
                 if (edge_ptr)
                 {
                     osm::RoadEdge* edge = *edge_ptr;
@@ -351,7 +366,7 @@ city_update(City* city, Buffer<city::Coordinate> new_agent_coords, async::Thread
                         ImGui::Text("%s: %s", (char*)tag.key.str, (char*)tag.value.str);
                     }
 
-                    city::RoadInfo* chosen_edge = map_get(city->road.road_info_map, edge->id);
+                    city::RoadInfo* chosen_edge = city->road.road_info_map->get(edge->id);
                     if (chosen_edge)
                     {
                         for (U32 i = 1; i < ArrayCount(chosen_edge->options); i++)
@@ -446,26 +461,26 @@ city_update(City* city, Buffer<city::Coordinate> new_agent_coords, async::Thread
 
         if (city->agent_creation_started == false && city->osm_task_done)
         {
-            Allocator* allocator = Allocator::create();
-            Debug_SetName(tileset->allocator->arena, "Cesium Tileset Allocator arena");
-            AgentSim* car_sim = &city->car_sim;
-            car_sim->allocator = allocator;
-            car_sim->asset_dir = push_str8_copy(allocator->arena, ctx->data_subdirs.data[dt_DataDirType::Assets]);
-            car_sim->texture_dir = push_str8_copy(allocator->arena, ctx->data_subdirs.data[dt_DataDirType::Texture]);
-            car_sim->agent_count = 100;
-            car_sim->max_agent_count = 10000;
-            car_sim->agent_config[enum_class_s32(VehicleType::Car)] = {.asset_file_name = S("car.glb"),
-                                                                       .model_forward_dir = glm::vec3(0.0, 0.0, 1.0)};
-            car_sim->agent_config[enum_class_s32(VehicleType::Bicycle)] = {.asset_file_name = S("bike.glb"),
-                                                                           .model_forward_dir =
-                                                                               glm::vec3(-1.0, 0.0, 0.0),
-                                                                           .model_to_world_scale = 1.0};
-            async::AsyncTaskStatus<AgentSim>* car_sim_task =
-                async::async_task_run(ctx->thread_pool, agent_sim_build, car_sim, "Car Sim Task");
+            Debug_SetName(tileset->allocator.arena, "Cesium Tileset Allocator arena");
+            AgentSimThread* agent_sim_thread = new AgentSimThread{};
+            AgentSimConfig* agent_sim_config = &agent_sim_thread->config;
+            agent_sim_config->asset_dir = push_str8_copy(city->arena, ctx->data_subdirs.data[dt_DataDirType::Assets]);
+            agent_sim_config->texture_dir =
+                push_str8_copy(city->arena, ctx->data_subdirs.data[dt_DataDirType::Texture]);
+            agent_sim_config->agent_count = 100;
+            agent_sim_config->max_agent_count = 10000;
+            agent_sim_config->agent_config[enum_class_s32(VehicleType::Car)] = {
+                .asset_file_name = S("car.glb"), .model_forward_dir = glm::vec3(0.0, 0.0, 1.0)};
+            agent_sim_config->agent_config[enum_class_s32(VehicleType::Bicycle)] = {.asset_file_name = S("bike.glb"),
+                                                                                    .model_forward_dir =
+                                                                                        glm::vec3(-1.0, 0.0, 0.0),
+                                                                                    .model_to_world_scale = 1.0};
+            async::AsyncTaskStatus<AgentSimThread>* agent_task_state =
+                async::async_task_run(ctx->thread_pool, agent_sim_build, agent_sim_thread, "Car Sim Task");
 
-            AsyncCityTask* car_sim_task_list_elem = PushStruct(allocator->arena, AsyncCityTask);
+            AsyncCityTask* car_sim_task_list_elem = PushStruct(city->arena, AsyncCityTask);
             car_sim_task_list_elem->type = AsyncTaskType::CarSim;
-            car_sim_task_list_elem->agent_sim = car_sim_task;
+            car_sim_task_list_elem->agent_sim_task = agent_task_state;
             DLLPushBack(city->task_list.first, city->task_list.last, car_sim_task_list_elem);
 
             city->agent_creation_started = true;
@@ -476,50 +491,46 @@ city_update(City* city, Buffer<city::Coordinate> new_agent_coords, async::Thread
         {
             prof_scope_marker_named("Car update scope");
             F32 scale_factor = city->all_agent_scale_factor;
-            S64 frame_rate = ctx->io->frame_rate.load();
-            agent_sim_update(&city->car_sim, tileset, new_agent_coords, tileset->ecef_to_local, scale_factor,
-                             ctx->io->frame_count);
+            city->agent_system->update(tileset, new_agent_coords, tileset->ecef_to_local, scale_factor,
+                                      ctx->io->frame_count);
 
-            AgentSim* agent_sim = &city->car_sim;
-            AgentModelRenderInfo* models = agent_sim->models;
+            AgentSim* agent_sim = city->agent_system->agent_sim.get();
+            AgentSimConfig* agent_sim_config = city->agent_system->agent_sim_config.get();
+            AgentModelRenderInfo* models = agent_sim_config->models;
 
-            ChunkList<render::Transform>* transform_lists[ArrayCount(agent_sim->agent_config)];
+            ChunkList<render::Transform>* transform_lists[ArrayCount(agent_sim_config->agent_config)];
             for (U32 agent_cfg_idx = 0; agent_cfg_idx < ArrayCount(transform_lists); ++agent_cfg_idx)
             {
                 transform_lists[agent_cfg_idx] = chunk_list_create<render::Transform>(scratch.arena, 100);
             }
             for (Agent& agent : *agent_sim->agents_active)
             {
-                if (((S64)ctx->io->frame_count - (S64)agent.latest_update_frame) <
-                    (frame_rate * 2)) // Do not add agent after 2 seconds without a streaming update
+                B32 visible = ui::frustum_check_from_bounding_box(&camera->frustum_planes, agent.world_bounds);
+                constexpr F32 hover_icon_scale_factor = 10.0f;
+                city->agent_system->agent_icon_add(agent, hover_icon_mesh_handle,
+                                                  hover_icon_scale_factor); // TODO: Frustum cull icon as well
+                if (visible)
                 {
-                    B32 visible = ui::frustum_check_from_bounding_box(&camera->frustum_planes, agent.world_bounds);
-                    constexpr F32 hover_icon_scale_factor = 10.0f;
-                    agent_icon_add(agent, hover_icon_mesh_handle,
-                                   hover_icon_scale_factor); // TODO: Frustum cull icon as well
-                    if (visible)
+                    if (ui::is_bounding_sphere_to_be_culled(*camera, agent.world_bounds) == false)
                     {
-                        if (ui::is_bounding_sphere_to_be_culled(*camera, agent.world_bounds) == false)
-                        {
-                            ChunkList<render::Transform>* transform_list =
-                                transform_lists[enum_idx(agent.vehicle_type)];
-                            chunk_list_insert(scratch.arena, transform_list, agent.model_matrix);
-                        }
+                        ChunkList<render::Transform>* transform_list = transform_lists[enum_idx(agent.vehicle_type)];
+                        chunk_list_insert(scratch.arena, transform_list, agent.model_matrix);
                     }
                 }
+            }
 
-                for (U32 agent_cfg_idx = 0; agent_cfg_idx < ArrayCount(agent_sim->agent_config); ++agent_cfg_idx)
-                {
-                    AgentModelRenderInfo* model_render_info = &models[agent_cfg_idx];
+            // Submit each model once after gathering all visible agent transforms.
+            for (U32 agent_cfg_idx = 0; agent_cfg_idx < ArrayCount(agent_sim_config->agent_config); ++agent_cfg_idx)
+            {
+                AgentModelRenderInfo* model_render_info = &models[agent_cfg_idx];
 
-                    Buffer<render::Transform> transform_buffer =
-                        buffer_from_chunk_list(draw::draw_frame_arena_get(), transform_lists[agent_cfg_idx]);
-                    render::BufferInfo instance_buffer_info = render::BufferInfo(
-                        transform_buffer, render::BufferType_Vertex | render::BufferType_StorageBuffer);
+                Buffer<render::Transform> transform_buffer =
+                    buffer_from_chunk_list(draw::draw_frame_arena_get(), transform_lists[agent_cfg_idx]);
+                render::BufferInfo instance_buffer_info =
+                    render::BufferInfo(transform_buffer, render::BufferType_Vertex | render::BufferType_StorageBuffer);
 
-                    city::agent_draw(camera_handle_void, model_render_info->geometry,
-                                     model_render_info->texture_handles, &instance_buffer_info);
-                }
+                city->agent_system->agent_draw(camera_handle_void, model_render_info->geometry,
+                                              model_render_info->texture_handles, &instance_buffer_info);
             }
         }
     }
@@ -543,10 +554,21 @@ city_release(City* city)
     {
         osm::osm_release(city->osm_network);
     }
-    if (city->car_sim.allocator)
+
+    // Shutdown has drained worker jobs; collect unpublished simulation results too.
+    for (AsyncCityTask* task = city->task_list.first; task; task = task->next)
     {
-        agent_sim_destroy(&city->car_sim);
+        if (task->type == AsyncTaskType::CarSim)
+        {
+            auto result = async::async_task_is_done(task->agent_sim_task);
+            Assert(result.done);
+            if (result.done)
+                delete result.task->user_data;
+        }
     }
+    delete city->agent_system;
+    city->agent_system = {};
+
     if (city->neta_state && city->neta_state->arena)
     {
         arena_release(city->neta_state->arena);
@@ -611,8 +633,8 @@ road_build(async::ThreadInfo info, async::AsyncTaskStatus<RoadBuildTask>* status
     return {};
 }
 
-g_internal async::AsyncTaskContinuation<AgentSim>
-agent_sim_build(async::ThreadInfo info, async::AsyncTaskStatus<AgentSim>* status)
+g_internal async::AsyncTaskContinuation<AgentSimThread>
+agent_sim_build(async::ThreadInfo info, async::AsyncTaskStatus<AgentSimThread>* status)
 {
     (void)info;
     city::agents_create(status->user_data);
@@ -640,6 +662,7 @@ road_destroy(Road* road)
     render::handle_destroy_deferred(road->segment_buffer_handle);
     render::handle_destroy_deferred(road->segment_node_buffer_handle);
 
+    road->road_info_map = {};
     arena_release(road->arena);
 }
 
@@ -1018,7 +1041,7 @@ road_segment_build(Arena* arena, osm::Network* network, Buffer<osm::RoadEdge> ed
                                                                 local_bottom_left};
             assert_non_intersecting_edges(vertices, RoadSegmentCornerCoord_Count);
         }
-        RoadInfo* road_info = map_get(road_info_map, edge->id);
+        RoadInfo* road_info = road_info_map->get(edge->id);
         if (road_info)
         {
             road_segment_corners->road_info = *road_info;
@@ -1765,7 +1788,7 @@ road_info_from_edge_id(Arena* arena, osm::Network* network, Buffer<osm::RoadEdge
                        Map<S64, neta::EdgeList>* neta_edge_map)
 {
     prof_scope_marker;
-    Map<osm::EdgeId, RoadInfo>* road_info_map = map_create<osm::EdgeId, RoadInfo>(arena, 1024);
+    Map<osm::EdgeId, RoadInfo>* road_info_map = Map<osm::EdgeId, RoadInfo>::create(arena, 1024);
 
     for (osm::RoadEdge& edge : road_edge_buf)
     {
@@ -1777,7 +1800,7 @@ road_info_from_edge_id(Arena* arena, osm::Network* network, Buffer<osm::RoadEdge
             info.options[RoadOverlayOption_Bikeability_tf] = neta_edge->index_bike_tf;
             info.options[RoadOverlayOption_Walkability_ft] = neta_edge->index_walk_ft;
             info.options[RoadOverlayOption_Walkability_tf] = neta_edge->index_walk_tf;
-            map_insert(road_info_map, edge.id, info);
+            road_info_map->insert(arena, edge.id, info);
         }
     }
 
@@ -1796,7 +1819,7 @@ edge_from_road_edge(osm::Network* network, osm::RoadEdge* road_edge, Map<osm::Wa
     Vec2F64 to_node_coord = vec_2f64(to_node_loc.lon, to_node_loc.lat);
 
     S64 way_id = road_edge->way_id;
-    neta::EdgeList* edge_list = map_get(edge_list_map, way_id);
+    neta::EdgeList* edge_list = edge_list_map->get(way_id);
 
     neta::Edge* chosen_edge = {};
     if (edge_list)

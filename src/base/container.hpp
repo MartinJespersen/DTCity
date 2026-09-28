@@ -32,6 +32,51 @@ result_not_ok(T v)
     return {v, true};
 };
 
+// ~Array
+enum class AllocationType : U32
+{
+    Arena,
+    General
+};
+
+template <typename T>
+struct Array
+{
+    T* data = {};
+    U32 size = {};
+    AllocationType type = AllocationType::Arena;
+
+    Array() = default;
+    // This array must be destroyed before its backing allocator is cleared or released.
+    Array(Allocator* allocator, U32 size) noexcept;
+    Array(U32 size) noexcept;
+    ~Array() noexcept;
+
+    Array(const Array&) = delete;
+    Array&
+    operator=(const Array&) = delete;
+
+    Array(Array&& other) noexcept;
+    Array&
+    operator=(Array&& other) noexcept;
+
+    T*
+    begin() noexcept;
+    const T*
+    begin() const noexcept;
+    T*
+    end() noexcept;
+    const T*
+    end() const noexcept;
+    T&
+    operator[](U64 index) noexcept;
+    const T&
+    operator[](U64 index) const noexcept;
+
+  private:
+    void _array_release() noexcept;
+};
+
 template <typename T>
 struct Buffer
 {
@@ -270,41 +315,39 @@ struct MapChunkList
     U64 total_count;
 };
 
-template <typename K, typename V>
-struct Map
-{
-    Arena* arena;
-    MapChunkList<K, V>* v;
-    U64 capacity;
-};
-
 enum class MapResult : B32
 {
     Success = 0,
     NotFound = 1
 };
 
+// The caller owns the arena; use the same arena for initialization and insertion.
+// Values must not require destruction. clear() retains chunks for reuse.
+// Value pointers remain valid until clear() or the backing arena is reset/released.
 template <typename K, typename V>
-lib_internal Map<K, V>*
-map_create(Arena* arena, U64 capacity);
+struct Map
+{
+    MapChunkList<K, V>* v = {};
+    U64 capacity = {};
 
-template <typename K, typename V>
-lib_internal V*
-map_get(Map<K, V>* m, K key);
+    Map<K, V>(Allocator* allocator, U64 bucket_capacity);
+    static Map*
+    create(Arena* arena, U64 bucket_capacity);
+    void
+    init(Arena* arena, U64 bucket_capacity);
+    void
+    clear();
+    V*
+    get(K key);
+    MapResult
+    get(K key, V** out_value);
+    // Duplicate keys leave the existing value unchanged and return nullptr.
+    V*
+    insert(Arena* arena, K key, const V& value);
 
-template <typename K, typename V>
-lib_internal MapResult
-map_get(Map<K, V>* m, K key, V** out_value);
-
-template <typename K, typename V>
-lib_internal V*
-map_insert(Map<K, V>* m, K key, V& value);
-
-// private map functions
-lib_internal inline U64
-map_hash_u64(U64 x);
-
-lib_internal inline U64
-map_round_up_pow2_u64(U64 v);
-
-/////////////////////////////////////////////////////
+  private:
+    static U64
+    _hash_u64(U64 value);
+    static U64
+    _round_up_pow2_u64(U64 value);
+};

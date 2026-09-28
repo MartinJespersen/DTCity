@@ -7,7 +7,7 @@
 #define DEBUG_LOG(...)
 #define ERROR_LOG(...)
 
-#include "third_party/symbol_set/symbol_set.h"
+
 #include "third_party/simdjson/simdjson.h"
 #include "third_party/simdjson/simdjson.cpp"
 using namespace simdjson;
@@ -59,6 +59,8 @@ _server_thread_exit(const struct mg_context* context, int thread_type, void* thr
 #include <nuklear.h>
 #include <nuklear_glfw_gl3.h>
 #include <yyjson.h>
+#include "event_snapshot.hpp"
+#include "event_snapshot.cpp"
 
 #define WINDOW_WIDTH 1024
 #define WINDOW_HEIGHT 1024
@@ -69,9 +71,8 @@ _server_thread_exit(const struct mg_context* context, int thread_type, void* thr
 #define MAX_PATH_TEXT 1024
 #define DEFAULT_FPS 20
 #define DEFAULT_VEHICLE_COUNT 200
-#define DEFAULT_DB_PATH "simulator/database/eskiltuna.sqlite"
+#define DEFAULT_DB_PATH "simulator/database/eskiltuna_test.sqlite"
 #define CUSTOM_FONT_PATH "simulator/fonts/segoeuithis.ttf"
-#define AGENT_PATH_SEGMENT_TABLE_NAME "agent_path_segment"
 #define CUSTOM_FONT_SIZE 18.0f
 #define DEFAULT_WS_PATH "/ws"
 #define APP_BG_R 45
@@ -90,6 +91,7 @@ struct websocket_server
 {
     struct mg_context* context;
     struct mg_connection* client_connection;
+    U64 stream_generation;
     OS_Handle mutex;
     char last_received[MAX_STATUS_TEXT];
     char last_sent[MAX_STATUS_TEXT];
@@ -99,6 +101,7 @@ struct websocket_server
 struct vehicle_stream
 {
     bool streaming;
+    SimulatorEventCursor cursor;
     bool isolate_selected_vehicles;
     int fps;
     int vehicle_count;
@@ -119,7 +122,8 @@ struct playback_db
 {
     Arena* arena;
     sqlite3* db;
-    sqlite3_stmt* active_stmt;
+    sqlite3_stmt* snapshot_stmt;
+    sqlite3_stmt* delta_stmt;
     bool ready;
     double min_time;
     double max_time;
@@ -586,7 +590,7 @@ server_close_client(struct websocket_server* server)
 }
 
 static bool
-server_send_text(struct websocket_server* server, const char* text)
+server_send_text(struct websocket_server* server, const char* text, U64 stream_generation)
 {
     struct mg_connection* connection = NULL;
     int sent = 0;
@@ -596,15 +600,21 @@ server_send_text(struct websocket_server* server, const char* text)
         return false;
     }
 
+    size_t text_length = strlen(text);
     server_lock(server);
+    if (stream_generation != server->stream_generation)
+    {
+        server_unlock(server);
+        return false;
+    }
     connection = server->client_connection;
     if (connection)
     {
         mg_lock_connection(connection);
-        sent = mg_websocket_write(connection, MG_WEBSOCKET_OPCODE_TEXT, text, strlen(text));
+        sent = mg_websocket_write(connection, MG_WEBSOCKET_OPCODE_TEXT, text, text_length);
         mg_unlock_connection(connection);
     }
-    if (sent > 0)
+    if (sent > 0 && (size_t)sent == text_length)
     {
         copy_status(server->last_sent, sizeof(server->last_sent), text);
         server_unlock(server);
@@ -678,6 +688,7 @@ server_websocket_ready_handler(struct mg_connection* conn, void* cbdata)
 
     server_lock(server);
     server->client_connection = conn;
+    ++server->stream_generation;
     copy_status(server->status_line, sizeof(server->status_line),
                 user_agent && strstr(user_agent, "Mozilla")
                     ? "Browser viewer connected. Map server: http://127.0.0.1:8080"
@@ -782,6 +793,13 @@ server_websocket_data_handler(struct mg_connection* conn, int bits, char* data, 
         int sent = 0;
         switch ((city::SimulationMessageKind)msg_id)
         {
+            case city::SimulationMessageKind::RequestSnapshot:
+            {
+                server_lock(server);
+                ++server->stream_generation;
+                server_unlock(server);
+                return 1;
+            }
             case city::SimulationMessageKind::Options:
             {
                 String8 test_reply_msg[] = {S("1. Scenario")};
@@ -944,16 +962,7 @@ playback_db_init(struct playback_db* playback_db, String8 path)
 {
     prof_scope_marker;
     sqlite3_stmt* range_stmt = NULL;
-    const char* active_sql = "WITH active AS ("
-                             "  SELECT agent, from_lat, from_lon, to_lat, to_lon, "
-                             "  CASE WHEN time_end <= time_start THEN 1.0 "
-                             "  ELSE max(0.0, min(1.0, (?1 - time_start) / (time_end - time_start))) END AS progress "
-                             "  FROM " AGENT_PATH_SEGMENT_TABLE_NAME "  WHERE time_start <= ?1 AND time_end > ?1 )"
-                             "SELECT agent, "
-                             "from_lat + (to_lat - from_lat) * progress AS lat, "
-                             "from_lon + (to_lon - from_lon) * progress AS lon "
-                             "FROM active "
-                             "ORDER BY agent";
+
 
     Arena* arena = playback_db->arena;
     if (arena)
@@ -997,7 +1006,7 @@ playback_db_init(struct playback_db* playback_db, String8 path)
     {
         prof_scope_marker_named("sqlite3_prepare_v2");
         if (sqlite3_prepare_v2(playback_db->db,
-                               "SELECT MIN(time_start), MAX(time_end) FROM " AGENT_PATH_SEGMENT_TABLE_NAME, -1,
+                               "SELECT (SELECT MIN(time) FROM agent_events), (SELECT MAX(time) FROM agent_events)", -1,
                                &range_stmt, NULL) != SQLITE_OK)
         {
             snprintf(playback_db->status_line, sizeof(playback_db->status_line),
@@ -1026,7 +1035,7 @@ playback_db_init(struct playback_db* playback_db, String8 path)
 
     {
         prof_scope_marker_named("prepare_sql_statement");
-        if (!prepare_sql_statement(playback_db->db, active_sql, &playback_db->active_stmt))
+        if (!prepare_sql_statement(playback_db->db, simulator_event_snapshot_sql, &playback_db->snapshot_stmt))
         {
             snprintf(playback_db->status_line, sizeof(playback_db->status_line),
                      "Could not prepare agent playback query: %s", sqlite3_errmsg(playback_db->db));
@@ -1034,6 +1043,11 @@ playback_db_init(struct playback_db* playback_db, String8 path)
         }
     }
 
+    if (!prepare_sql_statement(playback_db->db, simulator_event_delta_sql, &playback_db->delta_stmt))
+    {
+        copy_status(playback_db->status_line, sizeof(playback_db->status_line), sqlite3_errmsg(playback_db->db));
+        return;
+    }
     playback_db->ready = true;
     snprintf(playback_db->status_line, sizeof(playback_db->status_line), "SQLite agent playback ready: %s",
              (char*)playback_db->path.str);
@@ -1042,10 +1056,16 @@ playback_db_init(struct playback_db* playback_db, String8 path)
 static void
 playback_db_shutdown(struct playback_db* playback_db)
 {
-    if (playback_db->active_stmt)
+    if (playback_db->snapshot_stmt)
     {
-        sqlite3_finalize(playback_db->active_stmt);
-        playback_db->active_stmt = NULL;
+        sqlite3_finalize(playback_db->snapshot_stmt);
+        playback_db->snapshot_stmt = NULL;
+    }
+
+    if (playback_db->delta_stmt)
+    {
+        sqlite3_finalize(playback_db->delta_stmt);
+        playback_db->delta_stmt = NULL;
     }
 
     if (playback_db->db)
@@ -1069,6 +1089,7 @@ reload_playback_db(struct playback_db* playback_db, struct vehicle_stream* strea
     if (stream)
     {
         stream_stop(stream);
+        stream->cursor.reset_pending = true;
         stream->next_frame_at_us = 0.0;
         stream->last_tick_us = 0;
         stream->last_sent_vehicle_count = 0;
@@ -1241,6 +1262,7 @@ static void
 stream_start(struct vehicle_stream* stream)
 {
     stream->streaming = true;
+    stream->cursor.reset_pending = true;
     stream->next_frame_at_us = 0.0;
 }
 
@@ -1267,45 +1289,9 @@ stream_update_clock(struct vehicle_stream* stream, U64 now_us)
     }
 }
 
-static bool
-append_snapshot_vehicle(yyjson_mut_doc* doc, yyjson_mut_val* snapshot_array, const char* vehicle_id, double lat,
-                        double lon)
-{
-    prof_scope_marker;
-    yyjson_mut_val* vehicle = NULL;
-
-    if (!doc || !snapshot_array || !vehicle_id)
-    {
-        return false;
-    }
-
-    vehicle = yyjson_mut_obj(doc);
-    if (!vehicle)
-    {
-        return false;
-    }
-
-    if (!yyjson_mut_arr_append(snapshot_array, vehicle))
-    {
-        return false;
-    }
-
-    if (!yyjson_mut_obj_add_strcpy(doc, vehicle, "id", vehicle_id))
-    {
-        return false;
-    }
-
-    if (!yyjson_mut_obj_add_real(doc, vehicle, "lat", lat) || !yyjson_mut_obj_add_real(doc, vehicle, "lon", lon))
-    {
-        return false;
-    }
-
-    return true;
-}
-
 static int
-build_database_snapshot(struct vehicle_stream* stream, struct playback_db* playback_db, yyjson_mut_doc* doc,
-                        yyjson_mut_val* snapshot_array)
+build_database_events(struct vehicle_stream* stream, struct playback_db* playback_db, yyjson_mut_doc* doc,
+                        yyjson_mut_val* snapshot_array, bool reset)
 {
     prof_scope_marker;
     int row_count = 0;
@@ -1315,25 +1301,35 @@ build_database_snapshot(struct vehicle_stream* stream, struct playback_db* playb
         return -1;
     }
 
-    if (!playback_db->active_stmt)
+    sqlite3_stmt* event_stmt = reset ? playback_db->snapshot_stmt : playback_db->delta_stmt;
+    sqlite3_reset(event_stmt);
+    defer(sqlite3_reset(event_stmt));
+    sqlite3_clear_bindings(event_stmt);
+    if (reset)
     {
-        return -1;
+        sqlite3_bind_double(event_stmt, 1, stream->simulated_seconds);
+        sqlite3_bind_int(event_stmt, 2, stream->vehicle_count);
+        string_list_clear(&stream->visible_vehicle_ids);
+    }
+    else
+    {
+        sqlite3_bind_double(event_stmt, 1, stream->cursor.time);
+        sqlite3_bind_double(event_stmt, 2, stream->simulated_seconds);
     }
 
-    sqlite3_reset(playback_db->active_stmt);
-    sqlite3_clear_bindings(playback_db->active_stmt);
-    sqlite3_bind_double(playback_db->active_stmt, 1, stream->simulated_seconds);
-    sqlite3_bind_int(playback_db->active_stmt, 2, stream->vehicle_count);
-    string_list_clear(&stream->visible_vehicle_ids);
-
-    while (sqlite3_step(playback_db->active_stmt) == SQLITE_ROW)
+    int step_result = SQLITE_OK;
+    while ((step_result = sqlite3_step(event_stmt)) == SQLITE_ROW)
     {
-        prof_scope_marker_named("row loop (build_database_snapshot)");
-        const unsigned char* vehicle_id = sqlite3_column_text(playback_db->active_stmt, 0);
+        prof_scope_marker_named("row loop (build_database_events)");
+        const unsigned char* vehicle_id = sqlite3_column_text(event_stmt, 0);
         const char* vehicle_id_text = vehicle_id ? (const char*)vehicle_id : "unknown";
-        double lat = sqlite3_column_double(playback_db->active_stmt, 1);
-        double lon = sqlite3_column_double(playback_db->active_stmt, 2);
 
+        // Keep the selected population stable between reset snapshots.
+        bool visible = string_list_contains(&stream->visible_vehicle_ids, vehicle_id_text);
+        if (!visible && stream->visible_vehicle_ids.count >= stream->vehicle_count)
+        {
+            continue;
+        }
         if (!string_list_append_unique(&stream->visible_vehicle_ids, vehicle_id_text))
         {
             return -3;
@@ -1346,12 +1342,17 @@ build_database_snapshot(struct vehicle_stream* stream, struct playback_db* playb
             continue;
         }
 
-        if (!append_snapshot_vehicle(doc, snapshot_array, vehicle_id_text, lat, lon))
+        if (!_simulator_event_append(doc, snapshot_array, event_stmt))
         {
             return -2;
         }
 
         sent_row_count += 1;
+    }
+
+    if (step_result != SQLITE_DONE)
+    {
+        return -4;
     }
 
     playback_db->last_active_count = row_count;
@@ -1360,7 +1361,7 @@ build_database_snapshot(struct vehicle_stream* stream, struct playback_db* playb
 }
 
 static bool
-stream_send_current_snapshot(struct vehicle_stream* stream, struct websocket_server* server,
+stream_send_current_events(struct vehicle_stream* stream, struct websocket_server* server,
                              struct playback_db* playback_db)
 {
     prof_scope_marker;
@@ -1375,7 +1376,14 @@ stream_send_current_snapshot(struct vehicle_stream* stream, struct websocket_ser
     yyjson_mut_val* snapshot_array = NULL;
     char* snapshot = NULL;
     size_t snapshot_length = 0;
-    bool has_client = server_has_client(server);
+    server_lock(server);
+    bool has_client = server->client_connection != NULL;
+    U64 stream_generation = server->stream_generation;
+    server_unlock(server);
+    if (!has_client)
+    {
+        return false;
+    }
 
     if (!playback_db->ready)
     {
@@ -1385,7 +1393,22 @@ stream_send_current_snapshot(struct vehicle_stream* stream, struct websocket_ser
 
     if (stream->simulated_seconds > playback_db->max_time)
     {
-        stream->simulated_seconds = playback_db->min_time;
+        if (stream->cursor.initialized && stream->cursor.time < playback_db->max_time)
+        {
+            // Deliver the final interval before wrapping to a reset snapshot.
+            stream->simulated_seconds = playback_db->max_time;
+        }
+        else
+        {
+            stream->simulated_seconds = playback_db->min_time;
+            stream->cursor.reset_pending = true;
+        }
+    }
+
+    bool reset = _simulator_event_needs_reset(stream->cursor, stream->simulated_seconds, stream_generation, scenario_idx);
+    if (!reset && stream->simulated_seconds == stream->cursor.time)
+    {
+        return true;
     }
 
     doc = yyjson_mut_doc_new(NULL);
@@ -1406,8 +1429,9 @@ stream_send_current_snapshot(struct vehicle_stream* stream, struct websocket_ser
     String8 msg_id_name = SIMULATION_FIELD_NAME(MsgId);
     String8 scenario_id_name = SIMULATION_FIELD_NAME(ScenarioId);
     String8 stream_name = SIMULATION_FIELD_NAME(Stream);
+    city::SimulationMessageKind message_kind = reset ? city::SimulationMessageKind::Reset : city::SimulationMessageKind::Stream;
     bool id_added = yyjson_mut_obj_add_uint(doc, snapshot_root, (const char*)msg_id_name.str,
-                                            (U64)city::SimulationMessageKind::Stream);
+                                            (U64)message_kind);
     bool scenario_added = yyjson_mut_obj_add_uint(doc, snapshot_root, (const char*)scenario_id_name.str, scenario_idx);
     if (!id_added || !scenario_added)
     {
@@ -1423,16 +1447,15 @@ stream_send_current_snapshot(struct vehicle_stream* stream, struct websocket_ser
     }
 
     {
-        int database_rows = build_database_snapshot(stream, playback_db, doc, snapshot_array);
+        int database_rows = build_database_events(stream, playback_db, doc, snapshot_array, reset);
 
-        if (database_rows < -1)
+        if (database_rows < 0)
         {
             yyjson_mut_doc_free(doc);
-            copy_status(server->status_line, sizeof(server->status_line), "Snapshot buffer was too small.");
+            copy_status(server->status_line, sizeof(server->status_line), "Could not read or serialize event snapshot; check database values and schema.");
             return false;
         }
 
-        stream->packets_sent += (uint64_t)(database_rows > 0 ? database_rows : 0);
     }
 
     snapshot = yyjson_mut_write(doc, 0, &snapshot_length);
@@ -1450,19 +1473,14 @@ stream_send_current_snapshot(struct vehicle_stream* stream, struct websocket_ser
         return false;
     }
 
-    if (!has_client)
+    if (!server_send_text(server, snapshot, stream_generation))
     {
         free(snapshot);
         return false;
     }
 
-    if (!server_send_text(server, snapshot))
-    {
-        free(snapshot);
-        server_close_client(server);
-        return false;
-    }
-
+    stream->cursor = {true, false, stream->simulated_seconds, stream_generation, scenario_idx};
+    stream->packets_sent += (uint64_t)stream->last_sent_vehicle_count;
     free(snapshot);
     stream->frames_sent += 1;
     return true;
@@ -1473,7 +1491,13 @@ stream_send_frame(struct vehicle_stream* stream, struct websocket_server* server
                   U64 now_us)
 {
     prof_scope_marker;
-    if (!stream->streaming || stream->fps <= 0 || stream->vehicle_count <= 0)
+    server_lock(server);
+    U64 generation = server->stream_generation;
+    server_unlock(server);
+    U32 scenario = cur_simulation_scenario.load(std::memory_order_relaxed);
+    bool reset = _simulator_event_needs_reset(stream->cursor, stream->simulated_seconds, generation, scenario);
+    bool pending_interval = stream->cursor.initialized && stream->simulated_seconds > stream->cursor.time;
+    if ((!stream->streaming && !reset && !pending_interval) || stream->fps <= 0 || stream->vehicle_count <= 0)
     {
         return;
     }
@@ -1488,7 +1512,7 @@ stream_send_frame(struct vehicle_stream* stream, struct websocket_server* server
         return;
     }
 
-    if (!stream_send_current_snapshot(stream, server, playback_db))
+    if (!stream_send_current_events(stream, server, playback_db))
     {
         return;
     }
@@ -1907,7 +1931,12 @@ draw_ui(struct nk_context* ctx, struct websocket_server* server, struct vehicle_
 
         nk_layout_row_dynamic(ctx, slider_row_height, 1);
         nk_property_int(ctx, "FPS", 1, &stream->fps, 60, 1, 1);
+        int previous_vehicle_count = stream->vehicle_count;
         nk_property_int(ctx, "Vehicles", 1, &stream->vehicle_count, 10000, 1, 10);
+        if (previous_vehicle_count != stream->vehicle_count)
+        {
+            *timeline_changed = true;
+        }
 
         nk_layout_row_dynamic(ctx, text_row_height, 1);
         nk_labelf(ctx, NK_TEXT_LEFT, "Frames sent: %llu", (unsigned long long)stream->frames_sent);
@@ -2101,8 +2130,9 @@ App(int argc, char** argv)
 
         if (timeline_changed)
         {
+            stream.cursor.reset_pending = true;
             printf("Timeline Changed\n");
-            stream_send_current_snapshot(&stream, &server, &playback_db);
+            stream_send_current_events(&stream, &server, &playback_db);
         }
 
         glfwGetFramebufferSize(window, &framebuffer_width, &framebuffer_height);

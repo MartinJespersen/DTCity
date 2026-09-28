@@ -7,8 +7,8 @@ osm_init(U64 node_hashmap_size, U64 way_hashmap_size, String8 cache_path, String
     Debug_SetName(arena, "OSM network arena");
     Buffer<NodeList> node_hashmap = buffer_alloc<NodeList>(arena, node_hashmap_size);
     Buffer<WayList> way_hashmap = buffer_alloc<WayList>(arena, way_hashmap_size);
-    Map<NodeId, EcefLocation>* ecef_location_map = map_create<NodeId, EcefLocation>(arena, node_hashmap_size);
-    Map<NodeId, WgsLocation>* wgs_location_map = map_create<NodeId, WgsLocation>(arena, node_hashmap_size);
+    Map<NodeId, EcefLocation>* ecef_location_map = Map<NodeId, EcefLocation>::create(arena, node_hashmap_size);
+    Map<NodeId, WgsLocation>* wgs_location_map = Map<NodeId, WgsLocation>::create(arena, node_hashmap_size);
 
     Network* network = PushStruct(arena, Network);
     network->cache_file_location = str8_path_from_str8_list(arena, {cache_path, area, S("osm_data.json")});
@@ -30,7 +30,7 @@ osm_release(Network* osm_network)
 g_internal void
 structure_cleanup(Network* network)
 {
-    arena_release(network->arena);
+    osm_release(network);
 }
 
 g_internal async::UserFuncResult<osm::Network>
@@ -102,8 +102,8 @@ _parse_osm_data(osm::Network* osm_network)
                     EcefLocation loc = ecef_location_create(node_id, vec_3f64(coord_ecef.x, coord_ecef.y, coord_ecef.z));
                     WgsLocation wgs_loc = {.id = node_id, .lat = node_coord->lat, .lon = node_coord->lon};
 
-                    map_insert(osm_network->ecef_location_map, node_id, loc);
-                    map_insert(osm_network->wgs_location_map, node_id, wgs_loc);
+                    osm_network->ecef_location_map->insert(osm_network->arena, node_id, loc);
+                    osm_network->wgs_location_map->insert(osm_network->arena, node_id, wgs_loc);
 
                     chunk_list_insert(scratch.arena, node_id_chunk_list, node_id);
                 }
@@ -148,13 +148,14 @@ _road_edge_structure_create(Network* network)
     }
 
     Buffer<RoadEdge> road_edge_buf = buffer_from_chunk_list(network->arena, chunk_list);
-    Map<S64, RoadEdge*>* road_edge_map = map_create<S64, RoadEdge*>(network->arena, 1024);
+    Map<S64, RoadEdge*>* road_edge_map = &network->edge_structure.edge_map;
+    road_edge_map->init(network->arena, 1024);
     for (RoadEdge* edge = road_edge_buf.begin(); edge < road_edge_buf.end(); edge++)
     {
-        map_insert(road_edge_map, edge->id, edge);
+        road_edge_map->insert(network->arena, edge->id, edge);
     }
 
-    network->edge_structure = {.edges = road_edge_buf, .edge_map = *road_edge_map};
+    network->edge_structure.edges = road_edge_buf;
 }
 
 g_internal WgsNode*
@@ -211,7 +212,7 @@ g_internal EcefLocation
 location_get(Network* network, NodeId node_id)
 {
     prof_scope_marker;
-    EcefLocation* loc = map_get(network->ecef_location_map, node_id);
+    EcefLocation* loc = network->ecef_location_map->get(node_id);
     if (loc)
     {
         return *loc;
@@ -224,7 +225,7 @@ g_internal WgsLocation
 wgs_location_get(Network* network, NodeId node_id)
 {
     prof_scope_marker;
-    WgsLocation* loc = map_get(network->wgs_location_map, node_id);
+    WgsLocation* loc = network->wgs_location_map->get(node_id);
     if (loc)
     {
         return *loc;

@@ -31,16 +31,18 @@ class Simulator
     void
     simulator_disconnect();
     void
-    simulator_update(Arena* arena, Buffer<Coordinate>* out_coords, String8List* in_out_options, U32 option_idx,
+    simulator_update(Arena* arena, CoordinateBatch* out_coords, String8List* in_out_options, U32 option_idx,
                      U64 cur_frame);
     void
     simulator_options_get();
+    void
+    simulator_snapshot_request();
     void
     simulator_scenario_set(U32 scenario_idx, Buffer<String8> options);
 
   private:
     SimulationError
-    _simulator_interaction(Arena* arena, Buffer<Coordinate>* out_coords, String8List* out_options,
+    _simulator_interaction(Arena* arena, CoordinateBatch* out_coords, String8List* out_options,
                            B32* options_received, U32 expected_scenario_idx, U64* scenario_id);
 };
 } // namespace city

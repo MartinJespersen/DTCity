@@ -65,6 +65,18 @@ Simulator::simulator_options_get()
 }
 
 void
+Simulator::simulator_snapshot_request()
+{
+    if (!connected)
+    {
+        return;
+    }
+    ScratchScope scratch = ScratchScope(0, 0);
+    String8 request = push_str8f(scratch.arena, "{\"msg_id\":%u}", (U32)SimulationMessageKind::RequestSnapshot);
+    _simulator_message_push(message_heap, &msg_send_queue, request);
+}
+
+void
 Simulator::simulator_scenario_set(U32 scenario_idx, Buffer<String8> options)
 {
     Assert(connected);
@@ -81,7 +93,7 @@ Simulator::simulator_scenario_set(U32 scenario_idx, Buffer<String8> options)
 }
 
 void
-Simulator::simulator_update(Arena* arena, Buffer<Coordinate>* out_coords, String8List* out_options, U32 option_idx,
+Simulator::simulator_update(Arena* arena, CoordinateBatch* out_coords, String8List* out_options, U32 option_idx,
                             U64 cur_frame)
 {
     *out_coords = {};
@@ -167,8 +179,12 @@ _simulator_coordinates_from_json(Arena* arena, ondemand::array& array, Buffer<Co
             return error;
         }
 
-        coord->lat = coord_view.lat;
-        coord->lon = coord_view.lon;
+        coord->time = coord_view.time;
+        coord->event_type = coord_view.event_type;
+        coord->node_from_id = coord_view.node_from_id;
+        coord->node_to_id = coord_view.node_to_id;
+        coord->from = glm::dvec2(coord_view.lon_from, coord_view.lat_from);
+        coord->to = glm::dvec2(coord_view.lon_to, coord_view.lat_to);
         String8 id_str = str8((U8*)coord_view.id.data(), coord_view.id.size());
         U64 needle_start = str8_substr_find(id_str, S("_bicycle"), 0, MatchFlag_CaseInsensitive);
         coord->vehicle_type = VehicleType::Car;
@@ -194,7 +210,7 @@ _simulator_coordinates_from_json(Arena* arena, ondemand::array& array, Buffer<Co
 }
 
 SimulationError
-Simulator::_simulator_interaction(Arena* arena, Buffer<Coordinate>* out_coords, String8List* out_options,
+Simulator::_simulator_interaction(Arena* arena, CoordinateBatch* out_coords, String8List* out_options,
                                   B32* options_received, U32 expected_scenario_idx, U64* scenario_id)
 {
     SimulationError simulation_error = {};
@@ -259,6 +275,7 @@ Simulator::_simulator_interaction(Arena* arena, Buffer<Coordinate>* out_coords, 
                 };
                 break;
                 case SimulationMessageKind::Stream:
+                case SimulationMessageKind::Reset:
                 {
                     U64 id = 0;
                     ondemand::array array;
@@ -280,11 +297,14 @@ Simulator::_simulator_interaction(Arena* arena, Buffer<Coordinate>* out_coords, 
                     {
                         return SimulationError(SimulationErrorType::Json, json_error);
                     }
-                    json_error = _simulator_coordinates_from_json(arena, array, out_coords);
+                    Buffer<Coordinate> incoming = {};
+                    json_error = _simulator_coordinates_from_json(arena, array, &incoming);
                     if (json_error)
                     {
                         return SimulationError(SimulationErrorType::Json, json_error);
                     }
+                    // Reset currently uses the same event handling as Stream.
+                    simulator_coordinate_batch_append(arena, out_coords, incoming, false);
                 };
                 break;
                 default:

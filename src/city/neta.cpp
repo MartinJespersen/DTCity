@@ -132,18 +132,18 @@ osm_way_to_edges_map_create(Arena* arena, osm::Network* network, String8 file_pa
         }
     }
 
-    Map<S64, EdgeList>* edge_map = map_create<S64, EdgeList>(arena, 10);
+    Map<S64, EdgeList>* edge_map = Map<S64, EdgeList>::create(arena, 10);
     for (U32 i = 0; i < edge_buf.size; i++)
     {
         Edge* edge = edge_buf[i];
-        EdgeList* list_res = map_get(edge_map, edge->osm_id);
+        EdgeList* list_res = edge_map->get(edge->osm_id);
         EdgeNode* edge_node = PushStruct(arena, EdgeNode);
         edge_node->edge = edge;
 
         if (!list_res)
         {
             EdgeList dummy_edge_list = {};
-            list_res = map_insert(edge_map, edge->osm_id, dummy_edge_list);
+            list_res = edge_map->insert(arena, edge->osm_id, dummy_edge_list);
         }
 
         SLLQueuePush(list_res->first, list_res->last, edge_node);

@@ -7,6 +7,8 @@
 #include <memory>
 #include <new>
 #include <utility>
+#include <type_traits>
+#include <mimalloc.h>
 
 ////////////////////////////////
 //~ rjf: Base Includes

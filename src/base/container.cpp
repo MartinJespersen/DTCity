@@ -1,4 +1,95 @@
+
 ////////////////////////////////
+//~Array
+template <typename T>
+Array<T>::Array(Allocator* allocator, U32 size) noexcept
+{
+    this->data = static_cast<T*>(allocator->push(sizeof(T) * size, alignof(T)));
+    for (U32 i = 0; i < size; ++i)
+    {
+        new (&this->data[i]) T{};
+    }
+    this->size = size;
+    this->type = AllocationType::Arena;
+}
+
+template <typename T>
+Array<T>::Array(U32 size) noexcept
+{
+    this->size = size;
+    this->data = new T[size];
+    this->type = AllocationType::General;
+}
+template <typename T>
+Array<T>::~Array() noexcept
+{
+    _array_release();
+}
+
+template <typename T>
+Array<T>::Array(Array&& other) noexcept : Array()
+{
+    *this = std::move(other);
+}
+
+template <typename T>
+Array<T>&
+Array<T>::operator=(Array&& other) noexcept
+{
+    if (this != &other)
+    {
+        _array_release();
+        data = std::exchange(other.data, nullptr);
+        size = std::exchange(other.size, 0);
+        type = std::exchange(other.type, AllocationType::Arena);
+    }
+    return *this;
+}
+
+template <typename T>
+T*
+Array<T>::begin() noexcept
+{
+    return data;
+}
+
+template <typename T>
+const T*
+Array<T>::begin() const noexcept
+{
+    return data;
+}
+
+template <typename T>
+T*
+Array<T>::end() noexcept
+{
+    return size ? data + size : data;
+}
+
+template <typename T>
+const T*
+Array<T>::end() const noexcept
+{
+    return size ? data + size : data;
+}
+
+template <typename T>
+T&
+Array<T>::operator[](U64 index) noexcept
+{
+    Assert(index < size);
+    return data[index];
+}
+
+template <typename T>
+const T&
+Array<T>::operator[](U64 index) const noexcept
+{
+    Assert(index < size);
+    return data[index];
+}
+
 //~mgj: Container
 
 template <typename T>
@@ -33,7 +124,8 @@ BufferItemRemove(Buffer<T>* in_out_buffer, U32 index)
 {
     Assert(index < in_out_buffer->size);
     U32 type_size = sizeof(T);
-    MemoryCopy(in_out_buffer->data + index, in_out_buffer->data + index + 1, type_size * (in_out_buffer->size - index - 1));
+    MemoryCopy(in_out_buffer->data + index, in_out_buffer->data + index + 1,
+               type_size * (in_out_buffer->size - index - 1));
     in_out_buffer->size--;
 }
 
@@ -313,9 +405,124 @@ str8_from_chunk_list(Arena* arena, ChunkList<U8>* list)
     }
     return buffer;
 }
+
 // Linked List Map
-lib_internal inline U64
-map_hash_u64(U64 x)
+
+template <typename K, typename V>
+Map<K, V>::Map(Allocator* allocator, U64 bucket_capacity)
+{
+    this->init(allocator->arena, bucket_capacity);
+}
+
+template <typename K, typename V>
+Map<K, V>*
+Map<K, V>::create(Arena* arena, U64 bucket_capacity)
+{
+    using MapType = Map<K, V>;
+    Map* map = PushStruct(arena, MapType);
+    map->init(arena, bucket_capacity);
+    return map;
+}
+
+template <typename K, typename V>
+void
+Map<K, V>::init(Arena* arena, U64 bucket_capacity)
+{
+    static_assert(std::is_trivially_copyable_v<K> && std::is_trivially_copyable_v<V>);
+    static_assert(std::is_trivially_destructible_v<K> && std::is_trivially_destructible_v<V>);
+    AssertAlways(bucket_capacity <= (U64(1) << 63));
+    U64 actual_capacity = _round_up_pow2_u64(bucket_capacity);
+    AssertAlways(actual_capacity <= U64(-1) / sizeof(MapChunkList<K, V>));
+    Assert(!v);
+    using Bucket = MapChunkList<K, V>;
+    v = PushArray(arena, Bucket, actual_capacity);
+    capacity = actual_capacity;
+}
+
+template <typename K, typename V>
+void
+Map<K, V>::clear()
+{
+    for (U64 index = 0; index < capacity; ++index)
+    {
+        for (MapChunk<K, V>* chunk = v[index].first; chunk; chunk = chunk->next)
+        {
+            chunk->count = 0;
+        }
+        v[index].total_count = 0;
+    }
+}
+
+template <typename K, typename V>
+V*
+Map<K, V>::get(K key)
+{
+    if (capacity)
+    {
+        U64 hash = _hash_u64((U64)key);
+        U64 index = hash % capacity;
+        for (MapChunk<K, V>* chunk = v[index].first; chunk; chunk = chunk->next)
+        {
+            for (U64 i = 0; i < chunk->count; ++i)
+            {
+                if (chunk->v[i].key == key)
+                    return &chunk->v[i].value;
+            }
+        }
+    }
+    return nullptr;
+}
+
+template <typename K, typename V>
+MapResult
+Map<K, V>::get(K key, V** out_value)
+{
+    *out_value = get(key);
+    return *out_value ? MapResult::Success : MapResult::NotFound;
+}
+
+template <typename K, typename V>
+V*
+Map<K, V>::insert(Arena* arena, K key, const V& value)
+{
+    if (!capacity)
+        init(arena, 8);
+
+    U64 hash = _hash_u64((U64)key);
+    U64 index = hash % capacity;
+    MapChunkList<K, V>* chunk_list = &v[index];
+    for (MapChunk<K, V>* chunk = chunk_list->first; chunk; chunk = chunk->next)
+    {
+        for (U64 i = 0; i < chunk->count; ++i)
+        {
+            if (chunk->v[i].key == key)
+                return nullptr;
+        }
+    }
+
+    // Reuse existing chunks after clear() before allocating another one.
+    MapChunk<K, V>* chunk = chunk_list->first;
+    while (chunk && chunk->count == ArrayCount(chunk->v))
+        chunk = chunk->next;
+    if (!chunk)
+    {
+        using Chunk = MapChunk<K, V>;
+        chunk = PushStruct(arena, Chunk);
+        SLLQueuePush(chunk_list->first, chunk_list->last, chunk);
+        chunk_list->chunk_count += 1;
+    }
+
+    U64 i = chunk->count;
+    chunk->v[i].key = key;
+    chunk->v[i].value = value;
+    chunk_list->total_count += 1;
+    chunk->count += 1;
+    return &chunk->v[i].value;
+}
+
+template <typename K, typename V>
+U64
+Map<K, V>::_hash_u64(U64 x)
 {
     prof_scope_marker;
     String8 str = {.str = (U8*)&x, .size = sizeof(U64)};
@@ -323,8 +530,9 @@ map_hash_u64(U64 x)
     return res;
 }
 
-lib_internal inline U64
-map_round_up_pow2_u64(U64 v)
+template <typename K, typename V>
+U64
+Map<K, V>::_round_up_pow2_u64(U64 v)
 {
     if (v <= 8)
         return 8;
@@ -338,89 +546,19 @@ map_round_up_pow2_u64(U64 v)
     return v + 1;
 }
 
-template <typename K, typename V>
-lib_internal Map<K, V>*
-map_create(Arena* arena, U64 capacity)
+template <typename T>
+void
+Array<T>::_array_release() noexcept
 {
-    using MapType = Map<K, V>;
-    Map<K, V>* map = PushStruct(arena, MapType);
-    map->arena = arena;
-    U64 actual_cap = map_round_up_pow2_u64(capacity);
-    using MapKeyValuePairList = MapChunkList<K, V>;
-    map->v = PushArray(arena, MapKeyValuePairList, actual_cap);
-    map->capacity = actual_cap;
-    return map;
-}
-
-template <typename K, typename V>
-lib_internal V*
-map_get(Map<K, V>* m, K key)
-{
-    U64 hash = map_hash_u64(key);
-    U64 index = hash % m->capacity;
-    MapChunkList<K, V>* chunk_list = &m->v[index];
-    MapChunk<K, V>* chunk = chunk_list->first;
-    while (chunk)
+    if (type == AllocationType::General)
+        delete[] data;
+    else
     {
-        for (U64 i = 0; i < chunk->count; ++i)
-        {
-            if (chunk->v[i].key == key)
-                return &chunk->v[i].value;
-        }
-        chunk = chunk->next;
+        // The array owns element lifetimes; the allocator owns their storage.
+        for (U32 i = size; i > 0; --i)
+            data[i - 1].~T();
     }
-    return nullptr;
-}
-
-template <typename K, typename V>
-lib_internal MapResult
-map_get(Map<K, V>* m, K key, V** out_value)
-{
-    V* value = map_get(m, key);
-    if (value)
-    {
-        *out_value = value;
-        return MapResult::Success;
-    }
-
-    *out_value = nullptr;
-    return MapResult::NotFound;
-}
-
-template <typename K, typename V>
-lib_internal V*
-map_insert(Map<K, V>* m, K key, V& value)
-{
-    using KeyPair = MapChunk<K, V>;
-
-    U64 hash = map_hash_u64((U64)key);
-    U64 index = hash % m->capacity;
-    MapChunkList<K, V>* chunk_list = &m->v[index];
-    MapChunk<K, V>* chunk = chunk_list->first;
-
-    // check if key is already present
-    for (; chunk; chunk = chunk->next)
-    {
-        for (U64 i = 0; i < chunk->count; ++i)
-        {
-            if (chunk->v[i].key == key)
-                return nullptr;
-        }
-    }
-
-    if (!chunk || chunk->count >= ArrayCount(chunk->v))
-    {
-        chunk = PushStruct(m->arena, KeyPair);
-        SLLQueuePush(chunk_list->first, chunk_list->last, chunk);
-        chunk_list->chunk_count += 1;
-    }
-
-    chunk = chunk_list->last;
-    U64 i = chunk->count;
-    chunk->v[i].key = key;
-    chunk->v[i].value = value;
-    chunk_list->total_count += 1;
-    chunk->count += 1;
-
-    return &chunk->v[i].value;
+    data = nullptr;
+    size = 0;
+    type = AllocationType::Arena;
 }

@@ -87,9 +87,9 @@ and launched from another working directory. Development builds still fall back
 to the source-tree resource paths.
 
 Override the output folder with `-DDTCITY_PACKAGE_DIR=C:/path/to/dist` when configuring.
-By default, the bundle includes `simulator/database/eskiltuna.sqlite` if it exists.
+By default, the bundle includes `simulator/database/eskiltuna_test.sqlite` if it exists.
 Set `-DDTCITY_PACKAGE_SIMULATOR_DATABASE=C:/path/to/playback.sqlite` to package another
-database (renamed to `eskiltuna.sqlite`), or set the variable to an empty string to
+database (renamed to `eskiltuna_test.sqlite`), or set the variable to an empty string to
 omit the database and select one in the simulator UI. Packaging updates existing
 files without deleting the output folder; use a fresh output folder for a clean release.
 
@@ -99,7 +99,7 @@ on the destination machine. Cesium ion credentials and network access are not bu
 ### C Macros
 The following application specific macros are used to enable address sanitization, build tools and profiling:
 * -DBUILD_DEBUG (Additional debug information e.g vulkan validation layer support)
-* -DASAN_ENABLE=ON (enable address sanitizer support)
+* -DASAN_ENABLED=ON (enable address sanitizer support)
 * -DTRACY_PROFILE_ENABLE (Enable tracy profiling)
 * -DSHADER_DEBUG=ON (Shader debug information; requires BUILD_DEBUG=ON)
 
@@ -109,3 +109,48 @@ build directory under `shaders/bin`, so debug and release builds cannot overwrit
 each other's shaders. Packaging copies the selected build's shaders into `data/shaders/bin`.
 
 CMake presets define these macros based on what type of build configuration is used - debug, release or profile. These defaults can be changed e.g. you might want to enable address sanitization in a profile build.
+
+### Simulator event streaming
+
+The simulator reads `agent_events` from `simulator/database/eskiltuna_test.sqlite`.
+A stream message uses `msg_id: 3`; a reset snapshot uses `msg_id: 5`.
+Both contain the `stream` array of events, without a separate `reset` field. Each event
+contains `id`, `time`, `event_type`, `node_from_id`, `node_to_id`, `lon_from`,
+`lat_from`, `lon_to`, and `lat_to`.
+
+Connections, playback starts, seeks, scenario changes, and vehicle filter changes
+send a reset snapshot containing the latest event per selected agent at the
+playback time. Normal playback sends all events in `(last_sent_time, playback_time]`,
+ordered by timestamp and database row ID. The cursor advances only after a
+successful send. Pausing retains client state without periodic messages.
+Clients can request a fresh snapshot with `{"msg_id":4}`.
+
+The vehicle limit caps the population, not event rows: selected agents retain
+all their events between frames. The client currently handles Reset and Stream
+identically, appending their events without clearing the existing population.
+
+### Mimalloc and AddressSanitizer
+
+The application, Simulator, and base-layer tests replace global C++ `new`/`delete`
+with mimalloc, including ASan builds. With `ASAN_ENABLED=ON`, CMake downloads a
+hash-pinned mimalloc 2.2.6 source archive and builds a separate static library with
+`MI_TRACK_ASAN=1` and padding enabled. Other configurations use an installed mimalloc
+package (such as vcpkg), or download and build the same pinned version as a static
+library if no package is available. This also supports simulator-only presets
+without a vcpkg toolchain. The fallback's first configure needs network access;
+an offline checkout can be provided with `FETCHCONTENT_SOURCE_DIR_DTCITY_MIMALLOC_RELEASE_SOURCE`.
+The first ASan configure needs network access (or a prepopulated FetchContent cache).
+For an offline source checkout, set `FETCHCONTENT_SOURCE_DIR_DTCITY_MIMALLOC_SOURCE`
+to an already-patched copy of that version.
+
+The ASan dependency includes a small patch that restores poisoning of unused bytes
+at the end of rounded allocation blocks. Without it, the overflow probe misses a
+one-byte write past a 64-byte allocation. `cmake/MimallocAsanPatch.cmake` applies
+this patch only to the downloaded source. CRT `malloc`/`free` are not overridden.
+This integration does not provide all the diagnostics or quarantine behavior of
+ASan's own heap allocator; mimalloc reports poisoned-memory accesses through ASan.
+
+With `BUILD_TESTS=ON`, build `city_tests`, `utm_tests`, and `mimalloc_asan_probe`, then
+run `ctest --test-dir <build-directory>/tests --output-on-failure`. The ASan probes
+check allocation ownership and poisoned boundaries, and run deliberate overflow
+and use-after-free accesses in separate processes, requiring an ASan error report.

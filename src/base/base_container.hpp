@@ -1,6 +1,52 @@
 
 
 ///////////////////////////////////////////////////////////////////////
+// Heap-backed contiguous array. Growth invalidates pointers and iterators.
+template <typename T>
+struct DynamicArray
+{
+    T* data = {};
+    U64 size = {};
+    U64 capacity = {};
+
+    static_assert(std::is_trivially_copyable_v<T> && std::is_trivially_destructible_v<T>,
+                  "DynamicArray requires trivially copyable elements");
+
+    DynamicArray() = default;
+    explicit DynamicArray(U64 initial_item_capacity) noexcept;
+    ~DynamicArray();
+    DynamicArray(const DynamicArray&) = delete;
+    DynamicArray&
+    operator=(const DynamicArray&) = delete;
+    DynamicArray(DynamicArray&& other) noexcept;
+    DynamicArray&
+    operator=(DynamicArray&& other) noexcept;
+
+    void
+    reserve(U64 item_capacity) noexcept;
+    T*
+    push(const T& item) noexcept;
+    void
+    push(const T* items, U64 item_count) noexcept;
+    void
+    clear() noexcept;
+    void
+    release() noexcept;
+    T&
+    operator[](U64 index) noexcept;
+    const T&
+    operator[](U64 index) const noexcept;
+    T*
+    begin() noexcept;
+    const T*
+    begin() const noexcept;
+    T*
+    end() noexcept;
+    const T*
+    end() const noexcept;
+};
+
+///////////////////////////////////////////////////////////////////////
 // DynamicArenaArray
 template <typename T>
 struct ArenaArray
@@ -13,7 +59,7 @@ struct ArenaArray
   public:
     U64 size;
 
-    ArenaArray(U64 max_capacity) noexcept;
+    ArenaArray(U64 initial_item_capacity, U64 reserve_byte_capacity = KB(64), ArenaFlags arena_flags = 0) noexcept;
     ~ArenaArray();
 
     static void
@@ -43,6 +89,9 @@ struct ArenaArray
 
     void
     push(T* arr, U64 size) noexcept;
+
+    void
+    clear() noexcept;
 };
 
 /////////////////////////////////////////////////////////////////////////
@@ -151,15 +200,28 @@ struct ArrayResourcePool
     ArrayItemHeader<T>* items;
     U32 capacity;
     U32 free_list;
+    U32 item_in_use_count;
 
+    ArrayResourcePool(Arena* arena, U32 capacity) noexcept;
     static ArrayResourcePool<T>*
     create(Arena* arena, U32 capacity);
+
+    void
+    init(Arena* arena, U32 capacity);
+    ArrayResourcePoolHandle
+    item_new(T** out_item);
 
     bool
     item_from_handle(ArrayResourcePoolHandle item_handle, T** out_value);
 
     ArrayResourcePoolHandle
     handle_get();
+
+    void
+    invalidate_all();
+
+    bool
+    is_handle_valid(ArrayResourcePoolHandle item_handle);
 
     void
     item_free(ArrayResourcePoolHandle item_handle);
@@ -169,4 +231,8 @@ struct ArrayResourcePool
 
     ArrayResourcePoolIterator<T>
     end();
+
+  private:
+    void
+    reset_freelist();
 };

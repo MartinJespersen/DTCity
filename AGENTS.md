@@ -30,6 +30,8 @@ In the src directory all sub-directories are layers that are all responsible for
 - For the most part use Assert instead of AssertAlways
 - limit the number of memory arena's, and only create a new one when another arena does not have a similar lifetime.
 - The frame loop should never wait for resources, task, etc. All blocking operations should be avoided.
+# Decision making
+- Always ask for me to elaborate if needed? E.g something is unclear or there are multiple ways to implement a feature.
 
 # Important cleanup before committing 
 - move types and declarations into the headers and additional create declarations of functions if not already done, but only if the functions and types are public otherwise move them to the top of the cpp file.

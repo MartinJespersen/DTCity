@@ -7,6 +7,12 @@
 #undef MARKUP_LAYER_COLOR
 #define MARKUP_LAYER_COLOR 0.20f, 0.60f, 0.80f
 
+// The unity build includes this once per executable. ASan requires the tracking variant.
+#if ASAN_ENABLED && !DTCITY_MIMALLOC_ASAN
+#error ASan builds must link the ASan-enabled mimalloc target
+#endif
+#include <mimalloc-new-delete.h>
+
 #include "debug_forward_ref.hpp"
 #include "base_core.cpp"
 #include "base_profile.cpp"

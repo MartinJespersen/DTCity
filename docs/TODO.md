@@ -1,8 +1,11 @@
-
-# Regressions
-* [Medium] Restore macOS portability for the simulator message symbol sets. `symbol_set.h` only implements Windows and Linux section handling; its unconditional inclusion causes a compile-time `#error` on macOS. Add Mach-O support or replace these registries with portable tables.
-* [Medium] Include GPU-pending tile replacements in the global reprocessing limit. Counting only active CPU task nodes allows staging buffers and Vulkan submissions to accumulate after the CPU tasks finish.
-* [Medium] Increment the tile mesh processor generation only when mesh classification inputs change. Changing or re-enabling a shader overlay option should not re-tessellate every tile.
+# Refactor
+- Allocator should not have a create function as it creates a pointer that is not a smart pointer
+- Make agent simulator work after refactor
+  - Agent memory especially for threading should be made safe (maybe the task system should be reworked);
+- Improve interface to AgentSystem in city_update
+- Task System refactor
+  - The generic value should be wrapped in a unique ptr to allow so it will always be destroyed
+- Config should be moved to static array of struct or a static initialized global variable in separate file
 
 # Project TODO:
 - Agents need to be added and removed 
@@ -17,7 +20,7 @@
   - heap map?
 
 # Tessellation review findings
-* Keep the current tile buffers active until replacement uploads have completed on the GPU.
+* [x] Keep the current tile buffers active until replacement uploads have completed on the GPU.
 
 
 # features

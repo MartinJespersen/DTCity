@@ -8,9 +8,18 @@
 //~ rjf: Third Party Includes
 #include "third_party/stb_sprintf.h"
 ////////////////////////////////
-//~ rjf: String Types
+// Cpp string
+struct Str8
+{
+    U8* str;
+    U64 size;
 
-typedef struct String8 String8;
+    Str8() noexcept = default;
+    Str8(U64 size) noexcept;
+    ~Str8() noexcept;
+};
+
+//~ rjf: String Types
 struct String8
 {
     U8* str;
@@ -181,10 +190,10 @@ cstring32_length(U32* c);
 //~ rjf: String Constructors
 
 #define str8_lit(S) str8((U8*)(S), sizeof(S) - 1)
-#define str8_lit_comp(S)                                                                                                                                                                               \
-    {                                                                                                                                                                                                  \
-        (U8*)(S),                                                                                                                                                                                      \
-        sizeof(S) - 1,                                                                                                                                                                                 \
+#define str8_lit_comp(S) \
+    {                    \
+        (U8*)(S),        \
+        sizeof(S) - 1,   \
     }
 #define str8_varg(S) (int)((S).size), ((S).str)
 
@@ -548,7 +557,8 @@ lib_internal U64
 str8_deserial_read_windows_utf16_string16(String8 string, U64 off, String16* str_out);
 lib_internal U64
 str8_deserial_read_block(String8 string, U64 off, U64 size, String8* block_out);
-#define str8_deserial_read_array(string, off, ptr, count) str8_deserial_read((string), (off), (ptr), sizeof(*(ptr)) * (count), sizeof(*(ptr)))
+#define str8_deserial_read_array(string, off, ptr, count) \
+    str8_deserial_read((string), (off), (ptr), sizeof(*(ptr)) * (count), sizeof(*(ptr)))
 #define str8_deserial_read_struct(string, off, ptr) str8_deserial_read_array(string, off, ptr, 1)
 
 //- rjf: Allocation

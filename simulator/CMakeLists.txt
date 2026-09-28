@@ -13,6 +13,7 @@ option(TRACY_PROFILE_ENABLE "Enable Tracy profiler" OFF)
 
 find_package(OpenGL REQUIRED)
 find_package(Threads REQUIRED)
+include(${CMAKE_CURRENT_LIST_DIR}/../cmake/Mimalloc.cmake)
 
 set(GLFW_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
 set(GLFW_BUILD_TESTS OFF CACHE BOOL "" FORCE)
@@ -121,6 +122,7 @@ if(WIN32)
 endif()
 
 target_link_libraries(Simulator PRIVATE glfw)
+target_link_libraries(Simulator PRIVATE dtcity_mimalloc)
 
 if(MSVC)
     target_compile_options(Simulator PRIVATE /W4)

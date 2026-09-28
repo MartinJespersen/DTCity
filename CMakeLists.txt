@@ -137,19 +137,22 @@ if(BUILD_CITY OR BUILD_TESTS)
   find_package(glm CONFIG REQUIRED)
 endif()
 
+if(BUILD_CITY OR BUILD_TESTS OR BUILD_SIMULATOR)
+  include(cmake/Mimalloc.cmake)
+endif()
+
 if(BUILD_TESTS)
   add_subdirectory(tests)
 endif()
 
 if(BUILD_CITY)
   find_package(meshoptimizer CONFIG REQUIRED)
-  find_package(mimalloc CONFIG REQUIRED)
   add_executable(city)
   # Use simdjson's explicit error-code API in both the application and library sources.
   target_compile_definitions(city PRIVATE SIMDJSON_EXCEPTIONS=0
       DTCITY_SHADER_DIR="${CMAKE_CURRENT_BINARY_DIR}/shaders")
   target_link_libraries(city PRIVATE meshoptimizer::meshoptimizer)
-  target_link_libraries(city PRIVATE $<IF:$<TARGET_EXISTS:mimalloc-static>,mimalloc-static,mimalloc>)
+  target_link_libraries(city PRIVATE dtcity_mimalloc)
   list(APPEND ALL_TARGETS city)
 
   include_directories(${CMAKE_CURRENT_SOURCE_DIR}/src ${CMAKE_CURRENT_SOURCE_DIR}/src/third_party/imgui)
@@ -326,7 +329,7 @@ endif()
 
 if(BUILD_CITY AND BUILD_SIMULATOR)
   set(DTCITY_PACKAGE_DIR "${CMAKE_BINARY_DIR}/dist" CACHE PATH "Directory for the portable application bundle")
-  set(DTCITY_PACKAGE_SIMULATOR_DATABASE "${CMAKE_SOURCE_DIR}/simulator/database/eskiltuna.sqlite"
+  set(DTCITY_PACKAGE_SIMULATOR_DATABASE "${CMAKE_SOURCE_DIR}/simulator/database/eskiltuna_test.sqlite"
       CACHE FILEPATH "Simulator database to package; empty omits the database")
 
   install(TARGETS city Simulator RUNTIME DESTINATION . COMPONENT Runtime)
@@ -336,7 +339,7 @@ if(BUILD_CITY AND BUILD_SIMULATOR)
   if(DTCITY_PACKAGE_SIMULATOR_DATABASE)
     if(EXISTS "${DTCITY_PACKAGE_SIMULATOR_DATABASE}")
       install(FILES "${DTCITY_PACKAGE_SIMULATOR_DATABASE}" DESTINATION simulator/database
-              RENAME eskiltuna.sqlite COMPONENT Runtime)
+              RENAME eskiltuna_test.sqlite COMPONENT Runtime)
     else()
       message(STATUS "Packaging without a simulator database: ${DTCITY_PACKAGE_SIMULATOR_DATABASE} does not exist")
     endif()

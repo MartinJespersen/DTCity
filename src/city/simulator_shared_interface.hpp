@@ -9,6 +9,8 @@ enum class SimulationMessageKind : U32
     Options = 1,
     ChangeScenario = 2,
     Stream = 3,
+    RequestSnapshot = 4,
+    Reset = 5,
 };
 
 enum class SimulationFieldType
@@ -25,28 +27,14 @@ struct SimulationFieldName
     String8 name;
 };
 
-// Returns the registered field name as String8, from either client or simulator code.
-#define SIMULATION_FIELD_NAME(Type) (SyAddress(::city::JSON_FIELD_NAME, Type)->name)
-
-#define SYMBOL_SET_DEFINE JSON_FIELD_NAME
-#define JSON_FIELD_NAME_Type SimulationFieldName
-#define JSON_FIELD_NAME_elf_section ".sy.jsonfield"
-#define JSON_FIELD_NAME_coff_a_section ".sy$jsonfield_a"
-#define JSON_FIELD_NAME_coff_m_section ".sy$jsonfield_m"
-#define JSON_FIELD_NAME_coff_z_section ".sy$jsonfield_z"
-#define JSON_FIELD_NAME_marker jsonfield
-
-extern "C"
-{
-#include "third_party/symbol_set/symbol_set.define.h"
-
-#define JSON_FIELD_NAME_DEFINE(Type, Name) SyDefine(JSON_FIELD_NAME, Type) = {SimulationFieldType::Type, S(Name)}
-
-    JSON_FIELD_NAME_DEFINE(MsgId, "msg_id");
-    JSON_FIELD_NAME_DEFINE(Options, "options");
-    JSON_FIELD_NAME_DEFINE(ScenarioId, "scenario_idx");
-    JSON_FIELD_NAME_DEFINE(Stream, "stream");
-}
+// Field names are indexed by the shared enum on every platform.
+static const SimulationFieldName simulation_field_names[] = {
+    {SimulationFieldType::MsgId, S("msg_id")},
+    {SimulationFieldType::Options, S("options")},
+    {SimulationFieldType::ScenarioId, S("scenario_idx")},
+    {SimulationFieldType::Stream, S("stream")},
+};
+#define SIMULATION_FIELD_NAME(Type) (::city::simulation_field_names[(U32)::city::SimulationFieldType::Type].name)
 
 enum class SimulationErrorType
 {

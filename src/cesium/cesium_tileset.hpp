@@ -5,7 +5,8 @@ namespace cesium
 
 struct TilesetRenderer;
 
-typedef B32 (*TileMeshProcessFunc)(Arena* arena, Buffer<render::TileVertex> vertices, Buffer<U32> indices, void* user_data, render::TileMesh* out_mesh);
+typedef B32 (*TileMeshProcessFunc)(Arena* arena, Buffer<render::TileVertex> vertices, Buffer<U32> indices,
+                                   void* user_data, render::TileMesh* out_mesh);
 
 struct TileMeshProcessor
 {
@@ -18,7 +19,8 @@ struct RasterTileInfo
     const CesiumGltf::ImageAsset& image;
     const std::any& renderer_options;
 
-    RasterTileInfo(const CesiumGltf::ImageAsset& image, const std::any& renderer_options) : image(image), renderer_options(renderer_options)
+    RasterTileInfo(const CesiumGltf::ImageAsset& image, const std::any& renderer_options)
+        : image(image), renderer_options(renderer_options)
     {
     }
 };
@@ -88,7 +90,7 @@ struct RasterRenderResource
 
 struct TilesetRenderer
 {
-    Allocator* allocator;
+    Allocator allocator;
 
     TileMeshProcessor tile_mesh_processor;
     std::atomic<B32> tile_mesh_processor_enabled;
@@ -121,7 +123,8 @@ struct TilesetRenderer
 
 // Lifecycle
 g_internal void
-tileset_renderer_create(TilesetRenderer* tileset, ArrayResourcePoolHandle tileset_handle, async::ThreadPool* threads, String8 url, F64 origin_longitude, F64 origin_latitude, F64 origin_height,
+tileset_renderer_create(TilesetRenderer* tileset, ArrayResourcePoolHandle tileset_handle, async::ThreadPool* threads,
+                        String8 url, F64 origin_longitude, F64 origin_latitude, F64 origin_height,
                         S64 tileset_ion_asset_id, U64 cache_byte_size);
 // Poll on the render thread until true; keep the renderer alive between calls.
 g_internal B32
@@ -141,8 +144,10 @@ tileset_render_resources_release(TileRenderResources* list);
 
 // Private functions
 g_internal TileRenderResources*
-_tile_render_data_from_gltf(const CesiumGltf::Model& model, const glm::dmat4& ecef_to_local, const glm::dmat4& tile_transform, CesiumGeometry::Axis gltf_up_axis,
-                            render::ThreadWorkerCmdCtx* thread_input, TileMeshProcessor mesh_processor, U64 mesh_processor_generation);
+_tile_render_data_from_gltf(const CesiumGltf::Model& model, const glm::dmat4& ecef_to_local,
+                            const glm::dmat4& tile_transform, CesiumGeometry::Axis gltf_up_axis,
+                            render::ThreadWorkerCmdCtx* thread_input, TileMeshProcessor mesh_processor,
+                            U64 mesh_processor_generation);
 
 g_internal RasterRenderResource*
 _render_raster_tile_record(render::ThreadWorkerCmdCtx* thread_input, RasterTileInfo* tile_info);
@@ -151,10 +156,12 @@ g_internal F64
 _sample_height_from_result(const Cesium3DTilesSelection::SampleHeightResult& result, const char* label);
 
 g_internal Rng3F32
-_tile_local_bounds_get(const Cesium3DTilesSelection::Tile& tile, const CesiumGeospatial::Ellipsoid& ellipsoid, const glm::dmat4& ecef_to_local);
+_tile_local_bounds_get(const Cesium3DTilesSelection::Tile& tile, const CesiumGeospatial::Ellipsoid& ellipsoid,
+                       const glm::dmat4& ecef_to_local);
 
 g_internal void
-_tileset_renderer_initialize(TilesetRenderer* tileset, async::ThreadPool* threads, F64 origin_longitude, F64 origin_latitude, F64 origin_height);
+_tileset_renderer_initialize(TilesetRenderer* tileset, async::ThreadPool* threads, F64 origin_longitude,
+                             F64 origin_latitude, F64 origin_height);
 
 g_internal Cesium3DTilesSelection::TilesetExternals
 _tileset_externals_create(TilesetRenderer* tileset, ArrayResourcePoolHandle tileset_handle);
@@ -163,7 +170,8 @@ g_internal Cesium3DTilesSelection::TilesetOptions
 _tileset_options_create(U64 cache_byte_size);
 
 g_internal void
-_tileset_renderer_tile_to_show_push(TilesetRenderer* renderer, const Cesium3DTilesSelection::Tile& tile, B32 is_fading_out);
+_tileset_renderer_tile_to_show_push(TilesetRenderer* renderer, const Cesium3DTilesSelection::Tile& tile,
+                                    B32 is_fading_out);
 
 g_internal void
 _tileset_renderer_raster_resource_track(TilesetRenderer* renderer, RasterRenderResource* resource);

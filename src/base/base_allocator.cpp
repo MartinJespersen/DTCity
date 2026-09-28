@@ -1,23 +1,56 @@
-Allocator*
+Allocator
 Allocator::create(ArenaParams arena_params) noexcept
 {
-    arena_params.flags |= ArenaFlag_NoChain;
-    Arena* arena = arena_alloc(&arena_params);
-    Allocator* allocator = PushStruct(arena, Allocator);
-    new (allocator) Allocator{};
-
-    allocator->arena = arena;
-    arena->destructor_pos = arena->res;
-    allocator->destructor_cmt_pos = arena->res;
-    allocator->destructor_count = 0;
-    allocator->base_pos = arena_pos(arena);
+    Allocator allocator = Allocator(arena_params);
     return allocator;
+}
+
+template <typename T>
+T
+Allocator::create(ArenaParams params) noexcept
+{
+    return T{Allocator(params)};
+}
+
+Allocator::Allocator(ArenaParams arena_params)
+{
+    arena_params.flags |= ArenaFlag_NoChain;
+    Arena* arena_input = arena_alloc(&arena_params);
+    this->init(arena_input);
 }
 
 Allocator::~Allocator()
 {
-    _allocator_destroy_all();
-    arena_release(arena);
+    _allocator_release();
+}
+
+Allocator::Allocator(Allocator&& other) noexcept
+{
+    *this = std::move(other);
+}
+
+Allocator&
+Allocator::operator=(Allocator&& other) noexcept
+{
+    if (this != &other)
+    {
+        _allocator_release();
+        arena = std::exchange(other.arena, nullptr);
+        destructor_cmt_pos = std::exchange(other.destructor_cmt_pos, 0);
+        destructor_count = std::exchange(other.destructor_count, 0);
+        base_pos = std::exchange(other.base_pos, 0);
+    }
+    return *this;
+}
+
+void
+Allocator::init(Arena* arena_input)
+{
+    this->arena = arena_input;
+    this->arena->destructor_pos = arena_input->res;
+    this->destructor_cmt_pos = arena_input->res;
+    this->destructor_count = 0;
+    this->base_pos = arena_pos(arena_input);
 }
 
 // push some bytes onto the 'stack' - the way to allocate
@@ -54,6 +87,7 @@ Allocator::_push_only_destructor(void* object, Destructor destructor)
 U64
 Allocator::get_usage()
 {
+    AssertAlways(this->arena);
     U64 result = arena_pos(arena);
     return result;
 }
@@ -62,6 +96,7 @@ Allocator::get_usage()
 void
 Allocator::pop_to(U64 count)
 {
+    AssertAlways(this->arena);
     if (count <= base_pos)
     {
         _allocator_destroy_all();
@@ -77,6 +112,7 @@ Allocator::pop_to(U64 count)
 void
 Allocator::clear()
 {
+    AssertAlways(this->arena);
     pop_to(0);
 }
 
@@ -132,4 +168,37 @@ Allocator::_allocator_destroy_all()
         destructor_count -= 1;
     }
     arena->destructor_pos = arena->res;
+}
+
+template <typename T, typename... Args>
+T*
+Allocator::_allocator_construct(void* mem, Args&&... args)
+{
+    // Prefer Allocator*, then Arena*, using the same brace initialization as make().
+    if constexpr (requires { T{this, std::forward<Args>(args)...}; })
+    {
+        return new (mem) T{this, std::forward<Args>(args)...};
+    }
+    else if constexpr (requires { T{arena, std::forward<Args>(args)...}; })
+    {
+        return new (mem) T{arena, std::forward<Args>(args)...};
+    }
+    else
+    {
+        return new (mem) T{std::forward<Args>(args)...};
+    }
+}
+
+void
+Allocator::_allocator_release()
+{
+    if (arena)
+    {
+        _allocator_destroy_all();
+        arena_release(arena);
+    }
+    arena = nullptr;
+    destructor_cmt_pos = 0;
+    destructor_count = 0;
+    base_pos = 0;
 }

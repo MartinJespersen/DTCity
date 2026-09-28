@@ -104,15 +104,13 @@ tile_load_update(TileLoadState* state, ArrayResourcePoolHandle tileset_handle, A
 
             cesium::TileMeshProcessor mesh_processor = {_tile_load_road_mesh_process, bvh};
             cesium::tileset_tile_mesh_processor_set(tileset, mesh_processor);
+            // Installing classification inputs invalidates previously loaded meshes.
+            tileset->tile_mesh_processor_generation.fetch_add(1, std::memory_order_release);
         }
 
         B32 road_overlay_enabled = road_overlay_option != RoadOverlayOption_None;
-        B32 road_overlay_was_enabled = tileset->tile_mesh_processor_enabled.load(std::memory_order_acquire);
-        B32 mesh_processor_changed = road_overlay_was_enabled == false || road_overlay_changed;
-        if (road_overlay_enabled && mesh_processor_changed)
-        {
-            tileset->tile_mesh_processor_generation.fetch_add(1, std::memory_order_release);
-        }
+        // Overlay selection changes rendering, not the classification inputs.
+        (void)road_overlay_changed;
         cesium::tileset_tile_mesh_processor_enabled_set(tileset, road_overlay_enabled);
         if (road_overlay_enabled)
         {
@@ -144,8 +142,15 @@ _tile_load_stale_meshes_schedule(TileLoadState* state, cesium::TilesetRenderer* 
     if (state->polygon_bvh_pool->item_from_handle(bvh_handle, &bvh) && bvh->deletion_requested == false)
     {
         U32 active_task_count = 0;
+        // A replacement occupies its slot until its GPU upload is installed.
+        for (cesium::TileRenderResources* tile = state->tile_first; tile; tile = tile->next)
+        {
+            if (tile->tile_mesh_processor_pending_generation != 0)
+                active_task_count++;
+        }
         for (TileLoadTaskStateNode* node = state->task_first; node; node = node->next)
         {
+            // Conservatively count CPU work as well, including overlap with uploads.
             active_task_count++;
         }
 

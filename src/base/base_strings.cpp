@@ -8,6 +8,18 @@
 #define STB_SPRINTF_STATIC
 #include "third_party/stb_sprintf.h"
 #include "third_party/meow_hash_x64_aesni.h"
+
+// C++ strings
+Str8::Str8(U64 size) noexcept
+{
+    this->size = size;
+    this->str = new U8[size + 1]{}; // + 1 for \0 termination
+}
+
+Str8::~Str8() noexcept
+{
+    delete[] this->str;
+}
 ////////////////////////////////
 //~ NOTE(allen): String <-> Integer Tables
 
@@ -17,22 +29,29 @@ read_only lib_internal U8 integer_symbols[16] = {
 
 // NOTE(allen): Includes reverses for uppercase and lowercase hex.
 read_only lib_internal U8 integer_symbol_reverse[128] = {
-    0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
-    0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
-    0xFF, 0x0A, 0x0B, 0x0C, 0x0D, 0x0E, 0x0F, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
-    0xFF, 0x0A, 0x0B, 0x0C, 0x0D, 0x0E, 0x0F, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
+    0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
+    0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
+    0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08,
+    0x09, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x0A, 0x0B, 0x0C, 0x0D, 0x0E, 0x0F, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
+    0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
+    0xFF, 0xFF, 0x0A, 0x0B, 0x0C, 0x0D, 0x0E, 0x0F, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
+    0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
 };
 
 read_only lib_internal U8 base64[64] = {
-    '0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm', 'n', 'o', 'p', 'q', 'r', 's', 't', 'u', 'v',
-    'w', 'x', 'y', 'z', 'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z', '_', '$',
+    '0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l',
+    'm', 'n', 'o', 'p', 'q', 'r', 's', 't', 'u', 'v', 'w', 'x', 'y', 'z', 'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H',
+    'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z', '_', '$',
 };
 
 read_only lib_internal U8 base64_reverse[128] = {
-    0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
-    0xFF, 0xFF, 0xFF, 0xFF, 0x3F, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x00,
-    0xFF, 0x24, 0x25, 0x26, 0x27, 0x28, 0x29, 0x2A, 0x2B, 0x2C, 0x2D, 0x2E, 0x2F, 0x30, 0x31, 0x32, 0x33, 0x34, 0x35, 0x36, 0x37, 0x38, 0x39, 0x3A, 0x3B, 0x3C, 0x3D, 0xFF, 0xFF, 0xFF, 0xFF, 0x3E,
-    0xFF, 0x0A, 0x0B, 0x0C, 0x0D, 0x0E, 0x0F, 0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18, 0x19, 0x1A, 0x1B, 0x1C, 0x1D, 0x1E, 0x1F, 0x20, 0x21, 0x22, 0x23, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
+    0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
+    0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x3F, 0xFF,
+    0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08,
+    0x09, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x00, 0xFF, 0x24, 0x25, 0x26, 0x27, 0x28, 0x29, 0x2A, 0x2B, 0x2C, 0x2D, 0x2E,
+    0x2F, 0x30, 0x31, 0x32, 0x33, 0x34, 0x35, 0x36, 0x37, 0x38, 0x39, 0x3A, 0x3B, 0x3C, 0x3D, 0xFF, 0xFF, 0xFF, 0xFF,
+    0x3E, 0xFF, 0x0A, 0x0B, 0x0C, 0x0D, 0x0E, 0x0F, 0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18, 0x19, 0x1A,
+    0x1B, 0x1C, 0x1D, 0x1E, 0x1F, 0x20, 0x21, 0x22, 0x23, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
 };
 
 ////////////////////////////////
@@ -802,7 +821,8 @@ str8_from_bits_u64(Arena* arena, U64 x)
     U8 cd = 'a' + ((x >> 8) & 0xf);
     U8 ce = 'a' + ((x >> 4) & 0xf);
     U8 cf = 'a' + ((x >> 0) & 0xf);
-    String8 result = push_str8f(arena, "%c%c%c%c%c%c%c%c%c%c%c%c%c%c%c%c", c0, c1, c2, c3, c4, c5, c6, c7, c8, c9, ca, cb, cc, cd, ce, cf);
+    String8 result = push_str8f(arena, "%c%c%c%c%c%c%c%c%c%c%c%c%c%c%c%c", c0, c1, c2, c3, c4, c5, c6, c7, c8, c9, ca,
+                                cb, cc, cd, ce, cf);
     return result;
 }
 
@@ -960,7 +980,8 @@ f64_from_str8(String8 string)
         B32 exp = 0;
         for (U64 idx = 0; idx < string.size && num_valid_chars < sizeof(buffer) - 1; idx += 1)
         {
-            if (char_is_digit(string.str[idx], 10) || string.str[idx] == '.' || string.str[idx] == 'e' || (exp && (string.str[idx] == '+' || string.str[idx] == '-')))
+            if (char_is_digit(string.str[idx], 10) || string.str[idx] == '.' || string.str[idx] == 'e' ||
+                (exp && (string.str[idx] == '+' || string.str[idx] == '-')))
             {
                 buffer[num_valid_chars] = string.str[idx];
                 num_valid_chars += 1;
@@ -1611,7 +1632,8 @@ utf8_decode(U8* str, U64 max)
             if (3 < max)
             {
                 U8 cont_byte[3] = {str[1], str[2], str[3]};
-                if (utf8_class[cont_byte[0] >> 3] == 0 && utf8_class[cont_byte[1] >> 3] == 0 && utf8_class[cont_byte[2] >> 3] == 0)
+                if (utf8_class[cont_byte[0] >> 3] == 0 && utf8_class[cont_byte[1] >> 3] == 0 &&
+                    utf8_class[cont_byte[2] >> 3] == 0)
                 {
                     result.codepoint = (byte & bitmask3) << 18;
                     result.codepoint |= ((cont_byte[0] & bitmask6) << 12);
@@ -1891,7 +1913,8 @@ lib_internal String8
 string_from_arch(Arch arch)
 {
     local_persist String8 strings[] = {
-        str8_lit_comp("Null"), str8_lit_comp("x64"), str8_lit_comp("x86"), str8_lit_comp("arm64"), str8_lit_comp("arm32"),
+        str8_lit_comp("Null"),  str8_lit_comp("x64"),   str8_lit_comp("x86"),
+        str8_lit_comp("arm64"), str8_lit_comp("arm32"),
     };
     String8 result = str8_lit("error");
     if (arch < Arch_COUNT)
@@ -1908,7 +1931,8 @@ lib_internal String8
 string_from_week_day(WeekDay week_day)
 {
     local_persist String8 strings[] = {
-        str8_lit_comp("Sun"), str8_lit_comp("Mon"), str8_lit_comp("Tue"), str8_lit_comp("Wed"), str8_lit_comp("Thu"), str8_lit_comp("Fri"), str8_lit_comp("Sat"),
+        str8_lit_comp("Sun"), str8_lit_comp("Mon"), str8_lit_comp("Tue"), str8_lit_comp("Wed"),
+        str8_lit_comp("Thu"), str8_lit_comp("Fri"), str8_lit_comp("Sat"),
     };
     String8 result = str8_lit("Err");
     if ((U32)week_day < WeekDay_COUNT)
@@ -1922,8 +1946,9 @@ lib_internal String8
 string_from_month(Month month)
 {
     local_persist String8 strings[] = {
-        str8_lit_comp("Jan"), str8_lit_comp("Feb"), str8_lit_comp("Mar"), str8_lit_comp("Apr"), str8_lit_comp("May"), str8_lit_comp("Jun"),
-        str8_lit_comp("Jul"), str8_lit_comp("Aug"), str8_lit_comp("Sep"), str8_lit_comp("Oct"), str8_lit_comp("Nov"), str8_lit_comp("Dec"),
+        str8_lit_comp("Jan"), str8_lit_comp("Feb"), str8_lit_comp("Mar"), str8_lit_comp("Apr"),
+        str8_lit_comp("May"), str8_lit_comp("Jun"), str8_lit_comp("Jul"), str8_lit_comp("Aug"),
+        str8_lit_comp("Sep"), str8_lit_comp("Oct"), str8_lit_comp("Nov"), str8_lit_comp("Dec"),
     };
     String8 result = str8_lit("Err");
     if ((U32)month < Month_COUNT)
@@ -1947,7 +1972,8 @@ push_date_time_string(Arena* arena, DateTime* date_time)
     {
         ampm = "pm";
     }
-    String8 result = push_str8f(arena, "%d %s %d, %02d:%02d:%02d %s", date_time->day, mon_str, date_time->year, adjusted_hour, date_time->min, date_time->sec, ampm);
+    String8 result = push_str8f(arena, "%d %s %d, %02d:%02d:%02d %s", date_time->day, mon_str, date_time->year,
+                                adjusted_hour, date_time->min, date_time->sec, ampm);
     return (result);
 }
 
@@ -1955,7 +1981,8 @@ lib_internal String8
 push_file_name_date_time_string(Arena* arena, DateTime* date_time)
 {
     char* mon_str = (char*)string_from_month(date_time->month).str;
-    String8 result = push_str8f(arena, "%d-%s-%0d--%02d-%02d-%02d", date_time->year, mon_str, date_time->day, date_time->hour, date_time->min, date_time->sec);
+    String8 result = push_str8f(arena, "%d-%s-%0d--%02d-%02d-%02d", date_time->year, mon_str, date_time->day,
+                                date_time->hour, date_time->min, date_time->sec);
     return (result);
 }
 
@@ -1992,8 +2019,9 @@ string_from_elapsed_time(Arena* arena, DateTime dt)
 lib_internal String8
 string_from_guid(Arena* arena, Guid guid)
 {
-    String8 result = push_str8f(arena, "%08X-%04X-%04X-%02X%02X-%02X%02X%02X%02X%02X%02X", guid.data1, guid.data2, guid.data3, guid.data4[0], guid.data4[1], guid.data4[2], guid.data4[3],
-                                guid.data4[4], guid.data4[5], guid.data4[6], guid.data4[7]);
+    String8 result = push_str8f(arena, "%08X-%04X-%04X-%02X%02X-%02X%02X%02X%02X%02X%02X", guid.data1, guid.data2,
+                                guid.data3, guid.data4[0], guid.data4[1], guid.data4[2], guid.data4[3], guid.data4[4],
+                                guid.data4[5], guid.data4[6], guid.data4[7]);
     return result;
 }
 
@@ -2010,14 +2038,16 @@ try_guid_from_string(String8 string, Guid* guid_out)
         String8 data3_str = list.first->next->next->string;
         String8 data4_hi_str = list.first->next->next->next->string;
         String8 data4_lo_str = list.first->next->next->next->next->string;
-        if (str8_is_integer(data1_str, 16) && str8_is_integer(data2_str, 16) && str8_is_integer(data3_str, 16) && str8_is_integer(data4_hi_str, 16) && str8_is_integer(data4_lo_str, 16))
+        if (str8_is_integer(data1_str, 16) && str8_is_integer(data2_str, 16) && str8_is_integer(data3_str, 16) &&
+            str8_is_integer(data4_hi_str, 16) && str8_is_integer(data4_lo_str, 16))
         {
             U64 data1 = U64FromStr8(data1_str, 16);
             U64 data2 = U64FromStr8(data2_str, 16);
             U64 data3 = U64FromStr8(data3_str, 16);
             U64 data4_hi = U64FromStr8(data4_hi_str, 16);
             U64 data4_lo = U64FromStr8(data4_lo_str, 16);
-            if (data1 <= max_U32 && data2 <= max_U16 && data3 <= max_U16 && data4_hi <= max_U16 && data4_lo <= 0xffffffffffff)
+            if (data1 <= max_U32 && data2 <= max_U16 && data3 <= max_U16 && data4_hi <= max_U16 &&
+                data4_lo <= 0xffffffffffff)
             {
                 guid_out->data1 = (U32)data1;
                 guid_out->data2 = (U16)data2;
@@ -2047,9 +2077,10 @@ lib_internal String8
 indented_from_string(Arena* arena, String8 string)
 {
     Temp scratch = ScratchBegin(&arena, 1);
-    read_only local_persist U8 indentation_bytes[] = "                                                                        "
-                                                     "                  "
-                                                     "                                      ";
+    read_only local_persist U8 indentation_bytes[] =
+        "                                                                        "
+        "                  "
+        "                                      ";
     String8List indented_strings = {};
     S64 depth = 0;
     S64 next_depth = 0;
@@ -2086,7 +2117,8 @@ indented_from_string(Arena* arena, String8 string)
                 String8 line = str8_whitespace_skip(Str8Substr(string, r1u64(line_begin_off, off)));
                 if (line.size != 0)
                 {
-                    Str8ListPushF(scratch.arena, &indented_strings, "%.*s%s\n", (int)depth * 2, indentation_bytes, (char*)line.str);
+                    Str8ListPushF(scratch.arena, &indented_strings, "%.*s%s\n", (int)depth * 2, indentation_bytes,
+                                  (char*)line.str);
                 }
                 if (line.size == 0 && indented_strings.node_count != 0 && off < string.size)
                 {
@@ -2316,7 +2348,8 @@ wrapped_lines_from_string(Arena* arena, String8 string, U64 first_line_max_width
 lib_internal String8
 hex_string_from_rgba_4f32(Arena* arena, Vec4F32 rgba)
 {
-    String8 hex_string = push_str8f(arena, "%02x%02x%02x%02x", (U8)(rgba.x * 255.f), (U8)(rgba.y * 255.f), (U8)(rgba.z * 255.f), (U8)(rgba.w * 255.f));
+    String8 hex_string = push_str8f(arena, "%02x%02x%02x%02x", (U8)(rgba.x * 255.f), (U8)(rgba.y * 255.f),
+                                    (U8)(rgba.z * 255.f), (U8)(rgba.w * 255.f));
     return hex_string;
 }
 
@@ -2728,11 +2761,13 @@ env_vars_from_env_file(Arena* arena)
     String8List current_path_parts = str8_split_path(scratch.arena, current_path);
 
     // create an array of path-part lists for each parent path candidate
-    Buffer<String8List> candidate_parent_paths = buffer_alloc<String8List>(scratch.arena, current_path_parts.node_count);
+    Buffer<String8List> candidate_parent_paths =
+        buffer_alloc<String8List>(scratch.arena, current_path_parts.node_count);
 
     // find .env file by iterating parents
     String8Node* current_path_part = current_path_parts.first;
-    for (U32 i = 0; i < current_path_parts.node_count && current_path_part; ++i, current_path_part = current_path_part->next)
+    for (U32 i = 0; i < current_path_parts.node_count && current_path_part;
+         ++i, current_path_part = current_path_part->next)
     {
         for (U32 j = i; j < current_path_parts.node_count; ++j)
         {

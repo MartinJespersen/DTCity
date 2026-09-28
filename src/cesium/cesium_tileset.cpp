@@ -1056,15 +1056,15 @@ _tileset_renderer_initialize(TilesetRenderer* tileset, async::ThreadPool* thread
     Cesium3DTilesContent::registerAllTileContentTypes();
 
     // Create task processor
-    DTCityTaskProcessor* task_processor = tileset->allocator->place<DTCityTaskProcessor>(threads);
+    DTCityTaskProcessor* task_processor = tileset->allocator.make<DTCityTaskProcessor>(threads);
     tileset->task_processor = task_processor;
     std::shared_ptr<CesiumAsync::ITaskProcessor> task_processor_ref(tileset->task_processor,
                                                                     [](CesiumAsync::ITaskProcessor*) {});
 
     // Create async system
-    tileset->allocator->place(&tileset->async_system, task_processor_ref);
+    tileset->allocator.make(&tileset->async_system, task_processor_ref);
 
-    tileset->credit_system = tileset->allocator->place<CesiumUtility::CreditSystem>();
+    tileset->credit_system = tileset->allocator.make<CesiumUtility::CreditSystem>();
 
     // Set up local coordinate system centered at the origin
     CesiumGeospatial::Cartographic origin_cartographic(glm::radians(origin_longitude), glm::radians(origin_latitude),
@@ -1215,21 +1215,21 @@ tileset_renderer_create(TilesetRenderer* tileset, ArrayResourcePoolHandle tilese
     Assert(url.size == 0 || tileset_ion_asset_id == 0);
 
     tileset->allocator = Allocator::create();
-    Debug_SetName(tileset->allocator->arena, "Cesium Tileset Allocator arena");
+    Debug_SetName(tileset->allocator.arena, "Cesium Tileset Allocator arena");
     ScratchScope scratch = ScratchScope(0, 0);
 
     // setup tilesets
     _tileset_renderer_initialize(tileset, threads, origin_longitude, origin_latitude, origin_height);
     Cesium3DTilesSelection::TilesetExternals externals = _tileset_externals_create(tileset, tileset_handle);
     Cesium3DTilesSelection::TilesetOptions options = _tileset_options_create(cache_byte_size);
-    tileset->tilesets = buffer_alloc<Cesium3DTilesSelection::Tileset*>(tileset->allocator->arena, 1);
+    tileset->tilesets = buffer_alloc<Cesium3DTilesSelection::Tileset*>(tileset->allocator.arena, 1);
     bool is_map_tile = url.size == 0 && tileset_ion_asset_id == 0;
     options.rendererOptions = is_map_tile;
 
     if (url.size > 0)
     {
         tileset->tilesets.data[0] =
-            tileset->allocator->place<Cesium3DTilesSelection::Tileset>(externals, (const char*)url.str, options);
+            tileset->allocator.make<Cesium3DTilesSelection::Tileset>(externals, (const char*)url.str, options);
     }
     else
     {
@@ -1241,7 +1241,8 @@ tileset_renderer_create(TilesetRenderer* tileset, ArrayResourcePoolHandle tilese
 
         S64 ion_asset_id = is_map_tile ? 1 : tileset_ion_asset_id;
         String8 ion_terrain_asset_id_str = {};
-        if (is_map_tile && !env_vars_value_get(scratch.arena, S("CESIUM_ION_TERRAIN_ASSET_ID"), &ion_terrain_asset_id_str, 1))
+        if (is_map_tile &&
+            !env_vars_value_get(scratch.arena, S("CESIUM_ION_TERRAIN_ASSET_ID"), &ion_terrain_asset_id_str, 1))
         {
             ion_asset_id = s64_from_str8(ion_terrain_asset_id_str, 10);
             if (ion_asset_id <= 0)
@@ -1250,8 +1251,8 @@ tileset_renderer_create(TilesetRenderer* tileset, ArrayResourcePoolHandle tilese
             }
         }
         std::string access_token = _std_string_from_str8(ion_access_token);
-        tileset->tilesets.data[0] = tileset->allocator->place<Cesium3DTilesSelection::Tileset>(
-            externals, ion_asset_id, access_token, options);
+        tileset->tilesets.data[0] =
+            tileset->allocator.make<Cesium3DTilesSelection::Tileset>(externals, ion_asset_id, access_token, options);
         if (is_map_tile)
         {
             _ion_raster_overlay_example_add_if_present(tileset->tilesets.data[0]);
@@ -1354,8 +1355,7 @@ tileset_renderer_destroy(TilesetRenderer* renderer)
     B32 tile_loads_complete = true;
     for (U32 i = 0; i < renderer->tilesets.size; ++i)
     {
-        B32 tileset_loads_complete =
-            renderer->tilesets.data[i]->waitForAllLoadsToComplete(tile_load_poll_timeout_ms);
+        B32 tileset_loads_complete = renderer->tilesets.data[i]->waitForAllLoadsToComplete(tile_load_poll_timeout_ms);
         tile_loads_complete &= tileset_loads_complete;
     }
     if (!tile_loads_complete)
@@ -1365,7 +1365,7 @@ tileset_renderer_destroy(TilesetRenderer* renderer)
 
     render::gpu_work_update();
     renderer->async_system.dispatchMainThreadTasks();
-    Allocator::destroy(renderer->allocator);
+    renderer->allocator.~Allocator();
 
     _tileset_renderer_active_resources_release(renderer);
     MemoryZeroStruct(renderer);

@@ -219,7 +219,7 @@ dt_main_loop(void* ptr)
                                                  .bbox_width_meters = 5000,
                                                  .bbox_height_meters = 5000,
                                                  .tileset_source = city::AreaTilesetSource::Path,
-                                                 .tileset_path = S("file:///C:/ByModel/tileset.json"),
+                                                 .tileset_path = S("file:///C:/ByModel/Aarhus_MeshData/tileset.json"),
                                                  .bbox_clipping_enabled = true,
                                                  .custom_geometry_enabled = true},
                                                 {.name = S("Eskiltuna"),
@@ -277,6 +277,7 @@ dt_main_loop(void* ptr)
     city::City* area = city_buf[cur_area_option];
 
     city_area_streaming_begin(area, area_config);
+    B32 agents_ready_for_stream = false;
     while (ctx->running)
     {
         dt_time_update(ctx->io, ctx->time);
@@ -297,8 +298,14 @@ dt_main_loop(void* ptr)
             str8_list_push(ctx->arena_frame, &msg_list, ws_msg);
         }
         message_frame_counter++;
-        Buffer<city::Coordinate> new_agent_coords = {};
+        city::CoordinateBatch new_agent_coords = {};
         String8List simulator_options = {};
+        if (area->cars_creation_done && !agents_ready_for_stream)
+        {
+            // The initial connection snapshot may have arrived while models were loading.
+            simulator.simulator_snapshot_request();
+        }
+        agents_ready_for_stream = area->cars_creation_done;
         simulator.simulator_update(ctx->arena_frame, &new_agent_coords, &simulator_options, simulator_scenario_idx,
                                    io_ctx->frame_count);
 
