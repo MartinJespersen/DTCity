@@ -12,6 +12,7 @@ struct AsyncWebsocketSession
 
     // curl
     CurlContext* curl_ctx;
+    char curl_error[CURL_ERROR_SIZE];
 
     // http
     HttpInfo* http_info;

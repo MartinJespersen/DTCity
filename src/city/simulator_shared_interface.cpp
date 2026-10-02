@@ -2,6 +2,27 @@ using namespace simdjson;
 namespace city
 {
 
+g_internal error_code
+simulator_server_update_from_json(ondemand::document& doc, ServerUpdate* out_update, U64* out_request_id)
+{
+    ServerUpdate update = {};
+    std::string_view name;
+    U64 request_id = 0;
+    error_code error = doc["name"].get_string().get(name);
+    if (error) return error;
+    update.name.assign(name.data(), name.size());
+    error = doc["playback"].get_double().get(update.playback);
+    if (error) return error;
+    error = doc["period"].get_double().get(update.period);
+    if (error) return error;
+    error = doc["request_id"].get_uint64().get(request_id);
+    if (error) return error;
+    if (update.period < 0) return simdjson::NUMBER_ERROR;
+    *out_update = std::move(update);
+    *out_request_id = request_id;
+    return simdjson::SUCCESS;
+}
+
 g_internal simdjson::error_code
 simulator_prepare_json_doc(Arena* arena, String8 msg, simdjson::ondemand::parser& parser,
                            simdjson::ondemand::document& out_doc)

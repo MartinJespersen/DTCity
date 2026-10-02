@@ -7,7 +7,10 @@
 #include "misc/geometry.cpp"
 #include "../simulator/resource_paths.cpp"
 #include "../simulator/event_snapshot.cpp"
-#include "city/json.cpp"
+#include "city/simulator_shared_interface.cpp"
+#include "city/simulator_messages.cpp"
+#include "city/agent_state.cpp"
+#include "../simulator/metadata.cpp"
 
 // test files
 #include "async/test_heap.cpp"
@@ -20,6 +23,9 @@
 #include "misc/test_geometry.cpp"
 #include "simulator/test_resource_paths.cpp"
 #include "simulator/test_event_snapshot.cpp"
+#include "simulator/test_messages.cpp"
+#include "simulator/test_agent_state.cpp"
+#include "simulator/test_metadata.cpp"
 #include "base/test_freelist.cpp"
 
 int

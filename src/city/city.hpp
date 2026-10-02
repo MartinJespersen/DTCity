@@ -168,7 +168,7 @@ struct City
     Buildings buildings;
     ArrayResourcePoolHandle tileset_handle;
     neta::NetaState* neta_state;
-    ResourcePoolHandle camera_handle;
+    ArrayResourcePoolHandle camera_handle;
 
     // async
     AsyncCityTaskList task_list;
@@ -222,9 +222,8 @@ city_area_streaming_begin(City* city, const AreaConfig* area_config);
 g_internal B32
 city_area_streaming_end(City* city);
 g_internal void
-city_update(City* city, city::CoordinateBatch new_agent_coords, async::ThreadPool* thread_pool,
-            RoadOverlayOption neta_overlay_option, Vec2U32 framebuffer_dim, const AreaConfig* city_config,
-            render::MeshHandle hover_icon_mesh_handle);
+city_update(City* city, async::ThreadPool* thread_pool, RoadOverlayOption neta_overlay_option, Vec2U32 framebuffer_dim,
+            const AreaConfig* city_config);
 g_internal void
 city_init(City* city, String8 cache_path);
 g_internal void
@@ -288,4 +287,6 @@ g_internal Rng3F32
 _agent_world_bounds_from_transform(Rng3F32 model_bounds, glm::mat4 model_transform);
 
 // helpers
+g_internal void
+_city_tasks_collect(City* city, bool publish_agents);
 } // namespace city

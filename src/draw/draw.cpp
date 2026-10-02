@@ -49,10 +49,15 @@ draw_frame_get()
 }
 
 g_internal void
-draw_camera_set(render::MappedHandle<void> camera_handle)
+draw_camera_set(ArrayResourcePoolHandle camera_resource_handle)
 {
+    Context* ctx = dt_ctx_get();
     DrawFrame* frame = draw_frame_get();
-    frame->camera_handle = camera_handle;
+    ui::Camera* camera = {};
+    if (ctx->camera_container->item_from_handle(camera_resource_handle, &camera))
+    {
+        frame->camera_resource_handle = camera_resource_handle;
+    }
 }
 
 g_internal void
@@ -76,8 +81,12 @@ primitive_draw(glm::vec3 location, F32 scale_factor, render::MeshHandle mesh_han
         render::Handle* vertex_handle = &mesh_handle.vertex_buffer_handle;
         render::Handle* instance_index_handle = &instance->mesh_handle.index_buffer_handle;
         render::Handle* index_handle = &mesh_handle.index_buffer_handle;
-        B32 vertex_handle_matches = instance_vertex_handle->ptr == vertex_handle->ptr && instance_vertex_handle->gen_id == vertex_handle->gen_id && instance_vertex_handle->type == vertex_handle->type;
-        B32 index_handle_matches = instance_index_handle->ptr == index_handle->ptr && instance_index_handle->gen_id == index_handle->gen_id && instance_index_handle->type == index_handle->type;
+        B32 vertex_handle_matches = instance_vertex_handle->ptr == vertex_handle->ptr &&
+                                    instance_vertex_handle->gen_id == vertex_handle->gen_id &&
+                                    instance_vertex_handle->type == vertex_handle->type;
+        B32 index_handle_matches = instance_index_handle->ptr == index_handle->ptr &&
+                                   instance_index_handle->gen_id == index_handle->gen_id &&
+                                   instance_index_handle->type == index_handle->type;
         B32 mesh_matches = vertex_handle_matches && index_handle_matches;
         if (mesh_matches && instance->scale_factor == scale_factor)
         {

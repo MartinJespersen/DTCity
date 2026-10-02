@@ -72,7 +72,8 @@ swapchain_image_barrier_between_rendering(VkCommandBuffer cmd_buffer, VkImage sw
 }
 
 static void
-command_buffer_record(U32 image_index, U32 current_frame, Vec2S64 mouse_cursor_pos)
+command_buffer_record(U32 image_index, U32 current_frame, Vec2S64 mouse_cursor_pos,
+                      render::MappedHandle<void> camera_handle_void)
 {
     prof_scope_marker;
 
@@ -295,7 +296,7 @@ command_buffer_record(U32 image_index, U32 current_frame, Vec2S64 mouse_cursor_p
 
             debug_label.pLabelName = "Model 3D Rendering";
             CMD_BEGIN_DEBUG_UTILS_LABEL_EXT(current_cmd_buf, &debug_label);
-            tile_rendering();
+            tile_rendering(camera_handle_void);
             CMD_END_DEBUG_UTILS_LABEL_EXT(current_cmd_buf);
 
             blend_3d_rendering();
@@ -317,20 +318,21 @@ command_buffer_record(U32 image_index, U32 current_frame, Vec2S64 mouse_cursor_p
                     primitive_instance->mesh_handle = node->mesh_handle;
                 }
             }
-            primitive_rendering(primitive_instances, draw_frame->camera_handle);
+
+            primitive_rendering(primitive_instances, camera_handle_void);
 
             if (draw_frame->mesh_instance_batches->total_count > 0)
             {
                 Buffer<render::MeshInstanceBatch> mesh_batches =
                     buffer_from_chunk_list(vk_ctx->render_frame_arena, draw_frame->mesh_instance_batches);
-                mesh_instance_rendering(mesh_batches, draw_frame->camera_handle);
+                mesh_instance_rendering(mesh_batches, camera_handle_void);
             }
 
             if (draw_frame->line_vertex_chunk_list->total_count > 0)
             {
                 Buffer<render::LineVertex> line_vertices =
                     buffer_from_chunk_list(vk_ctx->render_frame_arena, draw_frame->line_vertex_chunk_list);
-                lines_render(line_vertices, draw_frame->camera_handle);
+                lines_render(line_vertices, camera_handle_void);
             }
 
             vkCmdEndRendering(current_cmd_buf);

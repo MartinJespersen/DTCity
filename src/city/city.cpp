@@ -191,7 +191,7 @@ _cache_and_parse_osm_json(async::ThreadPool* thread_pool, Road* road, osm::Netwo
 }
 
 g_internal void
-_tile_pipeline_add(cesium::TileDrawBatch* tile, City* city, render::MappedHandle<ui::CameraUniformBuffer> camera_handle,
+_tile_pipeline_add(cesium::TileDrawBatch* tile, City* city, ArrayResourcePoolHandle camera_handle,
                    RoadOverlayOption road_overlay_option_idx)
 {
     if (city->road.overlay_option_cur != 0)
@@ -205,95 +205,20 @@ _tile_pipeline_add(cesium::TileDrawBatch* tile, City* city, render::MappedHandle
     tile->render_data.colormap_handle = city->road.colormap_handle;
     tile->render_data.road_segment_buffer_handle = city->road.segment_buffer_handle;
     tile->render_data.road_test_enabled = city->road_building_done && road_overlay_option_idx != RoadOverlayOption_None;
-    tile->render_data.camera_handle = render::mapped_handle_erased(camera_handle);
     tile->render_data.overlay_option_idx = road_overlay_option_idx;
     render::tile_pipeline_add(&tile->render_data);
 }
 
 g_internal void
-city_update(City* city, city::CoordinateBatch new_agent_coords, async::ThreadPool* thread_pool,
-            RoadOverlayOption neta_overlay_option, Vec2U32 framebuffer_dim, const AreaConfig* city_config,
-            render::MeshHandle hover_icon_mesh_handle)
+city_update(City* city, async::ThreadPool* thread_pool, RoadOverlayOption neta_overlay_option, Vec2U32 framebuffer_dim,
+            const AreaConfig* city_config)
 {
     prof_scope_marker;
     ScratchScope scratch = ScratchScope(0, 0);
     Context* ctx = dt_ctx_get();
-    ui::Camera* camera = resource_pool_item_from_idx(ctx->camera_container, city->camera_handle);
-    // TODO: vulkan current frame should not be used directly
-    render::MappedHandle<ui::CameraUniformBuffer> camera_handle = camera->mut_handles;
-    render::MappedHandle<void> camera_handle_void = render::mapped_handle_erased(camera_handle);
-    draw::draw_camera_set(camera_handle_void);
+    draw::DrawFrame* draw_frame = draw::draw_frame_get();
 
-    for (AsyncCityTask* task = city->task_list.first; task;)
-    {
-        AsyncCityTask* next_task = task->next;
-        bool task_done = false;
-        switch (task->type)
-        {
-            case AsyncTaskType::Osm:
-            {
-                async::AsyncTaskResult<osm::Network> task_result = async::async_task_is_done(task->osm);
-                task_done = task_result.done;
-                city->osm_task_done = task_result.success;
-            };
-            break;
-            case AsyncTaskType::Neta:
-            {
-                async::AsyncTaskResult<neta::NetaTaskState> task_result = async::async_task_is_done(task->neta);
-                task_done = task_result.done;
-                city->neta_task_done = task_result.success;
-            }
-            break;
-            case AsyncTaskType::Road:
-            {
-                async::AsyncTaskResult<RoadBuildTask> task_result = async::async_task_is_done(task->road);
-                task_done = task_result.done;
-                city->road_building_done = task_result.success;
-            }
-            break;
-            case AsyncTaskType::CarSim:
-            {
-                async::AsyncTaskResult<AgentSimThread> task_result = async::async_task_is_done(task->agent_sim_task);
-                task_done = task_result.done;
-                city->cars_creation_done = task_result.success;
-                if (task_result.done)
-                {
-                    AgentSimThread* agent_sim_thread = task_result.task->user_data;
-                    if (task_result.success)
-                    {
-                        Assert(!city->agent_system);
-                        city->agent_system = new AgentSystem{};
-                        city->agent_system->agent_sim = std::move(agent_sim_thread->agent_sim);
-                        city->agent_system->agent_sim_config =
-                            std::make_unique<AgentSimConfig>(std::move(agent_sim_thread->config));
-                    }
-                    delete agent_sim_thread;
-                }
-            }
-            break;
-            case city::AsyncTaskType::Cached:
-            {
-                switch (task->cached_type)
-                {
-                    case AsyncTaskType::Neta:
-                    {
-                        task_done = true;
-                        city->neta_task_done = true;
-                        INFO_LOG("Neta cached state loaded");
-                    };
-                    break;
-                    default: InvalidPath; break;
-                }
-            };
-            break;
-            case AsyncTaskType::None: InvalidPath; break;
-        }
-        if (task_done)
-        {
-            DLLRemove(city->task_list.first, city->task_list.last, task);
-        }
-        task = next_task;
-    }
+    _city_tasks_collect(city, true);
 
     U64 hovered_object_id = render::latest_hovered_object_id_get();
 
@@ -330,8 +255,9 @@ city_update(City* city, city::CoordinateBatch new_agent_coords, async::ThreadPoo
 
     B32 road_overlay_changed = city->road.overlay_option_cur != neta_overlay_option;
     F64 delta_time = ctx->time->time_delta_constant_sec;
-    tile_load_update(ctx->tile_load_state, city->tileset_handle, city->road.bvh_handle, city->road_building_done,
-                     road_overlay_changed, neta_overlay_option, camera, delta_time);
+    tile_load_update(ctx->tile_load_state, city->tileset_handle, city->road.bvh_handle,
+                     draw_frame->camera_resource_handle, city->road_building_done, road_overlay_changed,
+                     neta_overlay_option, delta_time);
 
     // Update and render Cesium 3D Tiles ////////////
     cesium::TilesetRenderer* tileset = {};
@@ -419,7 +345,7 @@ city_update(City* city, city::CoordinateBatch new_agent_coords, async::ThreadPoo
                         batch->render_data.height_offset = -tileset->height_offset;
                     }
 
-                    _tile_pipeline_add(batch, city, camera_handle, neta_overlay_option);
+                    _tile_pipeline_add(batch, city, draw_frame->camera_resource_handle, neta_overlay_option);
                 }
             }
         }
@@ -438,7 +364,7 @@ city_update(City* city, city::CoordinateBatch new_agent_coords, async::ThreadPoo
                     {
                         batch->render_data.pipeline_bits |= render::TilePipelineBits::ColorDisable;
                         batch->render_data.depth_test_compare = render::DepthCompare::Always;
-                        _tile_pipeline_add(batch, city, camera_handle, neta_overlay_option);
+                        _tile_pipeline_add(batch, city, draw_frame->camera_resource_handle, neta_overlay_option);
                     }
                 }
             }
@@ -453,7 +379,7 @@ city_update(City* city, city::CoordinateBatch new_agent_coords, async::ThreadPoo
                     {
                         batch->render_data.pipeline_bits &= (~render::TilePipelineBits::ColorDisable);
                         batch->render_data.depth_test_compare = render::DepthCompare::LessOrEqual;
-                        _tile_pipeline_add(batch, city, camera_handle, neta_overlay_option);
+                        _tile_pipeline_add(batch, city, draw_frame->camera_resource_handle, neta_overlay_option);
                     }
                 }
             }
@@ -467,14 +393,14 @@ city_update(City* city, city::CoordinateBatch new_agent_coords, async::ThreadPoo
             agent_sim_config->asset_dir = push_str8_copy(city->arena, ctx->data_subdirs.data[dt_DataDirType::Assets]);
             agent_sim_config->texture_dir =
                 push_str8_copy(city->arena, ctx->data_subdirs.data[dt_DataDirType::Texture]);
-            agent_sim_config->agent_count = 100;
+            agent_sim_config->agent_map_bucket_count = 100;
             agent_sim_config->max_agent_count = 10000;
-            agent_sim_config->agent_config[enum_class_s32(VehicleType::Car)] = {
+            agent_sim_config->agent_config[enum_class_s32(AgentType::Car)] = {
                 .asset_file_name = S("car.glb"), .model_forward_dir = glm::vec3(0.0, 0.0, 1.0)};
-            agent_sim_config->agent_config[enum_class_s32(VehicleType::Bicycle)] = {.asset_file_name = S("bike.glb"),
-                                                                                    .model_forward_dir =
-                                                                                        glm::vec3(-1.0, 0.0, 0.0),
-                                                                                    .model_to_world_scale = 1.0};
+            agent_sim_config->agent_config[enum_class_s32(AgentType::Bicycle)] = {.asset_file_name = S("bike.glb"),
+                                                                                  .model_forward_dir =
+                                                                                      glm::vec3(-1.0, 0.0, 0.0),
+                                                                                  .model_to_world_scale = 1.0};
             async::AsyncTaskStatus<AgentSimThread>* agent_task_state =
                 async::async_task_run(ctx->thread_pool, agent_sim_build, agent_sim_thread, "Car Sim Task");
 
@@ -484,54 +410,6 @@ city_update(City* city, city::CoordinateBatch new_agent_coords, async::ThreadPoo
             DLLPushBack(city->task_list.first, city->task_list.last, car_sim_task_list_elem);
 
             city->agent_creation_started = true;
-        }
-
-        /// car simulation rendering
-        if (city->cars_creation_done)
-        {
-            prof_scope_marker_named("Car update scope");
-            F32 scale_factor = city->all_agent_scale_factor;
-            city->agent_system->update(tileset, new_agent_coords, tileset->ecef_to_local, scale_factor,
-                                      ctx->io->frame_count);
-
-            AgentSim* agent_sim = city->agent_system->agent_sim.get();
-            AgentSimConfig* agent_sim_config = city->agent_system->agent_sim_config.get();
-            AgentModelRenderInfo* models = agent_sim_config->models;
-
-            ChunkList<render::Transform>* transform_lists[ArrayCount(agent_sim_config->agent_config)];
-            for (U32 agent_cfg_idx = 0; agent_cfg_idx < ArrayCount(transform_lists); ++agent_cfg_idx)
-            {
-                transform_lists[agent_cfg_idx] = chunk_list_create<render::Transform>(scratch.arena, 100);
-            }
-            for (Agent& agent : *agent_sim->agents_active)
-            {
-                B32 visible = ui::frustum_check_from_bounding_box(&camera->frustum_planes, agent.world_bounds);
-                constexpr F32 hover_icon_scale_factor = 10.0f;
-                city->agent_system->agent_icon_add(agent, hover_icon_mesh_handle,
-                                                  hover_icon_scale_factor); // TODO: Frustum cull icon as well
-                if (visible)
-                {
-                    if (ui::is_bounding_sphere_to_be_culled(*camera, agent.world_bounds) == false)
-                    {
-                        ChunkList<render::Transform>* transform_list = transform_lists[enum_idx(agent.vehicle_type)];
-                        chunk_list_insert(scratch.arena, transform_list, agent.model_matrix);
-                    }
-                }
-            }
-
-            // Submit each model once after gathering all visible agent transforms.
-            for (U32 agent_cfg_idx = 0; agent_cfg_idx < ArrayCount(agent_sim_config->agent_config); ++agent_cfg_idx)
-            {
-                AgentModelRenderInfo* model_render_info = &models[agent_cfg_idx];
-
-                Buffer<render::Transform> transform_buffer =
-                    buffer_from_chunk_list(draw::draw_frame_arena_get(), transform_lists[agent_cfg_idx]);
-                render::BufferInfo instance_buffer_info =
-                    render::BufferInfo(transform_buffer, render::BufferType_Vertex | render::BufferType_StorageBuffer);
-
-                city->agent_system->agent_draw(camera_handle_void, model_render_info->geometry,
-                                              model_render_info->texture_handles, &instance_buffer_info);
-            }
         }
     }
 }
@@ -546,6 +424,9 @@ city_release(City* city)
         render::gpu_work_update();
         streaming_ended = city_area_streaming_end(city);
     }
+    // Task nodes and inputs may belong to road/network arenas; consume them first.
+    _city_tasks_collect(city, false);
+    Assert(!city->task_list.first);
     if (city->road.arena)
     {
         road_destroy(&city->road);
@@ -555,17 +436,6 @@ city_release(City* city)
         osm::osm_release(city->osm_network);
     }
 
-    // Shutdown has drained worker jobs; collect unpublished simulation results too.
-    for (AsyncCityTask* task = city->task_list.first; task; task = task->next)
-    {
-        if (task->type == AsyncTaskType::CarSim)
-        {
-            auto result = async::async_task_is_done(task->agent_sim_task);
-            Assert(result.done);
-            if (result.done)
-                delete result.task->user_data;
-        }
-    }
     delete city->agent_system;
     city->agent_system = {};
 
@@ -818,7 +688,7 @@ split_axis_find(Buffer<BoundingBox> bb_buffer, U32 start_idx, U32 end_idx)
     Rng2F32 bounds = rng2f32_inverted_inf();
     for (U32 i = start_idx; i < end_idx; ++i)
     {
-        BoundingBox* seg_center = bb_buffer[i];
+        BoundingBox* seg_center = &bb_buffer[i];
         for (U32 ax_idx = 0; ax_idx < Axis2_COUNT; ++ax_idx)
         {
             if (seg_center->center.v[ax_idx] < bounds.min.v[ax_idx])
@@ -854,7 +724,7 @@ bvh_create(Bvh* bvh, Buffer<RoadSegmentCorners> road_segment_buffer, U32 leaf_bb
         Rng2F32 bounds = rng2f32_inverted_inf();
         for (U32 j = 0; j < Corner_COUNT; ++j)
         {
-            RoadSegmentCorners* seg = road_segment_buffer[i];
+            RoadSegmentCorners* seg = &road_segment_buffer[i];
             Vec2F32 corner = seg->corners[j];
             bounds = bounds_union(bounds, corner);
         }
@@ -864,7 +734,7 @@ bvh_create(Bvh* bvh, Buffer<RoadSegmentCorners> road_segment_buffer, U32 leaf_bb
         Vec2F32 center = {};
         for (U32 j = 0; j < Corner_COUNT; ++j)
         {
-            RoadSegmentCorners* seg = road_segment_buffer[i];
+            RoadSegmentCorners* seg = &road_segment_buffer[i];
             Vec2F32 corner = seg->corners[j];
             center = add_2f32(center, corner);
         }
@@ -938,7 +808,7 @@ bvh_create(Bvh* bvh, Buffer<RoadSegmentCorners> road_segment_buffer, U32 leaf_bb
         SLLStackPop(bvh_ctx->stack);
 
         node->final_idx = cur_node_idx++;
-        RoadSegmentNodeStorageBuffer* current = road_segment_node_buffer[node->final_idx];
+        RoadSegmentNodeStorageBuffer* current = &road_segment_node_buffer[node->final_idx];
         current->min_x = node->bounds.min.x;
         current->min_y = node->bounds.min.y;
         current->max_x = node->bounds.max.x;
@@ -950,7 +820,7 @@ bvh_create(Bvh* bvh, Buffer<RoadSegmentCorners> road_segment_buffer, U32 leaf_bb
         if (node->parent)
         {
             U32 parent_idx = node->parent->final_idx;
-            RoadSegmentNodeStorageBuffer* parent = road_segment_node_buffer[parent_idx];
+            RoadSegmentNodeStorageBuffer* parent = &road_segment_node_buffer[parent_idx];
             parent->child_1_idx = node->final_idx;
         }
 
@@ -1006,7 +876,7 @@ road_segment_build(Arena* arena, osm::Network* network, Buffer<osm::RoadEdge> ed
     U32 cur_index_idx = 0;
     for (U32 i = 0; i < edge_buffer.size; i++)
     {
-        osm::RoadEdge* edge = edge_buffer[i];
+        osm::RoadEdge* edge = &edge_buffer[i];
 
         osm::EcefLocation start_node = osm::location_get(network, edge->node_id_from);
         osm::EcefLocation end_node = osm::location_get(network, edge->node_id_to);
@@ -1015,7 +885,7 @@ road_segment_build(Arena* arena, osm::Network* network, Buffer<osm::RoadEdge> ed
         road_segment_from_road_nodes(&road_segment, start_node, end_node, default_road_width);
 
         // Road coordinates stored in buffer for 3D geometry projection
-        RoadSegmentCorners* road_segment_corners = corner_buffer[i];
+        RoadSegmentCorners* road_segment_corners = &corner_buffer[i];
         road_segment_corners->edge_id = edge->id;
         glm::vec2 local_top_left =
             glm::vec2(ecef_to_local * glm::dvec4(road_segment.start.top.x, road_segment.start.top.y,
@@ -1855,6 +1725,87 @@ vertex_3d_from_gltfw_vertex(Arena* arena, Buffer<gltfw_Vertex3D> in_vertex_buffe
         out_vertex_buffer.data[i].uv = glm::vec2(in_vertex_buffer.data[i].uv.x, in_vertex_buffer.data[i].uv.y);
     }
     return out_vertex_buffer;
+}
+
+g_internal void
+_city_tasks_collect(City* city, bool publish_agents)
+{
+    for (AsyncCityTask* task = city->task_list.first; task;)
+    {
+        AsyncCityTask* next_task = task->next;
+        bool task_done = false;
+        switch (task->type)
+        {
+            case AsyncTaskType::Osm:
+            {
+                async::AsyncTaskResult<osm::Network> task_result = async::async_task_is_done(task->osm);
+                task_done = task_result.done;
+                city->osm_task_done = task_result.success;
+            };
+            break;
+            case AsyncTaskType::Neta:
+            {
+                async::AsyncTaskResult<neta::NetaTaskState> task_result = async::async_task_is_done(task->neta);
+                task_done = task_result.done;
+                city->neta_task_done = task_result.success;
+            }
+            break;
+            case AsyncTaskType::Road:
+            {
+                async::AsyncTaskResult<RoadBuildTask> task_result = async::async_task_is_done(task->road);
+                task_done = task_result.done;
+                city->road_building_done = task_result.success;
+            }
+            break;
+            case AsyncTaskType::CarSim:
+            {
+                async::AsyncTaskResult<AgentSimThread> task_result = async::async_task_is_done(task->agent_sim_task);
+                task_done = task_result.done;
+                if (publish_agents)
+                {
+                    city->cars_creation_done = task_result.success;
+                }
+                if (task_result.done)
+                {
+                    AgentSimThread* agent_sim_thread = task_result.task->user_data;
+                    if (task_result.success && publish_agents)
+                    {
+                        Assert(!city->agent_system);
+
+                        city->agent_system = new AgentSystem{};
+                        city->agent_system->agent_sim_config =
+                            std::make_unique<AgentSimConfig>(std::move(agent_sim_thread->config));
+                        city->agent_system->agent_sim =
+                            std::make_unique<AgentSim>(city->agent_system->agent_sim_config->agent_map_bucket_count,
+                                                       city->agent_system->agent_sim_config->max_agent_count);
+                    }
+                    delete agent_sim_thread;
+                }
+            }
+            break;
+            case city::AsyncTaskType::Cached:
+            {
+                switch (task->cached_type)
+                {
+                    case AsyncTaskType::Neta:
+                    {
+                        task_done = true;
+                        city->neta_task_done = true;
+                        INFO_LOG("Neta cached state loaded");
+                    };
+                    break;
+                    default: InvalidPath; break;
+                }
+            };
+            break;
+            case AsyncTaskType::None: InvalidPath; break;
+        }
+        if (task_done)
+        {
+            DLLRemove(city->task_list.first, city->task_list.last, task);
+        }
+        task = next_task;
+    }
 }
 
 } // namespace city

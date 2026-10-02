@@ -97,10 +97,14 @@ render_ctx_create(String8 shader_path, io::IO* io_ctx, async::ThreadPool* thread
     }
 
     const char* device_extensions[] = {
-        VK_KHR_SWAPCHAIN_EXTENSION_NAME,          VK_KHR_DYNAMIC_RENDERING_EXTENSION_NAME,
-        VK_EXT_COLOR_WRITE_ENABLE_EXTENSION_NAME, VK_EXT_DESCRIPTOR_INDEXING_EXTENSION_NAME,
-        VK_KHR_PUSH_DESCRIPTOR_EXTENSION_NAME,    VK_EXT_MEMORY_BUDGET_EXTENSION_NAME,
-        VK_KHR_TIMELINE_SEMAPHORE_EXTENSION_NAME, VK_EXT_MESH_SHADER_EXTENSION_NAME,
+        VK_KHR_SWAPCHAIN_EXTENSION_NAME,
+        VK_KHR_DYNAMIC_RENDERING_EXTENSION_NAME,
+        VK_EXT_COLOR_WRITE_ENABLE_EXTENSION_NAME,
+        VK_EXT_DESCRIPTOR_INDEXING_EXTENSION_NAME,
+        VK_KHR_PUSH_DESCRIPTOR_EXTENSION_NAME,
+        VK_EXT_MEMORY_BUDGET_EXTENSION_NAME,
+        VK_KHR_TIMELINE_SEMAPHORE_EXTENSION_NAME,
+        VK_EXT_MESH_SHADER_EXTENSION_NAME,
 #if BUILD_DEBUG && SHADER_DEBUG
         VK_KHR_SHADER_RELAXED_EXTENDED_INSTRUCTION_EXTENSION_NAME,
 #endif
@@ -271,7 +275,8 @@ render_ctx_destroy()
 }
 
 static void
-render_frame(Vec2U32 framebuffer_dim, B32* in_out_framebuffer_resized, Vec2S64 mouse_cursor_pos)
+render_frame(Vec2U32 framebuffer_dim, B32* in_out_framebuffer_resized, Vec2S64 mouse_cursor_pos,
+             MappedHandle<void> camera_handle_void)
 {
     prof_scope_marker;
     prof_frame_marker;
@@ -340,7 +345,7 @@ render_frame(Vec2U32 framebuffer_dim, B32* in_out_framebuffer_resized, Vec2S64 m
     VkCommandBuffer cmd_buffer = vk_ctx->command_buffers.data[frame_index];
     VK_CHECK_RESULT(vkResetCommandBuffer(cmd_buffer, 0));
 
-    vulkan::command_buffer_record(image_idx, (U32)frame_index, mouse_cursor_pos);
+    vulkan::command_buffer_record(image_idx, (U32)frame_index, mouse_cursor_pos, camera_handle_void);
 
     VkSemaphore image_available_semaphore = vk_ctx->image_available_semaphores.data[frame_index];
     VkSemaphore render_finished_semaphore = swapchain_resources->render_finished_semaphores.data[image_idx];
@@ -720,55 +725,6 @@ buffer_load_async(render::BufferInfo* buffer_info)
     return asset_handle;
 }
 
-g_internal bool
-agent_instance_render_bucket_add(render::MappedHandle<void> camera_handle, Buffer<render::AgentModelInfo> meshes,
-                                 Buffer<render::Handle> texture_handles, render::BufferInfo* instance_buffer_info,
-                                 U32 instance_buffer_offset)
-{
-    if (instance_buffer_info->buffer.size == 0 || instance_buffer_info->elem_count == 0 || meshes.size == 0 ||
-        texture_handles.size == 0)
-    {
-        return false;
-    }
-
-    vulkan::Context* vk_ctx = vulkan::ctx_get();
-    vulkan::RenderFrame* render_frame = vk_ctx->render_frame;
-    vulkan::CarInstanceRender* instance_draw = &render_frame->car_instance_render_list;
-
-    B32 resources_loaded = true;
-    for (U32 mesh_idx = 0; mesh_idx < meshes.size; ++mesh_idx)
-    {
-        render::AgentModelInfo* mesh = meshes[mesh_idx];
-        if (mesh->texture_handle_idx >= texture_handles.size)
-        {
-            return false;
-        }
-        render::Handle texture_handle = texture_handles.data[mesh->texture_handle_idx];
-        resources_loaded = resources_loaded && render::is_resource_loaded(mesh->vertex_handle) &&
-                           render::is_resource_loaded(mesh->index_handle) && render::is_resource_loaded(texture_handle);
-    }
-
-    if (resources_loaded)
-    {
-        // draw ressources
-        vulkan::CarInstanceRenderNode* node = PushStruct(vk_ctx->render_frame_arena, vulkan::CarInstanceRenderNode);
-        node->meshes = meshes;
-        node->texture_handles = texture_handles;
-        node->instance_buffer_info = *instance_buffer_info;
-        node->instance_buffer_offset = instance_buffer_offset;
-        node->camera_handle = camera_handle;
-        instance_draw->total_instance_buffer_byte_count =
-            Max(instance_draw->total_instance_buffer_byte_count,
-                instance_buffer_offset + instance_buffer_info->buffer.size);
-
-        // push work
-        SLLQueuePush(instance_draw->list.first, instance_draw->list.last, node);
-        return true;
-    }
-
-    return false;
-}
-
 static void
 tile_pipeline_add(render::TilePipelineData* pipeline_input)
 {
@@ -835,7 +791,6 @@ tile_pipeline_add(render::TilePipelineData* pipeline_input)
         node->push_constants = push_constants;
         node->index_count = pipeline_input->index_count;
         node->index_buffer_offset = pipeline_input->index_offset;
-        node->camera_handle = pipeline_input->camera_handle;
         node->pipeline_bits = pipeline_input->pipeline_bits;
         node->depth_compare = pipeline_input->depth_test_compare;
 

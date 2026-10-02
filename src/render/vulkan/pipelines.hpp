@@ -41,7 +41,7 @@ blend_3d_rendering();
 g_internal Pipeline
 tile_pipeline_create(Context* vk_ctx, String8 shader_path);
 g_internal void
-tile_rendering();
+tile_rendering(render::MappedHandle<void> mapped_camera_handle);
 
 // Primitive rendering
 g_internal Pipeline

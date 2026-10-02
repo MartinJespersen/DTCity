@@ -113,21 +113,22 @@ CMake presets define these macros based on what type of build configuration is u
 ### Simulator event streaming
 
 The simulator reads `agent_events` from `simulator/database/eskiltuna_test.sqlite`.
-A stream message uses `msg_id: 3`; a reset snapshot uses `msg_id: 5`.
-Both contain the `stream` array of events, without a separate `reset` field. Each event
-contains `id`, `time`, `event_type`, `node_from_id`, `node_to_id`, `lon_from`,
-`lat_from`, `lon_to`, and `lat_to`.
+The client sends `ServerUpdate` (`msg_id: 6`) with the scenario `name`, current
+`playback`, a fetch `period` in seconds, and a `request_id`. Requests are sent on
+seeks and scenario changes, and every half-period (default: 5 seconds).
 
-Connections, playback starts, seeks, scenario changes, and vehicle filter changes
-send a reset snapshot containing the latest event per selected agent at the
-playback time. Normal playback sends all events in `(last_sent_time, playback_time]`,
-ordered by timestamp and database row ID. The cursor advances only after a
-successful send. Pausing retains client state without periodic messages.
-Clients can request a fresh snapshot with `{"msg_id":4}`.
+Replies use `msg_id: 3`, echo `request_id`, and contain a chronological `stream`.
+Each event contains `id`, `time`, `event_type`, `node_from_id`, `node_to_id`,
+`lon_from`, `lat_from`, `lon_to`, and `lat_to`. A reply includes the latest event
+strictly before playback for each active agent, plus all events in
+`[playback, playback + period)`. The client buffers future events and only applies
+those with `time < playback`.
 
-The vehicle limit caps the population, not event rows: selected agents retain
-all their events between frames. The client currently handles Reset and Stream
-identically, appending their events without clearing the existing population.
+Event type 4 is arrival. Completed agents are excluded from the baseline;
+arrivals in the requested window retire existing client agents without allocating
+new slots. Full replies also remove agents absent from the reconstructed state,
+so missed arrivals cannot retain historical agents. Later trips reuse pool slots
+with fresh handle generations. See [time_sync.md](time_sync.md) for protocol details.
 
 ### Mimalloc and AddressSanitizer
 

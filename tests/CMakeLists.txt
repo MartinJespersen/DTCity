@@ -5,6 +5,7 @@ set(ALL_TARGETS "${ALL_TARGETS}" PARENT_SCOPE)
 target_sources(city_tests
     PRIVATE
     test_main.cpp
+    ../src/third_party/simdjson/simdjson.cpp
     ../simulator/third_party/sqlite/sqlite3.c
     ../simulator/third_party/yyjson/yyjson.c
 )

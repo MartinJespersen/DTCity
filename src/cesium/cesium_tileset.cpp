@@ -1365,7 +1365,11 @@ tileset_renderer_destroy(TilesetRenderer* renderer)
 
     render::gpu_work_update();
     renderer->async_system.dispatchMainThreadTasks();
+    CesiumAsync::AsyncSystem shutdown_async_system = renderer->async_system;
     renderer->allocator.~Allocator();
+    // Tileset destructors resolve pending height requests; run their callbacks
+    // before clearing the renderer or destroying the city's agent system.
+    shutdown_async_system.dispatchMainThreadTasks();
 
     _tileset_renderer_active_resources_release(renderer);
     MemoryZeroStruct(renderer);
@@ -1435,11 +1439,19 @@ _tileset_renderer_tile_to_show_push(TilesetRenderer* renderer, const Cesium3DTil
 }
 
 g_internal void
-tileset_update_view(TilesetRenderer* renderer, ui::Camera* camera, Vec2U32 viewport_size, F64 delta_time)
+tileset_update_view(TilesetRenderer* renderer, ArrayResourcePoolHandle camera_handle, F64 delta_time)
 {
     prof_scope_marker;
     if (!renderer)
         return;
+
+    Context* ctx = dt_ctx_get();
+    ui::Camera* camera = {};
+    B32 camera_found = ctx->camera_container->item_from_handle(camera_handle, &camera);
+    Assert(camera_found);
+    if (!camera_found)
+        return;
+    Vec2U32 viewport_size = camera->cur_framebuffer_extent;
 
     // Get camera position in ECEF
     glm::dmat4 local_to_ecef = renderer->local_to_ecef;

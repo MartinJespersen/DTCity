@@ -1,12 +1,10 @@
 TEST_CASE("Simulator field names use stable portable lookup")
 {
     String8 msg_id = SIMULATION_FIELD_NAME(MsgId);
-    String8 options = SIMULATION_FIELD_NAME(Options);
-    String8 scenario = SIMULATION_FIELD_NAME(ScenarioId);
+    String8 scenario_field_name = SIMULATION_FIELD_NAME(Scenarios);
     String8 stream = SIMULATION_FIELD_NAME(Stream);
     CHECK(std::string_view((char*)msg_id.str, msg_id.size) == "msg_id");
-    CHECK(std::string_view((char*)options.str, options.size) == "options");
-    CHECK(std::string_view((char*)scenario.str, scenario.size) == "scenario_idx");
+    CHECK(std::string_view((char*)scenario_field_name.str, scenario_field_name.size) == "scenarios");
     CHECK(std::string_view((char*)stream.str, stream.size) == "stream");
 }
 
@@ -228,7 +226,8 @@ TEST_CASE("Add Max Items Before Overflow And Read Last Item")
     U64 item_stride = align_pow2(sizeof(ItemHeader<TestObject>), item_align);
 
     // res holds the items arena + the ResourcePool struct + the nil slot; the rest is items.
-    U32 max_reserved = (container->arena->res - ARENA_HEADER_SIZE - sizeof(ResourcePool<TestObject>) - item_stride) / item_stride;
+    U32 max_reserved =
+        (container->arena->res - ARENA_HEADER_SIZE - sizeof(ResourcePool<TestObject>) - item_stride) / item_stride;
     for (U32 i = 0; i < max_reserved; ++i)
     {
         ResourcePoolHandle handle = resource_pool_array_idx_get(container);
@@ -415,7 +414,6 @@ TEST_CASE("Map uses collision chunks and preserves value pointers")
         map.insert(arena, key, key);
     U64 reused_position = arena_pos(arena);
     CHECK(reused_position == allocated_position);
-
 }
 
 TEST_CASE("Map supports explicit ownership and aligned values")

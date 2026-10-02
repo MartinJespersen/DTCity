@@ -1,3 +1,5 @@
+#include <string>
+#include <vector>
 // third party header
 #define DOCTEST_CONFIG_IMPLEMENT
 #include "third_party/doctest/doctest.h"
@@ -22,9 +24,19 @@ struct alignas(64) DynamicArrayAlignedTestItem
 #include "../simulator/third_party/sqlite/sqlite3.h"
 #include "../simulator/third_party/yyjson/yyjson.h"
 #include "../simulator/event_snapshot.hpp"
+#include "../simulator/metadata.hpp"
 #include "third_party/simdjson/simdjson.h"
 #include "city/simulator_shared_interface.hpp"
-#include "city/json.hpp"
+#include "city/simulator_messages.hpp"
+namespace ui
+{
+struct Camera;
+}
+namespace cesium
+{
+struct TilesetRenderer;
+}
+#include "city/agent.hpp"
 
 #if ASAN_ENABLED
 C_LINKAGE int

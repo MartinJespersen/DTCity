@@ -74,7 +74,8 @@ struct Array
     operator[](U64 index) const noexcept;
 
   private:
-    void _array_release() noexcept;
+    void
+    _array_release() noexcept;
 };
 
 template <typename T>
@@ -83,10 +84,10 @@ struct Buffer
     T* data;
     U64 size;
 
-    T*
+    T&
     operator[](U64 index)
     {
-        return &data[index];
+        return data[index];
     }
 
     T*

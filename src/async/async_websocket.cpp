@@ -145,7 +145,7 @@ WebsocketConnection::try_send_resv(Arena* arena, String8List* msg_send_list, Str
     AsyncError update_error = ws_session->error;
     if (update_error.has_error())
     {
-        DEBUG_LOG("error when updating websocket: %u", ws_session->error.curl_code);
+        DEBUG_LOG("error when updating websocket: %u (%s)", ws_session->error.curl_code, ws_session->curl_error);
         _curl_reset(ws_session->curl_ctx);
         // Delivery is unknown after disconnect: do not replay possibly sent messages.
         _async_websocket_send_clear(ws_session);
@@ -270,6 +270,9 @@ _async_websocket_configure(AsyncWebsocketSession* ws_session)
     {
         return error;
     }
+    ws_session->curl_error[0] = 0;
+    async_return_curl_error(CurlCodeType::Regular,
+                            curl_easy_setopt(curl_ctx->session_handle, CURLOPT_ERRORBUFFER, ws_session->curl_error));
     async_return_curl_error(CurlCodeType::Regular, curl_easy_setopt(curl_ctx->session_handle, CURLOPT_WRITEFUNCTION,
                                                                     _libcurl_ws_read_callback));
     async_return_curl_error(CurlCodeType::Regular,

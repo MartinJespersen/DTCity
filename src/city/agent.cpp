@@ -7,9 +7,7 @@ agents_create(AgentSimThread* agent_sim_thread)
 {
     prof_scope_marker;
     ScratchScope scratch = ScratchScope(0, 0);
-    agent_sim_thread->agent_sim = std::make_unique<AgentSim>(Allocator::create<AgentSim>());
     AgentSimConfig& agent_sim_config = agent_sim_thread->config;
-    AgentSim& agent_sim = *agent_sim_thread->agent_sim;
 
     for (U32 agent_cfg_idx = 0; agent_cfg_idx < ArrayCount(agent_sim_config.agent_config); ++agent_cfg_idx)
     {
@@ -73,7 +71,7 @@ agents_create(AgentSimThread* agent_sim_thread)
         model_render_info->texture_handles[0] = render::texture_zero_handle_get();
         for (U32 tex_idx = 1; tex_idx < glb_result.textures.size; ++tex_idx)
         {
-            gltfw_Texture* tex = glb_result.textures[tex_idx];
+            gltfw_Texture* tex = &glb_result.textures[tex_idx];
             render::SamplerInfo sampler_info = sampler_from_cgltf_sampler(tex->sampler);
             model_render_info->texture_handles.data[tex_idx] =
                 render::texture_load_sync(thread_ctx, &sampler_info, tex->tex_buf);
@@ -116,10 +114,6 @@ agents_create(AgentSimThread* agent_sim_thread)
             mesh_idx++;
         }
     }
-
-    agent_sim.agent_map = agent_sim.allocator.make<Map<WsId, AgentMapItem>>(agent_sim_config.agent_count);
-
-    agent_sim.agents_active = agent_sim.allocator.make<ArrayResourcePool<Agent>>(agent_sim_config.max_agent_count);
 }
 
 AgentSimThread::~AgentSimThread()
@@ -147,68 +141,67 @@ AgentSystem::destroy()
 }
 
 void
-AgentSystem::update(cesium::TilesetRenderer* renderer, CoordinateBatch updates, glm::dmat4& ecef_to_local,
-                    F32 scale_factor, U64 cur_frame)
+AgentSystem::update(ui::Camera* camera,
+                    render::MeshHandle& hover_icon_mesh_handle, cesium::TilesetRenderer* tileset,
+                    Buffer<AgentUpdate>& agent_updates, bool agent_reset, bool snapshot_received,
+                    F32 agent_scale_factor, glm::dmat4& ecef_to_local)
 {
     prof_scope_marker;
+    ScratchScope scratch = ScratchScope(0, 0);
 
-    if (updates.reset)
+    if (agent_reset)
     {
-        this->agent_sim->agents_active->invalidate_all();
-        this->agent_sim->agent_map->clear();
+        this->agent_sim->agents_active.invalidate_all();
+        this->agent_sim->agent_map.clear();
     }
-    Buffer<Coordinate> coord_buffer = updates.coordinates;
-    for (U32 agent_idx = 0; agent_idx < coord_buffer.size; agent_idx++)
+    if (snapshot_received)
     {
-        Coordinate* coord = &coord_buffer.data[agent_idx];
+        this->agent_sim->reconcile_snapshot(agent_updates);
+    }
+    for (U32 agent_idx = 0; agent_idx < agent_updates.size; agent_idx++)
+    {
+        AgentUpdate& coord = agent_updates[agent_idx];
 
-        glm::dvec3 ecef_coord = util::ecef_from_wgs84(coord->from.x, coord->from.y);
-        Agent* agent = {};
-        AgentMapItem* map_item = {};
-        MapResult result = this->agent_sim->agent_map->get(coord->id, &map_item);
-        if (result == MapResult::Success)
+        AgentSlotUpdate slot = this->agent_sim->update_slot(coord);
+        if (!slot.active)
         {
-            bool agent_found = agent_sim->agents_active->item_from_handle(map_item->agent_handle, &agent);
-            Assert(agent_found);
-            if (agent_found)
+            continue;
+        }
+        glm::dvec3 ecef_coord = util::ecef_from_wgs84(coord.from.x, coord.from.y);
+        Agent* agent = slot.agent;
+        if (!slot.created)
+        {
+            glm::dvec3 ecef_dir = ecef_coord - agent->ecef_coord;
+            F64 move_len_sq = glm::dot(ecef_dir, ecef_dir);
+            if (move_len_sq > 0.001)
             {
-                glm::dvec3 ecef_dir = ecef_coord - agent->ecef_coord;
-                F64 move_len_sq = glm::dot(ecef_dir, ecef_dir);
-                if (move_len_sq > 0.001)
-                {
-                    agent->ecef_coord = ecef_coord;
-                    agent->ecef_dir = ecef_dir;
-                }
+                agent->ecef_coord = ecef_coord;
+                agent->ecef_dir = ecef_dir;
             }
         }
         else
         {
-            glm::dvec3 local_dir = glm::dvec3(1, 0, 0);
-            ArrayResourcePoolHandle handle = agent_sim->agents_active->item_new(&agent);
-            *agent = {
-                .handle = handle, .ecef_coord = ecef_coord, .ecef_dir = local_dir, .vehicle_type = coord->vehicle_type};
-            agent->vehicle_type = coord->vehicle_type;
-            AgentMapItem agent_map_item = {.agent_handle = handle};
-            map_item = agent_sim->agent_map->insert(agent_sim->allocator.arena, coord->id, agent_map_item);
-
-            agent->cartographic_coords = glm::dvec2(coord->from.x, coord->from.y);
-            _agent_height_updates_start(renderer);
+            agent->ecef_coord = ecef_coord;
+            agent->ecef_dir = glm::dvec3(1, 0, 0);
+            agent->vehicle_type = coord.vehicle_type;
+            agent->cartographic_coords = glm::dvec2(coord.from.x, coord.from.y);
+            _agent_height_updates_start(tileset);
         }
-        agent->cartographic_coords = glm::dvec2(coord->from.x, coord->from.y);
+        agent->cartographic_coords = glm::dvec2(coord.from.x, coord.from.y);
 
-        AgentConfig* agent_config = &agent_sim_config->agent_config[enum_idx(agent->vehicle_type)];
+        AgentConfig* agent_config = &this->agent_sim_config->agent_config[enum_idx(agent->vehicle_type)];
 
         glm::dvec3 local_world_dir = glm::dvec3(ecef_to_local * glm::dvec4(agent->ecef_dir, 0.0));
         glm::dmat3 model_to_world_rotation =
             _gltf_rotation_to_world(local_world_dir, glm::dvec3(agent_config->model_forward_dir));
 
         agent->model_matrix.x_basis = glm::vec4(glm::dvec4(model_to_world_rotation[0], 0.0f)) *
-                                      (scale_factor + agent_config->model_to_world_scale);
+                                      (agent_scale_factor + agent_config->model_to_world_scale);
         agent->model_matrix.y_basis = glm::vec4(glm::dvec4(model_to_world_rotation[1], 0.0f)) *
-                                      (scale_factor + agent_config->model_to_world_scale);
+                                      (agent_scale_factor + agent_config->model_to_world_scale);
         agent->model_matrix.z_basis = glm::vec4(glm::dvec4(model_to_world_rotation[2], 0.0f)) *
-                                      (scale_factor + agent_config->model_to_world_scale);
-        CesiumGeospatial::Cartographic elevated_cartographic(glm::radians(coord->from.x), glm::radians(coord->from.y),
+                                      (agent_scale_factor + agent_config->model_to_world_scale);
+        CesiumGeospatial::Cartographic elevated_cartographic(glm::radians(coord.from.x), glm::radians(coord.from.y),
                                                              agent->height);
         glm::dvec3 elevated_ecef_coord =
             CesiumGeospatial::Ellipsoid::WGS84.cartographicToCartesian(elevated_cartographic);
@@ -217,7 +210,46 @@ AgentSystem::update(cesium::TilesetRenderer* renderer, CoordinateBatch updates, 
         glm::mat4 model_transform = glm::mat4(agent->model_matrix.x_basis, agent->model_matrix.y_basis,
                                               agent->model_matrix.z_basis, agent->model_matrix.w_basis);
         agent->world_bounds = _agent_world_bounds_from_transform(agent_config->model_bounds, model_transform);
-        agent->latest_update_frame = cur_frame;
+    }
+
+    // rendering
+    {
+        AgentModelRenderInfo* models = this->agent_sim_config->models;
+
+        ChunkList<render::Transform>* transform_lists[ArrayCount(this->agent_sim_config->agent_config)];
+        for (U32 agent_cfg_idx = 0; agent_cfg_idx < ArrayCount(transform_lists); ++agent_cfg_idx)
+        {
+            transform_lists[agent_cfg_idx] = chunk_list_create<render::Transform>(scratch.arena, 100);
+        }
+        for (Agent& active_agent : this->agent_sim->agents_active)
+        {
+            B32 visible = ui::frustum_check_from_bounding_box(&camera->frustum_planes, active_agent.world_bounds);
+            constexpr F32 hover_icon_scale_factor = 10.0f;
+            this->agent_icon_add(active_agent, hover_icon_mesh_handle,
+                                 hover_icon_scale_factor); // TODO: Frustum cull icon as well
+            if (visible)
+            {
+                if (ui::is_bounding_sphere_to_be_culled(*camera, active_agent.world_bounds) == false)
+                {
+                    ChunkList<render::Transform>* transform_list = transform_lists[enum_idx(active_agent.vehicle_type)];
+                    chunk_list_insert(scratch.arena, transform_list, active_agent.model_matrix);
+                }
+            }
+        }
+
+        // Submit each model once after gathering all visible agent transforms.
+        for (U32 agent_cfg_idx = 0; agent_cfg_idx < ArrayCount(this->agent_sim_config->agent_config); ++agent_cfg_idx)
+        {
+            AgentModelRenderInfo* model_render_info = &models[agent_cfg_idx];
+
+            Buffer<render::Transform> transform_buffer =
+                buffer_from_chunk_list(draw::draw_frame_arena_get(), transform_lists[agent_cfg_idx]);
+            render::BufferInfo instance_buffer_info =
+                render::BufferInfo(transform_buffer, render::BufferType_Vertex | render::BufferType_StorageBuffer);
+
+            this->agent_draw(model_render_info->geometry, model_render_info->texture_handles,
+                             &instance_buffer_info);
+        }
     }
 }
 
@@ -240,11 +272,10 @@ AgentSystem::agent_icon_add(Agent& agent, render::MeshHandle hover_icon_mesh_han
 }
 
 void
-AgentSystem::agent_draw(render::MappedHandle<void> camera_handle, Array<render::AgentModelInfo>& meshes,
+AgentSystem::agent_draw(Array<render::AgentModelInfo>& meshes,
                         Array<render::Handle>& texture_handles, render::BufferInfo* instance_buffer_info)
 {
     draw::DrawFrame* frame = draw::draw_frame_get();
-    (void)camera_handle; // The draw layer owns the frame camera.
     Assert(instance_buffer_info->type_size == sizeof(render::Transform));
     Buffer<render::Transform> transforms = {(render::Transform*)instance_buffer_info->buffer.data,
                                             instance_buffer_info->elem_count};
@@ -265,8 +296,7 @@ AgentSystem::agent_draw(render::MappedHandle<void> camera_handle, Array<render::
 void
 AgentSystem::_agent_height_updates_start(cesium::TilesetRenderer* renderer)
 {
-    if (agent_sim->agents_active == 0 || agent_sim->agents_active->item_in_use_count == 0 ||
-        agent_sim->height_update_in_flight)
+    if (agent_sim->agents_active.item_in_use_count == 0 || agent_sim->height_update_in_flight)
     {
         return;
     }
@@ -293,10 +323,10 @@ AgentSystem::_agent_height_update_async(cesium::TilesetRenderer* renderer)
 
     std::vector<CesiumGeospatial::Cartographic> agent_positions;
     std::vector<ArrayResourcePoolHandle> sampled_agents;
-    agent_positions.reserve(agent_sim->agents_active->item_in_use_count);
-    sampled_agents.reserve(agent_sim->agents_active->item_in_use_count);
+    agent_positions.reserve(agent_sim->agents_active.item_in_use_count);
+    sampled_agents.reserve(agent_sim->agents_active.item_in_use_count);
 
-    for (Agent& agent : *agent_sim->agents_active)
+    for (Agent& agent : agent_sim->agents_active)
     {
         if (!agent.done)
         {
@@ -330,7 +360,7 @@ AgentSystem::_agent_height_update_async(cesium::TilesetRenderer* renderer)
                     {
                         ArrayResourcePoolHandle handle = sampled_agents[agent_idx];
                         Agent* agent = {};
-                        if (this->agent_sim->agents_active->item_from_handle(handle, &agent))
+                        if (this->agent_sim->agents_active.item_from_handle(handle, &agent))
                         {
                             agent->height = (F32)result.positions[agent_idx].height;
                         }
@@ -395,4 +425,5 @@ _agent_models_release(AgentSimConfig* config)
         }
     }
 }
+
 } // namespace city

@@ -31,77 +31,12 @@ struct TilePipelineNode
     BufferAllocation vertex_alloc;
     BufferAllocation road_segment_alloc;
     TilePipelinePushConstants push_constants;
-    render::MappedHandle<void> camera_handle;
-};
-
-struct CarInstancePushConstants
-{
-    glm::vec4 color;
-    U32 tex_idx;
-};
-
-struct CarHeightCalculatePushConstants
-{
-    U32 agent_count;
-    F32 agent_height_offset;
-    F32 tile_height_offset;
-};
-
-struct CarInstanceComputeNode
-{
-    CarInstanceComputeNode* next;
-
-    // Compute pipeline ressources
-    BufferHandle* tile_index_handle;
-    BufferHandle* tile_vertex_handle;
-    CarHeightCalculatePushConstants compute_push_constants;
-
-    // shared pipeline ressources
-    render::BufferInfo instance_buffer_info;
-    U32 instance_buffer_offset;
-};
-
-struct CarInstanceRenderNode
-{
-    CarInstanceRenderNode* next;
-
-    // draw pipeline ressources
-    render::MappedHandle<void> camera_handle;
-    Buffer<render::AgentModelInfo> meshes;
-    Buffer<render::Handle> texture_handles;
-
-    // shared pipeline ressources
-    render::BufferInfo instance_buffer_info;
-    U32 instance_buffer_offset;
 };
 
 struct TilePipelineList
 {
     TilePipelineNode* first;
     TilePipelineNode* last;
-};
-
-struct CarInstanceComputeNodeList
-{
-    CarInstanceComputeNode* first;
-    CarInstanceComputeNode* last;
-};
-
-struct CarInstanceRenderNodeList
-{
-    CarInstanceRenderNode* first;
-    CarInstanceRenderNode* last;
-};
-
-struct CarInstanceCompute
-{
-    CarInstanceComputeNodeList list;
-};
-
-struct CarInstanceRender
-{
-    CarInstanceRenderNodeList list;
-    U32 total_instance_buffer_byte_count;
 };
 
 struct Blend3dPushConstants
@@ -150,8 +85,6 @@ struct RoadIntersectionList
 struct RenderFrame
 {
     TilePipelineList model_3D_list;
-    CarInstanceCompute car_instance_compute_list;
-    CarInstanceRender car_instance_render_list;
     Blend3DList blend_3d_list;
     RoadIntersectionList road_intersection_list;
 
@@ -301,7 +234,8 @@ blend_3d_bucket_add(BufferAllocation* vertex_buffer_allocation, BufferAllocation
                     render::MappedHandle<void> camera_handle);
 
 static void
-command_buffer_record(U32 image_index, U32 current_frame, Vec2S64 mouse_cursor_pos);
+command_buffer_record(U32 image_index, U32 current_frame, Vec2S64 mouse_cursor_pos,
+                      render::MappedHandle<void> camera_handle_void);
 
 g_internal void
 mapped_buffers_update();

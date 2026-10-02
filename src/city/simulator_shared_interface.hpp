@@ -6,19 +6,30 @@ namespace city
 enum class SimulationMessageKind : U32
 {
     Nop = 0,
-    Options = 1,
-    ChangeScenario = 2,
     Stream = 3,
-    RequestSnapshot = 4,
-    Reset = 5,
+    MetadataRequest = 4,
+    ServerUpdate = 6,
 };
 
 enum class SimulationFieldType
 {
     MsgId,
-    Options,
-    ScenarioId,
-    Stream
+    Scenarios,
+    Stream,
+    TimestampStart,
+    TimestampEnd
+};
+
+enum class AgentEventType : S64
+{
+    Arrival = 4
+};
+
+struct ServerUpdate
+{
+    std::string name;
+    F64 playback;
+    F64 period;
 };
 
 struct SimulationFieldName
@@ -30,10 +41,10 @@ struct SimulationFieldName
 // Field names are indexed by the shared enum on every platform.
 static const SimulationFieldName simulation_field_names[] = {
     {SimulationFieldType::MsgId, S("msg_id")},
-    {SimulationFieldType::Options, S("options")},
-    {SimulationFieldType::ScenarioId, S("scenario_idx")},
+    {SimulationFieldType::Scenarios, S("scenarios")},
     {SimulationFieldType::Stream, S("stream")},
-};
+    {SimulationFieldType::TimestampStart, S("timestamp_start")},
+    {SimulationFieldType::TimestampEnd, S("timestamp_end")}};
 #define SIMULATION_FIELD_NAME(Type) (::city::simulation_field_names[(U32)::city::SimulationFieldType::Type].name)
 
 enum class SimulationErrorType
@@ -52,6 +63,9 @@ struct SimulationError
     SimulationErrorType type;
     U64 error_code;
 };
+
+g_internal error_code
+simulator_server_update_from_json(ondemand::document& doc, ServerUpdate* out_update, U64* out_request_id);
 
 g_internal error_code
 simulator_prepare_json_doc(Arena* arena, String8 msg, ondemand::parser& parser, ondemand::document& out_doc);

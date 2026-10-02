@@ -4,6 +4,7 @@ namespace city
 constexpr F32 agent_hover_icon_offset = 100.0f;
 constexpr glm::vec4 agent_hover_icon_color = glm::vec4(1.0f, 0.65f, 0.0f, 1.0f);
 typedef S64 WsId;
+
 struct AgentModelRenderInfo
 {
     // rendering
@@ -13,18 +14,13 @@ struct AgentModelRenderInfo
 struct Agent
 {
     ArrayResourcePoolHandle handle;
+    WsId id;
     glm::dvec2 cartographic_coords;
     glm::dvec3 ecef_coord;
     glm::dvec3 ecef_dir;
-    U64 latest_update_frame;
-    VehicleType vehicle_type;
+    AgentType vehicle_type;
     F32 height;
     bool done;
-
-    F64 sim_time_start;
-    F64 sim_time_end;
-    glm::dvec3 start_pos;
-    glm::dvec3 end_pos;
 
     // updated per frame
     Rng3F32 world_bounds;
@@ -52,10 +48,17 @@ struct AgentSimConfig
 {
     String8 asset_dir;
     String8 texture_dir;
-    U32 agent_count;
+    U32 agent_map_bucket_count;
     U32 max_agent_count;
-    AgentConfig agent_config[(S32)VehicleType::Count];
-    AgentModelRenderInfo models[(S32)VehicleType::Count];
+    AgentConfig agent_config[(S32)AgentType::Count];
+    AgentModelRenderInfo models[(S32)AgentType::Count];
+};
+
+struct AgentSlotUpdate
+{
+    Agent* agent;
+    bool active;
+    bool created;
 };
 
 struct AgentSim
@@ -64,18 +67,23 @@ struct AgentSim
 
     B32 height_updates_stop;
     B32 height_update_in_flight;
-    Map<WsId, AgentMapItem>* agent_map;
-    ArrayResourcePool<Agent>* agents_active;
+    Map<WsId, AgentMapItem> agent_map;
+    ArrayResourcePool<Agent> agents_active;
+
+    AgentSim(U32 hashmap_bucket_capacity, U32 max_agent_count);
+    AgentSlotUpdate
+    update_slot(const AgentUpdate& update);
+    void
+    reconcile_snapshot(Buffer<AgentUpdate> updates);
 };
 
 struct AgentSimThread
 {
-    AgentSimConfig config;               // input
-    std::unique_ptr<AgentSim> agent_sim; // output
+    AgentSimConfig config; // input
     ~AgentSimThread();
 };
 
-glm::dmat3
+g_internal glm::dmat3
 _gltf_rotation_to_world(glm::dvec3 world_dir, glm::dvec3 model_dir);
 
 struct AgentSystem
@@ -87,13 +95,14 @@ struct AgentSystem
     void
     destroy();
     void
-    update(cesium::TilesetRenderer* renderer, CoordinateBatch updates, glm::dmat4& ecef_to_local, F32 scale_factor,
-           U64 cur_frame);
+    update(ui::Camera* camera,
+           render::MeshHandle& hover_icon_mesh_handle, cesium::TilesetRenderer* tileset,
+           Buffer<AgentUpdate>& agent_updates, bool agent_reset, bool snapshot_received, F32 agent_scale_factor, glm::dmat4& ecef_to_local);
 
     void
     agent_icon_add(Agent& agent, render::MeshHandle hover_icon_mesh_handle, F32 hover_icon_scale_factor);
     void
-    agent_draw(render::MappedHandle<void> camera_handle, Array<render::AgentModelInfo>& meshes,
+    agent_draw(Array<render::AgentModelInfo>& meshes,
                Array<render::Handle>& texture_handles, render::BufferInfo* instance_buffer_info);
     void
     _agent_height_updates_start(cesium::TilesetRenderer* renderer);

@@ -407,7 +407,6 @@ str8_from_chunk_list(Arena* arena, ChunkList<U8>* list)
 }
 
 // Linked List Map
-
 template <typename K, typename V>
 Map<K, V>::Map(Allocator* allocator, U64 bucket_capacity)
 {

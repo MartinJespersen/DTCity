@@ -2771,7 +2771,7 @@ env_vars_from_env_file(Arena* arena)
     {
         for (U32 j = i; j < current_path_parts.node_count; ++j)
         {
-            String8List* candidate_path_list = candidate_parent_paths[j];
+            String8List* candidate_path_list = &candidate_parent_paths[j];
             String8Node* path_part_node = PushStruct(scratch.arena, String8Node);
             path_part_node->string = push_str8_copy(scratch.arena, current_path_part->string);
             str8_list_push_node(candidate_path_list, path_part_node);

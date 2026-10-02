@@ -137,7 +137,7 @@ tileset_tile_mesh_processor_enabled_set(TilesetRenderer* renderer, B32 enabled);
 g_internal void
 tileset_pump_async(TilesetRenderer* renderer);
 g_internal void
-tileset_update_view(TilesetRenderer* renderer, ui::Camera* camera, Vec2U32 viewport_size, F64 delta_time);
+tileset_update_view(TilesetRenderer* renderer, ArrayResourcePoolHandle camera_handle, F64 delta_time);
 
 g_internal void
 tileset_render_resources_release(TileRenderResources* list);

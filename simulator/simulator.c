@@ -14,6 +14,7 @@ using namespace simdjson;
 #include "base/base_inc.hpp"
 #include "os_core/os_core_inc.hpp"
 #include "resource_paths.hpp"
+#include "metadata.hpp"
 
 #include "base/base_inc.cpp"
 #include "resource_paths.cpp"
@@ -60,7 +61,10 @@ _server_thread_exit(const struct mg_context* context, int thread_type, void* thr
 #include <nuklear_glfw_gl3.h>
 #include <yyjson.h>
 #include "event_snapshot.hpp"
+#include "event_worker.hpp"
 #include "event_snapshot.cpp"
+#include "event_worker.cpp"
+#include "metadata.cpp"
 
 #define WINDOW_WIDTH 1024
 #define WINDOW_HEIGHT 1024
@@ -69,8 +73,6 @@ _server_thread_exit(const struct mg_context* context, int thread_type, void* thr
 #define SERVER_PORT 8080
 #define MAX_STATUS_TEXT 8192
 #define MAX_PATH_TEXT 1024
-#define DEFAULT_FPS 20
-#define DEFAULT_VEHICLE_COUNT 200
 #define DEFAULT_DB_PATH "simulator/database/eskiltuna_test.sqlite"
 #define CUSTOM_FONT_PATH "simulator/fonts/segoeuithis.ttf"
 #define CUSTOM_FONT_SIZE 18.0f
@@ -79,19 +81,18 @@ _server_thread_exit(const struct mg_context* context, int thread_type, void* thr
 #define APP_BG_G 45
 #define APP_BG_B 45
 
-struct string_list
-{
-    Arena* arena;
-    char** items;
-    int count;
-    int capacity;
-};
-
 struct websocket_server
 {
     struct mg_context* context;
     struct mg_connection* client_connection;
     U64 stream_generation;
+    F64 timestamp_start;
+    F64 timestamp_end;
+    char requested_name[1024];
+    F64 requested_playback;
+    F64 requested_period;
+    U64 request_id;
+    bool request_pending;
     OS_Handle mutex;
     char last_received[MAX_STATUS_TEXT];
     char last_sent[MAX_STATUS_TEXT];
@@ -100,41 +101,29 @@ struct websocket_server
 
 struct vehicle_stream
 {
-    bool streaming;
-    SimulatorEventCursor cursor;
-    bool isolate_selected_vehicles;
-    int fps;
-    int vehicle_count;
-    uint64_t frames_sent;
-    uint64_t packets_sent;
-    int last_sent_vehicle_count;
-    U64 last_tick_us;
-    double simulated_seconds;
-    U64 next_frame_at_us;
+    U64 frames_sent;
     Arena* preview_arena;
     char* last_snapshot_preview;
-    char vehicle_search[128];
-    struct string_list visible_vehicle_ids;
-    struct string_list selected_vehicle_ids;
 };
 
 struct playback_db
 {
     Arena* arena;
     sqlite3* db;
-    sqlite3_stmt* snapshot_stmt;
-    sqlite3_stmt* delta_stmt;
     bool ready;
     double min_time;
     double max_time;
     String8 path;
     char path_input[MAX_PATH_TEXT];
     char status_line[256];
-    int last_active_count;
 };
 
 static void
-stream_stop(struct vehicle_stream* stream);
+_server_event_requests_process(struct vehicle_stream* stream, struct websocket_server* server,
+                                struct playback_db* playback_db, SimulatorEventWorker* worker);
+
+static void
+_server_playback_range_update(struct websocket_server* server, struct playback_db* playback_db);
 
 static void
 copy_status(char* dest, size_t dest_size, const char* src)
@@ -184,24 +173,6 @@ resolve_db_path(Arena* arena, String8 path, String8* out_path)
     return out_path->size > 0 && path_exists;
 }
 
-static bool
-prepare_sql_statement(sqlite3* db, const char* sql, sqlite3_stmt** stmt)
-{
-    prof_frame_marker;
-    if (!db || !sql || !stmt)
-    {
-        return false;
-    }
-
-    if (*stmt)
-    {
-        sqlite3_finalize(*stmt);
-        *stmt = NULL;
-    }
-
-    return sqlite3_prepare_v2(db, sql, -1, stmt, NULL) == SQLITE_OK;
-}
-
 static void
 server_mutex_init(struct websocket_server* server)
 {
@@ -236,6 +207,18 @@ server_unlock(struct websocket_server* server)
         return;
     }
     os_mutex_drop(server->mutex);
+}
+
+static void
+_server_playback_range_update(struct websocket_server* server, struct playback_db* playback_db)
+{
+    // Websocket callbacks read this snapshot without accessing SQLite on their thread.
+    server_lock(server);
+    // A database reload invalidates replies computed from the previous file.
+    ++server->stream_generation;
+    server->timestamp_start = playback_db->ready ? playback_db->min_time : 0;
+    server->timestamp_end = playback_db->ready ? playback_db->max_time : 0;
+    server_unlock(server);
 }
 
 static bool
@@ -323,261 +306,6 @@ pick_sqlite_db_file(char* out_path, size_t out_size)
     return converted_size > 0;
 }
 #endif
-
-static bool
-text_contains_ci(const char* text, const char* pattern)
-{
-    size_t pattern_length = 0;
-    const char* cursor = NULL;
-
-    if (!pattern || pattern[0] == '\0')
-    {
-        return true;
-    }
-
-    if (!text || text[0] == '\0')
-    {
-        return false;
-    }
-
-    pattern_length = strlen(pattern);
-
-    for (cursor = text; *cursor; ++cursor)
-    {
-        size_t i = 0;
-
-        while (i < pattern_length && cursor[i] && char_to_lower((U8)cursor[i]) == char_to_lower((U8)pattern[i]))
-        {
-            i += 1;
-        }
-
-        if (i == pattern_length)
-        {
-            return true;
-        }
-    }
-
-    return false;
-}
-
-static void
-string_list_clear(struct string_list* list)
-{
-    if (!list)
-    {
-        return;
-    }
-
-    if (list->arena)
-    {
-        arena_clear(list->arena);
-    }
-    list->items = NULL;
-    list->count = 0;
-    list->capacity = 0;
-}
-
-static void
-string_list_free(struct string_list* list)
-{
-    if (!list)
-    {
-        return;
-    }
-
-    if (list->arena)
-    {
-        arena_release(list->arena);
-    }
-    list->arena = NULL;
-    list->items = NULL;
-    list->count = 0;
-    list->capacity = 0;
-}
-
-static int
-string_list_index_of(const struct string_list* list, const char* value)
-{
-    int i = 0;
-
-    if (!list || !value)
-    {
-        return -1;
-    }
-
-    for (i = 0; i < list->count; ++i)
-    {
-        if (list->items[i] && strcmp(list->items[i], value) == 0)
-        {
-            return i;
-        }
-    }
-
-    return -1;
-}
-
-static bool
-string_list_contains(const struct string_list* list, const char* value)
-{
-    return string_list_index_of(list, value) >= 0;
-}
-
-static bool
-string_list_ensure_capacity(struct string_list* list, int required_count)
-{
-    int new_capacity = 0;
-    char** resized_items = NULL;
-
-    if (!list || !list->arena)
-    {
-        return false;
-    }
-
-    if (required_count <= list->capacity)
-    {
-        return true;
-    }
-
-    new_capacity = list->capacity > 0 ? list->capacity : 16;
-
-    while (new_capacity < required_count)
-    {
-        new_capacity *= 2;
-    }
-
-    resized_items = PushArray(list->arena, char*, new_capacity);
-
-    if (!resized_items)
-    {
-        return false;
-    }
-
-    if (list->items && list->count > 0)
-    {
-        MemoryCopyTyped(resized_items, list->items, list->count);
-    }
-    list->items = resized_items;
-    list->capacity = new_capacity;
-    return true;
-}
-
-static bool
-string_list_append_unique(struct string_list* list, const char* value)
-{
-    char* copy = NULL;
-
-    if (!list || !value)
-    {
-        return false;
-    }
-
-    if (string_list_contains(list, value))
-    {
-        return true;
-    }
-
-    if (!string_list_ensure_capacity(list, list->count + 1))
-    {
-        return false;
-    }
-
-    size_t value_size = strlen(value);
-    copy = PushArrayNoZero(list->arena, char, value_size + 1);
-
-    if (!copy)
-    {
-        return false;
-    }
-
-    MemoryCopy(copy, value, value_size);
-    copy[value_size] = 0;
-    list->items[list->count++] = copy;
-    return true;
-}
-
-static bool
-string_list_remove(struct string_list* list, const char* value)
-{
-    int index = 0;
-    int i = 0;
-
-    if (!list || !value)
-    {
-        return false;
-    }
-
-    index = string_list_index_of(list, value);
-
-    if (index < 0)
-    {
-        return false;
-    }
-
-    for (i = index; i < list->count - 1; ++i)
-    {
-        list->items[i] = list->items[i + 1];
-    }
-
-    list->items[list->count - 1] = NULL;
-    list->count -= 1;
-    return true;
-}
-
-static bool
-string_list_toggle(struct string_list* list, const char* value)
-{
-    if (!list || !value)
-    {
-        return false;
-    }
-
-    if (string_list_contains(list, value))
-    {
-        return string_list_remove(list, value);
-    }
-
-    return string_list_append_unique(list, value);
-}
-
-static void
-build_selected_summary(const struct string_list* selected_vehicle_ids, char* buffer, size_t buffer_size)
-{
-    size_t offset = 0;
-    int i = 0;
-
-    if (!buffer || buffer_size == 0)
-    {
-        return;
-    }
-
-    buffer[0] = '\0';
-
-    if (!selected_vehicle_ids || selected_vehicle_ids->count == 0)
-    {
-        snprintf(buffer, buffer_size, "(none)");
-        return;
-    }
-
-    for (i = 0; i < selected_vehicle_ids->count; ++i)
-    {
-        const char* vehicle_id = selected_vehicle_ids->items[i];
-        int written = 0;
-
-        written = snprintf(buffer + offset, buffer_size - offset, "%s%s", i == 0 ? "" : ", ",
-                           vehicle_id ? vehicle_id : "unknown");
-
-        if (written < 0 || (size_t)written >= buffer_size - offset)
-        {
-            if (buffer_size > 4)
-            {
-                snprintf(buffer + buffer_size - 4, 4, "...");
-            }
-            return;
-        }
-
-        offset += (size_t)written;
-    }
-}
 
 static void
 server_close_client(struct websocket_server* server)
@@ -689,6 +417,7 @@ server_websocket_ready_handler(struct mg_connection* conn, void* cbdata)
     server_lock(server);
     server->client_connection = conn;
     ++server->stream_generation;
+    server->request_pending = false;
     copy_status(server->status_line, sizeof(server->status_line),
                 user_agent && strstr(user_agent, "Mozilla")
                     ? "Browser viewer connected. Map server: http://127.0.0.1:8080"
@@ -696,59 +425,6 @@ server_websocket_ready_handler(struct mg_connection* conn, void* cbdata)
     server_unlock(server);
 }
 
-g_internal String8
-options_reply(Arena* arena, String8* scenario_arr, U32 num_scenarios)
-{
-    String8 reply_str = {};
-    yyjson_mut_doc* reply_doc = yyjson_mut_doc_new(NULL);
-    if (!reply_doc)
-    {
-        return {};
-    }
-    defer(yyjson_mut_doc_free(reply_doc));
-
-    yyjson_mut_val* reply_root = yyjson_mut_obj(reply_doc);
-    if (!reply_root)
-    {
-        return {};
-    }
-    yyjson_mut_doc_set_root(reply_doc, reply_root);
-    String8 msg_id_name = SIMULATION_FIELD_NAME(MsgId);
-    bool id_added = yyjson_mut_obj_add_uint(reply_doc, reply_root, (const char*)msg_id_name.str,
-                                            (U64)city::SimulationMessageKind::Options);
-    if (!id_added)
-    {
-        return {};
-    }
-    String8 options_name = SIMULATION_FIELD_NAME(Options);
-    yyjson_mut_val* reply_list = yyjson_mut_obj_add_arr(reply_doc, reply_root, (const char*)options_name.str);
-    if (!reply_list)
-    {
-        return {};
-    }
-    for (U32 i = 0; i < num_scenarios; i++)
-    {
-        bool item_added = yyjson_mut_arr_add_str(reply_doc, reply_list, (char*)scenario_arr[i].str);
-        if (!item_added)
-        {
-            return {};
-        }
-    }
-
-    size_t reply_size = 0;
-    char* reply = yyjson_mut_write(reply_doc, 0, &reply_size);
-    if (!reply)
-    {
-        return {};
-    }
-    defer(free(reply));
-
-    reply_str = push_str8_copy(arena, str8((U8*)reply, reply_size));
-
-    return reply_str;
-}
-
-std::atomic<U32> cur_simulation_scenario{1};
 static int
 server_websocket_data_handler(struct mg_connection* conn, int bits, char* data, size_t data_len, void* cbdata)
 {
@@ -793,17 +469,17 @@ server_websocket_data_handler(struct mg_connection* conn, int bits, char* data, 
         int sent = 0;
         switch ((city::SimulationMessageKind)msg_id)
         {
-            case city::SimulationMessageKind::RequestSnapshot:
-            {
-                server_lock(server);
-                ++server->stream_generation;
-                server_unlock(server);
-                return 1;
-            }
-            case city::SimulationMessageKind::Options:
+            case city::SimulationMessageKind::MetadataRequest:
             {
                 String8 test_reply_msg[] = {S("1. Scenario")};
-                String8 json_str = options_reply(scratch.arena, test_reply_msg, ArrayCount(test_reply_msg));
+                F64 timestamp_start = 0;
+                F64 timestamp_end = 0;
+                server_lock(server);
+                timestamp_start = server->timestamp_start;
+                timestamp_end = server->timestamp_end;
+                server_unlock(server);
+                String8 json_str = simulator_metadata_reply(scratch.arena, test_reply_msg, ArrayCount(test_reply_msg),
+                                                           timestamp_start, timestamp_end);
                 if (json_str.size == 0)
                 {
                     return 0;
@@ -813,17 +489,29 @@ server_websocket_data_handler(struct mg_connection* conn, int bits, char* data, 
                 return sent > 0 ? 1 : 0;
             };
             break;
-            case city::SimulationMessageKind::ChangeScenario:
+            case city::SimulationMessageKind::ServerUpdate:
             {
-                U64 cur_scenario_id = 0;
-                String8 scenario_id_name = SIMULATION_FIELD_NAME(ScenarioId);
-                json_error = doc[(const char*)scenario_id_name.str].get_uint64().get(cur_scenario_id);
-                if (json_error)
+                city::ServerUpdate update = {};
+                U64 request_id = 0;
+                json_error = city::simulator_server_update_from_json(doc, &update, &request_id);
+                if (json_error || update.name.size() >= sizeof(server->requested_name))
                 {
                     return 0;
                 }
-                cur_simulation_scenario.store((U32)cur_scenario_id, std::memory_order_relaxed);
-                // No reply is needed, but the connection must remain open for streaming.
+                // Transfer requests to the owner thread; callbacks never touch its SQLite connection.
+                server_lock(server);
+                // Polls in the same playback epoch must not invalidate an in-progress reply.
+                if (request_id != server->request_id)
+                {
+                    ++server->stream_generation;
+                }
+                MemoryCopy(server->requested_name, update.name.data(), update.name.size());
+                server->requested_name[update.name.size()] = 0;
+                server->requested_playback = update.playback;
+                server->requested_period = update.period;
+                server->request_id = request_id;
+                server->request_pending = true;
+                server_unlock(server);
                 return 1;
             }
             break;
@@ -951,11 +639,7 @@ stream_init(struct vehicle_stream* stream)
 {
     MemoryZeroStruct(stream);
     ArenaParams arena_params = {.reserve_size = MB(8), .commit_size = KB(64)};
-    stream->visible_vehicle_ids.arena = arena_alloc(&arena_params);
-    stream->selected_vehicle_ids.arena = arena_alloc(&arena_params);
     stream->preview_arena = arena_alloc(&arena_params);
-    stream->fps = DEFAULT_FPS;
-    stream->vehicle_count = DEFAULT_VEHICLE_COUNT;
 }
 static void
 playback_db_init(struct playback_db* playback_db, String8 path)
@@ -1033,21 +717,6 @@ playback_db_init(struct playback_db* playback_db, String8 path)
     playback_db->max_time = sqlite3_column_double(range_stmt, 1);
     sqlite3_finalize(range_stmt);
 
-    {
-        prof_scope_marker_named("prepare_sql_statement");
-        if (!prepare_sql_statement(playback_db->db, simulator_event_snapshot_sql, &playback_db->snapshot_stmt))
-        {
-            snprintf(playback_db->status_line, sizeof(playback_db->status_line),
-                     "Could not prepare agent playback query: %s", sqlite3_errmsg(playback_db->db));
-            return;
-        }
-    }
-
-    if (!prepare_sql_statement(playback_db->db, simulator_event_delta_sql, &playback_db->delta_stmt))
-    {
-        copy_status(playback_db->status_line, sizeof(playback_db->status_line), sqlite3_errmsg(playback_db->db));
-        return;
-    }
     playback_db->ready = true;
     snprintf(playback_db->status_line, sizeof(playback_db->status_line), "SQLite agent playback ready: %s",
              (char*)playback_db->path.str);
@@ -1056,18 +725,6 @@ playback_db_init(struct playback_db* playback_db, String8 path)
 static void
 playback_db_shutdown(struct playback_db* playback_db)
 {
-    if (playback_db->snapshot_stmt)
-    {
-        sqlite3_finalize(playback_db->snapshot_stmt);
-        playback_db->snapshot_stmt = NULL;
-    }
-
-    if (playback_db->delta_stmt)
-    {
-        sqlite3_finalize(playback_db->delta_stmt);
-        playback_db->delta_stmt = NULL;
-    }
-
     if (playback_db->db)
     {
         sqlite3_close(playback_db->db);
@@ -1078,7 +735,7 @@ playback_db_shutdown(struct playback_db* playback_db)
 }
 
 static void
-reload_playback_db(struct playback_db* playback_db, struct vehicle_stream* stream, struct websocket_server* server,
+reload_playback_db(struct playback_db* playback_db, struct websocket_server* server,
                    const char* db_path)
 {
     char chosen_path[MAX_PATH_TEXT];
@@ -1086,26 +743,12 @@ reload_playback_db(struct playback_db* playback_db, struct vehicle_stream* strea
     snprintf(chosen_path, sizeof(chosen_path), "%s", (db_path && db_path[0]) ? db_path : DEFAULT_DB_PATH);
     String8 str_path = str8_c_string(chosen_path);
 
-    if (stream)
-    {
-        stream_stop(stream);
-        stream->cursor.reset_pending = true;
-        stream->next_frame_at_us = 0.0;
-        stream->last_tick_us = 0;
-        stream->last_sent_vehicle_count = 0;
-        string_list_clear(&stream->visible_vehicle_ids);
-    }
-
     playback_db_shutdown(playback_db);
     playback_db_init(playback_db, str_path);
 
-    if (stream && playback_db->ready)
-    {
-        stream->simulated_seconds = playback_db->min_time;
-    }
-
     if (server)
     {
+        _server_playback_range_update(server, playback_db);
         copy_status(server->status_line, sizeof(server->status_line), playback_db->status_line);
     }
 }
@@ -1120,8 +763,6 @@ stream_free(struct vehicle_stream* stream)
 
     stream->preview_arena = NULL;
     stream->last_snapshot_preview = NULL;
-    string_list_free(&stream->visible_vehicle_ids);
-    string_list_free(&stream->selected_vehicle_ids);
 }
 
 static bool
@@ -1259,272 +900,69 @@ stream_store_snapshot_preview(struct vehicle_stream* stream, const char* snapsho
 }
 
 static void
-stream_start(struct vehicle_stream* stream)
+_server_event_requests_process(struct vehicle_stream* stream, struct websocket_server* server,
+                                struct playback_db* playback_db, SimulatorEventWorker* worker)
 {
-    stream->streaming = true;
-    stream->cursor.reset_pending = true;
-    stream->next_frame_at_us = 0.0;
-}
-
-static void
-stream_stop(struct vehicle_stream* stream)
-{
-    stream->streaming = false;
-    stream->next_frame_at_us = 0.0;
-}
-
-static void
-stream_update_clock(struct vehicle_stream* stream, U64 now_us)
-{
-    if (!stream->streaming || (stream->last_tick_us == 0))
+    // Consume completed work without waiting for the query thread.
+    os_mutex_take(worker->mutex);
+    bool completed = worker->completed;
+    bool busy = worker->busy;
+    os_mutex_drop(worker->mutex);
+    if (completed)
     {
-        stream->last_tick_us = now_us;
-        return;
-    }
-
-    if (now_us > stream->last_tick_us)
-    {
-        stream->simulated_seconds += (F64)(now_us - stream->last_tick_us) / 1'000'000.0;
-        stream->last_tick_us = now_us;
-    }
-}
-
-static int
-build_database_events(struct vehicle_stream* stream, struct playback_db* playback_db, yyjson_mut_doc* doc,
-                        yyjson_mut_val* snapshot_array, bool reset)
-{
-    prof_scope_marker;
-    int row_count = 0;
-    int sent_row_count = 0;
-    if (!playback_db->ready)
-    {
-        return -1;
-    }
-
-    sqlite3_stmt* event_stmt = reset ? playback_db->snapshot_stmt : playback_db->delta_stmt;
-    sqlite3_reset(event_stmt);
-    defer(sqlite3_reset(event_stmt));
-    sqlite3_clear_bindings(event_stmt);
-    if (reset)
-    {
-        sqlite3_bind_double(event_stmt, 1, stream->simulated_seconds);
-        sqlite3_bind_int(event_stmt, 2, stream->vehicle_count);
-        string_list_clear(&stream->visible_vehicle_ids);
-    }
-    else
-    {
-        sqlite3_bind_double(event_stmt, 1, stream->cursor.time);
-        sqlite3_bind_double(event_stmt, 2, stream->simulated_seconds);
-    }
-
-    int step_result = SQLITE_OK;
-    while ((step_result = sqlite3_step(event_stmt)) == SQLITE_ROW)
-    {
-        prof_scope_marker_named("row loop (build_database_events)");
-        const unsigned char* vehicle_id = sqlite3_column_text(event_stmt, 0);
-        const char* vehicle_id_text = vehicle_id ? (const char*)vehicle_id : "unknown";
-
-        // Keep the selected population stable between reset snapshots.
-        bool visible = string_list_contains(&stream->visible_vehicle_ids, vehicle_id_text);
-        if (!visible && stream->visible_vehicle_ids.count >= stream->vehicle_count)
+        if (worker->reply.size)
         {
-            continue;
-        }
-        if (!string_list_append_unique(&stream->visible_vehicle_ids, vehicle_id_text))
-        {
-            return -3;
-        }
-
-        row_count += 1;
-
-        if (stream->isolate_selected_vehicles && !string_list_contains(&stream->selected_vehicle_ids, vehicle_id_text))
-        {
-            continue;
-        }
-
-        if (!_simulator_event_append(doc, snapshot_array, event_stmt))
-        {
-            return -2;
-        }
-
-        sent_row_count += 1;
-    }
-
-    if (step_result != SQLITE_DONE)
-    {
-        return -4;
-    }
-
-    playback_db->last_active_count = row_count;
-    stream->last_sent_vehicle_count = sent_row_count;
-    return sent_row_count;
-}
-
-static bool
-stream_send_current_events(struct vehicle_stream* stream, struct websocket_server* server,
-                             struct playback_db* playback_db)
-{
-    prof_scope_marker;
-    U32 scenario_idx = 0;
-    scenario_idx = cur_simulation_scenario.load(std::memory_order_relaxed);
-    if (scenario_idx == 0)
-    {
-        return false;
-    }
-
-    yyjson_mut_doc* doc = NULL;
-    yyjson_mut_val* snapshot_array = NULL;
-    char* snapshot = NULL;
-    size_t snapshot_length = 0;
-    server_lock(server);
-    bool has_client = server->client_connection != NULL;
-    U64 stream_generation = server->stream_generation;
-    server_unlock(server);
-    if (!has_client)
-    {
-        return false;
-    }
-
-    if (!playback_db->ready)
-    {
-        copy_status(server->status_line, sizeof(server->status_line), playback_db->status_line);
-        return false;
-    }
-
-    if (stream->simulated_seconds > playback_db->max_time)
-    {
-        if (stream->cursor.initialized && stream->cursor.time < playback_db->max_time)
-        {
-            // Deliver the final interval before wrapping to a reset snapshot.
-            stream->simulated_seconds = playback_db->max_time;
+            bool sent = server_send_text(server, (const char*)worker->reply.str, worker->generation);
+            if (sent)
+            {
+                stream_store_snapshot_preview(stream, (const char*)worker->reply.str);
+                ++stream->frames_sent;
+            }
         }
         else
         {
-            stream->simulated_seconds = playback_db->min_time;
-            stream->cursor.reset_pending = true;
+            copy_status(server->status_line, sizeof(server->status_line), "Failed to read requested event window.");
         }
+        arena_clear(worker->arena);
+        os_mutex_take(worker->mutex);
+        worker->completed = false;
+        worker->busy = false;
+        os_mutex_drop(worker->mutex);
+        busy = false;
     }
+    if (busy) return;
 
-    bool reset = _simulator_event_needs_reset(stream->cursor, stream->simulated_seconds, stream_generation, scenario_idx);
-    if (!reset && stream->simulated_seconds == stream->cursor.time)
-    {
-        return true;
-    }
-
-    doc = yyjson_mut_doc_new(NULL);
-    if (!doc)
-    {
-        copy_status(server->status_line, sizeof(server->status_line), "Failed to allocate JSON snapshot document.");
-        return false;
-    }
-
-    // Wrap coordinates in the shared stream protocol.
-    yyjson_mut_val* snapshot_root = yyjson_mut_obj(doc);
-    if (!snapshot_root)
-    {
-        yyjson_mut_doc_free(doc);
-        return false;
-    }
-    yyjson_mut_doc_set_root(doc, snapshot_root);
-    String8 msg_id_name = SIMULATION_FIELD_NAME(MsgId);
-    String8 scenario_id_name = SIMULATION_FIELD_NAME(ScenarioId);
-    String8 stream_name = SIMULATION_FIELD_NAME(Stream);
-    city::SimulationMessageKind message_kind = reset ? city::SimulationMessageKind::Reset : city::SimulationMessageKind::Stream;
-    bool id_added = yyjson_mut_obj_add_uint(doc, snapshot_root, (const char*)msg_id_name.str,
-                                            (U64)message_kind);
-    bool scenario_added = yyjson_mut_obj_add_uint(doc, snapshot_root, (const char*)scenario_id_name.str, scenario_idx);
-    if (!id_added || !scenario_added)
-    {
-        yyjson_mut_doc_free(doc);
-        return false;
-    }
-    snapshot_array = yyjson_mut_obj_add_arr(doc, snapshot_root, (const char*)stream_name.str);
-    if (!snapshot_array)
-    {
-        yyjson_mut_doc_free(doc);
-        copy_status(server->status_line, sizeof(server->status_line), "Failed to allocate JSON snapshot array.");
-        return false;
-    }
-
-    {
-        int database_rows = build_database_events(stream, playback_db, doc, snapshot_array, reset);
-
-        if (database_rows < 0)
-        {
-            yyjson_mut_doc_free(doc);
-            copy_status(server->status_line, sizeof(server->status_line), "Could not read or serialize event snapshot; check database values and schema.");
-            return false;
-        }
-
-    }
-
-    snapshot = yyjson_mut_write(doc, 0, &snapshot_length);
-    yyjson_mut_doc_free(doc);
-    if (!snapshot)
-    {
-        copy_status(server->status_line, sizeof(server->status_line), "Failed to serialize JSON snapshot.");
-        return false;
-    }
-
-    if (!stream_store_snapshot_preview(stream, snapshot))
-    {
-        free(snapshot);
-        copy_status(server->status_line, sizeof(server->status_line), "Failed to store snapshot preview.");
-        return false;
-    }
-
-    if (!server_send_text(server, snapshot, stream_generation))
-    {
-        free(snapshot);
-        return false;
-    }
-
-    stream->cursor = {true, false, stream->simulated_seconds, stream_generation, scenario_idx};
-    stream->packets_sent += (uint64_t)stream->last_sent_vehicle_count;
-    free(snapshot);
-    stream->frames_sent += 1;
-    return true;
-}
-
-static void
-stream_send_frame(struct vehicle_stream* stream, struct websocket_server* server, struct playback_db* playback_db,
-                  U64 now_us)
-{
-    prof_scope_marker;
+    city::ServerUpdate update = {};
+    U64 request_id = 0;
+    U64 generation = 0;
     server_lock(server);
-    U64 generation = server->stream_generation;
+    bool pending = server->request_pending;
+    if (pending)
+    {
+        update.name = server->requested_name;
+        update.playback = server->requested_playback;
+        update.period = server->requested_period;
+        request_id = server->request_id;
+        generation = server->stream_generation;
+        server->request_pending = false;
+    }
     server_unlock(server);
-    U32 scenario = cur_simulation_scenario.load(std::memory_order_relaxed);
-    bool reset = _simulator_event_needs_reset(stream->cursor, stream->simulated_seconds, generation, scenario);
-    bool pending_interval = stream->cursor.initialized && stream->simulated_seconds > stream->cursor.time;
-    if ((!stream->streaming && !reset && !pending_interval) || stream->fps <= 0 || stream->vehicle_count <= 0)
-    {
-        return;
-    }
+    if (!pending) return;
 
-    if (stream->next_frame_at_us <= 0.0)
+    bool scenario_available = update.name == "1. Scenario";
+    os_mutex_take(worker->mutex);
+    worker->update = std::move(update);
+    worker->request_id = request_id;
+    worker->generation = generation;
+    worker->db_path[0] = 0;
+    if (playback_db->ready && scenario_available)
     {
-        stream->next_frame_at_us = now_us;
+        snprintf(worker->db_path, sizeof(worker->db_path), "%s", playback_db->path_input);
     }
-
-    if (now_us < stream->next_frame_at_us)
-    {
-        return;
-    }
-
-    if (!stream_send_current_events(stream, server, playback_db))
-    {
-        return;
-    }
-
-    F64 frame_us = 1'000'000.0 / (F64)stream->fps;
-    stream->next_frame_at_us += frame_us;
-
-    constexpr U64 max_lag_us = 1'000'000; // maximum lag in microseconds before need to catch up
-    if ((now_us > stream->next_frame_at_us) && (now_us - stream->next_frame_at_us) > max_lag_us)
-    {
-        stream->next_frame_at_us = now_us;
-    }
+    worker->busy = true;
+    worker->pending = true;
+    os_condition_variable_signal(worker->work_cv);
+    os_mutex_drop(worker->mutex);
 }
 
 static void
@@ -1594,12 +1032,6 @@ ui_text_row_height(const struct nk_context* ctx)
 
 static float
 ui_input_row_height(const struct nk_context* ctx)
-{
-    return ui_font_height(ctx) + 14.0f;
-}
-
-static float
-ui_button_row_height(const struct nk_context* ctx)
 {
     return ui_font_height(ctx) + 14.0f;
 }
@@ -1686,151 +1118,16 @@ apply_ui_style_overrides(struct nk_context* ctx, float ui_scale)
 }
 
 static void
-draw_visible_vehicle_group(struct nk_context* ctx, struct vehicle_stream* stream, bool* timeline_changed,
-                           float panel_height)
-{
-    int i = 0;
-    int matching_vehicle_count = 0;
-    int total_visible_vehicle_count = stream->visible_vehicle_ids.count;
-    int vehicle_list_height = 0;
-    char selected_summary[512];
-    float text_row_height = ui_text_row_height(ctx);
-    float input_row_height = ui_input_row_height(ctx);
-    float button_row_height = ui_button_row_height(ctx);
-    float list_row_height = ui_font_height(ctx) + 12.0f;
-    float used_height = 0.0f;
-
-    if (!nk_group_begin(ctx, "Vehicles at Time", NK_WINDOW_BORDER | NK_WINDOW_TITLE | NK_WINDOW_NO_SCROLLBAR))
-    {
-        return;
-    }
-
-    build_selected_summary(&stream->selected_vehicle_ids, selected_summary, sizeof(selected_summary));
-
-    nk_layout_row_dynamic(ctx, text_row_height, 1);
-    nk_label(ctx, "Search vehicle ID:", NK_TEXT_LEFT);
-
-    nk_layout_row_dynamic(ctx, input_row_height, 1);
-    nk_edit_string_zero_terminated(ctx, (nk_flags)NK_EDIT_FIELD | (nk_flags)NK_EDIT_CLIPBOARD, stream->vehicle_search,
-                                   sizeof(stream->vehicle_search), nk_filter_default);
-
-    nk_layout_row_dynamic(ctx, text_row_height, 1);
-    nk_labelf(ctx, NK_TEXT_LEFT, "Selected: %s", selected_summary);
-
-    nk_layout_row_dynamic(ctx, button_row_height, 2);
-    if (nk_button_label(ctx, stream->isolate_selected_vehicles ? "Isolate: ON" : "Isolate"))
-    {
-        if (stream->selected_vehicle_ids.count > 0)
-        {
-            stream->isolate_selected_vehicles = !stream->isolate_selected_vehicles;
-            *timeline_changed = true;
-        }
-    }
-    if (nk_button_label(ctx, "Clear"))
-    {
-        string_list_clear(&stream->selected_vehicle_ids);
-        stream->isolate_selected_vehicles = false;
-        *timeline_changed = true;
-    }
-
-    for (i = 0; i < total_visible_vehicle_count; ++i)
-    {
-        if (text_contains_ci(stream->visible_vehicle_ids.items[i], stream->vehicle_search))
-        {
-            matching_vehicle_count += 1;
-        }
-    }
-
-    nk_layout_row_dynamic(ctx, text_row_height, 1);
-    nk_labelf(ctx, NK_TEXT_LEFT, "Visible vehicles: %d / %d", matching_vehicle_count, total_visible_vehicle_count);
-
-    used_height = text_row_height + input_row_height + text_row_height + button_row_height + text_row_height +
-                  (ui_small_spacer_height(ctx) * 2.0f) + 28.0f;
-
-    vehicle_list_height = (int)(panel_height - used_height);
-    if (vehicle_list_height < 160)
-    {
-        vehicle_list_height = 160;
-    }
-    nk_layout_row_dynamic(ctx, (float)vehicle_list_height, 1);
-
-    if (nk_group_begin(ctx, "Vehicle List", NK_WINDOW_BORDER))
-    {
-        if (matching_vehicle_count == 0)
-        {
-            nk_layout_row_dynamic(ctx, text_row_height, 1);
-
-            if (total_visible_vehicle_count == 0)
-            {
-                nk_label(ctx, "No active vehicles at this time", NK_TEXT_LEFT);
-            }
-            else
-            {
-                nk_label(ctx, "No vehicles match current filter", NK_TEXT_LEFT);
-            }
-        }
-        else
-        {
-            for (i = 0; i < total_visible_vehicle_count; ++i)
-            {
-                const char* vehicle_id = stream->visible_vehicle_ids.items[i];
-                char vehicle_button[128];
-                bool is_selected = false;
-
-                if (!text_contains_ci(vehicle_id, stream->vehicle_search))
-                {
-                    continue;
-                }
-
-                is_selected = string_list_contains(&stream->selected_vehicle_ids, vehicle_id);
-
-                nk_layout_row_dynamic(ctx, list_row_height, 1);
-                snprintf(vehicle_button, sizeof(vehicle_button), "%s%s", is_selected ? "* " : "",
-                         vehicle_id ? vehicle_id : "unknown");
-
-                if (nk_button_label(ctx, vehicle_button))
-                {
-                    string_list_toggle(&stream->selected_vehicle_ids, vehicle_id);
-
-                    if (stream->isolate_selected_vehicles && stream->selected_vehicle_ids.count == 0)
-                    {
-                        stream->isolate_selected_vehicles = false;
-                    }
-
-                    *timeline_changed = true;
-                }
-            }
-        }
-
-        nk_group_end(ctx);
-    }
-
-    nk_group_end(ctx);
-}
-
-static void
 draw_ui(struct nk_context* ctx, struct websocket_server* server, struct vehicle_stream* stream,
-        struct playback_db* playback_db, bool* timeline_changed, int window_width, int window_height)
+        struct playback_db* playback_db, int window_width, int window_height)
 {
     prof_scope_marker;
     struct nk_rect bounds = nk_rect(0, 0, (float)window_width, (float)window_height);
     float title_row_height = ui_input_row_height(ctx);
     float text_row_height = ui_text_row_height(ctx);
-    float button_row_height = ui_button_row_height(ctx);
     float slider_row_height = ui_input_row_height(ctx);
     float spacer_height = ui_small_spacer_height(ctx);
-    float window_safety_margin = title_row_height + text_row_height + spacer_height + 24.0f;
-    float top_reserved_height = (title_row_height * 2.0f) + (text_row_height * 8.0f) + (button_row_height * 3.0f) +
-                                (slider_row_height * 4.0f) + window_safety_margin;
     float received_message_height = text_row_height * 4.0f;
-    top_reserved_height += text_row_height + received_message_height;
-    float preview_height = bounds.h - top_reserved_height;
-
-    if (preview_height < 120.0f)
-    {
-        preview_height = 120.0f;
-    }
-
     nk_window_set_bounds(ctx, "Vehicle Stream Server", bounds);
 
     if (nk_begin(ctx, "Vehicle Stream Server", bounds, NK_WINDOW_TITLE))
@@ -1841,14 +1138,35 @@ draw_ui(struct nk_context* ctx, struct websocket_server* server, struct vehicle_
         nk_layout_row_dynamic(ctx, text_row_height, 1);
         nk_label(ctx, server_has_client(server) ? "WebSocket client: connected" : "WebSocket client: not connected",
                  NK_TEXT_LEFT);
-        nk_label(ctx, stream->streaming ? "Streaming: active" : "Streaming: stopped", NK_TEXT_LEFT);
         nk_label(ctx, playback_db->status_line, NK_TEXT_LEFT);
 
-        // Copy the callback-owned text before drawing, keeping the mutex hold short.
+        // Capture the latest client update and its message under the same short lock.
         char last_received[sizeof(server->last_received)];
+        char scenario_name[sizeof(server->requested_name)];
+        F64 playback = 0;
+        F64 period = 0;
         server_lock(server);
         MemoryCopy(last_received, server->last_received, sizeof(last_received));
+        MemoryCopy(scenario_name, server->requested_name, sizeof(scenario_name));
+        playback = server->requested_playback;
+        period = server->requested_period;
         server_unlock(server);
+
+        nk_layout_row_dynamic(ctx, text_row_height, 1);
+        nk_labelf(ctx, NK_TEXT_LEFT, "Scenario: %s", scenario_name[0] ? scenario_name : "None");
+        nk_labelf(ctx, NK_TEXT_LEFT, "Playback: %.3f s, fetch period: %.3f s", playback, period);
+        if (playback_db->ready && playback_db->max_time > playback_db->min_time)
+        {
+            // Playback is controlled by the client; the slider displays its latest request.
+            float timeline_min = (float)playback_db->min_time;
+            float timeline_max = (float)playback_db->max_time;
+            float timeline_value = (float)Clamp(playback_db->min_time, playback, playback_db->max_time);
+            nk_layout_row_dynamic(ctx, slider_row_height, 1);
+            nk_widget_disable_begin(ctx);
+            nk_bool slider_changed = nk_slider_float(ctx, timeline_min, &timeline_value, timeline_max, 1.0f);
+            (void)slider_changed;
+            nk_widget_disable_end(ctx);
+        }
 
         nk_layout_row_dynamic(ctx, text_row_height, 1);
         nk_label(ctx, "Last message from client:", NK_TEXT_LEFT);
@@ -1869,8 +1187,7 @@ draw_ui(struct nk_context* ctx, struct websocket_server* server, struct vehicle_
         nk_layout_row_push(ctx, 0.18f);
         if (nk_button_label(ctx, "Load DB"))
         {
-            reload_playback_db(playback_db, stream, server, playback_db->path_input);
-            *timeline_changed = playback_db->ready;
+            reload_playback_db(playback_db, server, playback_db->path_input);
         }
 #if defined(__APPLE__) || (defined(_WIN32) && !defined(ASAN_ENABLED))
         nk_layout_row_push(ctx, 0.22f);
@@ -1879,8 +1196,7 @@ draw_ui(struct nk_context* ctx, struct websocket_server* server, struct vehicle_
             char chosen_path[MAX_PATH_TEXT];
             if (pick_sqlite_db_file(chosen_path, sizeof(chosen_path)))
             {
-                reload_playback_db(playback_db, stream, server, chosen_path);
-                *timeline_changed = playback_db->ready;
+                reload_playback_db(playback_db, server, chosen_path);
             }
         }
 #else
@@ -1893,79 +1209,9 @@ draw_ui(struct nk_context* ctx, struct websocket_server* server, struct vehicle_
 #endif
         nk_layout_row_end(ctx);
 
-        nk_layout_row_dynamic(ctx, button_row_height, 2);
-        if (nk_button_label(ctx, stream->streaming ? "Pause" : "Play"))
-        {
-            if (stream->streaming)
-            {
-                stream_stop(stream);
-                copy_status(server->status_line, sizeof(server->status_line), "Playback paused.");
-            }
-            else
-            {
-                if (playback_db->ready)
-                {
-                    stream_start(stream);
-                    copy_status(server->status_line, sizeof(server->status_line), "Playback started.");
-                }
-                else
-                {
-                    copy_status(server->status_line, sizeof(server->status_line), playback_db->status_line);
-                }
-            }
-        }
-        if (nk_button_label(ctx, "Reset Time"))
-        {
-            if (playback_db->ready)
-            {
-                stream->simulated_seconds = playback_db->min_time;
-                stream->next_frame_at_us = 0.0;
-                *timeline_changed = true;
-                copy_status(server->status_line, sizeof(server->status_line), "Playback time reset.");
-            }
-            else
-            {
-                copy_status(server->status_line, sizeof(server->status_line), playback_db->status_line);
-            }
-        }
-
-        nk_layout_row_dynamic(ctx, slider_row_height, 1);
-        nk_property_int(ctx, "FPS", 1, &stream->fps, 60, 1, 1);
-        int previous_vehicle_count = stream->vehicle_count;
-        nk_property_int(ctx, "Vehicles", 1, &stream->vehicle_count, 10000, 1, 10);
-        if (previous_vehicle_count != stream->vehicle_count)
-        {
-            *timeline_changed = true;
-        }
-
         nk_layout_row_dynamic(ctx, text_row_height, 1);
-        nk_labelf(ctx, NK_TEXT_LEFT, "Frames sent: %llu", (unsigned long long)stream->frames_sent);
-        nk_labelf(ctx, NK_TEXT_LEFT, "Vehicle lines sent: %llu", (unsigned long long)stream->packets_sent);
-        nk_labelf(ctx, NK_TEXT_LEFT, "Vehicle lines per second target: %d", stream->fps * stream->vehicle_count);
-        if (playback_db->ready)
-        {
-            float timeline_value = (float)stream->simulated_seconds;
-            float timeline_min = (float)playback_db->min_time;
-            float timeline_max = (float)playback_db->max_time;
-
-            nk_labelf(ctx, NK_TEXT_LEFT, "Simulation time: %.1f / %.1f, active vehicles: %d, sent: %d",
-                      stream->simulated_seconds, playback_db->max_time, playback_db->last_active_count,
-                      stream->last_sent_vehicle_count);
-
-            nk_layout_row_dynamic(ctx, slider_row_height, 1);
-            nk_bool timeline_slider_changed = nk_slider_float(ctx, timeline_min, &timeline_value, timeline_max, 1.0f);
-            if (timeline_slider_changed)
-            {
-                stream->simulated_seconds = (double)timeline_value;
-                stream->next_frame_at_us = 0.0;
-                *timeline_changed = true;
-            }
-        }
-
-        nk_layout_row_dynamic(ctx, preview_height, 2);
-
-        draw_visible_vehicle_group(ctx, stream, timeline_changed, preview_height);
-
+        nk_labelf(ctx, NK_TEXT_LEFT, "Replies sent: %llu", (unsigned long long)stream->frames_sent);
+        nk_layout_row_dynamic(ctx, Max(120.0f, bounds.h * 0.4f), 1);
         if (nk_group_begin(ctx, "Last Snapshot Sent", NK_WINDOW_BORDER | NK_WINDOW_TITLE))
         {
             draw_preview_lines(ctx, stream->last_snapshot_preview ? stream->last_snapshot_preview : server->last_sent);
@@ -2089,20 +1335,16 @@ App(int argc, char** argv)
     }
     stream_init(&stream);
     playback_db_init(&playback_db, str8_c_string(DEFAULT_DB_PATH));
-    if (playback_db.ready)
-    {
-        stream.simulated_seconds = playback_db.min_time;
-    }
-
+    _server_playback_range_update(&server, &playback_db);
     Arena* frame_arena = arena_alloc();
+    SimulatorEventWorker event_worker = {};
+    simulator_event_worker_start(&event_worker);
 
     while (running && !glfwWindowShouldClose(window))
     {
         arena_clear(frame_arena);
         prof_frame_marker;
         prof_scope_marker_named("simulator_frame");
-        U64 now_us = os_now_microseconds();
-        bool timeline_changed = false;
         int framebuffer_width = 0;
         int framebuffer_height = 0;
 
@@ -2123,17 +1365,9 @@ App(int argc, char** argv)
             window_height = 320;
         }
 
-        stream_update_clock(&stream, now_us);
         server_poll(&server);
-        stream_send_frame(&stream, &server, &playback_db, now_us);
-        draw_ui(ctx, &server, &stream, &playback_db, &timeline_changed, window_width, window_height);
-
-        if (timeline_changed)
-        {
-            stream.cursor.reset_pending = true;
-            printf("Timeline Changed\n");
-            stream_send_current_events(&stream, &server, &playback_db);
-        }
+        _server_event_requests_process(&stream, &server, &playback_db, &event_worker);
+        draw_ui(ctx, &server, &stream, &playback_db, window_width, window_height);
 
         glfwGetFramebufferSize(window, &framebuffer_width, &framebuffer_height);
         glViewport(0, 0, framebuffer_width, framebuffer_height);
@@ -2143,6 +1377,7 @@ App(int argc, char** argv)
         glfwSwapBuffers(window);
     }
 
+    simulator_event_worker_stop(&event_worker);
     server_shutdown(&server);
     playback_db_shutdown(&playback_db);
     arena_release(playback_db.arena);

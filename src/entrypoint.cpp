@@ -120,7 +120,9 @@ g_internal void
 imgui_debug_window(city::City* city, async::ThreadPool* thread_pool)
 {
     Context* ctx = dt_ctx_get();
-    ui::Camera* camera = resource_pool_item_from_idx(ctx->camera_container, city->camera_handle);
+    ui::Camera* camera = {};
+    B32 camera_exists = ctx->camera_container->item_from_handle(city->camera_handle, &camera);
+    Assert(camera_exists);
     vulkan::AssetManager* asset_manager = vulkan::asset_manager_get();
     const ImGuiViewport* viewport = ImGui::GetMainViewport();
     F32 max_debug_window_width = ClampTop(720.0f, viewport->WorkSize.x * 0.6f);
@@ -245,10 +247,10 @@ dt_main_loop(void* ptr)
     for (U32 i = 0; i < city_buf.size; ++i)
     {
         const city::AreaConfig* city_config = &cities_info_arr[i];
-        city::City* city = city_buf[i];
+        city::City* city = &city_buf[i];
 
-        city->camera_handle = resource_pool_array_idx_get(ctx->camera_container);
-        ui::Camera* camera = resource_pool_item_from_idx(ctx->camera_container, city->camera_handle);
+        ui::Camera* camera = {};
+        city->camera_handle = ctx->camera_container->item_new(&camera);
         ui::camera_init(ctx->arena, camera);
 
         Vec2F64 wgs84 = city::city_area_wgs84_get(city_config);
@@ -265,8 +267,12 @@ dt_main_loop(void* ptr)
         ////////////////////////////////////////////////////////
     }
 
-    city::Simulator simulator = {};
-    city::SimulationError simulator_connection_error = simulator.simulator_connect(60);
+    city::Simulation simulator = {};
+    city::SimulationError simulator_connection_error = simulator.start();
+    if (simulator_connection_error.type != city::SimulationErrorType::Success)
+    {
+        exit_with_error("Error during simulator setup");
+    }
     U32 simulator_scenario_idx = 0;
     city::RoadOverlayOption neta_overlay_option = city::RoadOverlayOption_None;
     S32 cur_area_option = 1;
@@ -274,10 +280,14 @@ dt_main_loop(void* ptr)
     B32 area_switch_pending = false;
 
     const city::AreaConfig* area_config = &cities_info_arr[cur_area_option];
-    city::City* area = city_buf[cur_area_option];
+    city::City* area = &city_buf[cur_area_option];
 
     city_area_streaming_begin(area, area_config);
-    B32 agents_ready_for_stream = false;
+
+    F64 playback_time = 0;
+    F64 fetch_period_seconds = 10;
+    bool playback_running = true;
+    bool agent_snapshot_needed = true;
     while (ctx->running)
     {
         dt_time_update(ctx->io, ctx->time);
@@ -298,18 +308,10 @@ dt_main_loop(void* ptr)
             str8_list_push(ctx->arena_frame, &msg_list, ws_msg);
         }
         message_frame_counter++;
-        city::CoordinateBatch new_agent_coords = {};
-        String8List simulator_options = {};
-        if (area->cars_creation_done && !agents_ready_for_stream)
-        {
-            // The initial connection snapshot may have arrived while models were loading.
-            simulator.simulator_snapshot_request();
-        }
-        agents_ready_for_stream = area->cars_creation_done;
-        simulator.simulator_update(ctx->arena_frame, &new_agent_coords, &simulator_options, simulator_scenario_idx,
-                                   io_ctx->frame_count);
 
         Vec2U32 framebuffer_dim = {(U32)io_ctx->framebuffer_width, (U32)io_ctx->framebuffer_height};
+        city::ServerUpdate server_update = {.playback = playback_time, .period = fetch_period_seconds};
+        bool playback_changed = false;
 
         ImGui::PushFont(nullptr, 18);
         ImGui::PushFont(nullptr, 24.0f);
@@ -319,23 +321,60 @@ dt_main_loop(void* ptr)
         ImGui::PushFont(nullptr, 22.0f);
         ImGui::SeparatorText("Scenarios");
         ImGui::PopFont();
-        if (simulator_options.node_count && simulator_scenario_idx >= simulator_options.node_count)
+
+        if (area->cars_creation_done)
         {
-            simulator_scenario_idx = 0;
-        }
-        U32 scenario_idx = 0;
-        for (String8Node* scenario_node = simulator_options.first; scenario_node; scenario_node = scenario_node->next)
-        {
-            ImGui::PushID((int)scenario_idx);
-            bool selected = simulator_scenario_idx == scenario_idx;
-            bool clicked = ImGui::RadioButton((const char*)scenario_node->string.str, selected);
-            if (clicked)
+            if (simulator_scenario_idx > simulator.metadata.scenarios.size())
             {
-                simulator_scenario_idx = scenario_idx;
+                simulator_scenario_idx = 0;
             }
-            ImGui::PopID();
-            ++scenario_idx;
+
+            // Index zero is the UI-only "None" entry; received scenarios start at one.
+            for (U32 scenario_idx = 0; scenario_idx <= simulator.metadata.scenarios.size(); ++scenario_idx)
+            {
+                const char* scenario_name = "None";
+                if (scenario_idx > 0)
+                {
+                    scenario_name = simulator.metadata.scenarios[scenario_idx - 1].name.c_str();
+                }
+                ImGui::PushID((int)scenario_idx);
+                bool selected = simulator_scenario_idx == scenario_idx;
+                bool clicked = ImGui::RadioButton(scenario_name, selected);
+                if (clicked)
+                {
+                    playback_changed = simulator_scenario_idx != scenario_idx;
+                    simulator_scenario_idx = scenario_idx;
+                    if (scenario_idx > 0 && playback_changed)
+                    {
+                        playback_time = simulator.metadata.scenarios[scenario_idx - 1].timestamp_start;
+                    }
+                }
+                ImGui::PopID();
+            }
+
+            F64 delta_seconds = ctx->time->frame_timestamp_delta_ms / 1'000'000.0;
+            if (simulator_scenario_idx > 0)
+            {
+                const city::Scenario& scenario = simulator.metadata.scenarios[simulator_scenario_idx - 1];
+                ImGui::Checkbox("Play", &playback_running);
+                if (playback_running && !playback_changed)
+                {
+                    playback_time = city::simulator_playback_advance(playback_time, delta_seconds,
+                                                                     scenario.timestamp_end);
+                }
+                bool seek = ImGui::SliderScalar("Timestamp", ImGuiDataType_Double, &playback_time,
+                                                &scenario.timestamp_start, &scenario.timestamp_end, "%.3f");
+                playback_changed = playback_changed || seek;
+                server_update.name = scenario.name;
+            }
+            F64 min_period = 0.1;
+            F64 max_period = 60;
+            ImGui::SliderScalar("Fetch period (seconds)", ImGuiDataType_Double, &fetch_period_seconds, &min_period,
+                                &max_period, "%.1f");
+            server_update.playback = playback_time;
+            server_update.period = fetch_period_seconds;
         }
+
         ImGui::PushFont(nullptr, 22.0f);
         ImGui::SeparatorText("Area");
         ImGui::PopFont();
@@ -363,7 +402,7 @@ dt_main_loop(void* ptr)
         {
             prof_scope_marker_named("Scroll Agent Time");
             ImGui::SeparatorText("Agent Size");
-            city::City* selected_city = city_buf[area_option];
+            city::City* selected_city = &city_buf[area_option];
             ImGui::SliderFloat("Scale", &selected_city->all_agent_scale_factor, 0.01f, 100.0f, "%.3f");
         }
 
@@ -382,15 +421,18 @@ dt_main_loop(void* ptr)
                 Debug_Memory_Snapshot_Dump();
 
                 cur_area_option = area_option;
-                area = city_buf[cur_area_option];
+                area = &city_buf[cur_area_option];
                 area_config = &cities_info_arr[cur_area_option];
 
                 city_area_streaming_begin(area, area_config);
                 area_switch_pending = false;
+                // The new area's agent pool needs a fresh complete snapshot.
+                agent_snapshot_needed = true;
             }
         }
 
-        ui::Camera* camera = resource_pool_item_from_idx(ctx->camera_container, area->camera_handle);
+        draw::draw_camera_set(area->camera_handle);
+
         ImGuiIO& imgui_io = ImGui::GetIO();
         bool imgui_window_hovered = ImGui::IsWindowHovered(ImGuiHoveredFlags_AnyWindow);
         bool imgui_input_captured = imgui_io.WantCaptureMouse || imgui_io.WantCaptureKeyboard;
@@ -400,40 +442,71 @@ dt_main_loop(void* ptr)
         {
             area->no_gui_focus = true;
         }
-        ui::camera_update(camera, ctx->io, ctx->time->frame_timestamp_delta_ms / 1'000'000,
-                          vec_2s32(io_ctx->framebuffer_width, io_ctx->framebuffer_height), world_camera_enable);
-        city::city_update(area, new_agent_coords, ctx->thread_pool, neta_overlay_option, framebuffer_dim, area_config,
-                          agent_hover_icon_mesh_handle);
 
-        // #if BUILD_DEBUG
-        imgui_debug_window(area, ctx->thread_pool);
-        // #endif
+        draw::DrawFrame* frame = draw::draw_frame_get();
+        {
+            ui::Camera* camera = {};
+            if (ctx->camera_container->item_from_handle(frame->camera_resource_handle, &camera))
+            {
+                ui::camera_update(camera, ctx->io, ctx->time->frame_timestamp_delta_ms / 1'000'000,
+                                  vec_2s32(io_ctx->framebuffer_width, io_ctx->framebuffer_height), world_camera_enable);
+            }
+            city::city_update(area, ctx->thread_pool, neta_overlay_option, framebuffer_dim, area_config);
+
+            // Gather agent batches using the displayed area and this frame's camera.
+            if (area->cars_creation_done && !area_switch_pending)
+            {
+                city::Simulation::Update updates =
+                    simulator.update(ctx->arena_frame, server_update, playback_changed || agent_snapshot_needed);
+                agent_snapshot_needed = false;
+                cesium::TilesetRenderer* tileset = {};
+                B32 tileset_found =
+                    ctx->tile_load_state->tileset_pool->item_from_handle(area->tileset_handle, &tileset);
+                if (tileset_found && !tileset->destruction_requested)
+                {
+                    area->agent_system->update(camera, agent_hover_icon_mesh_handle, tileset,
+                                               updates.updates, updates.agents_clear, updates.snapshot_received,
+                                               area->all_agent_scale_factor, tileset->ecef_to_local);
+                }
+            }
+
+            // Build every ImGui window before render_frame ends the ImGui frame.
+            imgui_debug_window(area, ctx->thread_pool);
+
+            render::MappedHandle<void> camera_handle_void = render::mapped_handle_erased(camera->mut_handles);
+            render::render_frame(framebuffer_dim, &io_ctx->framebuffer_resized, io_ctx->mouse_pos_cur_s64,
+                                 camera_handle_void);
+        }
 
         /////////////////////////////////////
-
-        render::render_frame(framebuffer_dim, &io_ctx->framebuffer_resized, io_ctx->mouse_pos_cur_s64);
 
         ImGui::EndFrame();
         Debug_Frame_End();
     }
 #if GRACEFUL_SHUTDOWN
-    while (thread_pool_has_pending_work(ctx->thread_pool))
+    for (;;)
     {
+        async::thread_pool_main_thread_queue_drain(ctx->thread_pool);
+        render::gpu_work_update();
+        bool pending_work = thread_pool_has_pending_work(ctx->thread_pool);
+        if (!pending_work)
+        {
+            // A worker may have queued a callback just before finishing.
+            async::thread_pool_main_thread_queue_drain(ctx->thread_pool);
+            pending_work = thread_pool_has_pending_work(ctx->thread_pool);
+            if (!pending_work) break;
+        }
     }
     render::gpu_work_update();
     render::gpu_work_done_wait();
     render::gpu_work_update();
-    for (U32 i = 0; i < ctx->camera_container->size; ++i)
+    for (ui::Camera& camera : *ctx->camera_container)
     {
-        ItemHeader<ui::Camera>* camera_item = &ctx->camera_container->items[i];
-        if (camera_item->in_use)
-        {
-            render::mapped_buffer_destroy(camera_item->data.mut_handles);
-        }
+        render::mapped_buffer_destroy(camera.mut_handles);
     }
     for (U32 i = 0; i < city_buf.size; i += 1)
     {
-        city::city_release(city_buf[i]);
+        city::city_release(&city_buf[i]);
     }
     render::handle_destroy(agent_hover_icon_mesh_handle.vertex_buffer_handle);
     render::handle_destroy(agent_hover_icon_mesh_handle.index_buffer_handle);

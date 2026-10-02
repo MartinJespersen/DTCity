@@ -35,7 +35,7 @@ struct Context
 
     io::IO* io;
     dt_Time* time;
-    ResourcePool<ui::Camera>* camera_container;
+    ArrayResourcePool<ui::Camera>* camera_container;
     city::TileLoadState* tile_load_state;
 
     async::ThreadPool* thread_pool;

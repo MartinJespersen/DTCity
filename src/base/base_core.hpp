@@ -236,11 +236,13 @@
 #endif
 
 #if ARCH_64BIT
-#define ins_atomic_ptr_eval_cond_assign(x, k, c) (void*)ins_atomic_u64_eval_cond_assign((volatile U64*)(x), (U64)(k), (U64)(c))
+#define ins_atomic_ptr_eval_cond_assign(x, k, c) \
+    (void*)ins_atomic_u64_eval_cond_assign((volatile U64*)(x), (U64)(k), (U64)(c))
 #define ins_atomic_ptr_eval_assign(x, c) (void*)ins_atomic_u64_eval_assign((volatile U64*)(x), (U64)(c))
 #define ins_atomic_ptr_eval(x) (void*)ins_atomic_u64_eval((volatile U64*)(x))
 #elif ARCH_32BIT
-#define ins_atomic_ptr_eval_cond_assign(x, k, c) (void*)ins_atomic_u32_eval_cond_assign((volatile U32*)(x), (U32)(k), (U32)(c))
+#define ins_atomic_ptr_eval_cond_assign(x, k, c) \
+    (void*)ins_atomic_u32_eval_cond_assign((volatile U32*)(x), (U32)(k), (U32)(c))
 #define ins_atomic_ptr_eval_assign(x, c) (void*)ins_atomic_u32_eval_assign((volatile U32*)(x), (U32)(c))
 #define ins_atomic_ptr_eval(x) (void*)ins_atomic_u32_eval((volatile U32*)(x))
 #else
@@ -255,20 +257,25 @@
 #define SetNil(nil, p) ((p) = (nil))
 
 //- rjf: doubly-linked-lists
-#define DLLInsert_NPZ(nil, f, l, p, n, next, prev)                                              \
-    (CheckNil(nil, f)   ? ((f) = (l) = (n), SetNil(nil, (n)->next), SetNil(nil, (n)->prev))     \
-     : CheckNil(nil, p) ? ((n)->next = (f), (f)->prev = (n), (f) = (n), SetNil(nil, (n)->prev)) \
-     : ((p) == (l))     ? ((l)->next = (n), (n)->prev = (l), (l) = (n), SetNil(nil, (n)->next)) \
-                        : (((!CheckNil(nil, p) && CheckNil(nil, (p)->next)) ? (0) : ((p)->next->prev = (n))), ((n)->next = (p)->next), ((p)->next = (n)), ((n)->prev = (p))))
+#define DLLInsert_NPZ(nil, f, l, p, n, next, prev)                                                            \
+    (CheckNil(nil, f)   ? ((f) = (l) = (n), SetNil(nil, (n)->next), SetNil(nil, (n)->prev))                   \
+     : CheckNil(nil, p) ? ((n)->next = (f), (f)->prev = (n), (f) = (n), SetNil(nil, (n)->prev))               \
+     : ((p) == (l))     ? ((l)->next = (n), (n)->prev = (l), (l) = (n), SetNil(nil, (n)->next))               \
+                        : (((!CheckNil(nil, p) && CheckNil(nil, (p)->next)) ? (0) : ((p)->next->prev = (n))), \
+                           ((n)->next = (p)->next), ((p)->next = (n)), ((n)->prev = (p))))
 #define DLLPushBack_NPZ(nil, f, l, n, next, prev) DLLInsert_NPZ(nil, f, l, l, n, next, prev)
 #define DLLPushFront_NPZ(nil, f, l, n, next, prev) DLLInsert_NPZ(nil, l, f, f, n, prev, next)
-#define DLLRemove_NPZ(nil, f, l, n, next, prev)                                                                                                    \
-    (((n) == (f) ? (f) = (n)->next : (0)), ((n) == (l) ? (l) = (l)->prev : (0)), (CheckNil(nil, (n)->prev) ? (0) : ((n)->prev->next = (n)->next)), \
+#define DLLRemove_NPZ(nil, f, l, n, next, prev)                                  \
+    (((n) == (f) ? (f) = (n)->next : (0)), ((n) == (l) ? (l) = (l)->prev : (0)), \
+     (CheckNil(nil, (n)->prev) ? (0) : ((n)->prev->next = (n)->next)),           \
      (CheckNil(nil, (n)->next) ? (0) : ((n)->next->prev = (n)->prev)))
 
 //- rjf: singly-linked, doubly-headed lists (queues)
-#define SLLQueuePush_NZ(nil, f, l, n, next) (CheckNil(nil, f) ? ((f) = (l) = (n), SetNil(nil, (n)->next)) : ((l)->next = (n), (l) = (n), SetNil(nil, (n)->next)))
-#define SLLQueuePushFront_NZ(nil, f, l, n, next) (CheckNil(nil, f) ? ((f) = (l) = (n), SetNil(nil, (n)->next)) : ((n)->next = (f), (f) = (n)))
+#define SLLQueuePush_NZ(nil, f, l, n, next)                       \
+    (CheckNil(nil, f) ? ((f) = (l) = (n), SetNil(nil, (n)->next)) \
+                      : ((l)->next = (n), (l) = (n), SetNil(nil, (n)->next)))
+#define SLLQueuePushFront_NZ(nil, f, l, n, next) \
+    (CheckNil(nil, f) ? ((f) = (l) = (n), SetNil(nil, (n)->next)) : ((n)->next = (f), (f) = (n)))
 #define SLLQueuePop_NZ(nil, f, l, next) ((f) == (l) ? (SetNil(nil, f), SetNil(nil, l)) : ((f) = (f)->next))
 
 //- rjf: singly-linked, singly-headed lists (stacks)
@@ -977,13 +984,16 @@ lib_internal U64
 ring_write(U8* ring_base, U64 ring_size, U64 ring_pos, void* src_data, U64 src_data_size);
 lib_internal U64
 ring_read(U8* ring_base, U64 ring_size, U64 ring_pos, void* dst_data, U64 read_size);
-#define ring_write_struct(ring_base, ring_size, ring_pos, ptr) ring_write((ring_base), (ring_size), (ring_pos), (ptr), sizeof(*(ptr)))
-#define ring_read_struct(ring_base, ring_size, ring_pos, ptr) ring_read((ring_base), (ring_size), (ring_pos), (ptr), sizeof(*(ptr)))
+#define ring_write_struct(ring_base, ring_size, ring_pos, ptr) \
+    ring_write((ring_base), (ring_size), (ring_pos), (ptr), sizeof(*(ptr)))
+#define ring_read_struct(ring_base, ring_size, ring_pos, ptr) \
+    ring_read((ring_base), (ring_size), (ring_pos), (ptr), sizeof(*(ptr)))
 
 ////////////////////////////////
 //~ rjf: Sorts
 
-#define quick_sort(ptr, count, element_size, cmp_function) qsort((ptr), (count), (element_size), (int (*)(const void*, const void*))(cmp_function))
+#define quick_sort(ptr, count, element_size, cmp_function) \
+    qsort((ptr), (count), (element_size), (int (*)(const void*, const void*))(cmp_function))
 
 ////////////////////////////////
 
@@ -1081,5 +1091,9 @@ has_flag(Enum value, Enum flag) noexcept
 {
     return (value & flag) == flag;
 }
-
+#define ENABLE_BITMASK(Enum)                            \
+    friend constexpr bool enable_bitmask(Enum) noexcept \
+    {                                                   \
+        return true;                                    \
+    }
 #endif // BASE_CORE_H

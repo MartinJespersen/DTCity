@@ -74,7 +74,7 @@ struct DrawFrame
     ChunkList<render::LineVertex>* line_vertex_chunk_list;
     PrimitiveInstanceList primitive_instance_list;
     ChunkList<render::MeshInstanceBatch>* mesh_instance_batches;
-    render::MappedHandle<void> camera_handle;
+    ArrayResourcePoolHandle camera_resource_handle;
 };
 
 struct Draw
@@ -96,7 +96,7 @@ g_internal DrawFrame*
 draw_frame_get();
 
 g_internal void
-draw_camera_set(render::MappedHandle<void> camera_handle);
+draw_camera_set(ArrayResourcePoolHandle camera_resource_handle);
 g_internal void
 draw_line(render::Line& line);
 g_internal void

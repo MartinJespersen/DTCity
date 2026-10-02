@@ -1,6 +1,7 @@
+# Sim refactor
+- remember to handle changing id ;
+- polling for metadata should be done regularly
 # Refactor
-- Allocator should not have a create function as it creates a pointer that is not a smart pointer
-- Make agent simulator work after refactor
   - Agent memory especially for threading should be made safe (maybe the task system should be reworked);
 - Improve interface to AgentSystem in city_update
 - Task System refactor
@@ -18,10 +19,6 @@
   - Visualization -> simulation communication for scenario change 
 - Agent pr road visualization
   - heap map?
-
-# Tessellation review findings
-* [x] Keep the current tile buffers active until replacement uploads have completed on the GPU.
-
 
 # features
 * chunk_list should not allow chunk items with count larger than capacity

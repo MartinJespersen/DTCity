@@ -33,7 +33,8 @@ tile_load_destroy(TileLoadState* state)
 }
 
 g_internal ArrayResourcePoolHandle
-tile_load_streaming_begin(TileLoadState* state, String8 tileset_url, Rng2F64 bounds, S64 tileset_ion_asset_id, U64 cache_byte_size)
+tile_load_streaming_begin(TileLoadState* state, String8 tileset_url, Rng2F64 bounds, S64 tileset_ion_asset_id,
+                          U64 cache_byte_size)
 {
     Assert(state);
 
@@ -43,7 +44,8 @@ tile_load_streaming_begin(TileLoadState* state, String8 tileset_url, Rng2F64 bou
     Assert(tileset_exists);
 
     Vec2F64 bounds_center = {.x = (bounds.min.x + bounds.max.x) * 0.5, .y = (bounds.min.y + bounds.max.y) * 0.5};
-    cesium::tileset_renderer_create(tileset, tileset_handle, state->thread_pool, tileset_url, bounds_center.x, bounds_center.y, 0.0, tileset_ion_asset_id, cache_byte_size);
+    cesium::tileset_renderer_create(tileset, tileset_handle, state->thread_pool, tileset_url, bounds_center.x,
+                                    bounds_center.y, 0.0, tileset_ion_asset_id, cache_byte_size);
     return tileset_handle;
 }
 
@@ -68,11 +70,11 @@ tile_load_streaming_end(TileLoadState* state, ArrayResourcePoolHandle tileset_ha
 
 // NOTE: To be called every frame on the render thread for an active city.
 g_internal void
-tile_load_update(TileLoadState* state, ArrayResourcePoolHandle tileset_handle, ArrayResourcePoolHandle bvh_handle, B32 road_building_done, B32 road_overlay_changed,
-                 RoadOverlayOption road_overlay_option, ui::Camera* camera, F64 delta_time)
+tile_load_update(TileLoadState* state, ArrayResourcePoolHandle tileset_handle, ArrayResourcePoolHandle bvh_handle,
+                 ArrayResourcePoolHandle camera_handle, B32 road_building_done, B32 road_overlay_changed,
+                 RoadOverlayOption road_overlay_option, F64 delta_time)
 {
     Assert(state);
-    Assert(camera);
 
     for (cesium::TilesetRenderer& registered_tileset : *state->tileset_pool)
     {
@@ -84,7 +86,7 @@ tile_load_update(TileLoadState* state, ArrayResourcePoolHandle tileset_handle, A
     tileset_exists = tileset_exists && !tileset->destruction_requested;
     if (tileset_exists)
     {
-        cesium::tileset_update_view(tileset, camera, camera->cur_framebuffer_extent, delta_time);
+        cesium::tileset_update_view(tileset, camera_handle, delta_time);
     }
 
     _tile_load_task_completions_update(state);
@@ -136,7 +138,9 @@ tile_load_debug_ui_draw(TileLoadState* state, ArrayResourcePoolHandle tileset_ha
 }
 
 g_internal void
-_tile_load_stale_meshes_schedule(TileLoadState* state, cesium::TilesetRenderer* tileset, ArrayResourcePoolHandle tileset_handle, ArrayResourcePoolHandle bvh_handle, U64 mesh_processor_generation)
+_tile_load_stale_meshes_schedule(TileLoadState* state, cesium::TilesetRenderer* tileset,
+                                 ArrayResourcePoolHandle tileset_handle, ArrayResourcePoolHandle bvh_handle,
+                                 U64 mesh_processor_generation)
 {
     Bvh* bvh = 0;
     if (state->polygon_bvh_pool->item_from_handle(bvh_handle, &bvh) && bvh->deletion_requested == false)
@@ -171,14 +175,18 @@ _tile_load_stale_meshes_schedule(TileLoadState* state, cesium::TilesetRenderer* 
         U32 tasks_started_count = 0;
 
         // Schedule visible tiles before cached tiles so an overlay change is reflected on screen first.
-        for (cesium::TileRenderResources* tile = tileset->tile_to_show_first; tile && tasks_started_count < available_task_count; tile = tile->render_next)
+        for (cesium::TileRenderResources* tile = tileset->tile_to_show_first;
+             tile && tasks_started_count < available_task_count; tile = tile->render_next)
         {
-            tasks_started_count += _tile_load_mesh_reprocess_task_start(state, tile, tileset_handle, bvh, bvh_handle, mesh_processor_generation);
+            tasks_started_count += _tile_load_mesh_reprocess_task_start(state, tile, tileset_handle, bvh, bvh_handle,
+                                                                        mesh_processor_generation);
         }
 
-        for (cesium::TileRenderResources* tile = state->tile_first; tile && tasks_started_count < available_task_count; tile = tile->next)
+        for (cesium::TileRenderResources* tile = state->tile_first; tile && tasks_started_count < available_task_count;
+             tile = tile->next)
         {
-            tasks_started_count += _tile_load_mesh_reprocess_task_start(state, tile, tileset_handle, bvh, bvh_handle, mesh_processor_generation);
+            tasks_started_count += _tile_load_mesh_reprocess_task_start(state, tile, tileset_handle, bvh, bvh_handle,
+                                                                        mesh_processor_generation);
         }
 
         if (tasks_started_count > 0)
@@ -189,11 +197,13 @@ _tile_load_stale_meshes_schedule(TileLoadState* state, cesium::TilesetRenderer* 
 }
 
 g_internal B32
-_tile_load_mesh_reprocess_task_start(TileLoadState* state, cesium::TileRenderResources* tile, ArrayResourcePoolHandle tileset_handle, Bvh* bvh, ArrayResourcePoolHandle bvh_handle,
-                                     U64 mesh_processor_generation)
+_tile_load_mesh_reprocess_task_start(TileLoadState* state, cesium::TileRenderResources* tile,
+                                     ArrayResourcePoolHandle tileset_handle, Bvh* bvh,
+                                     ArrayResourcePoolHandle bvh_handle, U64 mesh_processor_generation)
 {
     B32 task_started = false;
-    if (bvh->deletion_requested == false && tile->tileset_handle == tileset_handle && tile->tile_mesh_processor_generation != mesh_processor_generation &&
+    if (bvh->deletion_requested == false && tile->tileset_handle == tileset_handle &&
+        tile->tile_mesh_processor_generation != mesh_processor_generation &&
         tile->tile_mesh_processor_pending_generation == 0 && tile->to_be_dealloced.load() == false)
     {
         tile->tile_mesh_processor_pending_generation = mesh_processor_generation;
@@ -206,7 +216,9 @@ _tile_load_mesh_reprocess_task_start(TileLoadState* state, cesium::TileRenderRes
         tile_task_state->bvh_handle = bvh_handle;
         tile_task_state->mesh_processor_generation = mesh_processor_generation;
 
-        async::AsyncTaskStatus<TileLoadTaskState>* tile_load_task = async::async_task_run(task_arena, state->thread_pool, _tile_load_mesh_reprocess_task, tile_task_state, "Tile Mesh Reprocess Task");
+        async::AsyncTaskStatus<TileLoadTaskState>* tile_load_task =
+            async::async_task_run(task_arena, state->thread_pool, _tile_load_mesh_reprocess_task, tile_task_state,
+                                  "Tile Mesh Reprocess Task");
         TileLoadTaskStateNode* node = state->task_free_list;
         if (node)
         {
@@ -301,7 +313,8 @@ _tile_load_deallocated_tiles_release(TileLoadState* state)
 }
 
 g_internal B32
-_tile_load_road_mesh_process(Arena* arena, Buffer<render::TileVertex> vertices, Buffer<U32> indices, void* user_data, render::TileMesh* out_mesh)
+_tile_load_road_mesh_process(Arena* arena, Buffer<render::TileVertex> vertices, Buffer<U32> indices, void* user_data,
+                             render::TileMesh* out_mesh)
 {
     Bvh* bvh = (Bvh*)user_data;
     B32 result = city::tesselate_roads(arena, vertices, indices, *bvh, out_mesh);
@@ -327,7 +340,8 @@ _tile_load_mesh_reprocess_task(async::ThreadInfo info, async::AsyncTaskStatus<Ti
     for (cesium::TileDrawBatch* batch = tile->batch_first; batch; batch = batch->next)
     {
         render::TileMesh mesh = {};
-        B32 has_road_classification = city::tesselate_roads(scratch.arena, batch->vertex_buffer_orig, batch->index_buffer_orig, *bvh, &mesh);
+        B32 has_road_classification =
+            city::tesselate_roads(scratch.arena, batch->vertex_buffer_orig, batch->index_buffer_orig, *bvh, &mesh);
 
         if (has_road_classification)
         {
@@ -345,8 +359,10 @@ _tile_load_mesh_reprocess_task(async::ThreadInfo info, async::AsyncTaskStatus<Ti
 
             render::BufferInfo vertex_buffer_info = render::BufferInfo(mesh.vertices, render::BufferType_Vertex);
             render::BufferInfo index_buffer_info = render::BufferInfo(mesh.indices, render::BufferType_Index);
-            render::Handle vertex_buffer_render_handle = render::buffer_load_sync(thread_ctx, &vertex_buffer_info, S("Vertex Tile Load"));
-            render::Handle index_buffer_render_handle = render::buffer_load_sync(thread_ctx, &index_buffer_info, S("Index Tile Load"));
+            render::Handle vertex_buffer_render_handle =
+                render::buffer_load_sync(thread_ctx, &vertex_buffer_info, S("Vertex Tile Load"));
+            render::Handle index_buffer_render_handle =
+                render::buffer_load_sync(thread_ctx, &index_buffer_info, S("Index Tile Load"));
 
             batch->vertex_buffer_handle_load_temp = vertex_buffer_render_handle;
             batch->index_buffer_handle_load_temp = index_buffer_render_handle;

@@ -183,7 +183,8 @@ struct BufferInfo
     U32 buffer_type;
     U32 elem_count;
 
-    BufferInfo(Buffer<U8> buffer, U64 type_size, U32 buffer_type, U32 elem_count) : buffer(buffer), type_size(type_size), buffer_type(buffer_type), elem_count(elem_count)
+    BufferInfo(Buffer<U8> buffer, U64 type_size, U32 buffer_type, U32 elem_count)
+        : buffer(buffer), type_size(type_size), buffer_type(buffer_type), elem_count(elem_count)
     {
     }
 
@@ -267,8 +268,6 @@ struct TilePipelineData
     Handle texture_handle;
     Handle overlay_texture_handle;
     Handle colormap_handle;
-
-    MappedHandle<void> camera_handle;
 
     Vec2F32 overlay_translation;
     Vec2F32 overlay_scale;
@@ -459,7 +458,8 @@ render_ctx_create(String8 shader_path, io::IO* io_ctx, async::ThreadPool* thread
 static void
 render_ctx_destroy();
 static void
-render_frame(Vec2U32 framebuffer_dim, B32* in_out_framebuffer_resized, Vec2S64 mouse_cursor_pos);
+render_frame(Vec2U32 framebuffer_dim, B32* in_out_framebuffer_resized, Vec2S64 mouse_cursor_pos,
+             MappedHandle<void> camera_handle_void);
 
 static void
 gpu_work_update();
@@ -495,10 +495,6 @@ blend_3d_draw(Blend3DPipelineData pipeline_input);
 
 static void
 tile_pipeline_add(render::TilePipelineData* pipeline_input);
-g_internal bool
-agent_instance_render_bucket_add(render::MappedHandle<void> camera_handle, Buffer<render::AgentModelInfo> meshes, Buffer<render::Handle> texture_handles, render::BufferInfo* instance_buffer_info,
-                                 U32 instance_buffer_offset);
-
 g_internal Handle
 buffer_load_async(BufferInfo* buffer_info);
 

@@ -10,7 +10,8 @@ namespace neta
 g_internal void
 neta_init(NetaState* neta_state, String8 cache_path, String8 cache_type, Rng2F64 bbox, String8 bbox_cache_str)
 {
-    neta_state->cache_file_location = str8_path_from_str8_list(neta_state->arena, {cache_path, cache_type, S("netascore_edges.geojson")});
+    neta_state->cache_file_location =
+        str8_path_from_str8_list(neta_state->arena, {cache_path, cache_type, S("netascore_edges.geojson")});
     neta_state->task_state.bbox_wgs84 = bbox;
     neta_state->task_state.cache_file_location = neta_state->cache_file_location;
     neta_state->task_state.cache_bbox_str = push_str8_copy(neta_state->arena, bbox_cache_str);
@@ -21,7 +22,8 @@ neta_init(NetaState* neta_state, String8 cache_path, String8 cache_type, Rng2F64
     {
         ERROR_LOG("NETASCORE_API_KEY environment variable could not be found");
     }
-    neta_state->task_state.mobility_api_key_header = neta::mobilitylab_api_key_header_get(neta_state->arena, neta_state->mobility_api_key);
+    neta_state->task_state.mobility_api_key_header =
+        neta::mobilitylab_api_key_header_get(neta_state->arena, neta_state->mobility_api_key);
 }
 
 static Result<Buffer<Edge>>
@@ -65,7 +67,10 @@ _edge_in_osm_area(Arena* arena, osm::Network* network, simdjson::ondemand::docum
         }
         size_t size = 0;
         err |= geometry.count_elements().get(size);
-        if (err) { break; }
+        if (err)
+        {
+            break;
+        }
         Buffer<Vec2F64> coords_buf = buffer_alloc<Vec2F64>(arena, size);
         U64 coord_idx = 0;
         for (auto point : geometry)
@@ -75,7 +80,8 @@ _edge_in_osm_area(Arena* arena, osm::Network* network, simdjson::ondemand::docum
             simdjson::error_code coord_error = coords.count_elements().get(coord_count);
             if (coord_error != simdjson::error_code::SUCCESS || coord_count != 2)
             {
-                err |= coord_error != simdjson::error_code::SUCCESS ? coord_error : simdjson::error_code::INCORRECT_TYPE;
+                err |=
+                    coord_error != simdjson::error_code::SUCCESS ? coord_error : simdjson::error_code::INCORRECT_TYPE;
                 continue;
             }
             U32 arr_idx = 0;
@@ -87,9 +93,10 @@ _edge_in_osm_area(Arena* arena, osm::Network* network, simdjson::ondemand::docum
                 arr_idx += 1;
             }
 
-            if (bbox_wgs84.min.x < coord_arr[0] && coord_arr[0] < bbox_wgs84.max.x && bbox_wgs84.min.y < coord_arr[1] && coord_arr[1] < bbox_wgs84.max.y)
+            if (bbox_wgs84.min.x < coord_arr[0] && coord_arr[0] < bbox_wgs84.max.x && bbox_wgs84.min.y < coord_arr[1] &&
+                coord_arr[1] < bbox_wgs84.max.y)
             {
-                *coords_buf[coord_idx] = {coord_arr[0], coord_arr[1]};
+                coords_buf[coord_idx] = {coord_arr[0], coord_arr[1]};
                 coord_idx += 1;
             }
         }
@@ -135,7 +142,7 @@ osm_way_to_edges_map_create(Arena* arena, osm::Network* network, String8 file_pa
     Map<S64, EdgeList>* edge_map = Map<S64, EdgeList>::create(arena, 10);
     for (U32 i = 0; i < edge_buf.size; i++)
     {
-        Edge* edge = edge_buf[i];
+        Edge* edge = &edge_buf[i];
         EdgeList* list_res = edge_map->get(edge->osm_id);
         EdgeNode* edge_node = PushStruct(arena, EdgeNode);
         edge_node->edge = edge;
@@ -190,8 +197,10 @@ _netascore_next_download_http_info(Arena* arena, NetaTaskState* task_state)
         return 0;
     }
 
-    String8 download_api = push_str8f(arena, "%.*s%.*s/download/%.*s", str8_varg(mobilitylab_jobs_api_get()), str8_varg(download_queue->job_id), str8_varg(node->key));
-    async::HttpInfo* http_info = async::http_info_create_get(arena, download_api, {task_state->mobility_api_key_header});
+    String8 download_api = push_str8f(arena, "%.*s%.*s/download/%.*s", str8_varg(mobilitylab_jobs_api_get()),
+                                      str8_varg(download_queue->job_id), str8_varg(node->key));
+    async::HttpInfo* http_info =
+        async::http_info_create_get(arena, download_api, {task_state->mobility_api_key_header});
     return http_info;
 }
 
@@ -229,7 +238,8 @@ _netascore_downloads_complete(Arena* arena, async::ThreadPool* thread_pool, Stri
     err = doc.get_array().get(downloads);
     if (err)
     {
-        return async::UserFuncResult<NetaTaskState>::failure(arena, "Expected NetAScore downloads response to be an array");
+        return async::UserFuncResult<NetaTaskState>::failure(arena,
+                                                             "Expected NetAScore downloads response to be an array");
     }
 
     for (simdjson::dom::element elem : downloads)
@@ -247,7 +257,8 @@ _netascore_downloads_complete(Arena* arena, async::ThreadPool* thread_pool, Stri
         simdjson::error_code err_file_name = item["filename"].get_c_str().get(file_name);
         if (err_key || err_file_name)
         {
-            return async::UserFuncResult<NetaTaskState>::failure(arena, "NetAScore download item is missing key or filename");
+            return async::UserFuncResult<NetaTaskState>::failure(arena,
+                                                                 "NetAScore download item is missing key or filename");
         }
 
         String8 file_name_str = str8_c_string(file_name);
@@ -264,7 +275,8 @@ _netascore_downloads_complete(Arena* arena, async::ThreadPool* thread_pool, Stri
         AssertAlways(next_http_info != 0);
         return async::UserFuncResult<NetaTaskState>::success(next_http_info, _netascore_download_file_complete);
     }
-    return async::UserFuncResult<NetaTaskState>::failure(arena, "NetAScore downloads response did not contain any *_edges.geojson files");
+    return async::UserFuncResult<NetaTaskState>::failure(
+        arena, "NetAScore downloads response did not contain any *_edges.geojson files");
 }
 
 static async::UserFuncResult<NetaTaskState>
@@ -284,7 +296,8 @@ _netascore_job_status_complete(Arena* arena, async::ThreadPool* thread_pool, Str
     err = doc.get_object().get(obj);
     if (err)
     {
-        return async::UserFuncResult<NetaTaskState>::failure(arena, "Expected NetAScore status response to be an object");
+        return async::UserFuncResult<NetaTaskState>::failure(arena,
+                                                             "Expected NetAScore status response to be an object");
     }
 
     const char* status = 0;
@@ -293,7 +306,8 @@ _netascore_job_status_complete(Arena* arena, async::ThreadPool* thread_pool, Str
     simdjson::error_code err_job_id = obj["job_id"].get_c_str().get(job_id);
     if (err_status || err_job_id)
     {
-        return async::UserFuncResult<NetaTaskState>::failure(arena, "NetAScore status response is missing status or job_id");
+        return async::UserFuncResult<NetaTaskState>::failure(arena,
+                                                             "NetAScore status response is missing status or job_id");
     }
 
     download_queue->job_id = push_str8_copy(arena, str8_c_string(job_id));
@@ -304,8 +318,10 @@ _netascore_job_status_complete(Arena* arena, async::ThreadPool* thread_pool, Str
 
     if (c_str_equal(status, "done"))
     {
-        String8 downloads_api = push_str8f(arena, "%.*s%.*s/downloads", str8_varg(mobilitylab_jobs_api_get()), str8_varg(download_queue->job_id));
-        async::HttpInfo* http_info = async::http_info_create_get(arena, downloads_api, {task_state->mobility_api_key_header});
+        String8 downloads_api = push_str8f(arena, "%.*s%.*s/downloads", str8_varg(mobilitylab_jobs_api_get()),
+                                           str8_varg(download_queue->job_id));
+        async::HttpInfo* http_info =
+            async::http_info_create_get(arena, downloads_api, {task_state->mobility_api_key_header});
         return async::UserFuncResult<NetaTaskState>::success(http_info, _netascore_downloads_complete);
     }
 
@@ -314,7 +330,8 @@ _netascore_job_status_complete(Arena* arena, async::ThreadPool* thread_pool, Str
         const char* error_msg = 0;
         if (obj["error"].get_c_str().get(error_msg) == simdjson::SUCCESS && error_msg != 0)
         {
-            return async::UserFuncResult<NetaTaskState>::failure(arena, "NetAScore job %s failed: %s", job_id, error_msg);
+            return async::UserFuncResult<NetaTaskState>::failure(arena, "NetAScore job %s failed: %s", job_id,
+                                                                 error_msg);
         }
         return async::UserFuncResult<NetaTaskState>::failure(arena, "NetAScore job %s failed", job_id);
     }
@@ -339,7 +356,8 @@ netascore_job_create_complete(Arena* arena, async::ThreadPool* thread_pool, Stri
     err = doc.get_object().get(obj);
     if (err)
     {
-        return async::UserFuncResult<NetaTaskState>::failure(arena, "Expected NetAScore job creation response to be an object");
+        return async::UserFuncResult<NetaTaskState>::failure(
+            arena, "Expected NetAScore job creation response to be an object");
     }
 
     const char* status = 0;
@@ -348,18 +366,21 @@ netascore_job_create_complete(Arena* arena, async::ThreadPool* thread_pool, Stri
     simdjson::error_code err_job_id = obj["job_id"].get_c_str().get(job_id);
     if (err_status || err_job_id)
     {
-        return async::UserFuncResult<NetaTaskState>::failure(arena, "NetAScore job creation response is missing status or job_id");
+        return async::UserFuncResult<NetaTaskState>::failure(
+            arena, "NetAScore job creation response is missing status or job_id");
     }
 
     if (!c_str_equal(status, "queued") && !c_str_equal(status, "running"))
     {
-        return async::UserFuncResult<NetaTaskState>::failure(arena, "Unexpected NetAScore job creation status: %s", status);
+        return async::UserFuncResult<NetaTaskState>::failure(arena, "Unexpected NetAScore job creation status: %s",
+                                                             status);
     }
 
     *download_queue = {};
     download_queue->job_id = push_str8_copy(arena, str8_c_string(job_id));
 
-    String8 status_api = push_str8f(arena, "%.*s%.*s", str8_varg(mobilitylab_jobs_api_get()), str8_varg(download_queue->job_id));
+    String8 status_api =
+        push_str8f(arena, "%.*s%.*s", str8_varg(mobilitylab_jobs_api_get()), str8_varg(download_queue->job_id));
     async::HttpInfo* http_info = async::http_info_create_get(arena, status_api, {task_state->mobility_api_key_header});
     return async::UserFuncResult<NetaTaskState>::success(http_info, _netascore_job_status_complete);
 }
@@ -375,7 +396,8 @@ netascore_async_task_create(Arena* arena, NetaState* neta, Rng2F64 bbox)
         exit_with_error("Failed to derive a valid UTM SRID from the provided WGS84 coordinates");
     }
 
-    Result<String8> netascore_result = cache_read(neta->arena, neta->cache_file_location, neta->task_state.cache_bbox_str);
+    Result<String8> netascore_result =
+        cache_read(neta->arena, neta->cache_file_location, neta->task_state.cache_bbox_str);
     city::AsyncCityTask* neta_task = PushStruct(arena, city::AsyncCityTask);
     if (netascore_result.err)
     {
@@ -389,10 +411,14 @@ netascore_async_task_create(Arena* arena, NetaState* neta, Rng2F64 bbox)
 
         String8 netascore_api = push_str8f(task_arena, "%.*snetascore", str8_varg(neta::mobilitylab_jobs_api_get()));
         String8 target_srid_param = push_str8f(task_arena, "target_srid=%d", target_srid);
-        async::HttpInfo* http_info = async::http_info_create(task_arena, HTTP_Method_Post, netascore_api, S("application/x-www-form-urlencoded"), {task_state->mobility_api_key_header},
-                                                             {target_srid_param, task_state->cache_bbox_str, S("output_format=GeoJSON")});
-        async::AsyncHttpTaskStateConfig<NetaTaskState> config = async::AsyncHttpTaskStateConfig<NetaTaskState>(neta::netascore_job_create_complete, task_state, 5, 1);
-        async::AsyncHttpTaskCreateResult<NetaTaskState> result = async::async_http_task_run(task_arena, ctx->thread_pool, http_info, &config, "Neta Task");
+        async::HttpInfo* http_info =
+            async::http_info_create(task_arena, HTTP_Method_Post, netascore_api, S("application/x-www-form-urlencoded"),
+                                    {task_state->mobility_api_key_header},
+                                    {target_srid_param, task_state->cache_bbox_str, S("output_format=GeoJSON")});
+        async::AsyncHttpTaskStateConfig<NetaTaskState> config =
+            async::AsyncHttpTaskStateConfig<NetaTaskState>(neta::netascore_job_create_complete, task_state, 5, 1);
+        async::AsyncHttpTaskCreateResult<NetaTaskState> result =
+            async::async_http_task_run(task_arena, ctx->thread_pool, http_info, &config, "Neta Task");
         AssertAlways(result.async_result.has_error() == false);
 
         neta_task->type = city::AsyncTaskType::Neta;

@@ -13,6 +13,41 @@
 
 namespace city
 {
+
+struct ServerUpdate;
+
+enum class AgentType : S32
+{
+    Car,
+    Bicycle,
+    Count
+};
+
+struct AgentUpdate
+{
+    S64 id;
+    String8 original_id; // Owned by the arena used to parse this update.
+    AgentType vehicle_type;
+    F64 time;
+    S64 event_type;
+    S64 node_from_id;
+    S64 node_to_id;
+    glm::dvec2 from;
+    glm::dvec2 to;
+};
+
+struct Scenario
+{
+    std::string name;
+    F64 timestamp_start;
+    F64 timestamp_end;
+};
+
+struct SimulationMetadata
+{
+    std::vector<Scenario> scenarios;
+};
+
 struct CoordinateView
 {
     std::string_view id;
@@ -26,34 +61,27 @@ struct CoordinateView
     F64 lat_to;
 };
 
-enum class VehicleType : S32
-{
-    Car,
-    Bicycle,
-    Count
-};
+// Metadata owns its scenario names. Output is replaced only on success.
+g_internal simdjson::error_code
+simulator_metadata_from_json(simdjson::ondemand::object& object, SimulationMetadata* out);
 
-struct Coordinate
-{
-    S64 id;
-    VehicleType vehicle_type;
-    F64 time;
-    S64 event_type;
-    S64 node_from_id;
-    S64 node_to_id;
-    glm::dvec2 from;
-    glm::dvec2 to;
-};
+g_internal String8
+simulator_server_update_to_json(Arena* arena, const ServerUpdate& update, U64 request_id = 0);
 
-struct CoordinateBatch
-{
-    Buffer<Coordinate> coordinates;
-    B32 reset;
-};
+g_internal Buffer<AgentUpdate>
+simulator_events_before_playback(Arena* arena, Buffer<AgentUpdate>& pending, F64 playback);
+
+// Compact a chronological snapshot in place, keeping the last ready event per agent.
+g_internal Buffer<AgentUpdate>
+simulator_snapshot_latest_events(Arena* arena, Buffer<AgentUpdate> ready);
+
+g_internal F64
+simulator_playback_advance(F64 playback, F64 delta_seconds, F64 timestamp_end);
 
 g_internal void
-simulator_coordinate_batch_append(Arena* arena, CoordinateBatch* batch, Buffer<Coordinate> incoming, B32 reset);
-
+_simulator_message_push(std::vector<std::string>* queue, String8 message);
+g_internal void
+_simulator_message_push(std::vector<std::string>* queue, String8List* parts, StringJoin* join);
 } // namespace city
 
 template <>
