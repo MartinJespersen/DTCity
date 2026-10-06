@@ -1,6 +1,8 @@
+#pragma once
 
-g_internal U32
+
+U32
 random_u32();
 
-g_internal U64
+U64
 random_u64();

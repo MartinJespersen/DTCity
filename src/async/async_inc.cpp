@@ -1,8 +1,12 @@
+// Worker queue and timer heap implementations belong to the async unit.
+#include "segment_buffer.hpp"
+#include "async_heap.hpp"
+#include "mpmc_queue.hpp"
+
+#include "segment_buffer_templates.hpp"
+#include "async_heap_templates.hpp"
+#include "mpmc_queue_templates.hpp"
+
 #include "thread_pool.cpp"
-#include "spmc_queue.cpp"
-#include "segment_buffer.cpp"
-#include "async_heap.cpp"
 #include "async_http.cpp"
-#include "async_task.cpp"
-#include "mpmc_queue.cpp"
 #include "async_websocket.cpp"

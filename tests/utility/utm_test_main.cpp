@@ -1,6 +1,7 @@
 // Standalone tests for the dependency-free coordinate conversion.
 #define DOCTEST_CONFIG_IMPLEMENT_WITH_MAIN
 #include "third_party/doctest/doctest.h"
+#include <memory>
 #include "base/base_context_cracking.h"
 #include "base/base_core.hpp"
 #include "base/base_arena.hpp"

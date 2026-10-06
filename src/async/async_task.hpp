@@ -129,26 +129,26 @@ struct AsyncTaskResult
 };
 
 template <typename T>
-g_internal AsyncTaskStatus<T>*
+AsyncTaskStatus<T>*
 async_task_run(AsyncTaskStatus<T>* task_status, ThreadPool* thread_pool, WorkerTaskFunc<T> func, S64 us_delay);
 
 template <typename T>
-g_internal AsyncTaskStatus<T>*
+AsyncTaskStatus<T>*
 _async_task_status_create(String8 name);
 
 template <typename T>
-g_internal AsyncTaskResult<T>
+AsyncTaskResult<T>
 async_task_is_done(AsyncTaskStatus<T>* task);
 
 template <typename T>
-g_internal AsyncTaskStatus<T>*
+AsyncTaskStatus<T>*
 async_task_run(ThreadPool* thread_pool, WorkerTaskFunc<T> func, T* data, const char* task_name, S64 us_delay = 0);
 
 template <typename T>
-g_internal AsyncTaskStatus<T>*
+AsyncTaskStatus<T>*
 async_task_run(Arena* arena, ThreadPool* thread_pool, WorkerTaskFunc<T> func, T* data, const char* task_name, S64 us_delay = 0);
 
 template <typename T>
-g_internal AsyncTaskStatus<T>*
+AsyncTaskStatus<T>*
 async_task_with_ext_run(Arena* arena, ThreadPool* thread_pool, WorkerTaskFunc<T> func, T* data, const char* task_name, S64 us_delay, ExtensionType ext_type, void* ext);
 } // namespace async

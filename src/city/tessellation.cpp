@@ -36,12 +36,12 @@ _polygon_intersection_sat(geometry::Quad2d quad, geometry::Triangle2d face)
         float p2_dot = dot(quad.v[(r_i + 2) % CORNERS_COUNT] - p0, n);
         float p3_dot = dot(quad.v[(r_i + 3) % CORNERS_COUNT] - p0, n);
 
-        float min_seg = min(0.0, min(p2_dot, p3_dot));
-        float max_seg = max(0.0, max(p2_dot, p3_dot));
+        float min_seg = Min(0.0, Min(p2_dot, p3_dot));
+        float max_seg = Max(0.0, Max(p2_dot, p3_dot));
 
         // find max interval for triangle points project to normal vector n
-        float min_face = min(dot(face.v[0] - p0, n), min(dot(face.v[1] - p0, n), dot(face.v[2] - p0, n)));
-        float max_face = max(dot(face.v[0] - p0, n), max(dot(face.v[1] - p0, n), dot(face.v[2] - p0, n)));
+        float min_face = Min(dot(face.v[0] - p0, n), Min(dot(face.v[1] - p0, n), dot(face.v[2] - p0, n)));
+        float max_face = Max(dot(face.v[0] - p0, n), Max(dot(face.v[1] - p0, n), dot(face.v[2] - p0, n)));
 
         if (min_face > max_seg || max_face < min_seg)
         {
@@ -60,13 +60,13 @@ _polygon_intersection_sat(geometry::Quad2d quad, geometry::Triangle2d face)
 
         // find max interval for remaining triangle point project to normal vector n
         float opposite_dot = dot(face.v[(t_i + 2) % FACE_VERTEX_COUNT] - p0, n);
-        float min_triangle = min(0.0, opposite_dot);
-        float max_triangle = max(0.0, opposite_dot);
+        float min_triangle = Min(0.0, opposite_dot);
+        float max_triangle = Max(0.0, opposite_dot);
 
-        float min_seg = min(min(dot(quad.v[0] - p0, n), dot(quad.v[1] - p0, n)),
-                            min(dot(quad.v[2] - p0, n), dot(quad.v[3] - p0, n)));
-        float max_seg = max(max(dot(quad.v[0] - p0, n), dot(quad.v[1] - p0, n)),
-                            max(dot(quad.v[2] - p0, n), dot(quad.v[3] - p0, n)));
+        float min_seg = Min(Min(dot(quad.v[0] - p0, n), dot(quad.v[1] - p0, n)),
+                            Min(dot(quad.v[2] - p0, n), dot(quad.v[3] - p0, n)));
+        float max_seg = Max(Max(dot(quad.v[0] - p0, n), dot(quad.v[1] - p0, n)),
+                            Max(dot(quad.v[2] - p0, n), dot(quad.v[3] - p0, n)));
 
         if (min_triangle > max_seg || max_triangle < min_seg)
         {

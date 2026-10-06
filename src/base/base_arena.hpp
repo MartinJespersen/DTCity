@@ -1,3 +1,5 @@
+#pragma once
+
 // Copyright (c) 2024 Epic Games Tools
 // Licensed under the MIT license (https://opensource.org/license/mit/)
 
@@ -57,46 +59,46 @@ struct Temp
 ////////////////////////////////
 //~ rjf: Global Defaults
 
-lib_internal U64 arena_default_reserve_size = MB(64);
-lib_internal U64 arena_default_commit_size = KB(64);
-lib_internal ArenaFlags arena_default_flags = 0;
+extern U64 arena_default_reserve_size;
+extern U64 arena_default_commit_size;
+extern ArenaFlags arena_default_flags;
 
 ////////////////////////////////
 //~ rjf: Arena Functions
 
 //- rjf: arena creation/destruction
 
-lib_internal Arena*
+Arena*
 arena_alloc(ArenaParams* params);
 
-lib_internal Arena*
+Arena*
 arena_alloc();
 
-lib_internal void
+void
 arena_release(Arena* arena);
 
 //- rjf: arena push/pop/pos core functions
-lib_internal void*
+void*
 arena_push(Arena* arena, U64 size, U64 align);
-lib_internal U64
+U64
 arena_pos(Arena* arena);
-lib_internal void
+void
 arena_pop_to(Arena* arena, U64 pos);
 // Trim unused commitment and cached blocks, preserving all live allocations.
 // The budget includes live commitment; large-page blocks cannot be partially trimmed.
-lib_internal void
+void
 arena_trim(Arena* arena, U64 retained_size);
 
 //- rjf: arena push/pop helpers
-lib_internal void
+void
 arena_clear(Arena* arena);
-lib_internal void
+void
 arena_pop(Arena* arena, U64 amt);
 
 //- rjf: temporary arena scopes
-lib_internal Temp
+Temp
 temp_begin(Arena* arena);
-lib_internal void
+void
 temp_end(Temp temp);
 
 //- mgj: C++ smart pointers

@@ -4,7 +4,7 @@ _hash_u64_from_str8(String8 str)
     return hash_u128_from_str8(str).u64[1];
 }
 
-g_internal B32
+B32
 cache_needs_update(String8 cache_data_file, String8 cache_meta_file, U32 ttl_sec)
 {
     ScratchScope scratch = ScratchScope(0, 0);
@@ -78,7 +78,7 @@ cache_needs_update(String8 cache_data_file, String8 cache_meta_file, U32 ttl_sec
     return update_needed;
 }
 
-lib_internal void
+void
 cache_write(String8 cache_file, String8 content, String8 hash_content)
 {
     prof_scope_marker;
@@ -115,7 +115,7 @@ cache_write(String8 cache_file, String8 content, String8 hash_content)
     }
 }
 
-lib_internal Result<String8>
+Result<String8>
 cache_read(Arena* arena, String8 cache_file, String8 hash_input, U32 ttl_sec)
 {
     prof_scope_marker;

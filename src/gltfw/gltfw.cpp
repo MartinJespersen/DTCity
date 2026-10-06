@@ -318,7 +318,7 @@ gltfw_free_func(void* user, void* ptr)
     (void)ptr;
 }
 
-static gltfw_Result
+gltfw_Result
 gltfw_glb_read(Arena* arena, String8 glb_path)
 {
     ScratchScope scratch = ScratchScope(&arena, 1);
@@ -342,7 +342,7 @@ gltfw_glb_read(Arena* arena, String8 glb_path)
     return gltfw_Result{prim_list, tex_buffer};
 }
 
-lib_internal Rng3F32
+Rng3F32
 gltfw_model_bounds_calc(Buffer<gltfw_Vertex3D> vertices)
 {
     Assert(vertices.size > 0);

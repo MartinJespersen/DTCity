@@ -1,5 +1,6 @@
+#pragma once
 
-
+// Template implementations
 ///////////////////////////////////////////////////////////////////////////////////////
 // Dynamic Array
 
@@ -232,7 +233,7 @@ ArenaArray<T>::clear() noexcept
 /////////////////////////////////////////////////////////////////////////
 // Resource Pool
 template <typename T>
-g_internal ResourcePool<T>*
+ResourcePool<T>*
 resource_pool_init(U64 reserve_element_size)
 {
     U64 element_byte_size = sizeof(ItemHeader<T>);
@@ -271,7 +272,7 @@ resource_pool_init(U64 reserve_element_size)
 }
 
 template <typename T>
-g_internal void
+void
 resource_pool_release(ResourcePool<T>* container)
 {
     arena_release(container->arena_free_list);
@@ -279,7 +280,7 @@ resource_pool_release(ResourcePool<T>* container)
 }
 
 template <typename T>
-g_internal ItemHeader<T>*
+ItemHeader<T>*
 _resource_pool_item_from_idx(ResourcePool<T>* container, U32 idx)
 {
     ItemHeader<T>* result = &container->items[0];
@@ -298,7 +299,7 @@ _resource_pool_item_from_idx(ResourcePool<T>* container, U32 idx)
 }
 
 template <typename T>
-g_internal T*
+T*
 resource_pool_item_from_idx(ResourcePool<T>* container, ResourcePoolHandle item_handle)
 {
     ItemHeader<T>* result = &container->items[0];
@@ -311,7 +312,7 @@ resource_pool_item_from_idx(ResourcePool<T>* container, ResourcePoolHandle item_
 }
 
 template <typename T>
-g_internal ResourcePoolHandle
+ResourcePoolHandle
 resource_pool_array_idx_get(ResourcePool<T>* container)
 {
     U32 item_idx = 0;
@@ -336,7 +337,7 @@ resource_pool_array_idx_get(ResourcePool<T>* container)
 }
 
 template <typename T>
-g_internal void
+void
 resource_pool_item_free(ResourcePool<T>* container, ResourcePoolHandle item_handle)
 {
     ItemHeader<T>* item = _resource_pool_item_from_idx(container, item_handle.idx);

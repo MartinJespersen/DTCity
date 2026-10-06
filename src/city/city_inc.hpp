@@ -10,7 +10,6 @@
 #include "simulator_messages.hpp"
 #include "agent.hpp"
 #include "simulator_shared_interface.hpp"
-#include "simulation_client.hpp"
 #include "simulation.hpp"
 #include "city/city.hpp"
 #include "tile_load.hpp"

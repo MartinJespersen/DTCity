@@ -11,7 +11,7 @@ framebuffer_resize_callback(GLFWwindow* window, int width, int height)
     io_ctx->framebuffer_resized = 1;
 }
 
-static IO*
+IO*
 window_create(String8 app_name, U32 window_width, U32 window_height)
 {
     Arena* arena = arena_alloc();
@@ -30,7 +30,7 @@ window_create(String8 app_name, U32 window_width, U32 window_height)
     return io_ctx;
 }
 
-static void
+void
 window_destroy(IO* io_ctx)
 {
     glfwDestroyWindow(io_ctx->window);
@@ -52,7 +52,7 @@ scroll_callback(GLFWwindow* window, double xoffset, double yoffset)
 // internally to a 0 value. This means that another thread may view the reset value before it is set
 // to the correct value.
 
-static void
+void
 input_state_update(IO* input)
 {
     glfwPollEvents();
@@ -100,7 +100,7 @@ input_state_update(IO* input)
     input->frame_rate.store(refresh_rate);
 }
 
-static Vec2S32
+Vec2S32
 wait_for_valid_framebuffer_size(IO* io_ctx)
 {
     // framebuffer update
@@ -116,7 +116,7 @@ wait_for_valid_framebuffer_size(IO* io_ctx)
     return framebuffer_dim;
 }
 
-static void
+void
 new_frame(io::IO* io)
 {
     ImGui_ImplGlfw_NewFrame();

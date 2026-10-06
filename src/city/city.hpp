@@ -1,5 +1,8 @@
 #pragma once
 
+struct gltfw_Sampler;
+struct gltfw_Vertex3D;
+
 #include "generated/colormaps.h"
 
 namespace city
@@ -142,7 +145,7 @@ struct AreaConfig
     bool custom_geometry_enabled;
 };
 
-g_internal Vec2F64
+Vec2F64
 city_area_wgs84_get(const AreaConfig* config);
 
 struct City
@@ -215,18 +218,18 @@ road_create(City* city, Road* in_out_road, glm::dmat4& ecef_to_local, String8 ar
 g_internal Map<osm::EdgeId, RoadInfo>*
 road_info_from_edge_id(Arena* arena, osm::Network* network, Buffer<osm::RoadEdge> road_edge_buf,
                        Map<S64, neta::EdgeList>* neta_edge_map);
-g_internal void
+void
 city_build(City* city, Rng2F64 bbox, String8 tileset_url, String8 area);
-g_internal void
+void
 city_area_streaming_begin(City* city, const AreaConfig* area_config);
-g_internal B32
+B32
 city_area_streaming_end(City* city);
-g_internal void
+void
 city_update(City* city, async::ThreadPool* thread_pool, RoadOverlayOption neta_overlay_option, Vec2U32 framebuffer_dim,
             const AreaConfig* city_config);
-g_internal void
+void
 city_init(City* city, String8 cache_path);
-g_internal void
+void
 city_release(City* city);
 
 g_internal neta::Edge*

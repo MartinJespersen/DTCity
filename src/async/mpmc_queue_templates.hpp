@@ -1,9 +1,10 @@
+#pragma once
 
+// Template implementations
 namespace async
 {
-
 template <typename T>
-static void
+void
 _queue_grow(Queue<T>* queue, U32 min_queue_size)
 {
     AssertAlways(queue);
@@ -24,7 +25,7 @@ _queue_grow(Queue<T>* queue, U32 min_queue_size)
 }
 
 template <typename T>
-static void
+void
 _queue_insert_value(Queue<T>* queue, T* data)
 {
     U32 fill_index = queue->fill_index;
@@ -34,7 +35,7 @@ _queue_insert_value(Queue<T>* queue, T* data)
 }
 
 template <typename T>
-static Queue<T>*
+Queue<T>*
 queue_alloc(Arena* arena, U32 queue_size)
 {
     Queue<T>* queue = PushStruct(arena, Queue<T>);
@@ -46,14 +47,14 @@ queue_alloc(Arena* arena, U32 queue_size)
 }
 
 template <typename T>
-static void
+void
 queue_release(Queue<T>* queue)
 {
     os_rw_mutex_release(queue->mutex);
 }
 
 template <typename T>
-static void
+void
 queue_push(Queue<T>* queue, T* data)
 {
     os_mutex_scope_w(queue->mutex)
@@ -68,7 +69,7 @@ queue_push(Queue<T>* queue, T* data)
 }
 
 template <typename T>
-static B32
+B32
 queue_try_push(Queue<T>* queue, T* data)
 {
     B32 inserted = false;
@@ -84,7 +85,7 @@ queue_try_push(Queue<T>* queue, T* data)
 }
 
 template <typename T>
-static B32
+B32
 queue_try_read(Queue<T>* queue, T* item)
 {
     B32 has_read = 0;
@@ -101,4 +102,5 @@ queue_try_read(Queue<T>* queue, T* item)
     }
     return has_read;
 }
-} // namespace async
+
+}

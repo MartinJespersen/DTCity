@@ -1,8 +1,10 @@
+#pragma once
+
+// Template implementations
 namespace async
 {
-
 template <typename T>
-static U64
+U64
 segment_buffer_capacity(U64 segment_index)
 {
     Assert(segment_index < SEGMENT_BUFFER_MAX_SEGMENT_COUNT);
@@ -10,7 +12,7 @@ segment_buffer_capacity(U64 segment_index)
 }
 
 template <typename T>
-static U64
+U64
 segment_buffer_capacity_from_segment_count(U64 segment_count)
 {
     Assert(segment_count <= SEGMENT_BUFFER_MAX_SEGMENT_COUNT);
@@ -24,7 +26,7 @@ segment_buffer_capacity_from_segment_count(U64 segment_count)
 }
 
 template <typename T>
-static U64
+U64
 segment_buffer_segment_index(U64 index)
 {
     U64 shifted_index = (index >> SEGMENT_BUFFER_SHIFT) + 1;
@@ -32,7 +34,7 @@ segment_buffer_segment_index(U64 index)
 }
 
 template <typename T>
-g_internal void
+void
 segment_buffer_ensure_size(SegmentBuffer<T>* segment_buffer, U64 segment_index)
 {
     Assert(segment_index < SEGMENT_BUFFER_MAX_SEGMENT_COUNT);
@@ -50,7 +52,7 @@ segment_buffer_ensure_size(SegmentBuffer<T>* segment_buffer, U64 segment_index)
 }
 
 template <typename T>
-g_internal T&
+T&
 segment_buffer_item_get(SegmentBuffer<T>* buffer, U64 index)
 {
     U64 segment_index = segment_buffer_segment_index<T>(index);
@@ -60,10 +62,10 @@ segment_buffer_item_get(SegmentBuffer<T>* buffer, U64 index)
 }
 
 template <typename T>
-g_internal void
+void
 segment_buffer_insert(SegmentBuffer<T>* buffer, const T& v, U64 index)
 {
     T& item = segment_buffer_item_get(buffer, index);
     item = v;
 }
-} // namespace async
+}

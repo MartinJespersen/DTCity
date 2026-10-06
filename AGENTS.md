@@ -48,6 +48,9 @@ In the src directory all sub-directories are layers that are all responsible for
 # Bug fix suggestions
 - Always looked at the git changes being tracked to easier identify bugs and other issues.
 
+# Explanations
+- When explaining things try doing it using the ASD-STE100 language specification.
+
 # Permissions
 - Never ask for read permission
 

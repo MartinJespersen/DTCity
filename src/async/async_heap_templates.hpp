@@ -1,8 +1,10 @@
+#pragma once
+
+// Template implementations
 namespace async
 {
-
 template <typename T>
-static void
+void
 _heap_index_swap(Heap<T>* heap, U64 a, U64 b)
 {
     AssertAlways(a < heap->size);
@@ -15,7 +17,7 @@ _heap_index_swap(Heap<T>* heap, U64 a, U64 b)
 }
 
 template <typename T>
-static void
+void
 _async_min_heap_pop_unlocked(Heap<T>* heap)
 {
     AssertAlways(heap->size > 0);
@@ -54,7 +56,7 @@ _async_min_heap_pop_unlocked(Heap<T>* heap)
 }
 
 template <typename T>
-g_internal Heap<T>*
+Heap<T>*
 async_heap_alloc()
 {
     Arena* arena = arena_alloc();
@@ -66,7 +68,7 @@ async_heap_alloc()
 }
 
 template <typename T>
-g_internal void
+void
 async_heap_release(Heap<T>* heap)
 {
     if (heap)
@@ -79,7 +81,7 @@ async_heap_release(Heap<T>* heap)
 }
 
 template <typename T>
-g_internal void
+void
 async_min_heap_push(Heap<T>* heap, const T& v, S64 k)
 {
     HeapItem<T> item = {};
@@ -110,7 +112,7 @@ async_min_heap_push(Heap<T>* heap, const T& v, S64 k)
 }
 
 template <typename T>
-g_internal void
+void
 async_min_heap_pop(Heap<T>* heap)
 {
     os_mutex_scope_w(heap->mutex)
@@ -123,7 +125,7 @@ async_min_heap_pop(Heap<T>* heap)
 }
 
 template <typename T>
-g_internal B32
+B32
 async_min_heap_pop_ready(Heap<T>* heap, S64 max_key, HeapItem<T>* out_value)
 {
     B32 result = false;
@@ -147,7 +149,7 @@ async_min_heap_pop_ready(Heap<T>* heap, S64 max_key, HeapItem<T>* out_value)
 }
 
 template <typename T>
-g_internal B32
+B32
 async_min_heap_peek(Heap<T>* heap, HeapItem<T>* out_value)
 {
     B32 result = false;
@@ -164,5 +166,4 @@ async_min_heap_peek(Heap<T>* heap, HeapItem<T>* out_value)
     }
     return result;
 }
-
-} // namespace async
+}

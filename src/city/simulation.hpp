@@ -1,5 +1,9 @@
+#pragma once
+
 namespace city
 {
+class SimulationClient;
+
 class Simulation
 {
   public:

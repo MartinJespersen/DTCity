@@ -1,9 +1,13 @@
+U64 arena_default_reserve_size = MB(64);
+U64 arena_default_commit_size = KB(64);
+ArenaFlags arena_default_flags = 0;
+
 // Copyright (c) 2024 Epic Games Tools
 // Licensed under the MIT license (https://opensource.org/license/mit/)
 
 //- rjf: arena creation/destruction
 
-lib_internal Arena*
+Arena*
 arena_alloc(ArenaParams* params)
 {
     // rjf: round up reserve/commit sizes
@@ -66,7 +70,7 @@ arena_alloc(ArenaParams* params)
     return arena;
 }
 
-lib_internal Arena*
+Arena*
 arena_alloc()
 {
     ArenaParams arena_params = {};
@@ -76,7 +80,7 @@ arena_alloc()
     return arena_alloc(&arena_params);
 }
 
-lib_internal void
+void
 arena_release(Arena* arena)
 {
     for (Arena *n = arena->free_last, *prev = 0; n != 0; n = prev)
@@ -95,7 +99,7 @@ arena_release(Arena* arena)
 
 //- rjf: arena push/pop core functions
 
-lib_internal void*
+void*
 arena_push(Arena* arena, U64 size, U64 align)
 {
     Arena* current = arena->current;
@@ -195,7 +199,7 @@ arena_push(Arena* arena, U64 size, U64 align)
     return result;
 }
 
-lib_internal U64
+U64
 arena_pos(Arena* arena)
 {
     Arena* current = arena->current;
@@ -203,7 +207,7 @@ arena_pos(Arena* arena)
     return pos;
 }
 
-lib_internal void
+void
 arena_pop_to(Arena* arena, U64 pos)
 {
     U64 big_pos = ClampBot(ARENA_HEADER_SIZE, pos);
@@ -246,7 +250,7 @@ arena_pop_to(Arena* arena, U64 pos)
 }
 
 // Keep a bounded cache at task/idle boundaries, never inside the face loop.
-lib_internal void
+void
 arena_trim(Arena* arena, U64 retained_size)
 {
     U64 remaining = retained_size;
@@ -276,13 +280,13 @@ arena_trim(Arena* arena, U64 retained_size)
 
 //- rjf: arena push/pop helpers
 
-lib_internal void
+void
 arena_clear(Arena* arena)
 {
     arena_pop_to(arena, 0);
 }
 
-lib_internal void
+void
 arena_pop(Arena* arena, U64 amt)
 {
     U64 pos_old = arena_pos(arena);
@@ -296,7 +300,7 @@ arena_pop(Arena* arena, U64 amt)
 
 //- rjf: temporary arena scopes
 
-lib_internal Temp
+Temp
 temp_begin(Arena* arena)
 {
     U64 pos = arena_pos(arena);
@@ -304,7 +308,7 @@ temp_begin(Arena* arena)
     return temp;
 }
 
-lib_internal void
+void
 temp_end(Temp temp)
 {
     arena_pop_to(temp.arena, temp.pos);

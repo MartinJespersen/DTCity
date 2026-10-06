@@ -6,7 +6,7 @@
 
 lib_internal thread_static TCTX* tctx_thread_local;
 
-lib_internal void
+void
 TCTX_InitAndEquip(TCTX* tctx)
 {
     MemoryZeroStruct(tctx);
@@ -25,7 +25,7 @@ TCTX_InitAndEquip(TCTX* tctx)
     tctx_thread_local = tctx;
 }
 
-lib_internal void
+void
 TCTX_Release()
 {
     for (U64 i = 0; i < ArrayCount(tctx_thread_local->arenas); i += 1)
@@ -36,13 +36,13 @@ TCTX_Release()
     LogRelease(tctx_thread_local->log);
 }
 
-lib_internal TCTX*
+TCTX*
 TCTX_Get()
 {
     return (tctx_thread_local);
 }
 
-lib_internal Arena*
+Arena*
 TCTX_ScratchGet(Arena** conflicts, U64 count)
 {
     TCTX* tctx = TCTX_Get();
@@ -71,7 +71,7 @@ TCTX_ScratchGet(Arena** conflicts, U64 count)
     return (result);
 }
 
-lib_internal void
+void
 tctx_set_thread_name(String8 string)
 {
     TCTX* tctx = TCTX_Get();
@@ -80,7 +80,7 @@ tctx_set_thread_name(String8 string)
     tctx->thread_name_size = size;
 }
 
-lib_internal String8
+String8
 tctx_get_thread_name()
 {
     TCTX* tctx = TCTX_Get();
@@ -88,7 +88,7 @@ tctx_get_thread_name()
     return (result);
 }
 
-lib_internal void
+void
 tctx_write_srcloc(char* file_name, U64 line_number)
 {
     TCTX* tctx = TCTX_Get();
@@ -96,7 +96,7 @@ tctx_write_srcloc(char* file_name, U64 line_number)
     tctx->line_number = line_number;
 }
 
-lib_internal void
+void
 tctx_read_srcloc(char** file_name, U64* line_number)
 {
     TCTX* tctx = TCTX_Get();
@@ -107,7 +107,7 @@ tctx_read_srcloc(char** file_name, U64* line_number)
 ////////////////////////////////
 //~ mgj: Log Creation/Selection
 
-lib_internal Log*
+Log*
 LogAlloc()
 {
     Arena* arena = arena_alloc();
@@ -117,7 +117,7 @@ LogAlloc()
     return log;
 }
 
-lib_internal void
+void
 LogRelease(Log* log)
 {
     arena_release(log->arena);
@@ -126,7 +126,7 @@ LogRelease(Log* log)
 ////////////////////////////////
 //~ mgj: Log Building/Clearing
 
-lib_internal void
+void
 LogMsg(LogMsgKind kind, String8 string)
 {
     if (tctx_thread_local != 0 && tctx_thread_local->log != 0 && tctx_thread_local->log->top_scope != 0)
@@ -136,7 +136,7 @@ LogMsg(LogMsgKind kind, String8 string)
     }
 }
 
-lib_internal void
+void
 LogMsgF(LogMsgKind kind, char* fmt, ...)
 {
     if (tctx_thread_local != 0 && tctx_thread_local->log)
@@ -154,7 +154,7 @@ LogMsgF(LogMsgKind kind, char* fmt, ...)
 ////////////////////////////////
 //~ rjf: Log Scopes
 
-lib_internal void
+void
 LogScopeBegin()
 {
     if (tctx_thread_local != 0 && tctx_thread_local->log)
@@ -166,7 +166,7 @@ LogScopeBegin()
     }
 }
 
-lib_internal LogScopeResult
+LogScopeResult
 LogScopeEnd(Arena* arena)
 {
     LogScopeResult result = {0};
@@ -195,7 +195,7 @@ LogScopeEnd(Arena* arena)
 
 //- rjf: lane metadata
 
-lib_internal LaneCtx
+LaneCtx
 tctx_set_lane_ctx(LaneCtx lane_ctx)
 {
     TCTX* tctx = TCTX_Get();
@@ -204,7 +204,7 @@ tctx_set_lane_ctx(LaneCtx lane_ctx)
     return restore;
 }
 
-lib_internal void
+void
 tctx_lane_barrier_wait(void* broadcast_ptr, U64 broadcast_size, U64 broadcast_src_lane_idx)
 {
     prof_scope_marker;

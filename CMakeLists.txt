@@ -14,6 +14,7 @@ set(RADLINKER_PATH "C:/repos/raddebugger/build/radlink.exe")
 
 option(BUILD_DEBUG "Enable Additional Debugging Information (e.g Vulkan Validation Layers)" OFF)
 option(ASAN_ENABLED "Enable Address Sanitizer" OFF)
+option(CITY_MONOLITHIC_BUILD "Compile all city layers in one object for build-time comparisons" OFF)
 option(BUILD_CITY "Build the DTCity application" ON)
 option(BUILD_SIMULATOR "Build the vehicle simulator" OFF)
 option(BUILD_TESTS "Build tests" OFF)
@@ -194,11 +195,30 @@ foreach(GLSL ${GLSL_SOURCE_FILES})
 endforeach()
 add_custom_target(CompileShaders ALL DEPENDS ${SPIRV_BINARY_FILES})
 
-target_sources(city
-    PRIVATE
-    src/
-    src/main.cpp
+# Keep unity compilation within each layer, with independent incremental objects.
+# A monolithic mode is retained for timing comparisons on the same toolchain.
+set(CITY_LAYER_SOURCES
+    # Start the larger units first so they do not trail the parallel build.
+    src/build_units/cesium.cpp
+    src/build_units/city.cpp
+    src/build_units/render.cpp
+    src/build_units/base.cpp
+    src/build_units/osm.cpp
+    src/build_units/app.cpp
+    src/build_units/async.cpp
+    src/build_units/gltf.cpp
+    src/build_units/misc.cpp
+    src/build_units/json.cpp
+    src/build_units/draw.cpp
+    src/build_units/utility.cpp
 )
+if(CITY_MONOLITHIC_BUILD)
+  set(CITY_BUILD_SOURCES src/build_units/unity.cpp)
+else()
+  set(CITY_BUILD_SOURCES ${CITY_LAYER_SOURCES})
+endif()
+target_sources(city PRIVATE ${CITY_BUILD_SOURCES})
+set_target_properties(city PROPERTIES UNITY_BUILD OFF)
 
 target_include_directories(city SYSTEM PRIVATE
     ${THIRD_PARTY_LIBS_DIR}
@@ -316,9 +336,10 @@ endif()
 
 
 add_custom_target(clang-tidy-check
-    COMMAND clang-tidy -p ${CMAKE_BINARY_DIR} "src/main.cpp"
+    COMMAND clang-tidy -p ${CMAKE_BINARY_DIR} ${CITY_BUILD_SOURCES}
     WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
-    COMMENT "Running clang-tidy on"
+    COMMENT "Running clang-tidy on city translation units"
+    VERBATIM
 )
 endif()
 

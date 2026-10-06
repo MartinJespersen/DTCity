@@ -1,6 +1,13 @@
 namespace osm
 {
-g_internal Network*
+EcefLocation
+ecef_location_create(U64 id, Vec3F64 pos)
+{
+    EcefLocation loc = {.id = id, .pos = pos};
+    return loc;
+}
+
+Network*
 osm_init(U64 node_hashmap_size, U64 way_hashmap_size, String8 cache_path, String8 area, String8 bbox_cache_str)
 {
     Arena* arena = arena_alloc();
@@ -21,7 +28,7 @@ osm_init(U64 node_hashmap_size, U64 way_hashmap_size, String8 cache_path, String
     return network;
 }
 
-g_internal void
+void
 osm_release(Network* osm_network)
 {
     arena_release(osm_network->arena);
@@ -33,7 +40,7 @@ structure_cleanup(Network* network)
     osm_release(network);
 }
 
-g_internal async::UserFuncResult<osm::Network>
+async::UserFuncResult<osm::Network>
 fetch_osm_data_and_parse(Arena* arena, async::ThreadPool* thread_pool, String8 response_body, osm::Network* osm_network)
 {
     (void)arena;
@@ -44,7 +51,7 @@ fetch_osm_data_and_parse(Arena* arena, async::ThreadPool* thread_pool, String8 r
     return async::UserFuncResult<osm::Network>::success(task_continuation);
 }
 
-g_internal async::AsyncTaskContinuation<osm::Network>
+async::AsyncTaskContinuation<osm::Network>
 parse_osm_data(async::ThreadInfo thread_info, async::AsyncTaskStatus<osm::Network>* task)
 {
     (void)thread_info;
@@ -174,7 +181,7 @@ _wgs_node_find(Buffer<RoadNodeList> node_hashmap, U64 node_id)
     return node;
 }
 
-g_internal WayNode*
+WayNode*
 way_find(Network* network, WayId way_id)
 {
     WayList* way_list = &network->way_hashmap.data[way_id % network->way_hashmap.size];
@@ -191,7 +198,7 @@ way_find(Network* network, WayId way_id)
     return node;
 }
 
-g_internal TagResult
+TagResult
 tag_find(Arena* arena, Buffer<Tag> tags, String8 tag_to_find)
 {
     TagResult result = {};
@@ -208,7 +215,7 @@ tag_find(Arena* arena, Buffer<Tag> tags, String8 tag_to_find)
     return result;
 }
 
-g_internal EcefLocation
+EcefLocation
 location_get(Network* network, NodeId node_id)
 {
     prof_scope_marker;
@@ -221,7 +228,7 @@ location_get(Network* network, NodeId node_id)
     return {};
 }
 
-g_internal WgsLocation
+WgsLocation
 wgs_location_get(Network* network, NodeId node_id)
 {
     prof_scope_marker;

@@ -204,7 +204,7 @@ static void
 ctx_set(Context* vk_ctx);
 static void
 ctx_release();
-g_internal Context*
+Context*
 ctx_get();
 
 // ~mgj: Descriptor Sets Functions

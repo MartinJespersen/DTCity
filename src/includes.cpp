@@ -1,6 +1,7 @@
 // layers - [cpp]
 
 DISABLE_WARNINGS_PUSH
+#include "debug_log.cpp"
 #include "base/base_inc.cpp"
 
 DISABLE_WARNINGS_POP

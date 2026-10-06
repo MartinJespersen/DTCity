@@ -1,3 +1,4 @@
+#pragma once
 
 
 ///////////////////////////////////////////////////////////////////////
@@ -123,23 +124,23 @@ struct ResourcePool
 };
 
 template <typename T>
-g_internal ResourcePool<T>*
+ResourcePool<T>*
 resource_pool_init(U64 reserve_element_size);
 
 template <typename T>
-g_internal void
+void
 resource_pool_release(ResourcePool<T>* container);
 
 template <typename T>
-g_internal T*
+T*
 resource_pool_item_from_idx(ResourcePool<T>* container, ResourcePoolHandle item_handle);
 
 template <typename T>
-g_internal ResourcePoolHandle
+ResourcePoolHandle
 resource_pool_array_idx_get(ResourcePool<T>* container);
 
 template <typename T>
-g_internal void
+void
 resource_pool_item_free(ResourcePool<T>* container, ResourcePoolHandle item_handle);
 
 /////////////////////////////////////////////////////////////////////////

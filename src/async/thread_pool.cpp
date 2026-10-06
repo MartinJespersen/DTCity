@@ -1,5 +1,11 @@
 namespace async
 {
+thread_local U32 t_cur_thread_id = max_U32;
+thread_local ThreadPool* t_thread_pool = 0;
+}
+
+namespace async
+{
 
 static B32
 _thread_pool_is_worker_thread(ThreadPool* thread_pool)
@@ -87,7 +93,7 @@ _thread_pool_wake_workers(ThreadPool* thread_pool, B32 wake_all)
     }
 }
 
-static B32
+B32
 thread_pool_register_current_thread(ThreadPool* thread_pool)
 {
     AssertAlways(thread_pool);
@@ -102,7 +108,7 @@ thread_pool_register_current_thread(ThreadPool* thread_pool)
     return true;
 }
 
-static B32
+B32
 thread_pool_push(ThreadPool* thread_pool, WorkerItem* task, S64 us_delay)
 {
     if (thread_pool->thread_count == 0 || thread_pool->kill_switch)
@@ -133,14 +139,14 @@ thread_pool_push(ThreadPool* thread_pool, WorkerItem* task, S64 us_delay)
     return true;
 }
 
-static B32
+B32
 thread_pool_has_pending_work(ThreadPool* thread_pool)
 {
     AssertAlways(thread_pool);
     return thread_pool->pending_task_count.load() > 0 || thread_pool->in_flight_count.load() > 0;
 }
 
-static B32
+B32
 thread_pool_main_thread_queue_push(ThreadPool* thread_pool, WorkerItem* item)
 {
     AssertAlways(thread_pool);
@@ -187,7 +193,7 @@ thread_pool_main_thread_queue_try_pull(ThreadPool* thread_pool, WorkerItem* item
     return has_item;
 }
 
-static void
+void
 thread_pool_main_thread_queue_drain(ThreadPool* thread_pool)
 {
     AssertAlways(thread_pool);
@@ -260,7 +266,7 @@ thread_worker(void* data)
     t_thread_pool = 0;
 }
 
-static ThreadPool*
+ThreadPool*
 thread_pool_create(Arena* arena, U32 thread_count, U32 mpmc_queue_size, U32 main_thread_queue_size)
 {
     ThreadPool* thread_info = PushStruct(arena, ThreadPool);
@@ -289,7 +295,7 @@ thread_pool_create(Arena* arena, U32 thread_count, U32 mpmc_queue_size, U32 main
     return thread_info;
 }
 
-static void
+void
 thread_pool_destroy(ThreadPool* thread_info)
 {
     thread_info->kill_switch = 1;

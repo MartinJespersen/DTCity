@@ -1,3 +1,5 @@
+#include "simulation_client.hpp"
+
 #include "neta.cpp"
 
 #include "agent_state.cpp"

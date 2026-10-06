@@ -10,6 +10,10 @@ The [usage-guide.pdf](docs/usage-guide.pdf) explains how to use the application 
 
 # Build instructions
 
+City uses independent layer unity translation units for incremental compilation.
+See [incremental builds](docs/incremental_builds.md) for the layout, build-time
+comparison mode, and benchmark script.
+
 ## Windows Prerequisites
 * Install the Microsoft C/C++ Build Tools to install the MSVC compiler, CMake and vcpkg.
 * Setup environment by running the script: ```vcvarsall.bat x64``` or ```use the x64 Native Tools Command Prompt``` that will automatically run the script when started.

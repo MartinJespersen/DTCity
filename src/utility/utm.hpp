@@ -11,6 +11,6 @@ struct UtmCoordinate
 };
 
 // Returns longitude in x and latitude in y, both in degrees.
-g_internal Vec2F64
+Vec2F64
 util_wgs84_from_utm(UtmCoordinate coordinate);
 } // namespace util

@@ -1,3 +1,5 @@
+#pragma once
+
 #include <string>
 #include <vector>
 // third party header
@@ -17,6 +19,8 @@ struct alignas(64) DynamicArrayAlignedTestItem
 #include "base/test_allocator.hpp"
 #include "async/segment_buffer.hpp"
 #include "async/async_heap.hpp"
+#include "async/segment_buffer_templates.hpp"
+#include "async/async_heap_templates.hpp"
 #include "async/thread_pool.hpp"
 #include "render/render.hpp"
 #include "misc/geometry.hpp"

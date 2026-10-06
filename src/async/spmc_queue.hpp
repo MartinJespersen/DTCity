@@ -22,7 +22,7 @@ template <typename T> struct SpmcQueue
 };
 
 template <typename T>
-static U64
+U64
 _spmc_queue_capacity(SpmcQueue<T>* queue);
 
 template <typename T>
@@ -46,11 +46,11 @@ B32
 spmc_queue_steal(SpmcQueue<T>* queue, T& value);
 
 template <typename T>
-static U64
+U64
 spmc_queue_capacity(AsyncSpmcFifoQueue<T>* buffer);
 
 template <typename T>
-static T&
+T&
 spmc_queue_slot_get(AsyncSpmcFifoQueue<T>* buffer, U64 index);
 
 } // namespace async

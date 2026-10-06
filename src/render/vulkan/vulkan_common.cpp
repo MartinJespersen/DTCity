@@ -1,5 +1,10 @@
 namespace vulkan
 {
+static PFN_vkCmdSetColorWriteEnableEXT cmd_set_color_write_enable_ext = VK_NULL_HANDLE;
+static PFN_vkCmdPushDescriptorSetKHR cmd_push_descriptor_set_khr = VK_NULL_HANDLE;
+static PFN_vkCmdBeginDebugUtilsLabelEXT cmd_begin_debug_utils_label_ext = VK_NULL_HANDLE;
+static PFN_vkCmdEndDebugUtilsLabelEXT cmd_end_debug_utils_label_ext = VK_NULL_HANDLE;
+
 
 // TODO: check for blitting format beforehand
 

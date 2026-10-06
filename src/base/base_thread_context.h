@@ -1,3 +1,5 @@
+#pragma once
+
 // Copyright (c) 2024 Epic Games Tools
 // Licensed under the MIT license (https://opensource.org/license/mit/)
 
@@ -36,14 +38,14 @@ struct Log
 ////////////////////////////////
 //~ mgj: Log Creation/Selection
 
-lib_internal Log*
+Log*
 LogAlloc();
-lib_internal void
+void
 LogRelease(Log* log);
 
-lib_internal void
+void
 LogMsg(LogMsgKind kind, String8 string);
-lib_internal void
+void
 LogMsgF(LogMsgKind kind, char* fmt, ...);
 #define LogInfo(s) LogMsg(LogMsgKind_Info, (s))
 #define LogInfoF(...) LogMsgF(LogMsgKind_Info, __VA_ARGS__)
@@ -53,9 +55,9 @@ LogMsgF(LogMsgKind kind, char* fmt, ...);
 #define LogInfoNamedBlock(s) DeferLoop(LogInfoF("%s:\n{\n", ((s).str)), LogInfoF("}\n"))
 #define LogInfoNamedBlockF(...) DeferLoop((LogInfoF(__VA_ARGS__), LogInfoF(":\n{\n")), LogInfoF("}\n"))
 
-lib_internal void
+void
 LogScopeBegin();
-lib_internal LogScopeResult
+LogScopeResult
 LogScopeEnd(Arena* arena);
 
 ////////////////////////////////
@@ -91,24 +93,24 @@ struct TCTX
 ////////////////////////////////
 // NOTE(allen): Thread Context Functions
 
-lib_internal void
+void
 TCTX_InitAndEquip(TCTX* tctx);
-lib_internal void
+void
 TCTX_Release();
-lib_internal TCTX*
+TCTX*
 TCTX_Get();
 
-lib_internal Arena*
+Arena*
 TCTX_ScratchGet(Arena** conflicts, U64 countt);
 
-lib_internal void
+void
 tctx_set_thread_name(String8 name);
-lib_internal String8
+String8
 tctx_get_thread_name();
 
-lib_internal void
+void
 tctx_write_srcloc(char* file_name, U64 line_number);
-lib_internal void
+void
 tctx_read_srcloc(char** file_name, U64* line_number);
 #define tctx_write_this_srcloc() tctx_write_srcloc(__FILE__, __LINE__)
 
@@ -132,9 +134,9 @@ struct ScratchScope
 };
 
 //- rjf: lane metadata
-lib_internal LaneCtx
+LaneCtx
 tctx_set_lane_ctx(LaneCtx lane_ctx);
-lib_internal void
+void
 tctx_lane_barrier_wait(void* broadcast_ptr, U64 broadcast_size, U64 broadcast_src_lane_idx);
 #define lane_idx() (TCTX_Get()->lane_ctx.lane_idx)
 #define lane_count() (TCTX_Get()->lane_ctx.lane_count)

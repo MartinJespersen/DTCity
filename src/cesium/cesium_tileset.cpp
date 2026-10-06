@@ -1204,7 +1204,7 @@ _height_offset_sample_async(TilesetRenderer* renderer, CesiumGeospatial::Cartogr
         .catchInMainThread([](std::exception&& e) { DEBUG_LOG("Height offset sampling failed: %s\n", e.what()); });
 }
 
-g_internal void
+void
 tileset_renderer_create(TilesetRenderer* tileset, ArrayResourcePoolHandle tileset_handle, async::ThreadPool* threads,
                         String8 url, F64 origin_longitude, F64 origin_latitude, F64 origin_height,
                         S64 tileset_ion_asset_id, U64 cache_byte_size)
@@ -1260,7 +1260,7 @@ tileset_renderer_create(TilesetRenderer* tileset, ArrayResourcePoolHandle tilese
     }
 }
 
-g_internal void
+void
 tileset_tile_mesh_processor_set(TilesetRenderer* renderer, TileMeshProcessor processor)
 {
     Assert(renderer);
@@ -1272,7 +1272,7 @@ tileset_tile_mesh_processor_set(TilesetRenderer* renderer, TileMeshProcessor pro
     renderer->tile_mesh_processor = processor;
 }
 
-g_internal void
+void
 tileset_tile_mesh_processor_enabled_set(TilesetRenderer* renderer, B32 enabled)
 {
     Assert(renderer);
@@ -1281,7 +1281,7 @@ tileset_tile_mesh_processor_enabled_set(TilesetRenderer* renderer, B32 enabled)
     renderer->tile_mesh_processor_enabled.store(enabled, std::memory_order_release);
 }
 
-g_internal void
+void
 tileset_render_resources_release(TileRenderResources* list)
 {
     for (TileDrawBatch* render_data = list->batch_first; render_data; render_data = render_data->next)
@@ -1341,7 +1341,7 @@ _tileset_renderer_active_resources_release(TilesetRenderer* renderer)
     }
 }
 
-g_internal B32
+B32
 tileset_renderer_destroy(TilesetRenderer* renderer)
 {
     Assert(renderer);
@@ -1382,7 +1382,7 @@ tileset_renderer_destroy(TilesetRenderer* renderer)
 
 // Advances completed async work without touching the view. Inactive renderers
 // must still drain freed tile resources, but should not kick more tile loads.
-g_internal void
+void
 tileset_pump_async(TilesetRenderer* renderer)
 {
     if (!renderer)
@@ -1438,7 +1438,7 @@ _tileset_renderer_tile_to_show_push(TilesetRenderer* renderer, const Cesium3DTil
     renderer->tiles_to_show_count++;
 }
 
-g_internal void
+void
 tileset_update_view(TilesetRenderer* renderer, ArrayResourcePoolHandle camera_handle, F64 delta_time)
 {
     prof_scope_marker;

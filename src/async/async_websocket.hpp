@@ -1,3 +1,5 @@
+#pragma once
+
 namespace async
 {
 
@@ -38,7 +40,7 @@ struct WebsocketPayload
     B32 frame_started;
 };
 
-g_internal void
+void
 _async_websocket_connection_end(AsyncWebsocketSession* ws_session);
 
 struct WebsocketConnection
@@ -107,7 +109,7 @@ struct WebsocketConnection
     try_send_resv(Arena* arena, String8List* msg_send_list, String8List* msg_recv_msgs);
 };
 
-g_internal WebsocketConnection
+WebsocketConnection
 async_websocket_start(String8 url);
 
 g_internal size_t

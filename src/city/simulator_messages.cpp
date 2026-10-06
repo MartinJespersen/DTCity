@@ -70,7 +70,7 @@ simulator_server_update_to_json(Arena* arena, const ServerUpdate& update, U64 re
     return message;
 }
 
-g_internal F64
+F64
 simulator_playback_advance(F64 playback, F64 delta_seconds, F64 timestamp_end)
 {
     // Strictly earlier events require playback to pass the final timestamp too.

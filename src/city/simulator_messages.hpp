@@ -75,7 +75,7 @@ simulator_events_before_playback(Arena* arena, Buffer<AgentUpdate>& pending, F64
 g_internal Buffer<AgentUpdate>
 simulator_snapshot_latest_events(Arena* arena, Buffer<AgentUpdate> ready);
 
-g_internal F64
+F64
 simulator_playback_advance(F64 playback, F64 delta_seconds, F64 timestamp_end);
 
 g_internal void

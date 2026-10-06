@@ -1,3 +1,12 @@
+#pragma once
+
+namespace async
+{
+struct ThreadPool;
+struct HttpInfo;
+template <typename T> struct UserFuncResult;
+}
+
 namespace city
 {
 struct AsyncCityTask;

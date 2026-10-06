@@ -5,7 +5,7 @@
 ////////////////////////////////
 //~ rjf: Table Stripe Functions
 
-lib_internal StripeArray
+StripeArray
 stripe_array_alloc(Arena* arena)
 {
     StripeArray array = {0};
@@ -21,7 +21,7 @@ stripe_array_alloc(Arena* arena)
   return array;
 }
 
-lib_internal void
+void
 stripe_array_release(StripeArray* stripes)
 {
   for
@@ -33,7 +33,7 @@ stripe_array_release(StripeArray* stripes)
       }
 }
 
-lib_internal Stripe*
+Stripe*
 stripe_from_slot_idx(StripeArray* stripes, U64 slot_idx)
 {
     Stripe* stripe = &stripes->v[slot_idx % stripes->count];
@@ -65,7 +65,7 @@ struct BarrierTCTX
 
 thread_static BarrierTCTX* barrier_tctx = 0;
 
-lib_internal Barrier
+Barrier
 slow_barrier_alloc(U64 count)
 {
     if (barrier_tctx == 0)
@@ -92,7 +92,7 @@ slow_barrier_alloc(U64 count)
     return result;
 }
 
-lib_internal void
+void
 slow_barrier_release(Barrier barrier)
 {
     if (barrier_tctx == 0)
@@ -107,7 +107,7 @@ slow_barrier_release(Barrier barrier)
     SLLStackPush(barrier_tctx->free_barrier_node, n);
 }
 
-lib_internal void
+void
 slow_barrier_wait(Barrier barrier)
 {
     prof_scope_marker;
@@ -179,20 +179,20 @@ slow_barrier_wait(Barrier barrier)
     }
 }
 
-lib_internal Barrier
+Barrier
 barrier_alloc(U64 count)
 {
     Barrier barrier = slow_barrier_alloc(count);
     return barrier;
 }
 
-lib_internal void
+void
 barrier_release(Barrier barrier)
 {
     slow_barrier_release(barrier);
 }
 
-lib_internal void
+void
 barrier_wait(Barrier barrier)
 {
     slow_barrier_wait(barrier);

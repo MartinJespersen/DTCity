@@ -107,38 +107,38 @@ template <typename T>
 Buffer<T>
 buffer_alloc(Arena* arena, U64 count);
 template <typename T>
-lib_internal Buffer<T>
+Buffer<T>
 buffer_from_arr(Arena* arena, T* arr, U64 size);
 template <typename T>
-lib_internal void
+void
 buffer_copy(Buffer<T> dst, Buffer<T> src, U64 element_count_to_copy);
 template <typename T>
-lib_internal void
+void
 BufferCopy(Buffer<T> dst, Buffer<T> src, U64 dst_offset, U64 src_offset, U64 size);
 template <typename T>
-lib_internal void
+void
 BufferItemRemove(Buffer<T>* in_out_buffer, U32 index);
 template <typename T>
-lib_internal Buffer<T>
+Buffer<T>
 buffer_arena_copy(Arena* arena, Buffer<T> buffer);
 template <typename T>
-lib_internal Buffer<T>
+Buffer<T>
 buffer_concat(Arena* arena, Buffer<T> a, Buffer<T> b);
-lib_internal Buffer<String8>
+Buffer<String8>
 Str8BufferFromCString(Arena* arena, std::initializer_list<const char*> strings);
-lib_internal String8
+String8
 str8_path_from_str8_list(Arena* arena, std::initializer_list<String8> strings);
-lib_internal String8
+String8
 CreatePathFromStrings(Arena* arena, Buffer<String8> path_elements);
 
 ////////////////////////////////////////////////////////
 namespace io
 {
-lib_internal Buffer<U8>
+Buffer<U8>
 file_read(Arena* arena, String8 filename);
 }
 
-lib_internal char**
+char**
 CStrArrFromStr8Buffer(Arena* arena, Buffer<String8> buffer);
 
 // ~mgj: ChunkList
@@ -240,7 +240,7 @@ template <typename T>
 void
 chunk_list_from_buffer_append(Arena* arena, ChunkList<T>* list, const Buffer<T>& buffer);
 template <typename T>
-lib_internal void
+void
 chunk_list_empty(ChunkList<T>* list);
 template <typename T>
 ChunkItem<T>*
@@ -255,13 +255,13 @@ template <typename T>
 T*
 chunk_list_get_next(Arena* arena, ChunkList<T>* list);
 template <typename T>
-lib_internal Buffer<T>
+Buffer<T>
 buffer_from_chunk_list(Arena* arena, ChunkList<T>* list);
 template <typename T>
-lib_internal Buffer<T>
+Buffer<T>
 buffer_from_chunk_list_append(Buffer<T> buffer, U32 buffer_offset, ChunkList<T>* list);
 
-lib_internal String8
+String8
 str8_from_chunk_list(Arena* arena, ChunkList<U8>* list);
 // defer implementation
 template <typename F>
@@ -331,7 +331,7 @@ struct Map
     MapChunkList<K, V>* v = {};
     U64 capacity = {};
 
-    Map<K, V>(Allocator* allocator, U64 bucket_capacity);
+    Map(Allocator* allocator, U64 bucket_capacity);
     static Map*
     create(Arena* arena, U64 bucket_capacity);
     void

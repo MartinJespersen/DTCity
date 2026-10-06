@@ -1,3 +1,5 @@
+#pragma once
+
 // Copyright (c) 2024 Epic Games Tools
 // Licensed under the MIT license (https://opensource.org/license/mit/)
 
@@ -113,8 +115,7 @@ struct OS_LNX_State
 ////////////////////////////////
 //~ rjf: Globals
 
-lib_internal OS_LNX_State os_lnx_state = {0};
-thread_static OS_LNX_SafeCallChain* os_lnx_safe_call_chain = 0;
+extern thread_static OS_LNX_SafeCallChain* os_lnx_safe_call_chain;
 
 ////////////////////////////////
 //~ rjf: Helpers

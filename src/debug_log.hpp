@@ -124,24 +124,24 @@ struct DebugTable
 #define Debug_Name_(file, line, label) S(file ":" Stringify(line) "|" label)
 #define Debug_Name(label) Debug_Name_(__FILE__, __LINE__, label)
 
-DebugTable g_debug_table = {};
+extern DebugTable g_debug_table;
 
-g_internal DebugEvent*
+DebugEvent*
 debug_event_record(DebugEventType event_type, String8 debug_name, String8 name);
 
-g_internal void
+void
 debug_dir_create(String8 debug_dir);
 
-g_internal void
+void
 debug_g_state_init();
 
-g_internal void
+void
 debug_dump_str(String8 str, String8 filepath);
 
-g_internal void
+void
 debug_event_frame_end();
 
-g_internal void
+void
 debug_memory_snapshot_dump();
 g_internal void
 _debug_arena_page_release_event(DebugEvent* debug_event);
@@ -222,6 +222,6 @@ _debug_handle_name_set_event(DebugEvent* debug_event);
 #define Debug_Asset_Push_WrongHandleType(handle) Debug_Asset_Push_(WrongHandleType, handle)
 #define Debug_Asset_Push_WrongGenId(handle) Debug_Asset_Push_(WrongGenId, handle)
 
-#include "debug_log.cpp"
+
 
 #endif

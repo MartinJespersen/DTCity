@@ -1,3 +1,5 @@
+#pragma once
+
 // Copyright (c) 2024 Epic Games Tools
 // Licensed under the MIT license (https://opensource.org/license/mit/)
 
@@ -15,6 +17,7 @@
 #include "base_context_cracking.h"
 
 #include "base_core.hpp"
+#include "debug_forward_ref.hpp"
 #include "base_profile.hpp"
 #include "base_arena.hpp"
 #include "base_allocator.hpp"
@@ -25,9 +28,17 @@
 #include "base_thread.hpp"
 #include "base_thread_context.h"
 #include "container.hpp"
+
+// Define debug event macros before the container template implementations.
+#if !BUILD_TEST
+#include "debug_log.hpp"
+#endif
+
 #include "base_container.hpp"
 #include "base_freelist.hpp"
 #include "cache.hpp"
 #include "base_lists.hpp"
+
+#include "base_templates.hpp"
 
 #endif // BASE_INC_H

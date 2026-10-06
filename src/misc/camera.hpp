@@ -1,3 +1,5 @@
+#pragma once
+
 namespace ui
 {
 
@@ -42,18 +44,18 @@ struct Camera
     Vec2U32 cur_framebuffer_extent;
 };
 
-g_internal void
+void
 camera_init(Arena* arena, Camera* camera);
-static void
+void
 camera_update(Camera* camera, io::IO* input, F64 time, Vec2S32 extent, bool enable);
 
 g_internal void
 _camera_uniform_buffer_update(ui::Camera* camera, render::MappedHandle<CameraUniformBuffer> mut_handle, Vec2U32 screen_res);
-g_internal bool
+bool
 frustum_check_from_bounding_box(Frustum* frustum, Rng3F32 bbox);
 
 g_internal void
 _frustum_planes_calculate(Frustum* out_frustum, const glm::mat4 matrix);
-g_internal bool
+bool
 is_bounding_sphere_to_be_culled(Camera& camera, Rng3F32& bbox);
 } // namespace ui

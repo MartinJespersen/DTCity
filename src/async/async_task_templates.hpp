@@ -1,8 +1,10 @@
+#pragma once
+
+// Template implementations
 namespace async
 {
-
 template <typename T>
-g_internal WorkerResult
+WorkerResult
 _worker_task_func(ThreadInfo thread_info, WorkerData data)
 {
     AsyncTaskWork<T>* work = (AsyncTaskWork<T>*)data;
@@ -33,7 +35,7 @@ _worker_task_func(ThreadInfo thread_info, WorkerData data)
 }
 
 template <typename T>
-g_internal AsyncTaskStatus<T>*
+AsyncTaskStatus<T>*
 _async_task_status_create(Arena* arena, ThreadPool* thread_pool, String8 name, T* data)
 {
     AsyncTaskStatus<T>* task_status = PushStruct(arena, AsyncTaskStatus<T>);
@@ -46,7 +48,7 @@ _async_task_status_create(Arena* arena, ThreadPool* thread_pool, String8 name, T
 }
 
 template <typename T>
-g_internal AsyncTaskStatus<T>*
+AsyncTaskStatus<T>*
 async_task_run(AsyncTaskStatus<T>* task_status, ThreadPool* thread_pool, WorkerTaskFunc<T> func, S64 us_delay)
 {
     AsyncTaskWork<T>* work = PushStruct(task_status->arena, AsyncTaskWork<T>);
@@ -64,7 +66,7 @@ async_task_run(AsyncTaskStatus<T>* task_status, ThreadPool* thread_pool, WorkerT
 }
 
 template <typename T>
-g_internal AsyncTaskResult<T>
+AsyncTaskResult<T>
 async_task_is_done(AsyncTaskStatus<T>* task)
 {
     AsyncTaskResult<T> result = AsyncTaskResult<T>(task);
@@ -80,7 +82,7 @@ async_task_is_done(AsyncTaskStatus<T>* task)
             AsyncHttpTaskState<T>* http_ctx = task->http_ext;
             if (http_ctx->error.has_error())
             {
-                AsyncError* error = &http_ctx->error;
+                auto* error = &http_ctx->error;
                 INFO_LOG("%.*s error: %u", str8_varg(task->task_name), (U32)error->result);
                 if (error->curl_code)
                 {
@@ -95,7 +97,7 @@ async_task_is_done(AsyncTaskStatus<T>* task)
 }
 
 template <typename T>
-g_internal AsyncTaskStatus<T>*
+AsyncTaskStatus<T>*
 async_task_run(ThreadPool* thread_pool, WorkerTaskFunc<T> func, T* data, const char* task_name, S64 us_delay)
 {
     Arena* task_arena = arena_alloc();
@@ -106,7 +108,7 @@ async_task_run(ThreadPool* thread_pool, WorkerTaskFunc<T> func, T* data, const c
 }
 
 template <typename T>
-g_internal AsyncTaskStatus<T>*
+AsyncTaskStatus<T>*
 async_task_run(Arena* arena, ThreadPool* thread_pool, WorkerTaskFunc<T> func, T* data, const char* task_name, S64 us_delay)
 {
     String8 task_name_str8 = str8_c_string(task_name);
@@ -115,7 +117,7 @@ async_task_run(Arena* arena, ThreadPool* thread_pool, WorkerTaskFunc<T> func, T*
 }
 
 template <typename T>
-g_internal AsyncTaskStatus<T>*
+AsyncTaskStatus<T>*
 async_task_with_ext_run(Arena* arena, ThreadPool* thread_pool, WorkerTaskFunc<T> func, T* data, const char* task_name, S64 us_delay, ExtensionType ext_type, void* ext)
 {
     String8 task_name_str8 = str8_c_string(task_name);
@@ -129,5 +131,4 @@ async_task_with_ext_run(Arena* arena, ThreadPool* thread_pool, WorkerTaskFunc<T>
 
     return async_task_run(task_status, thread_pool, func, us_delay);
 }
-
-} // namespace async
+}

@@ -1,7 +1,7 @@
 namespace ui
 {
 
-g_internal void
+void
 camera_init(Arena* arena, Camera* camera)
 {
     camera->move_sensitivity = 300.0f;
@@ -20,7 +20,7 @@ camera_init(Arena* arena, Camera* camera)
         render::mapped_buffer_create<ui::CameraUniformBuffer>(arena, thread_ctx, buffer_type, debug_name);
 }
 
-static void
+void
 camera_update(Camera* camera, io::IO* input, F64 time, Vec2S32 extent, bool enable)
 {
     F32 mouse_sensitivity = 0.1f;
@@ -92,7 +92,7 @@ _camera_uniform_buffer_update(ui::Camera* camera, render::MappedHandle<CameraUni
     render::mapped_buffer_add(mut_handle, &ubo);
 }
 
-g_internal bool
+bool
 is_bounding_sphere_to_be_culled(Camera& camera, Rng3F32& bbox)
 {
     glm::vec3 bbox_min = glm::vec3(bbox.x0, bbox.y0, bbox.z0);
@@ -119,7 +119,7 @@ is_bounding_sphere_to_be_culled(Camera& camera, Rng3F32& bbox)
     return pixel_diameter < 10.0f;
 }
 
-g_internal bool
+bool
 frustum_check_from_bounding_box(Frustum* frustum, Rng3F32 bbox)
 {
     for (U32 plane_idx = 0; plane_idx < ArrayCount(frustum->planes); ++plane_idx)

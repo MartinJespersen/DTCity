@@ -1,3 +1,5 @@
+#pragma once
+
 #ifndef Debug_SetName
 #define Debug_SetName(...)
 #endif

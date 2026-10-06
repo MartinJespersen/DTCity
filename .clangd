@@ -47,3 +47,171 @@ If:
 CompileFlags:
   CompilationDatabase: simulator/build/win/profile
   Remove: [/FI*]
+
+# Individual source files need the private headers supplied by their layer unity unit.
+---
+If:
+  PathMatch: src/async/.*
+CompileFlags:
+  Add:
+    - /FI../../../src/async/segment_buffer.hpp
+    - /FI../../../src/async/async_heap.hpp
+    - /FI../../../src/async/mpmc_queue.hpp
+    - /FI../../../src/async/spmc_queue.hpp
+
+---
+If:
+  PathMatch: src/city/.*
+CompileFlags:
+  Add: [/FI../../../src/city/simulation_client.hpp]
+
+# These implementation files and headers are compiled inside C++ unity units.
+---
+If:
+  PathMatch: (src|tests|simulator)/.*\.(c|h)
+  PathExclude: .*/third_party/.*
+CompileFlags:
+  Add: [/TP, /std:c++20]
+
+# Foundational headers receive only declarations that precede them in core_inc.hpp.
+# Importing includes.hpp here would include the active header through itself.
+---
+If:
+  PathMatch: src/base/base_context_cracking\.h
+CompileFlags:
+  Remove: [/FI*, /Yu*, /Yc*, /Fp*]
+
+---
+If:
+  PathMatch: src/base/base_core\.hpp
+CompileFlags:
+  Remove: [/FI*, /Yu*, /Yc*, /Fp*]
+  Add:
+    - /FI../../../src/base/base_context_cracking.h
+
+---
+If:
+  PathMatch: src/base/base_profile\.hpp
+CompileFlags:
+  Remove: [/FI*, /Yu*, /Yc*, /Fp*]
+  Add:
+    - -DOS_FEATURE_GRAPHICAL=1
+    - /FImimalloc.h
+    - /FI../../../src/pch.hpp
+    - /FI../../../src/base/base_context_cracking.h
+    - /FI../../../src/base/base_core.hpp
+
+---
+If:
+  PathMatch: src/base/base_arena\.hpp
+CompileFlags:
+  Remove: [/FI*, /Yu*, /Yc*, /Fp*]
+  Add:
+    - -DOS_FEATURE_GRAPHICAL=1
+    - /FImimalloc.h
+    - /FI../../../src/pch.hpp
+    - /FI../../../src/base/base_context_cracking.h
+    - /FI../../../src/base/base_core.hpp
+    - /FI../../../src/base/base_profile.hpp
+
+---
+If:
+  PathMatch: src/base/base_allocator\.hpp
+CompileFlags:
+  Remove: [/FI*, /Yu*, /Yc*, /Fp*]
+  Add:
+    - -DOS_FEATURE_GRAPHICAL=1
+    - /FImimalloc.h
+    - /FI../../../src/pch.hpp
+    - /FI../../../src/base/base_context_cracking.h
+    - /FI../../../src/base/base_core.hpp
+    - /FI../../../src/base/base_profile.hpp
+    - /FI../../../src/base/base_arena.hpp
+
+---
+If:
+  PathMatch: src/base/base_math\.h
+CompileFlags:
+  Remove: [/FI*, /Yu*, /Yc*, /Fp*]
+  Add:
+    - -DOS_FEATURE_GRAPHICAL=1
+    - /FImimalloc.h
+    - /FI../../../src/pch.hpp
+    - /FI../../../src/base/base_context_cracking.h
+    - /FI../../../src/base/base_core.hpp
+    - /FI../../../src/base/base_profile.hpp
+    - /FI../../../src/base/base_arena.hpp
+    - /FI../../../src/base/base_allocator.hpp
+
+---
+If:
+  PathMatch: src/base/base_strings\.hpp
+CompileFlags:
+  Remove: [/FI*, /Yu*, /Yc*, /Fp*]
+  Add:
+    - -DOS_FEATURE_GRAPHICAL=1
+    - /FImimalloc.h
+    - /FI../../../src/pch.hpp
+    - /FI../../../src/base/base_context_cracking.h
+    - /FI../../../src/base/base_core.hpp
+    - /FI../../../src/base/base_profile.hpp
+    - /FI../../../src/base/base_arena.hpp
+    - /FI../../../src/base/base_allocator.hpp
+    - /FI../../../src/base/base_math.h
+
+---
+If:
+  PathMatch: src/base/base_thread\.hpp
+CompileFlags:
+  Remove: [/FI*, /Yu*, /Yc*, /Fp*]
+  Add:
+    - -DOS_FEATURE_GRAPHICAL=1
+    - /FImimalloc.h
+    - /FI../../../src/pch.hpp
+    - /FI../../../src/base/base_context_cracking.h
+    - /FI../../../src/base/base_core.hpp
+    - /FI../../../src/base/base_profile.hpp
+    - /FI../../../src/base/base_arena.hpp
+    - /FI../../../src/base/base_allocator.hpp
+    - /FI../../../src/base/base_math.h
+    - /FI../../../src/base/base_strings.hpp
+    - /FI../../../src/os_core/os_core_inc.hpp
+
+---
+If:
+  PathMatch: src/base/base_thread_context\.h
+CompileFlags:
+  Remove: [/FI*, /Yu*, /Yc*, /Fp*]
+  Add:
+    - -DOS_FEATURE_GRAPHICAL=1
+    - /FImimalloc.h
+    - /FI../../../src/pch.hpp
+    - /FI../../../src/base/base_context_cracking.h
+    - /FI../../../src/base/base_core.hpp
+    - /FI../../../src/base/base_profile.hpp
+    - /FI../../../src/base/base_arena.hpp
+    - /FI../../../src/base/base_allocator.hpp
+    - /FI../../../src/base/base_math.h
+    - /FI../../../src/base/base_strings.hpp
+    - /FI../../../src/os_core/os_core_inc.hpp
+    - /FI../../../src/base/base_thread.hpp
+
+---
+If:
+  PathMatch: src/base/container\.hpp
+CompileFlags:
+  Remove: [/FI*, /Yu*, /Yc*, /Fp*]
+  Add:
+    - -DOS_FEATURE_GRAPHICAL=1
+    - /FImimalloc.h
+    - /FI../../../src/pch.hpp
+    - /FI../../../src/base/base_context_cracking.h
+    - /FI../../../src/base/base_core.hpp
+    - /FI../../../src/base/base_profile.hpp
+    - /FI../../../src/base/base_arena.hpp
+    - /FI../../../src/base/base_allocator.hpp
+    - /FI../../../src/base/base_math.h
+    - /FI../../../src/base/base_strings.hpp
+    - /FI../../../src/os_core/os_core_inc.hpp
+    - /FI../../../src/base/base_thread.hpp
+    - /FI../../../src/base/base_thread_context.h

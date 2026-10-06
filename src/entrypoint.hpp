@@ -1,5 +1,26 @@
 #pragma once
 
+namespace io
+{
+struct IO;
+}
+namespace ui
+{
+struct Camera;
+}
+namespace city
+{
+struct TileLoadState;
+}
+namespace async
+{
+struct ThreadPool;
+}
+namespace vulkan
+{
+struct Context;
+}
+
 struct dt_Time
 {
     F64 time_delta_constant_sec;
@@ -42,13 +63,13 @@ struct Context
 };
 
 // ~mgj: Globals
-static Context* g_ctx;
+
 const U32 MAX_FONTS_IN_USE = 10;
 
 // globals context
 static void
 dt_ctx_set(Context* ctx);
-static Context*
+Context*
 dt_ctx_get();
 
 static OS_Handle

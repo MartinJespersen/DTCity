@@ -1,5 +1,8 @@
+#pragma once
+
+// Template implementations
 template <typename T>
-g_internal LinkedList<T>
+LinkedList<T>
 singly_linked_list_copy(Arena* arena, LinkedList<T>* ll)
 {
     LinkedList<T> new_ll = {};

@@ -1,7 +1,7 @@
 namespace city
 {
 
-g_internal Vec2F64
+Vec2F64
 city_area_wgs84_get(const AreaConfig* config)
 {
     switch (config->coordinate_type)
@@ -17,7 +17,7 @@ city_area_wgs84_get(const AreaConfig* config)
     return {};
 }
 
-g_internal void
+void
 city_init(City* city, String8 cache_path)
 {
     ScratchScope scratch = ScratchScope(0, 0);
@@ -29,7 +29,7 @@ city_init(City* city, String8 cache_path)
     city->all_agent_scale_factor = 1.0f;
 }
 
-g_internal void
+void
 city_area_streaming_begin(City* city, const AreaConfig* area_config)
 {
     Assert(city);
@@ -68,7 +68,7 @@ city_area_streaming_begin(City* city, const AreaConfig* area_config)
     }
 }
 
-g_internal B32
+B32
 city_area_streaming_end(City* city)
 {
     Assert(city);
@@ -82,7 +82,7 @@ city_area_streaming_end(City* city)
     return destroyed;
 }
 
-g_internal void
+void
 city_build(City* city, Rng2F64 bbox, String8 tileset_url, String8 area)
 {
     ScratchScope scratch = ScratchScope(0, 0);
@@ -209,7 +209,7 @@ _tile_pipeline_add(cesium::TileDrawBatch* tile, City* city, ArrayResourcePoolHan
     render::tile_pipeline_add(&tile->render_data);
 }
 
-g_internal void
+void
 city_update(City* city, async::ThreadPool* thread_pool, RoadOverlayOption neta_overlay_option, Vec2U32 framebuffer_dim,
             const AreaConfig* city_config)
 {
@@ -414,7 +414,7 @@ city_update(City* city, async::ThreadPool* thread_pool, RoadOverlayOption neta_o
     }
 }
 
-g_internal void
+void
 city_release(City* city)
 {
     // Final shutdown has no frame loop, so drain GPU work explicitly here.

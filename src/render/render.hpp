@@ -1,4 +1,9 @@
 #pragma once
+
+namespace async
+{
+struct ThreadPool;
+}
 // TODO: IO should not be a dependency of this layer
 namespace io
 {
@@ -75,7 +80,7 @@ struct MappedHandle
 };
 
 template <typename T>
-static MappedHandle<void>
+MappedHandle<void>
 mapped_handle_erased(MappedHandle<T> handle)
 {
     MappedHandle<void> result = {};
@@ -431,74 +436,74 @@ struct TextureUploadData
     }
 };
 
-g_internal void
+void
 thread_cmd_buffer_end(ThreadWorkerCmdCtx* cmd_ctx);
-g_internal void
+void
 thread_cmd_buffer_record(ThreadWorkerCmdCtx* thread_ctx);
 
-static ThreadWorkerCmdCtx*
+ThreadWorkerCmdCtx*
 thread_ctx_create();
-static void
+void
 thread_input_destroy(ThreadWorkerCmdCtx* thread_input);
 
-static Handle
+Handle
 handle_zero();
-static bool
+bool
 is_handle_zero(Handle handle);
-static void
+void
 handle_list_push(ThreadWorkerCmdCtx* thread_ctx, render::Handle handle);
-static Handle
+Handle
 handle_list_first_handle(HandleList* list);
 
 //////////////////////////////////////////////////////////////////////////
 // ~mgj: function declaration to be implemented by backend
 
-static void
+void
 render_ctx_create(String8 shader_path, io::IO* io_ctx, async::ThreadPool* thread_pool);
-static void
+void
 render_ctx_destroy();
-static void
+void
 render_frame(Vec2U32 framebuffer_dim, B32* in_out_framebuffer_resized, Vec2S64 mouse_cursor_pos,
              MappedHandle<void> camera_handle_void);
 
-static void
+void
 gpu_work_update();
-static void
+void
 gpu_work_done_wait();
-static void
+void
 new_frame();
-static U64
+U64
 latest_hovered_object_id_get();
 
 // ~mgj: Texture loading interface
-g_internal Handle
+Handle
 texture_zero_handle_get();
-g_internal Handle
+Handle
 texture_handle_create(SamplerInfo* sampler_info);
-g_internal Handle
+Handle
 texture_load_async(SamplerInfo* sampler_info, String8 texture_path);
 
-g_internal Handle
+Handle
 texture_load_sync(render::SamplerInfo* sampler_info, TextureUploadData* tex_data, void* cmd);
-g_internal Handle
+Handle
 texture_load_sync(render::ThreadWorkerCmdCtx* thread_ctx, render::SamplerInfo* sampler_info, Buffer<U8> tex_buf);
-g_internal void
+void
 handle_destroy(Handle handle);
-g_internal void
+void
 handle_destroy_deferred(Handle handle);
 
-g_internal void
+void
 handle_done_loading(render::HandleList handles);
 
-g_internal void
+void
 blend_3d_draw(Blend3DPipelineData pipeline_input);
 
-static void
+void
 tile_pipeline_add(render::TilePipelineData* pipeline_input);
-g_internal Handle
+Handle
 buffer_load_async(BufferInfo* buffer_info);
 
-g_internal Handle
+Handle
 _buffer_load_immediate(render::BufferInfo* buffer_info, String8 debug_name);
 #if BUILD_DEBUG
 #define buffer_load_immediate(buffer_info, name) _buffer_load_immediate(buffer_info, name)
@@ -506,7 +511,7 @@ _buffer_load_immediate(render::BufferInfo* buffer_info, String8 debug_name);
 #define buffer_load_immediate(buffer_info, name) _buffer_load_immediate(buffer_info, S(""))
 #endif
 
-g_internal Handle
+Handle
 _buffer_load_sync(render::ThreadWorkerCmdCtx* thread_ctx, render::BufferInfo* buffer_info, String8 debug_name);
 #if BUILD_DEBUG
 #define buffer_load_sync(thread_ctx, buffer_info, name) _buffer_load_sync(thread_ctx, buffer_info, name)
@@ -515,30 +520,30 @@ _buffer_load_sync(render::ThreadWorkerCmdCtx* thread_ctx, render::BufferInfo* bu
 #endif
 
 template <typename T>
-g_internal MappedHandle<T>
+MappedHandle<T>
 mapped_buffer_create(Arena* arena, render::ThreadWorkerCmdCtx* thread_ctx, BufferType buffer_type, String8 debug_name);
 
 template <typename T>
-g_internal void
+void
 mapped_buffer_destroy(MappedHandle<T> mapped_handle);
 template <typename T>
-g_internal void
+void
 mapped_buffer_add(MappedHandle<T> mut_handle, T* data);
 
 template <typename T>
-g_internal bool
+bool
 is_resource_loaded(Handle handle, AssetItem<T>** out_asset);
-g_internal bool
+bool
 is_resource_loaded(Handle handle);
 
 // handle helpers
 
-g_internal render::MeshHandle
+render::MeshHandle
 mesh_handles_create_and_upload(render::PrimitiveMesh& prim_mesh);
-g_internal MeshletMeshHandle
+MeshletMeshHandle
 mesh_shader_handles_create_and_upload(PrimitiveMesh& mesh);
-g_internal MeshletMeshHandle
+MeshletMeshHandle
 mesh_shader_handles_create_and_upload(Buffer<PrimitiveVertex> vertices, Buffer<U32> indices, Arena* source_arena = 0);
-g_internal void
+void
 mesh_shader_handles_destroy(MeshletMeshHandle mesh);
 } // namespace render

@@ -1,3 +1,5 @@
+#pragma once
+
 
 template <typename T>
 struct LinkedListNode
@@ -14,5 +16,5 @@ struct LinkedList
 };
 
 template <typename T>
-g_internal LinkedList<T>
+LinkedList<T>
 singly_linked_list_copy(Arena* arena, LinkedList<T>* ll);

@@ -66,8 +66,8 @@ struct ThreadPool
 
 // ~mgj: Globals /////////////////////////////
 // used for threads that want to access thread_local data
-thread_local U32 t_cur_thread_id = max_U32;
-thread_local ThreadPool* t_thread_pool = 0;
+extern thread_local U32 t_cur_thread_id;
+extern thread_local ThreadPool* t_thread_pool;
 ////////////////////////////////////////////////
 static U64
 _thread_pool_next_deadline(ThreadPool* thread_pool);
@@ -77,25 +77,25 @@ static void
 _thread_pool_worker_task_execute(ThreadInfo thread_info, WorkerItem* item);
 static void
 _thread_pool_wake_workers(ThreadPool* thread_pool, B32 wake_all);
-static B32
+B32
 thread_pool_register_current_thread(ThreadPool* thread_pool);
-static B32
+B32
 thread_pool_push(ThreadPool* thread_pool, WorkerItem* task, S64 us_delay = 0);
-static B32
+B32
 thread_pool_has_pending_work(ThreadPool* thread_pool);
 static void
 thread_worker(void* data);
-static ThreadPool*
+ThreadPool*
 thread_pool_create(Arena* arena, U32 thread_count, U32 mpmc_queue_size, U32 main_thread_queue_size);
-static void
+void
 thread_pool_destroy(ThreadPool* thread_info);
 
 // main thread queue functions
-static B32
+B32
 thread_pool_main_thread_queue_push(ThreadPool* thread_pool, WorkerItem* item);
 static B32
 thread_pool_main_thread_queue_try_pull(ThreadPool* thread_pool, WorkerItem* item);
-static void
+void
 thread_pool_main_thread_queue_drain(ThreadPool* thread_pool);
 g_internal B32
 thread_pool_is_main_thread(ThreadPool* thread_pool);

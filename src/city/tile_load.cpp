@@ -1,7 +1,7 @@
 namespace city
 {
 
-g_internal TileLoadState*
+TileLoadState*
 tile_load_create(async::ThreadPool* thread_pool, U32 tileset_capacity)
 {
     Assert(thread_pool);
@@ -16,7 +16,7 @@ tile_load_create(async::ThreadPool* thread_pool, U32 tileset_capacity)
     return state;
 }
 
-g_internal void
+void
 tile_load_destroy(TileLoadState* state)
 {
     Assert(state);
@@ -122,7 +122,7 @@ tile_load_update(TileLoadState* state, ArrayResourcePoolHandle tileset_handle, A
     }
 }
 
-g_internal void
+void
 tile_load_debug_ui_draw(TileLoadState* state, ArrayResourcePoolHandle tileset_handle)
 {
     Assert(state);

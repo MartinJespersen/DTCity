@@ -1,3 +1,5 @@
+#pragma once
+
 
 // Copyright (c) Epic Games Tools
 // Licensed under the MIT license (https://opensource.org/license/mit/)
@@ -48,47 +50,47 @@ struct StripeArray
 ////////////////////////////////
 //~ rjf: Table Stripe Functions
 
-lib_internal StripeArray
+StripeArray
 stripe_array_alloc(Arena* arena);
-lib_internal void
+void
 stripe_array_release(StripeArray* stripes);
-lib_internal Stripe*
+Stripe*
 stripe_from_slot_idx(StripeArray* stripes, U64 slot_idx);
 
 //- rjf: barriers
-lib_internal Barrier
+Barrier
 barrier_alloc(U64 count);
-lib_internal void
+void
 barrier_release(Barrier barrier);
-lib_internal void
+void
 barrier_wait(Barrier barrier);
 
 ////////////////////////////////
 //~ rjf: Platform-Abstracted Synchronization Primitive Functions
 
 //- rjf: slow barriers
-lib_internal Barrier
+Barrier
 slow_barrier_alloc(U64 count);
-lib_internal void
+void
 slow_barrier_release(Barrier barrier);
-lib_internal void
+void
 slow_barrier_wait(Barrier barrier);
 
-lib_internal RWMutex
+RWMutex
 rw_mutex_alloc();
-lib_internal void
+void
 rw_mutex_release(RWMutex mutex);
-lib_internal void
+void
 rw_mutex_take(RWMutex mutex, B32 write_mode);
-lib_internal void
+void
 rw_mutex_drop(RWMutex mutex, B32 write_mode);
-lib_internal CondVar
+CondVar
 cond_var_alloc();
-lib_internal void
+void
 cond_var_release(CondVar cv);
-lib_internal B32
+B32
 cond_var_wait_rw(CondVar cv, RWMutex mutex, B32 write_mode, U64 endt_us);
-lib_internal void
+void
 cond_var_signal(CondVar cv);
 
 #endif // BASE_THREADS_H

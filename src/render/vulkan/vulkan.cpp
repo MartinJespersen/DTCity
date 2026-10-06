@@ -19,7 +19,7 @@ ctx_release()
     g_vk_ctx = 0;
 }
 
-g_internal Context*
+Context*
 ctx_get()
 {
     Assert(g_vk_ctx);

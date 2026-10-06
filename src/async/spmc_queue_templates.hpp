@@ -1,8 +1,10 @@
+#pragma once
+
+// Template implementations
 namespace async
 {
-
 template <typename T>
-static U64
+U64
 _spmc_queue_capacity(SpmcQueue<T>* queue)
 {
     return segment_buffer_capacity(&queue->buffer);
@@ -112,7 +114,7 @@ spmc_queue_steal(SpmcQueue<T>* queue, T& value)
 }
 
 template <typename T>
-static void
+void
 _spmc_queue_buffer_ensure_segment(SpmcQueue<T>* queue, U64 segment_index)
 {
     Assert(segment_index < SPMC_QUEUE_MAX_SEGMENT_COUNT);
@@ -129,7 +131,7 @@ _spmc_queue_buffer_ensure_segment(SpmcQueue<T>* queue, U64 segment_index)
 }
 
 template <typename T>
-static void
+void
 _spmc_queue_reserve(SpmcQueue<T>* queue, U64 capacity)
 {
     U64 segment_count = 1;
@@ -143,7 +145,7 @@ _spmc_queue_reserve(SpmcQueue<T>* queue, U64 capacity)
 }
 
 template <typename T>
-static U64
+U64
 spmc_queue_capacity(AsyncSpmcFifoQueue<T>* buffer)
 {
     U64 segment_count = buffer->segment_count.load(std::memory_order_acquire);
@@ -151,7 +153,7 @@ spmc_queue_capacity(AsyncSpmcFifoQueue<T>* buffer)
 }
 
 template <typename T>
-static T&
+T&
 spmc_queue_slot_get(AsyncSpmcFifoQueue<T>* buffer, U64 index)
 {
     U64 segment_index = segment_buffer_segment_index<T>(index);
@@ -160,4 +162,4 @@ spmc_queue_slot_get(AsyncSpmcFifoQueue<T>* buffer, U64 index)
     Assert(segment);
     return segment[segment_offset];
 }
-} // namespace async
+}

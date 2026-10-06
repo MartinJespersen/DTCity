@@ -7,6 +7,7 @@ colormaps = ["viridis", "plasma", "inferno", "magma"]
 
 
 with open(file_name, "w") as f:
+    f.write("#pragma once\n\n")
     for colormap in colormaps:
         color_list_flattened = [
             color

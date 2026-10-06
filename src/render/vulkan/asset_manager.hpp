@@ -195,7 +195,7 @@ struct AssetManager
 
 //~mgj: Asset Manager Lifecycle
 
-g_internal AssetManager*
+AssetManager*
 asset_manager_get();
 static AssetManager*
 asset_manager_create(VkPhysicalDevice physical_device, VkDevice device, VkInstance instance, VkQueue graphics_queue, U32 queue_family_index, async::ThreadPool* threads, U64 total_size_in_bytes,
@@ -222,7 +222,7 @@ buffer_readback_create(VkDeviceSize size, VkBufferUsageFlags buffer_usage, Buffe
 static void
 buffer_readback_destroy(BufferReadback* out_buffer_readback);
 
-g_internal void*
+void*
 asset_manager_allocation_cpu_pointer_get(void* allocation);
 
 //~mgj: Image Allocation Functions (VMA)
@@ -254,7 +254,7 @@ deletion_queue_empty_all();
 
 //~mgj: Asset Item Management
 
-static render::AssetItem<BufferHandle>*
+render::AssetItem<BufferHandle>*
 asset_manager_buffer_item_get(render::Handle handle);
 static render::AssetItem<TextureHandle>*
 asset_manager_texture_item_get(render::Handle handle);
@@ -308,7 +308,7 @@ static void
 asset_manager_buffer_free(render::Handle handle);
 static void
 asset_manager_texture_free(render::Handle handle);
-g_internal render::Handle
+render::Handle
 asset_manager_buffer_allocation_create(render::ThreadWorkerCmdCtx* thread_ctx, render::BufferInfo* buffer_info, VmaAllocationCreateInfo vma_info);
 g_internal render::Handle
 asset_manager_buffer_immediate_create(render::BufferInfo* buffer_info, String8 debug_name);
@@ -338,7 +338,7 @@ static async::WorkerResult
 thread_main(async::ThreadInfo thread_info, async::WorkerData input);
 
 // debug helpers
-lib_internal void
+void
 asset_manager_debug_name_set(void* allocation, String8 name);
 
 static render::Handle

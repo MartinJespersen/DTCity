@@ -15,24 +15,24 @@ struct Queue
 
 ////////////////////////////////////////////////
 template <typename T>
-static void
+void
 _queue_grow(Queue<T>* queue, U32 min_queue_size);
 template <typename T>
-static void
+void
 _queue_insert_value(Queue<T>* queue, T* data);
 template <typename T>
-static Queue<T>*
+Queue<T>*
 queue_alloc(Arena* arena, U32 queue_size);
 template <typename T>
-static void
+void
 queue_release(Queue<T>* queue);
 template <typename T>
-static B32
+B32
 queue_try_read(Queue<T>* queue, T* item);
 template <typename T>
-static B32
+B32
 queue_try_push(Queue<T>* queue, T* data);
 template <typename T>
-static void
+void
 queue_push(Queue<T>* queue, T* data);
 } // namespace async

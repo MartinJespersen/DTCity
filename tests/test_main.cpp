@@ -2,8 +2,6 @@
 
 // user source
 #include "base/base_inc.cpp"
-#include "async/segment_buffer.cpp"
-#include "async/async_heap.cpp"
 #include "misc/geometry.cpp"
 #include "../simulator/resource_paths.cpp"
 #include "../simulator/event_snapshot.cpp"
@@ -15,6 +13,7 @@
 // test files
 #include "async/test_heap.cpp"
 #include "base/test_allocator.cpp"
+#include "base/test_layer_linkage.cpp"
 #include "base/test_arena.cpp"
 #include "base/test_container.cpp"
 #include "base/test_math.cpp"

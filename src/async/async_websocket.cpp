@@ -76,7 +76,7 @@ _ws_main(AsyncWebsocketSession* ws_session)
         }
     }
 }
-g_internal WebsocketConnection
+WebsocketConnection
 async_websocket_start(String8 url)
 {
     Arena* session_arena = arena_alloc();
@@ -108,7 +108,7 @@ async_websocket_start(String8 url)
     return result;
 }
 
-g_internal void
+void
 _async_websocket_connection_end(AsyncWebsocketSession* ws_session)
 {
     if (ws_session == 0)

@@ -18,7 +18,7 @@ _allocation_name_get(VmaAllocator allocator, VmaAllocation allocation)
     return result;
 }
 
-g_internal AssetManager*
+AssetManager*
 asset_manager_get()
 {
     Assert(g_asset_manager);
@@ -659,7 +659,7 @@ asset_manager_item_get(render::Handle handle)
     return asset_item;
 }
 
-static render::AssetItem<BufferHandle>*
+render::AssetItem<BufferHandle>*
 asset_manager_buffer_item_get(render::Handle handle)
 {
     AssetManager* asset_manager = asset_manager_get();
@@ -719,7 +719,7 @@ asset_manager_item_create(render::AssetItemList<T>* list, render::AssetItemList<
     return handle;
 }
 
-g_internal render::Handle
+render::Handle
 asset_manager_buffer_allocation_create(render::ThreadWorkerCmdCtx* thread_ctx, render::BufferInfo* buffer_info, VmaAllocationCreateInfo vma_info)
 {
     render::Handle handle = _asset_manager_buffer_create(buffer_info, vma_info, VK_BUFFER_USAGE_TRANSFER_DST_BIT);
@@ -1250,7 +1250,7 @@ buffer_readback_destroy(BufferReadback* out_buffer_readback)
     out_buffer_readback->mapped_ptr = 0;
 }
 
-g_internal void*
+void*
 asset_manager_allocation_cpu_pointer_get(void* allocation)
 {
     AssetManager* asset_manager = asset_manager_get();
@@ -1308,7 +1308,7 @@ image_resource_destroy(ImageResource image)
 }
 
 // debug helpers
-lib_internal void
+void
 asset_manager_debug_name_set(void* allocation, String8 name)
 {
     AssetManager* asset_manager = asset_manager_get();

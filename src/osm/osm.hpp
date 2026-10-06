@@ -1,5 +1,14 @@
 #pragma once
 
+namespace async
+{
+struct ThreadPool;
+struct ThreadInfo;
+template <typename T> struct UserFuncResult;
+template <typename T> struct AsyncTaskContinuation;
+template <typename T> struct AsyncTaskStatus;
+}
+
 namespace neta
 {
 struct EdgeList;
@@ -123,12 +132,6 @@ struct EdgeStructure
     Buffer<RoadEdge> edges;
     Map<EdgeId, RoadEdge*> edge_map;
 };
-EcefLocation
-ecef_location_create(U64 id, Vec3F64 pos)
-{
-    EcefLocation loc = {.id = id, .pos = pos};
-    return loc;
-}
 
 struct NodeList
 {
@@ -173,28 +176,31 @@ struct Network
 read_only g_internal Node g_road_node_utm = {nullptr, 0, {}, {}};
 
 // Public
-g_internal Network*
+EcefLocation
+ecef_location_create(U64 id, Vec3F64 pos);
+
+Network*
 osm_init(U64 node_hashmap_size, U64 way_hashmap_size, String8 cache_path, String8 area, String8 bbox_cache_str);
-g_internal void
+void
 osm_release(Network* osm_network);
 g_internal void
 structure_cleanup(Network* network);
-g_internal TagResult
+TagResult
 tag_find(Arena* arena, Buffer<Tag> tags, String8 tag_to_find);
-g_internal WayNode*
+WayNode*
 way_find(Network* network, WayId way_id);
-g_internal EcefLocation
+EcefLocation
 location_get(Network* network, U64 node_id);
-g_internal WgsLocation
+WgsLocation
 wgs_location_get(Network* network, U64 node_id);
 g_internal Node*
 node_get(Network* network, U64 node_id);
 g_internal NodeId
 random_node_id_from_type_get(Network* network, WayType type);
 
-g_internal async::UserFuncResult<osm::Network>
+async::UserFuncResult<osm::Network>
 fetch_osm_data_and_parse(Arena* arena, async::ThreadPool* thread_pool, String8 response_body, osm::Network* osm_network);
-g_internal async::AsyncTaskContinuation<osm::Network>
+async::AsyncTaskContinuation<osm::Network>
 parse_osm_data(async::ThreadInfo thread_info, async::AsyncTaskStatus<osm::Network>* task);
 g_internal Error
 _parse_osm_data(osm::Network* osm_network);

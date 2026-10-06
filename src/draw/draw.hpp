@@ -84,22 +84,22 @@ struct Draw
     DrawFrame* frame;
 };
 
-g_internal void
+void
 draw_init();
-g_internal void
+void
 draw_release();
-g_internal void
+void
 draw_new_frame();
-g_internal Arena*
+Arena*
 draw_frame_arena_get();
-g_internal DrawFrame*
+DrawFrame*
 draw_frame_get();
 
-g_internal void
+void
 draw_camera_set(ArrayResourcePoolHandle camera_resource_handle);
-g_internal void
+void
 draw_line(render::Line& line);
-g_internal void
+void
 primitive_draw(glm::vec3 location, F32 scale_factor, render::MeshHandle mesh_handle);
 
 g_internal void

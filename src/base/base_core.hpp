@@ -1,3 +1,5 @@
+#pragma once
+
 // Copyright (c) 2024 Epic Games Tools
 // Licensed under the MIT license (https://opensource.org/license/mit/)
 
@@ -849,45 +851,45 @@ struct FileProperties
 ////////////////////////////////
 //~ rjf: Safe Casts
 
-lib_internal U16
+U16
 safe_cast_u16(U32 x);
-lib_internal U32
+U32
 safe_cast_u32(U64 x);
-lib_internal S32
+S32
 safe_cast_s32(S64 x);
 
 ////////////////////////////////
 //~ rjf: Large Base Type Functions
 
-lib_internal U128
+U128
 u128_zero();
-lib_internal U128
+U128
 u128_make(U64 v0, U64 v1);
-lib_internal B32
+B32
 u128_match(U128 a, U128 b);
 
 ////////////////////////////////
 //~ rjf: Bit Patterns
 
-lib_internal U32
+U32
 u32_from_u64_saturate(U64 x);
-lib_internal U64
+U64
 u64_up_to_pow2(U64 x);
-lib_internal S32
+S32
 extend_sign32(U32 x, U32 size);
-lib_internal S64
+S64
 extend_sign64(U64 x, U64 size);
 
-lib_internal F32
+F32
 inf32();
-lib_internal F32
+F32
 neg_inf32();
 
-lib_internal U16
+U16
 bswap_u16(U16 x);
-lib_internal U32
+U32
 bswap_u32(U32 x);
-lib_internal U64
+U64
 bswap_u64(U64 x);
 
 #if ARCH_LITTLE_ENDIAN
@@ -900,89 +902,89 @@ bswap_u64(U64 x);
 #define from_be_u64(x) (x)
 #endif
 
-lib_internal U64
+U64
 count_bits_set32(U32 val);
-lib_internal U64
+U64
 count_bits_set64(U64 val);
 
-lib_internal U64
+U64
 ctz32(U32 val);
-lib_internal U64
+U64
 ctz64(U64 val);
-lib_internal U64
+U64
 clz32(U32 val);
-lib_internal U64
+U64
 clz64(U64 val);
 
 ////////////////////////////////
 //~ rjf: Enum -> Sign
 
-lib_internal S32
+S32
 sign_from_side_S32(Side side);
-lib_internal F32
+F32
 sign_from_side_F32(Side side);
 
 ////////////////////////////////
 //~ rjf: Memory Functions
 
-lib_internal B32
+B32
 memory_is_zero(void* ptr, U64 size);
 
 ////////////////////////////////
 //~ rjf: Text 2D Coordinate/Range Functions
 
-lib_internal TxtPt
+TxtPt
 txt_pt(S64 line, S64 column);
-lib_internal B32
+B32
 txt_pt_match(TxtPt a, TxtPt b);
-lib_internal B32
+B32
 txt_pt_less_than(TxtPt a, TxtPt b);
-lib_internal TxtPt
+TxtPt
 txt_pt_min(TxtPt a, TxtPt b);
-lib_internal TxtPt
+TxtPt
 txt_pt_max(TxtPt a, TxtPt b);
-lib_internal TxtRng
+TxtRng
 txt_rng(TxtPt min, TxtPt max);
-lib_internal TxtRng
+TxtRng
 txt_rng_intersect(TxtRng a, TxtRng b);
-lib_internal TxtRng
+TxtRng
 txt_rng_union(TxtRng a, TxtRng b);
-lib_internal B32
+B32
 txt_rng_contains(TxtRng r, TxtPt pt);
 
 ////////////////////////////////
 //~ rjf: Toolchain/Environment Enum Functions
 
-lib_internal U64
+U64
 bit_size_from_arch(Arch arch);
-lib_internal U64
+U64
 max_instruction_size_from_arch(Arch arch);
 
-lib_internal OperatingSystem
+OperatingSystem
 operating_system_from_context();
-lib_internal Arch
+Arch
 arch_from_context();
-lib_internal Compiler
+Compiler
 compiler_from_context();
 
 ////////////////////////////////
 //~ rjf: Time Functions
 
-lib_internal DenseTime
+DenseTime
 dense_time_from_date_time(DateTime date_time);
-lib_internal DateTime
+DateTime
 date_time_from_dense_time(DenseTime time);
-lib_internal DateTime
+DateTime
 date_time_from_micro_seconds(U64 time);
-lib_internal DateTime
+DateTime
 date_time_from_unix_time(U64 unix_time);
 
 ////////////////////////////////
 //~ rjf: Non-Fancy Ring Buffer Reads/Writes
 
-lib_internal U64
+U64
 ring_write(U8* ring_base, U64 ring_size, U64 ring_pos, void* src_data, U64 src_data_size);
-lib_internal U64
+U64
 ring_read(U8* ring_base, U64 ring_size, U64 ring_pos, void* dst_data, U64 read_size);
 #define ring_write_struct(ring_base, ring_size, ring_pos, ptr) \
     ring_write((ring_base), (ring_size), (ring_pos), (ptr), sizeof(*(ptr)))
@@ -997,7 +999,7 @@ ring_read(U8* ring_base, U64 ring_size, U64 ring_pos, void* dst_data, U64 read_s
 
 ////////////////////////////////
 
-lib_internal U64
+U64
 u64_array_bsearch(U64* arr, U64 count, U64 value);
 
 // bit level functions

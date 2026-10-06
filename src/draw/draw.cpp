@@ -3,7 +3,7 @@ namespace draw
 
 g_internal Draw g_draw_ctx = {};
 
-g_internal void
+void
 draw_init()
 {
     if (!g_draw_ctx.frame_arena)
@@ -13,7 +13,7 @@ draw_init()
     }
 }
 
-g_internal void
+void
 draw_release()
 {
     if (g_draw_ctx.frame_arena)
@@ -23,7 +23,7 @@ draw_release()
     g_draw_ctx = {};
 }
 
-g_internal void
+void
 draw_new_frame()
 {
     arena_clear(g_draw_ctx.frame_arena);
@@ -32,13 +32,13 @@ draw_new_frame()
     g_draw_ctx.frame->mesh_instance_batches = chunk_list_create<render::MeshInstanceBatch>(g_draw_ctx.frame_arena, 32);
 }
 
-g_internal Arena*
+Arena*
 draw_frame_arena_get()
 {
     return g_draw_ctx.frame_arena;
 }
 
-g_internal DrawFrame*
+DrawFrame*
 draw_frame_get()
 {
     if (!g_draw_ctx.frame)
@@ -48,7 +48,7 @@ draw_frame_get()
     return g_draw_ctx.frame;
 }
 
-g_internal void
+void
 draw_camera_set(ArrayResourcePoolHandle camera_resource_handle)
 {
     Context* ctx = dt_ctx_get();
@@ -60,7 +60,7 @@ draw_camera_set(ArrayResourcePoolHandle camera_resource_handle)
     }
 }
 
-g_internal void
+void
 draw_line(render::Line& line)
 {
     DrawFrame* frame = draw_frame_get();
@@ -70,7 +70,7 @@ draw_line(render::Line& line)
     chunk_list_insert(g_draw_ctx.frame_arena, frame->line_vertex_chunk_list, to);
 }
 
-g_internal void
+void
 primitive_draw(glm::vec3 location, F32 scale_factor, render::MeshHandle mesh_handle)
 {
     DrawFrame* frame = draw_frame_get();

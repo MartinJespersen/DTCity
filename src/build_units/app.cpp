@@ -1,0 +1,18 @@
+// Unity compilation for the app layer.
+#include "core_inc.hpp"
+#include "base/base_container.hpp"
+#include "base/base_container_templates.hpp"
+#include "base/base_lists.hpp"
+#include "base/base_lists_templates.hpp"
+#include "utility/utility_inc.hpp"
+#include "async/thread_pool.hpp"
+#include "render/render_inc.hpp"
+#include "draw/draw.hpp"
+#include "misc/misc_inc.hpp"
+#include "osm/osm.hpp"
+#include "cesium/cesium_tileset.hpp"
+#include "city/city_inc.hpp"
+#include "entrypoint.hpp"
+
+#include "entrypoint.cpp"
+#include "main.cpp"

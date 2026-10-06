@@ -1,14 +1,7 @@
 #pragma once
 
-#include "pch.hpp"
-
-
-DISABLE_WARNINGS_PUSH
-#define OS_FEATURE_GRAPHICAL 1
+#include "core_inc.hpp"
 #include "base/base_inc.hpp"
-#include "os_core/os_core_inc.hpp"
-DISABLE_WARNINGS_POP
-#include "debug_log.hpp"
 
 // user defined: [hpp]
 #include "utility/utility_inc.hpp"

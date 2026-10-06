@@ -35,19 +35,19 @@ struct IO
     U64 frame_count;
 };
 
-static void
+void
 input_state_update(IO* io);
-static Vec2S32
+Vec2S32
 wait_for_valid_framebuffer_size(IO* io_ctx);
 static void
 framebuffer_resize_callback(GLFWwindow* window, int width, int height);
-static IO*
+IO*
 window_create(String8 app_name, U32 window_width, U32 window_height);
-static void
+void
 window_destroy(IO* io_ctx);
 static void
 scroll_callback(GLFWwindow* window, double xoffset, double yoffset);
-static void
+void
 new_frame(io::IO* io);
 
 } // namespace io

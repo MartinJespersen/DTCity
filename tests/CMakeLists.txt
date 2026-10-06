@@ -8,6 +8,7 @@ target_sources(city_tests
     ../src/third_party/simdjson/simdjson.cpp
     ../simulator/third_party/sqlite/sqlite3.c
     ../simulator/third_party/yyjson/yyjson.c
+    base/layer_linkage.cpp
 )
 
 target_include_directories(city_tests PRIVATE

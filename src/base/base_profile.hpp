@@ -15,8 +15,8 @@
 #define prof_frame_marker ;
 #endif
 
-lib_internal U64
+U64
 cpu_timer_freq_estimate();
 
-lib_internal F64
+F64
 us_from_cpu_cycles(U64 cycles);

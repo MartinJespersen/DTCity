@@ -1,4 +1,22 @@
 #pragma once
+
+namespace cesium
+{
+struct TileRenderResources;
+struct TilesetRenderer;
+}
+namespace async
+{
+struct ThreadPool;
+struct ThreadInfo;
+template <typename T> struct AsyncTaskStatus;
+template <typename T> struct AsyncTaskContinuation;
+}
+namespace city
+{
+struct Bvh;
+enum RoadOverlayOption : U32;
+}
 namespace city
 {
 
@@ -46,9 +64,9 @@ struct TileLoadState
     TileLoadTaskStateNode* task_free_list;
 };
 
-g_internal TileLoadState*
+TileLoadState*
 tile_load_create(async::ThreadPool* thread_pool, U32 tileset_capacity);
-g_internal void
+void
 tile_load_destroy(TileLoadState* state);
 g_internal ArrayResourcePoolHandle
 tile_load_streaming_begin(TileLoadState* state, String8 tileset_url, Rng2F64 bounds, S64 tileset_ion_asset_id,
@@ -59,7 +77,7 @@ g_internal void
 tile_load_update(TileLoadState* state, ArrayResourcePoolHandle tileset_handle, ArrayResourcePoolHandle bvh_handle,
                  ArrayResourcePoolHandle camera_handle, B32 road_building_done, B32 road_overlay_changed,
                  RoadOverlayOption road_overlay_option, F64 delta_time);
-g_internal void
+void
 tile_load_debug_ui_draw(TileLoadState* state, ArrayResourcePoolHandle tileset_handle);
 
 g_internal void

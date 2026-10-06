@@ -1,3 +1,5 @@
+#pragma once
+
 #ifndef BASE_ALLOCATOR_HPP
 #define BASE_ALLOCATOR_HPP
 
@@ -125,5 +127,6 @@ struct Allocator
     void
     _push_only_destructor(void* object, Destructor destructor);
 };
+
 
 #endif // BASE_ALLOCATOR_HPP

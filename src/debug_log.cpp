@@ -1,5 +1,7 @@
+#if BUILD_DEBUG
+DebugTable g_debug_table = {};
 
-g_internal DebugEvent*
+DebugEvent*
 debug_event_record(DebugEventType event_type, String8 debug_name, String8 name)
 {
     Assert((g_debug_table.arr_idx_and_event_idx.load() & 0xFFFFFFFF) < ArrayCount(g_debug_table.events[0]));
@@ -14,7 +16,7 @@ debug_event_record(DebugEventType event_type, String8 debug_name, String8 name)
     return event;
 }
 
-g_internal void
+void
 debug_dir_create(String8 debug_dir)
 {
     if (!os_file_path_exists(debug_dir) && !os_make_directory(debug_dir))
@@ -24,7 +26,7 @@ debug_dir_create(String8 debug_dir)
     }
 }
 
-g_internal void
+void
 debug_g_state_init()
 {
     g_debug_table.frame_arena = arena_alloc();
@@ -37,7 +39,7 @@ debug_g_state_init()
     debug_dir_create(debug_dir);
 }
 
-g_internal void
+void
 debug_dump_str(String8 str, String8 filepath)
 {
     if (str.size == 0)
@@ -180,7 +182,7 @@ _debug_handle_name_set_event(DebugEvent* debug_event)
     arena_to_name->name = handle_name_set_event->name;
 }
 
-g_internal void
+void
 debug_event_frame_end()
 {
     g_debug_table.arr_idx_cur = !g_debug_table.arr_idx_cur;
@@ -278,7 +280,7 @@ debug_event_frame_end()
     }
 }
 
-g_internal void
+void
 debug_memory_snapshot_dump()
 {
     // Arena Log
@@ -293,3 +295,5 @@ debug_memory_snapshot_dump()
     }
     DEBUG_LOG("Arena Count: Count: %llu, Total memory committed: %llu", arena_count, total_memory_committed);
 }
+
+#endif

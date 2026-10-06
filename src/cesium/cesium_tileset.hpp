@@ -122,24 +122,24 @@ struct TilesetRenderer
 };
 
 // Lifecycle
-g_internal void
+void
 tileset_renderer_create(TilesetRenderer* tileset, ArrayResourcePoolHandle tileset_handle, async::ThreadPool* threads,
                         String8 url, F64 origin_longitude, F64 origin_latitude, F64 origin_height,
                         S64 tileset_ion_asset_id, U64 cache_byte_size);
 // Poll on the render thread until true; keep the renderer alive between calls.
-g_internal B32
+B32
 tileset_renderer_destroy(TilesetRenderer* renderer);
-g_internal void
+void
 tileset_tile_mesh_processor_set(TilesetRenderer* renderer, TileMeshProcessor processor);
-g_internal void
+void
 tileset_tile_mesh_processor_enabled_set(TilesetRenderer* renderer, B32 enabled);
 // Update and rendering
-g_internal void
+void
 tileset_pump_async(TilesetRenderer* renderer);
-g_internal void
+void
 tileset_update_view(TilesetRenderer* renderer, ArrayResourcePoolHandle camera_handle, F64 delta_time);
 
-g_internal void
+void
 tileset_render_resources_release(TileRenderResources* list);
 
 // Private functions

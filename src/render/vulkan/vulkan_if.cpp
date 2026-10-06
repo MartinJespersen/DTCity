@@ -76,7 +76,7 @@ null_texture_create(vulkan::Context* vk_ctx)
 }
 
 // ~mgj: Vulkan Interface
-static void
+void
 render_ctx_create(String8 shader_path, io::IO* io_ctx, async::ThreadPool* thread_pool)
 {
     ScratchScope scratch = ScratchScope(0, 0);
@@ -207,7 +207,7 @@ render_ctx_create(String8 shader_path, io::IO* io_ctx, async::ThreadPool* thread
     }
 }
 
-static void
+void
 render_ctx_destroy()
 {
     vulkan::Context* vk_ctx = vulkan::ctx_get();
@@ -274,7 +274,7 @@ render_ctx_destroy()
     vulkan::ctx_release();
 }
 
-static void
+void
 render_frame(Vec2U32 framebuffer_dim, B32* in_out_framebuffer_resized, Vec2S64 mouse_cursor_pos,
              MappedHandle<void> camera_handle_void)
 {
@@ -409,21 +409,21 @@ render_frame(Vec2U32 framebuffer_dim, B32* in_out_framebuffer_resized, Vec2S64 m
     gpu_work_update();
 }
 
-static void
+void
 gpu_work_update()
 {
     vulkan::asset_manager_execute_cmds();
     vulkan::asset_manager_cmd_done_check();
 }
 
-static void
+void
 gpu_work_done_wait()
 {
     vulkan::Context* vk_ctx = vulkan::ctx_get();
     vkDeviceWaitIdle(vk_ctx->device);
 }
 
-static void
+void
 new_frame()
 {
     vulkan::Context* vk_ctx = vulkan::ctx_get();
@@ -433,7 +433,7 @@ new_frame()
     ImGui_ImplVulkan_NewFrame();
 }
 
-static U64
+U64
 latest_hovered_object_id_get()
 {
     vulkan::Context* vk_ctx = vulkan::ctx_get();
@@ -441,14 +441,14 @@ latest_hovered_object_id_get()
 }
 
 // ~mgj: Texture interface functions
-g_internal Handle
+Handle
 texture_zero_handle_get()
 {
     vulkan::Context* vk_ctx = vulkan::ctx_get();
     return vk_ctx->null_texture_handle;
 }
 
-g_internal Handle
+Handle
 texture_handle_create(SamplerInfo* sampler_info)
 {
     vulkan::Context* vk_ctx = vulkan::ctx_get();
@@ -473,7 +473,7 @@ texture_handle_create(SamplerInfo* sampler_info)
     return asset_handle;
 }
 
-static render::Handle
+render::Handle
 texture_load_async(render::SamplerInfo* sampler_info, String8 texture_path)
 {
     ScratchScope scratch = ScratchScope(0, 0);
@@ -494,7 +494,7 @@ texture_load_async(render::SamplerInfo* sampler_info, String8 texture_path)
     return handle;
 }
 
-g_internal Handle
+Handle
 texture_load_sync(render::ThreadWorkerCmdCtx* thread_ctx, render::SamplerInfo* sampler_info, Buffer<U8> tex_buf)
 {
     ScratchScope scratch = ScratchScope(0, 0);
@@ -511,7 +511,7 @@ texture_load_sync(render::ThreadWorkerCmdCtx* thread_ctx, render::SamplerInfo* s
     return tex_handle;
 }
 
-g_internal Handle
+Handle
 texture_load_sync(render::SamplerInfo* sampler_info, TextureUploadData* tex_data, void* cmd)
 {
     prof_scope_marker;
@@ -541,13 +541,13 @@ texture_load_sync(render::SamplerInfo* sampler_info, TextureUploadData* tex_data
     return handle;
 }
 
-g_internal void
+void
 handle_destroy(render::Handle handle)
 {
     handle_destroy_deferred(handle);
 }
 
-g_internal void
+void
 handle_destroy_deferred(render::Handle handle)
 {
     if (render::is_handle_zero(handle) == false)
@@ -556,67 +556,7 @@ handle_destroy_deferred(render::Handle handle)
     }
 }
 
-template <typename T>
-g_internal void
-mapped_buffer_add(MappedHandle<T> mut_handle, T* data)
-{
-    vulkan::Context* vk_ctx = vulkan::ctx_get();
-    String8 buffer = str8((U8*)data, sizeof(T));
-    String8 source = push_str8_copy(vk_ctx->render_frame_arena, buffer);
-    LinkedListNode<vulkan::MappedHandleTransfer>* mut_handle_node =
-        PushStruct(vk_ctx->render_frame_arena, LinkedListNode<vulkan::MappedHandleTransfer>);
-    render::MappedHandle<void> handle_void = render::mapped_handle_erased(mut_handle);
-    mut_handle_node->v.mapped_handle = handle_void;
-    mut_handle_node->v.source = source;
-    SLLQueuePush(vk_ctx->mapped_handle_list.first, vk_ctx->mapped_handle_list.last, mut_handle_node);
-}
-
-template <typename T>
-g_internal MappedHandle<T>
-mapped_buffer_create(Arena* arena, render::ThreadWorkerCmdCtx* thread_ctx, BufferType buffer_type, String8 debug_name)
-{
-    ScratchScope scratch = ScratchScope(0, 0);
-    Buffer<MappedHandleFrame<T>> handle_buffer =
-        buffer_alloc<MappedHandleFrame<T>>(arena, render::MAX_FRAMES_IN_FLIGHT);
-
-    for (U32 frame_idx = 0; frame_idx < handle_buffer.size; ++frame_idx)
-    {
-        MappedHandleFrame<T>* content = &handle_buffer.data[frame_idx];
-        VmaAllocationCreateInfo vma_info = {0};
-        vma_info.usage = VMA_MEMORY_USAGE_AUTO;
-        vma_info.flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT | VMA_ALLOCATION_CREATE_MAPPED_BIT;
-        vma_info.requiredFlags = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT;
-
-        BufferInfo buffer_info = BufferInfo::empty_buffer_info<T>(arena, buffer_type);
-        content->handle = vulkan::asset_manager_buffer_allocation_create(thread_ctx, &buffer_info, vma_info);
-        render::AssetItem<vulkan::BufferHandle>* asset_item_buffer =
-            vulkan::asset_manager_buffer_item_get(content->handle);
-        vulkan::BufferHandle* buffer_handle = &asset_item_buffer->item;
-
-#if BUILD_DEBUG
-        String8 frame_debug_name = push_str8f(scratch.arena, "%.*s[%u]", str8_varg(debug_name), frame_idx);
-        vulkan::asset_manager_debug_name_set(buffer_handle->buffer_alloc.allocation, frame_debug_name);
-#endif
-
-        content->data = (T*)vulkan::asset_manager_allocation_cpu_pointer_get(buffer_handle->buffer_alloc.allocation);
-        AssertAlways(content->data);
-    }
-
-    MappedHandle<T> mut_handle = {};
-    mut_handle.buffer = handle_buffer;
-    return mut_handle;
-}
-
-template <typename T>
-g_internal void
-mapped_buffer_destroy(MappedHandle<T> mapped_handle)
-{
-    for (auto h : mapped_handle.buffer)
-    {
-        render::handle_destroy(h.handle);
-    }
-}
-g_internal Handle
+Handle
 _buffer_load_sync(render::ThreadWorkerCmdCtx* thread_ctx, render::BufferInfo* buffer_info, String8 debug_name)
 {
     prof_scope_marker;
@@ -649,7 +589,7 @@ _buffer_load_sync(render::ThreadWorkerCmdCtx* thread_ctx, render::BufferInfo* bu
     return handle;
 }
 
-g_internal Handle
+Handle
 _buffer_load_immediate(render::BufferInfo* buffer_info, String8 debug_name)
 {
     if (buffer_info->buffer.size == 0)
@@ -663,7 +603,7 @@ _buffer_load_immediate(render::BufferInfo* buffer_info, String8 debug_name)
     return handle;
 }
 
-static render::Handle
+render::Handle
 buffer_load_async(render::BufferInfo* buffer_info)
 {
     prof_scope_marker;
@@ -725,7 +665,7 @@ buffer_load_async(render::BufferInfo* buffer_info)
     return asset_handle;
 }
 
-static void
+void
 tile_pipeline_add(render::TilePipelineData* pipeline_input)
 {
     vulkan::Context* vk_ctx = vulkan::ctx_get();
@@ -806,7 +746,7 @@ tile_pipeline_add(render::TilePipelineData* pipeline_input)
     }
 }
 
-lib_internal void
+void
 blend_3d_draw(render::Blend3DPipelineData pipeline_input)
 {
     render::AssetItem<vulkan::BufferHandle>* asset_vertex_buffer = 0;
@@ -824,43 +764,19 @@ blend_3d_draw(render::Blend3DPipelineData pipeline_input)
     }
 }
 
-g_internal render::AssetItem<vulkan::BufferHandle>*
+render::AssetItem<vulkan::BufferHandle>*
 _render_asset_item_get(render::Handle handle, vulkan::BufferHandle*)
 {
     return handle.type == render::HandleType::Buffer ? vulkan::asset_manager_buffer_item_get(handle) : 0;
 }
 
-g_internal render::AssetItem<vulkan::TextureHandle>*
+render::AssetItem<vulkan::TextureHandle>*
 _render_asset_item_get(render::Handle handle, vulkan::TextureHandle*)
 {
     return handle.type == render::HandleType::Texture ? vulkan::asset_manager_texture_item_get(handle) : 0;
 }
 
-template <typename T>
-g_internal bool
-is_resource_loaded(render::Handle handle, render::AssetItem<T>** out_asset)
-{
-    if (out_asset)
-    {
-        *out_asset = 0;
-    }
-
-    if (render::is_handle_zero(handle))
-    {
-        return false;
-    }
-
-    T* type_marker = 0;
-    render::AssetItem<T>* asset = _render_asset_item_get(handle, type_marker);
-    if (out_asset)
-    {
-        *out_asset = asset;
-    }
-
-    return asset ? asset->is_loaded : false;
-}
-
-g_internal bool
+bool
 is_resource_loaded(render::Handle handle)
 {
     switch (handle.type)
@@ -906,7 +822,7 @@ Handle::buffer_handle_create(BufferType buffer_type)
     return handle;
 }
 
-g_internal void
+void
 thread_cmd_buffer_record(ThreadWorkerCmdCtx* thread_ctx)
 {
     vulkan::AssetManager* asset_manager = vulkan::asset_manager_get();
@@ -918,7 +834,7 @@ thread_cmd_buffer_record(ThreadWorkerCmdCtx* thread_ctx)
     thread_ctx->cmd_buffer = begin_command(asset_manager->device, &thread_cmd_pool);
 }
 
-g_internal void
+void
 thread_cmd_buffer_end(ThreadWorkerCmdCtx* cmd_ctx)
 {
     U32 thread_local_id = async::t_cur_thread_id;
@@ -931,7 +847,7 @@ thread_cmd_buffer_end(ThreadWorkerCmdCtx* cmd_ctx)
     vulkan::asset_cmd_queue_item_enqueue(thread_local_id, cmd_ctx);
 }
 
-g_internal void
+void
 handle_done_loading(render::HandleList handles)
 {
     for (render::HandleNode* node = handles.first; node; node = node->next)
@@ -972,7 +888,7 @@ handle_done_loading(render::HandleList handles)
 }
 
 // handle helpers
-g_internal MeshHandle
+MeshHandle
 mesh_handles_create_and_upload(PrimitiveMesh& prim_mesh)
 {
     BufferInfo vertex_buffer_info = BufferInfo(prim_mesh.vertices, BufferType_Vertex);
@@ -988,7 +904,7 @@ mesh_handles_create_and_upload(PrimitiveMesh& prim_mesh)
     return render::MeshHandle{vertex_handle, index_handle};
 }
 
-g_internal MeshletMeshHandle
+MeshletMeshHandle
 mesh_shader_handles_create_and_upload(PrimitiveMesh& mesh)
 {
     ScratchScope scratch = ScratchScope(0, 0);
@@ -1004,7 +920,7 @@ mesh_shader_handles_create_and_upload(PrimitiveMesh& mesh)
     return result;
 }
 
-g_internal MeshletMeshHandle
+MeshletMeshHandle
 mesh_shader_handles_create_and_upload(Buffer<PrimitiveVertex> vertices, Buffer<U32> indices, Arena* source_arena)
 {
     prof_scope_marker;
@@ -1127,7 +1043,7 @@ mesh_shader_handles_create_and_upload(Buffer<PrimitiveVertex> vertices, Buffer<U
     return result;
 }
 
-g_internal void
+void
 mesh_shader_handles_destroy(MeshletMeshHandle mesh)
 {
     if (mesh.meshlet_count > 0)

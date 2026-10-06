@@ -1,3 +1,5 @@
+static Context* g_ctx;
+
 static Buffer<String8>
 dt_dir_create(Arena* arena, String8 parent, dt_DataDirPair* dirs, U32 count)
 {
@@ -24,7 +26,7 @@ dt_ctx_set(Context* ctx)
     g_ctx = ctx;
 }
 
-static Context*
+Context*
 dt_ctx_get()
 {
     return g_ctx;

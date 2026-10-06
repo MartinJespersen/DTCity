@@ -4,7 +4,7 @@ namespace util
 // given corner becomes the min corner; the opposite (max) corner is found by
 // offsetting `width` metres east and `height` metres north on an east-north-up
 // tangent frame placed at the corner.
-g_internal Rng2F64
+Rng2F64
 wgs84_bbox_from_btm_right_corner(F64 lon, F64 lat, F64 width, F64 height)
 {
     CesiumGeospatial::Cartographic corner = CesiumGeospatial::Cartographic::fromDegrees(lon, lat, 0.0);
@@ -24,7 +24,7 @@ wgs84_bbox_from_btm_right_corner(F64 lon, F64 lat, F64 width, F64 height)
 
 // derives the EPSG SRID of the UTM zone that contains the given wgs84 point.
 // returns 0 when the longitude is outside the valid wgs84 range.
-g_internal S32
+S32
 target_srid_from_wgs84(Vec2F64 wgs84_point)
 {
     if (wgs84_point.x < -180.0 || wgs84_point.x > 180.0)
@@ -44,7 +44,7 @@ target_srid_from_wgs84(Vec2F64 wgs84_point)
     return srid_base + zone_number;
 }
 
-g_internal glm::dvec3
+glm::dvec3
 ecef_from_wgs84(F64 lon, F64 lat)
 {
     CesiumGeospatial::Cartographic origin_cartographic(glm::radians(lon), glm::radians(lat), 0);

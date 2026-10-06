@@ -1,6 +1,6 @@
 namespace util
 {
-g_internal Vec2F64
+Vec2F64
 util_wgs84_from_utm(UtmCoordinate coordinate)
 {
     Assert(coordinate.zone >= 1 && coordinate.zone <= 60);
