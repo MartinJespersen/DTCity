@@ -29,11 +29,6 @@
 #include "base_thread_context.h"
 #include "container.hpp"
 
-// Define debug event macros before the container template implementations.
-#if !BUILD_TEST
-#include "debug_log.hpp"
-#endif
-
 #include "base_container.hpp"
 #include "base_freelist.hpp"
 #include "cache.hpp"

@@ -13,7 +13,7 @@ struct SimulatorEventWorker
     city::ServerUpdate update;
     U64 request_id;
     U64 generation;
-    char db_path[1024];
+    char database_directory[1024];
     String8 reply;
 };
 

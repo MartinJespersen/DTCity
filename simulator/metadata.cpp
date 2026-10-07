@@ -1,4 +1,18 @@
 static String8
+simulator_metadata_reply_from_directory(Arena* arena, String8 directory, F64 timestamp_start, F64 timestamp_end)
+{
+    ScratchScope scratch = ScratchScope(&arena, 1);
+    Buffer<SimulatorScenario> scenarios = simulator_scenarios_find(scratch.arena, directory);
+    String8Array names = str8_array_reserve(scratch.arena, scenarios.size);
+    for (U64 index = 0; index < scenarios.size; ++index)
+    {
+        names.v[names.count++] = scenarios.data[index].name;
+    }
+    String8 reply = simulator_metadata_reply(arena, names.v, (U32)names.count, timestamp_start, timestamp_end);
+    return reply;
+}
+
+static String8
 simulator_metadata_reply(Arena* arena, String8* scenario_arr, U32 num_scenarios,
                          F64 timestamp_start, F64 timestamp_end)
 {

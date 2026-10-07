@@ -116,12 +116,39 @@ CMake presets define these macros based on what type of build configuration is u
 
 ### Simulator event streaming
 
-The simulator reads `agent_events` from `simulator/database/eskiltuna_test.sqlite`.
-The client sends `ServerUpdate` (`msg_id: 6`) with the scenario `name`, current
+Prepare MATSim imports with this folder layout:
+
+```text
+simulator/input/event_files/<scenario>.xml  # one or more events files
+simulator/input/network_file/network.xml   # shared network
+simulator/input/map_file/<map file>         # one map file
+```
+
+Run `python simulator/scripts/import_playback_sqlite.py` from the repository root.
+The script writes one database per events file to `simulator/output/`, replacing
+only the final `.xml` extension with `.sqlite`. For example, `city.day 1.xml`
+becomes `city.day 1.sqlite`. Defaults use paths beside the script, so running from
+another working directory produces the same outputs. The network is loaded once;
+event limits apply separately to each events file. Existing matching databases
+are replaced on each run.
+
+The network and map files must exist before importing. Coordinates come from the
+network XML; the map file is checked for presence and is not inserted into SQLite.
+Projected network coordinates require `pyproj` (`python -m pip install pyproj`).
+Use `--network-crs` to override the network CRS when needed. Use `--events` with
+one or more XML files or folders, `--network` and `--map` to select shared input
+files, and `--output` to select an output folder. These options also support files
+placed directly in `simulator/input/`.
+
+The simulator discovers `.sqlite`, `.sqlite3`, and `.db` files in `simulator/database/`.
+Metadata lists their filenames without the final extension as scenario names.
+The client selects a name, and the query worker reads `agent_events` from that file.
+Metadata retains one shared time range from the database loaded in the simulator UI.
+The client sends `ServerUpdate` with the scenario `name`, current
 `playback`, a fetch `period` in seconds, and a `request_id`. Requests are sent on
 seeks and scenario changes, and every half-period (default: 5 seconds).
 
-Replies use `msg_id: 3`, echo `request_id`, and contain a chronological `stream`.
+Replies use `Stream`, echo `request_id`, and contain a chronological `stream`.
 Each event contains `id`, `time`, `event_type`, `node_from_id`, `node_to_id`,
 `lon_from`, `lat_from`, `lon_to`, and `lat_to`. A reply includes the latest event
 strictly before playback for each active agent, plus all events in

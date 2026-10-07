@@ -3,8 +3,9 @@ TEST_CASE("Simulation metadata owns scenario names independently of the JSON inp
     city::SimulationMetadata metadata = {};
     {
         simdjson::ondemand::parser parser;
-        std::string_view input =
-            R"({"scenarios":["city","escaped\nname",""],"msg_id":4,"timestamp_end":42.5,"timestamp_start":-1})";
+        std::string input = R"({"scenarios":["city","escaped\nname",""],"msg_id":)";
+        input += std::to_string((U32)city::SimulationMessageKind::MetadataRequest);
+        input += R"(,"timestamp_end":42.5,"timestamp_start":-1})";
         simdjson::padded_string json(input);
         simdjson::ondemand::document doc;
         auto error = parser.iterate(json).get(doc);

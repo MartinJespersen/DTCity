@@ -6,13 +6,19 @@ Different scenarios:
   - Visualizer/client controls time.
   - Streamed and simulated source gets should be stored for playback and fetched using a window
 
-The playback client sends `ServerUpdate` (message 6) with `name`, `playback`,
+The playback client sends `ServerUpdate` with `name`, `playback`,
 `period` (both times in seconds), and `request_id`. An empty name selects None.
 Updates are sent immediately on scenario selection, seeking, or period changes,
 and every half-period using the OS clock while playback continues or is paused.
 The default period is 10 seconds.
 
-The simulator returns `Stream` (message 3), echoing `request_id`. Its chronological
+Metadata lists database filenames from `simulator/database/` without the final
+`.sqlite`, `.sqlite3`, or `.db` extension. The query worker resolves the selected
+name against those files, independently of the database loaded in the simulator UI.
+Empty or unknown names return an empty stream. The existing metadata format still
+uses the UI database's time range for all scenario names.
+
+The simulator returns `Stream`, echoing `request_id`. Its chronological
 `stream` contains the latest event strictly before playback for each active agent, plus
 all events in `[playback, playback + period)`. The baseline allows backward seeks
 and late arrivals to reconstruct state. SQLite queries run on a worker with its

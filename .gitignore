@@ -33,3 +33,5 @@ nul
 vcpkg_installed/**
 .env
 debug
+simulator/input/**
+simulator/database/**

@@ -4,13 +4,12 @@ using namespace simdjson;
 namespace city
 {
 
-// Stable protocol IDs, independent of symbol-set linker order.
 enum class SimulationMessageKind : U32
 {
-    Nop = 0,
-    Stream = 3,
-    MetadataRequest = 4,
-    ServerUpdate = 6,
+    Nop,
+    MetadataRequest,
+    Stream,
+    ServerUpdate
 };
 
 enum class SimulationFieldType

@@ -25,6 +25,7 @@ struct alignas(64) DynamicArrayAlignedTestItem
 #include "render/render.hpp"
 #include "misc/geometry.hpp"
 #include "../simulator/resource_paths.hpp"
+#include "../simulator/scenarios.hpp"
 #include "../simulator/third_party/sqlite/sqlite3.h"
 #include "../simulator/third_party/yyjson/yyjson.h"
 #include "../simulator/event_snapshot.hpp"

@@ -7,7 +7,6 @@
 #define DEBUG_LOG(...)
 #define ERROR_LOG(...)
 
-
 #include "third_party/simdjson/simdjson.h"
 #include "third_party/simdjson/simdjson.cpp"
 using namespace simdjson;
@@ -15,10 +14,12 @@ using namespace simdjson;
 #include "os_core/os_core_inc.hpp"
 #include "resource_paths.hpp"
 #include "metadata.hpp"
+#include "scenarios.hpp"
 
 #include "base/base_inc.cpp"
 #include "resource_paths.cpp"
-#define SY__MAIN 1
+#include "scenarios.cpp"
+
 #include "city/simulator_shared_interface.hpp"
 #include "city/simulator_shared_interface.cpp"
 
@@ -120,7 +121,7 @@ struct playback_db
 
 static void
 _server_event_requests_process(struct vehicle_stream* stream, struct websocket_server* server,
-                                struct playback_db* playback_db, SimulatorEventWorker* worker);
+                               SimulatorEventWorker* worker);
 
 static void
 _server_playback_range_update(struct websocket_server* server, struct playback_db* playback_db);
@@ -471,15 +472,15 @@ server_websocket_data_handler(struct mg_connection* conn, int bits, char* data, 
         {
             case city::SimulationMessageKind::MetadataRequest:
             {
-                String8 test_reply_msg[] = {S("1. Scenario")};
+                String8 directory = simulator_database_directory_get(scratch.arena);
                 F64 timestamp_start = 0;
                 F64 timestamp_end = 0;
                 server_lock(server);
                 timestamp_start = server->timestamp_start;
                 timestamp_end = server->timestamp_end;
                 server_unlock(server);
-                String8 json_str = simulator_metadata_reply(scratch.arena, test_reply_msg, ArrayCount(test_reply_msg),
-                                                           timestamp_start, timestamp_end);
+                String8 json_str =
+                    simulator_metadata_reply_from_directory(scratch.arena, directory, timestamp_start, timestamp_end);
                 if (json_str.size == 0)
                 {
                     return 0;
@@ -647,7 +648,6 @@ playback_db_init(struct playback_db* playback_db, String8 path)
     prof_scope_marker;
     sqlite3_stmt* range_stmt = NULL;
 
-
     Arena* arena = playback_db->arena;
     if (arena)
     {
@@ -735,8 +735,7 @@ playback_db_shutdown(struct playback_db* playback_db)
 }
 
 static void
-reload_playback_db(struct playback_db* playback_db, struct websocket_server* server,
-                   const char* db_path)
+reload_playback_db(struct playback_db* playback_db, struct websocket_server* server, const char* db_path)
 {
     char chosen_path[MAX_PATH_TEXT];
 
@@ -901,7 +900,7 @@ stream_store_snapshot_preview(struct vehicle_stream* stream, const char* snapsho
 
 static void
 _server_event_requests_process(struct vehicle_stream* stream, struct websocket_server* server,
-                                struct playback_db* playback_db, SimulatorEventWorker* worker)
+                               SimulatorEventWorker* worker)
 {
     // Consume completed work without waiting for the query thread.
     os_mutex_take(worker->mutex);
@@ -930,7 +929,8 @@ _server_event_requests_process(struct vehicle_stream* stream, struct websocket_s
         os_mutex_drop(worker->mutex);
         busy = false;
     }
-    if (busy) return;
+    if (busy)
+        return;
 
     city::ServerUpdate update = {};
     U64 request_id = 0;
@@ -947,18 +947,13 @@ _server_event_requests_process(struct vehicle_stream* stream, struct websocket_s
         server->request_pending = false;
     }
     server_unlock(server);
-    if (!pending) return;
+    if (!pending)
+        return;
 
-    bool scenario_available = update.name == "1. Scenario";
     os_mutex_take(worker->mutex);
     worker->update = std::move(update);
     worker->request_id = request_id;
     worker->generation = generation;
-    worker->db_path[0] = 0;
-    if (playback_db->ready && scenario_available)
-    {
-        snprintf(worker->db_path, sizeof(worker->db_path), "%s", playback_db->path_input);
-    }
     worker->busy = true;
     worker->pending = true;
     os_condition_variable_signal(worker->work_cv);
@@ -1366,7 +1361,7 @@ App(int argc, char** argv)
         }
 
         server_poll(&server);
-        _server_event_requests_process(&stream, &server, &playback_db, &event_worker);
+        _server_event_requests_process(&stream, &server, &event_worker);
         draw_ui(ctx, &server, &stream, &playback_db, window_width, window_height);
 
         glfwGetFramebufferSize(window, &framebuffer_width, &framebuffer_height);
