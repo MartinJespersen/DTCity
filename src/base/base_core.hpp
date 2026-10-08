@@ -331,7 +331,9 @@
 #endif
 
 #if ASAN_ENABLED
+#if OS_WINDOWS
 #pragma comment(lib, "clang_rt.asan_dynamic-x86_64.lib")
+#endif
 C_LINKAGE void
 __asan_poison_memory_region(void const volatile* addr, size_t size);
 C_LINKAGE void

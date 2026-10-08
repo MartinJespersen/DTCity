@@ -21,6 +21,7 @@ option(BUILD_TESTS "Build tests" OFF)
 option(SHADER_DEBUG "Enable Shader Debugging" OFF)
 option(USE_RADLINKER "Use RAD linker for MSVC debug builds" ON)
 
+
 # cmake macro -> compiler macro
 if(BUILD_DEBUG AND SHADER_DEBUG)
   add_compile_definitions(SHADER_DEBUG=1)
@@ -90,6 +91,8 @@ elseif(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
         -Wall -Wextra -Wno-attributes -Wno-format -Wno-unused-function -Wno-unused-parameter -Wno-narrowing -Wno-missing-field-initializers -Wno-sign-conversion -Wno-write-strings -Wno-comment -Wno-pedantic
     )
 
+    add_link_options(-fuse-ld=lld)
+
     if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
       add_compile_options(-Wno-class-memaccess)
     endif()
@@ -102,6 +105,7 @@ elseif(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
 
     add_compile_options(-w)
   endif()
+
 
   list(APPEND ASAN_LINK_FLAGS -fsanitize=address)
   list(APPEND ASAN_COMPILE_FLAGS -fsanitize=address)
@@ -223,6 +227,9 @@ set_target_properties(city PROPERTIES UNITY_BUILD OFF)
 target_include_directories(city SYSTEM PRIVATE
     ${THIRD_PARTY_LIBS_DIR}
 )
+
+# Enable interprocedural optimization on the existing application target.
+set_property(TARGET city PROPERTY INTERPROCEDURAL_OPTIMIZATION TRUE)
 
 target_precompile_headers(city PRIVATE src/pch.hpp)
 

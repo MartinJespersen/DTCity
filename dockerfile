@@ -18,6 +18,7 @@ RUN apt-get update && apt-get install -y \
     libwayland-dev \
     libxkbcommon-dev \
     wayland-protocols \
+    lld \
     extra-cmake-modules && \
     rm -rf /var/lib/apt/lists/*
 

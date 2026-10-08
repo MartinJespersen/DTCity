@@ -1,15 +1,14 @@
 #pragma once
 
-///////////////////////////////////////////////////////////////////
-// std includes
-#include <cstdio>
-#include <cstdlib>
-#include <cstring>
-#include <limits>
-
-#include "debug_forward_ref.hpp"
-// helper diagnostics
-#include "diagnostics.hpp"
+//////////////////////////////////////////////
+// mgj: third party libs
+#define GLM_FORCE_RADIANS
+#define GLM_FORCE_DEPTH_ZERO_TO_ONE
+#define GLM_FORCE_DEFAULT_ALIGNED_GENTYPES
+#define GLM_FORCE_INTRINSICS
+#define GLM_FORCE_INLINE
+#include "glm/glm.hpp"
+#include "glm/gtc/matrix_transform.hpp"
 
 #include <meshoptimizer.h>
 // cesium native libraries
@@ -20,15 +19,16 @@
 #include <GLFW/glfw3.h>
 #undef APIENTRY
 
-//////////////////////////////////////////////
-// mgj: third party libs
-#define GLM_FORCE_RADIANS
-#define GLM_FORCE_DEPTH_ZERO_TO_ONE
-#define GLM_FORCE_DEFAULT_ALIGNED_GENTYPES
-#define GLM_FORCE_INTRINSICS
-#define GLM_FORCE_INLINE
-#include "glm/glm.hpp"
-#include "glm/gtc/matrix_transform.hpp"
+///////////////////////////////////////////////////////////////////
+// std includes
+#include <cstdio>
+#include <cstdlib>
+#include <cstring>
+#include <limits>
+
+#include "debug_forward_ref.hpp"
+// helper diagnostics
+#include "diagnostics.hpp"
 
 //////////////////////////////////////////////
 // mgj: imgui
