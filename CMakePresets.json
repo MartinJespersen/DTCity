@@ -200,7 +200,9 @@
       "binaryDir": "${sourceDir}/build/linux/profile",
       "generator": "Unix Makefiles",
       "cacheVariables": {
-        "VCPKG_TARGET_TRIPLET": "x64-linux"
+        "VCPKG_TARGET_TRIPLET": "x64-linux",
+        "VCPKG_TARG": "x64-linux"
+
       }
     }
   ],

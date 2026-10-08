@@ -1,7 +1,6 @@
 # Sim refactor
 - remember to handle changing id ;
 - polling for metadata should be done regularly
-- cpp files themselves should include the headers. This will improve clangd support.
 
 # Simulator regressions
 

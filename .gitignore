@@ -15,6 +15,7 @@ build
 *.sqlite
 *.qmd
 *.tracy
+*.tar
 out
 .cache
 .venv

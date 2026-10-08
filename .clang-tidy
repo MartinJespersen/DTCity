@@ -82,7 +82,7 @@ Checks:
   - "misc-misplaced-const"
   - "misc-non-copyable-objects"
   - "misc-redundant-expression"
-  - "-misc-unused-parameters"
+  - "misc-unused-parameters"
   - "misc-unused-using-decls"
   - "misc-use-internal-linkage"
   - "modernize-deprecated-headers"

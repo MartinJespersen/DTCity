@@ -20,7 +20,7 @@ option(BUILD_SIMULATOR "Build the vehicle simulator" OFF)
 option(BUILD_TESTS "Build tests" OFF)
 option(SHADER_DEBUG "Enable Shader Debugging" OFF)
 option(USE_RADLINKER "Use RAD linker for MSVC debug builds" ON)
-
+option(TRACY_PROFILE_ENABLE "Enable Tracy profiler" OFF)
 
 # cmake macro -> compiler macro
 if(BUILD_DEBUG AND SHADER_DEBUG)
@@ -133,7 +133,6 @@ set(THIRD_PARTY_SOURCES
     src/third_party/vma_stb.cpp
 )
 
-option(TRACY_PROFILE_ENABLE "Enable Tracy profiler" OFF)
 if(TRACY_PROFILE_ENABLE)
   list(APPEND THIRD_PARTY_SOURCES ${THIRD_PARTY_LIBS_DIR}/tracy/TracyClient.cpp)
 endif()

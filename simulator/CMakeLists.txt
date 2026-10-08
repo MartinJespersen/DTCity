@@ -81,6 +81,7 @@ add_executable(Simulator
 )
 set_source_files_properties(simulator.c PROPERTIES LANGUAGE CXX)
 set_target_properties(Simulator PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}")
+set_property(TARGET Simulator PROPERTY INTERPROCEDURAL_OPTIMIZATION TRUE)
 
 if(TRACY_PROFILE_ENABLE)
     target_sources(Simulator PRIVATE ../src/third_party/tracy/TracyClient.cpp)
