@@ -1,5 +1,7 @@
 #pragma once
 
+#include "mpmc_queue.hpp"
+
 // Template implementations
 namespace async
 {

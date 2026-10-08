@@ -1,6 +1,11 @@
 #pragma once
+
+#include "core_inc.hpp"
+#include "render/render.hpp"
 namespace vulkan
 {
+struct Context;
+
 enum WriteType
 {
     WriteType_Color,

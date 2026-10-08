@@ -1,3 +1,9 @@
+#include "base/base_inc.hpp"
+#include <glm/glm.hpp>
+#include <glm/gtc/matrix_transform.hpp>
+#include "misc/geometry.hpp"
+#include "render/render.hpp"
+
 namespace geometry
 {
 

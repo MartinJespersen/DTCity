@@ -1,3 +1,5 @@
+#include "../test_inc.hpp"
+
 TEST_CASE("Scratch-style arena resets retain committed pages and zero new allocations")
 {
     ArenaParams params = {.reserve_size = MB(2), .commit_size = KB(64), .flags = ArenaFlag_RetainCommitted};

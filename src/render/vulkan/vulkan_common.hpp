@@ -1,5 +1,7 @@
 #pragma once
 
+#include "asset_manager.hpp"
+
 namespace vulkan
 {
 
@@ -226,5 +228,11 @@ destroy_debug_utils_messenger_ext(VkInstance instance, VkDebugUtilsMessengerEXT 
 // ~mgj: sampler functions
 static void
 sampler_create_info_from_sampler_info(render::SamplerInfo* sampler, VkSamplerCreateInfo* out_sampler_info);
+
+// Extension entry points are shared by the render implementation files.
+extern PFN_vkCmdSetColorWriteEnableEXT cmd_set_color_write_enable_ext;
+extern PFN_vkCmdPushDescriptorSetKHR cmd_push_descriptor_set_khr;
+extern PFN_vkCmdBeginDebugUtilsLabelEXT cmd_begin_debug_utils_label_ext;
+extern PFN_vkCmdEndDebugUtilsLabelEXT cmd_end_debug_utils_label_ext;
 
 } // namespace vulkan

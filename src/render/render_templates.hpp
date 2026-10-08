@@ -1,5 +1,7 @@
 #pragma once
 
+#include "render.hpp"
+
 // Template implementations
 namespace render
 {

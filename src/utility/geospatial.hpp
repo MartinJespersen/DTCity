@@ -1,5 +1,8 @@
 #pragma once
 
+#include <glm/glm.hpp>
+#include "base/base_math.h"
+
 namespace util
 {
 Rng2F64

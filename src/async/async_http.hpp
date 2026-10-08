@@ -1,4 +1,8 @@
 #pragma once
+
+#include <curl/curl.h>
+#include "http/http.h"
+#include "async_task.hpp"
 namespace async
 {
 typedef void* AsyncHandle;

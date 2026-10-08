@@ -1,5 +1,10 @@
 #pragma once
 
+#include "asset_manager.hpp"
+#include "vulkan_common.hpp"
+#include "pipelines.hpp"
+#include "base/base_lists.hpp"
+
 namespace vulkan
 {
 

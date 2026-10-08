@@ -1,3 +1,6 @@
+#include "diagnostics.hpp"
+#include "base/base_inc.hpp"
+
 lib_internal OS_W32_State os_w32_state = {0};
 
 // Copyright (c) 2024 Epic Games Tools

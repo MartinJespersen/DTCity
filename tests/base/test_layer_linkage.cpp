@@ -1,3 +1,5 @@
+#include "../test_inc.hpp"
+
 #include "layer_linkage_inc.hpp"
 
 TEST_CASE("base state and templates are shared across translation units")

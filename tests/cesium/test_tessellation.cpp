@@ -1,3 +1,5 @@
+#include "../test_inc.hpp"
+
 TEST_CASE("segment-plane intersection remains on plane for large coordinates")
 {
     glm::vec2 a = {-4595512.5f, -4600893.5f};

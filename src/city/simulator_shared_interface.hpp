@@ -1,5 +1,9 @@
 #pragma once
 
+#include <string>
+#include "base/base_strings.hpp"
+#include "third_party/simdjson/simdjson.h"
+
 using namespace simdjson;
 namespace city
 {

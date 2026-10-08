@@ -1,5 +1,7 @@
 #pragma once
 
+#include "base/base_arena.hpp"
+
 #include <atomic>
 
 namespace async

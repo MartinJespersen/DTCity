@@ -1,5 +1,7 @@
 #pragma once
 
+#include "container.hpp"
+
 g_internal U64
 _hash_u64_from_str8(String8 str);
 

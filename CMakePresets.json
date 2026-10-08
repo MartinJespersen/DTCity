@@ -13,6 +13,9 @@
       "hidden": true,
       "inherits": "base",
       "cacheVariables": {
+        "ASAN_ENABLED": "ON",
+        "CMAKE_C_COMPILER": "clang",
+        "CMAKE_CXX_COMPILER": "clang++",
         "CMAKE_BUILD_TYPE": "Debug",
         "BUILD_DEBUG": "ON"
       }
@@ -23,6 +26,8 @@
       "inherits": "base",
       "binaryDir": "${sourceDir}/build/release",
       "cacheVariables": {
+        "CMAKE_C_COMPILER": "clang",
+        "CMAKE_CXX_COMPILER": "clang++",
         "CMAKE_BUILD_TYPE": "Release"
       }
     },
@@ -31,6 +36,8 @@
       "hidden": true,
       "inherits": "base",
       "cacheVariables": {
+        "CMAKE_C_COMPILER": "clang",
+        "CMAKE_CXX_COMPILER": "clang++",
         "CMAKE_BUILD_TYPE": "RelWithDebInfo",
         "TRACY_PROFILE_ENABLE": "ON"
       }
@@ -60,11 +67,13 @@
       }
     },
     {
-      "name": "debug-simulator-windows",
-      "displayName": "Debug Simulator (Windows)",
-      "binaryDir": "${sourceDir}/simulator/build/win/debug",
-      "generator": "Ninja",
+      "name": "debug-simulator-linux",
+      "displayName": "Debug Simulator (Linux)",
+      "binaryDir": "${sourceDir}/simulator/build/linux/debug",
+      "generator": "Unix Makefiles",
       "cacheVariables": {
+        "CMAKE_C_COMPILER": "clang",
+        "CMAKE_CXX_COMPILER": "clang++",
         "CMAKE_BUILD_TYPE": "Debug",
         "BUILD_DEBUG": "ON",
         "ASAN_ENABLED": "ON",
@@ -80,6 +89,8 @@
       "generator": "Unix Makefiles",
       "binaryDir": "${sourceDir}/build/linux/debug",
       "cacheVariables": {
+        "CMAKE_C_COMPILER": "clang",
+        "CMAKE_CXX_COMPILER": "clang++",
         "CMAKE_BUILD_TYPE": "Debug",
         "VCPKG_TARGET_TRIPLET": "x64-linux"
       }
@@ -129,6 +140,22 @@
       }
     },
     {
+      "name": "release-simulator-linux",
+      "displayName": "Release Simulator (Linux)",
+      "binaryDir": "${sourceDir}/simulator/build/linux/release",
+      "generator": "Unix Makefiles",
+      "cacheVariables": {
+        "CMAKE_C_COMPILER": "clang",
+        "CMAKE_CXX_COMPILER": "clang++",
+        "CMAKE_BUILD_TYPE": "Release",
+        "BUILD_DEBUG": "OFF",
+        "ASAN_ENABLED": "OFF",
+        "BUILD_CITY": "OFF",
+        "BUILD_SIMULATOR": "ON",
+        "TRACY_PROFILE_ENABLE": "OFF"
+      }
+    },
+    {
       "name": "release-linux",
       "displayName": "Release (Linux)",
       "inherits": "release-base",
@@ -139,11 +166,13 @@
       }
     },
     {
-      "name": "profile-simulator-windows",
-      "displayName": "Profile Simulator (Windows)",
-      "binaryDir": "${sourceDir}/simulator/build/win/profile",
-      "generator": "Ninja",
+      "name": "profile-simulator-linux",
+      "displayName": "Profile Simulator (Linux)",
+      "binaryDir": "${sourceDir}/simulator/build/linux/profile",
+      "generator": "Unix Makefiles",
       "cacheVariables": {
+        "CMAKE_C_COMPILER": "clang",
+        "CMAKE_CXX_COMPILER": "clang++",
         "CMAKE_BUILD_TYPE": "RelWithDebInfo",
         "TRACY_PROFILE_ENABLE": "ON",
         "ASAN_ENABLED": "OFF",
@@ -192,24 +221,24 @@
       "jobs": 0
     },
     {
-      "name": "debug-simulator-windows",
-      "configurePreset": "debug-simulator-windows",
+      "name": "debug-simulator-linux",
+      "configurePreset": "debug-simulator-linux",
       "targets": [
         "Simulator"
       ],
       "jobs": 0
     },
     {
-      "name": "profile-simulator-windows",
-      "configurePreset": "profile-simulator-windows",
+      "name": "profile-simulator-linux",
+      "configurePreset": "profile-simulator-linux",
       "targets": [
         "Simulator"
       ],
       "jobs": 0
     },
     {
-      "name": "release-simulator-windows",
-      "configurePreset": "release-simulator-windows",
+      "name": "release-simulator-linux",
+      "configurePreset": "release-simulator-linux",
       "targets": [
         "Simulator"
       ],

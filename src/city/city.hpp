@@ -1,5 +1,10 @@
 #pragma once
 
+#include "neta.hpp"
+#include "tessellation.hpp"
+#include "agent.hpp"
+#include "utility/utm.hpp"
+
 struct gltfw_Sampler;
 struct gltfw_Vertex3D;
 

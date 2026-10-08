@@ -1,3 +1,5 @@
+#include "../test_inc.hpp"
+
 TEST_CASE("Freelist creation with buffer_handle lifecycle")
 {
     U32 buffer_size = 10;

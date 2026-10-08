@@ -1,3 +1,12 @@
+#include "diagnostics.hpp"
+#include "base/base_inc.hpp"
+#include "third_party/sqlite/sqlite3.h"
+#include "third_party/yyjson/yyjson.h"
+#include "city/simulator_shared_interface.hpp"
+#include "scenarios.hpp"
+#include "event_snapshot.hpp"
+#include "event_snapshot.hpp"
+
 static String8
 simulator_event_window_reply(Arena* arena, sqlite3* db, const city::ServerUpdate& update, U64 request_id)
 {

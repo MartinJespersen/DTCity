@@ -1,3 +1,5 @@
+#include "../test_inc.hpp"
+
 TEST_CASE("Rng3F32 subtraction translates both bounds")
 {
     Vec3F32 min = v3f32(-2.0f, 4.0f, 1.0f);

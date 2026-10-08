@@ -1,3 +1,4 @@
+#define DOCTEST_CONFIG_IMPLEMENT
 #include "test_inc.hpp"
 
 // user source

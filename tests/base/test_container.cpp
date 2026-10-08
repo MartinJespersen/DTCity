@@ -1,3 +1,5 @@
+#include "../test_inc.hpp"
+
 TEST_CASE("Simulator field names use stable portable lookup")
 {
     String8 msg_id = SIMULATION_FIELD_NAME(MsgId);

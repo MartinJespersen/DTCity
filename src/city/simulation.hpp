@@ -1,5 +1,8 @@
 #pragma once
 
+#include "simulator_messages.hpp"
+#include "simulator_shared_interface.hpp"
+
 namespace city
 {
 class SimulationClient;

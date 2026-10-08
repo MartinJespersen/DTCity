@@ -1,5 +1,8 @@
 #pragma once
 
+#include "spmc_queue.hpp"
+#include "segment_buffer_templates.hpp"
+
 // Template implementations
 namespace async
 {

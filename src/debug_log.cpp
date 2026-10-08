@@ -1,3 +1,5 @@
+#include "core_inc.hpp"
+
 #if BUILD_DEBUG
 DebugTable g_debug_table = {};
 

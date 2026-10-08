@@ -1,5 +1,9 @@
 #pragma once
 
+#include "core_inc.hpp"
+#include "base/base_container.hpp"
+#include "render/render.hpp"
+
 namespace cesium
 {
 

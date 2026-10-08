@@ -1,3 +1,5 @@
+#include "../test_inc.hpp"
+
 TEST_CASE("Agent arrivals do not allocate slots and completed trips reuse pool capacity")
 {
     city::AgentSim simulation(256, 2);

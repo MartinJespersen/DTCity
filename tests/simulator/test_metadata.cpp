@@ -1,3 +1,5 @@
+#include "../test_inc.hpp"
+
 TEST_CASE("Simulation metadata owns scenario names independently of the JSON input")
 {
     city::SimulationMetadata metadata = {};

@@ -1,5 +1,11 @@
 #pragma once
 
+#include "core_inc.hpp"
+
+#include "render/render_templates.hpp"
+#include "vulkan.hpp"
+#include "base/base_lists_templates.hpp"
+
 // Template implementations
 namespace render
 {

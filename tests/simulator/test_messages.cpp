@@ -1,3 +1,5 @@
+#include "../test_inc.hpp"
+
 TEST_CASE("Server updates serialize their message kind, name, and playback")
 {
     ScratchScope scratch = ScratchScope(0, 0);

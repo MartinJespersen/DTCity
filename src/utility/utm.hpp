@@ -1,5 +1,7 @@
 #pragma once
 
+#include "base/base_math.h"
+
 namespace util
 {
 struct UtmCoordinate

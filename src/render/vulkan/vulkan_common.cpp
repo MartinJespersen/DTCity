@@ -1,9 +1,20 @@
+#include "core_inc.hpp"
+#include "base/base_container.hpp"
+#include "base/base_container_templates.hpp"
+#include "base/base_lists.hpp"
+#include "base/base_lists_templates.hpp"
+#include "async/thread_pool.hpp"
+#include "render/render_inc.hpp"
+#include "draw/draw.hpp"
+#include "misc/io.hpp"
+#include "entrypoint.hpp"
+
 namespace vulkan
 {
-static PFN_vkCmdSetColorWriteEnableEXT cmd_set_color_write_enable_ext = VK_NULL_HANDLE;
-static PFN_vkCmdPushDescriptorSetKHR cmd_push_descriptor_set_khr = VK_NULL_HANDLE;
-static PFN_vkCmdBeginDebugUtilsLabelEXT cmd_begin_debug_utils_label_ext = VK_NULL_HANDLE;
-static PFN_vkCmdEndDebugUtilsLabelEXT cmd_end_debug_utils_label_ext = VK_NULL_HANDLE;
+PFN_vkCmdSetColorWriteEnableEXT cmd_set_color_write_enable_ext = VK_NULL_HANDLE;
+PFN_vkCmdPushDescriptorSetKHR cmd_push_descriptor_set_khr = VK_NULL_HANDLE;
+PFN_vkCmdBeginDebugUtilsLabelEXT cmd_begin_debug_utils_label_ext = VK_NULL_HANDLE;
+PFN_vkCmdEndDebugUtilsLabelEXT cmd_end_debug_utils_label_ext = VK_NULL_HANDLE;
 
 
 // TODO: check for blitting format beforehand

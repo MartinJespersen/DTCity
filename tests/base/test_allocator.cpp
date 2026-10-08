@@ -1,3 +1,5 @@
+#include "../test_inc.hpp"
+
 TEST_CASE("Allocator Runs Destructors On Clear")
 {
     struct TestObject

@@ -1,3 +1,14 @@
+#include "core_inc.hpp"
+#include "base/base_container.hpp"
+#include "base/base_container_templates.hpp"
+#include "base/base_lists.hpp"
+#include "base/base_lists_templates.hpp"
+#include "async/thread_pool.hpp"
+#include "render/render_inc.hpp"
+#include "draw/draw.hpp"
+#include "misc/io.hpp"
+#include "entrypoint.hpp"
+
 namespace vulkan
 {
 
@@ -81,13 +92,16 @@ texture_ktx_cmd_record(VkCommandBuffer cmd, TextureHandle* tex, Buffer<U8> tex_b
         vmaGetAllocationInfo(asset_manager->allocator, staging_allocation.allocation, &staging_allocation_info);
 
         VmaAllocationCreateInfo vma_info = {.usage = VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE};
-        ImageAllocation image_alloc =
-            image_allocation_create(base_width, base_height, VK_SAMPLE_COUNT_1_BIT, vk_format, VK_IMAGE_TILING_OPTIMAL,
-                                    VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, mip_levels, vma_info, "texture_ktx image");
+        ImageAllocation image_alloc = image_allocation_create(
+            base_width, base_height, VK_SAMPLE_COUNT_1_BIT, vk_format, VK_IMAGE_TILING_OPTIMAL,
+            VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, mip_levels,
+            vma_info, "texture_ktx image");
 
-        ImageViewResource image_view_resource = image_view_resource_create(asset_manager->device, image_alloc.image, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_ASPECT_COLOR_BIT, mip_levels);
+        ImageViewResource image_view_resource = image_view_resource_create(
+            asset_manager->device, image_alloc.image, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_ASPECT_COLOR_BIT, mip_levels);
 
-        KTX_error_code ktx_error = ktxTexture_LoadImageData((ktxTexture*)ktx_texture, (U8*)staging_allocation_info.pMappedData, ktx_texture->dataSize);
+        KTX_error_code ktx_error = ktxTexture_LoadImageData(
+            (ktxTexture*)ktx_texture, (U8*)staging_allocation_info.pMappedData, ktx_texture->dataSize);
         if (ktx_error != KTX_SUCCESS)
         {
             exit_with_error("Failed to load KTX texture data");
@@ -104,7 +118,10 @@ texture_ktx_cmd_record(VkCommandBuffer cmd, TextureHandle* tex, Buffer<U8> tex_b
             regions[level] = {.bufferOffset = mip_level_offsets.data[level],
                               .bufferRowLength = 0,
                               .bufferImageHeight = 0,
-                              .imageSubresource = {.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT, .mipLevel = level, .baseArrayLayer = 0, .layerCount = 1},
+                              .imageSubresource = {.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+                                                   .mipLevel = level,
+                                                   .baseArrayLayer = 0,
+                                                   .layerCount = 1},
                               .imageOffset = {0, 0, 0},
                               .imageExtent = {mip_width, mip_height, mip_depth}};
         }
@@ -118,17 +135,24 @@ texture_ktx_cmd_record(VkCommandBuffer cmd, TextureHandle* tex, Buffer<U8> tex_b
             .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
             .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
             .image = image_alloc.image,
-            .subresourceRange = {.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT, .baseMipLevel = 0, .levelCount = mip_levels, .baseArrayLayer = 0, .layerCount = 1},
+            .subresourceRange = {.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+                                 .baseMipLevel = 0,
+                                 .levelCount = mip_levels,
+                                 .baseArrayLayer = 0,
+                                 .layerCount = 1},
         };
-        vkCmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0, NULL, 0, NULL, 1, &barrier);
-        vkCmdCopyBufferToImage(cmd, staging_allocation.buffer, image_alloc.image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, mip_levels, regions);
+        vkCmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0, NULL, 0,
+                             NULL, 1, &barrier);
+        vkCmdCopyBufferToImage(cmd, staging_allocation.buffer, image_alloc.image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                               mip_levels, regions);
 
         barrier.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
         barrier.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
         barrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
         barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
 
-        vkCmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0, 0, NULL, 0, NULL, 1, &barrier);
+        vkCmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0, 0, NULL, 0,
+                             NULL, 1, &barrier);
 
         tex->image_resource = ImageResource(image_alloc, image_view_resource);
         tex->staging_allocation = staging_allocation;
@@ -149,14 +173,17 @@ texture_upload_with_blitting(VkCommandBuffer cmd, render::TextureUploadData* dat
     // upload base mip level
 
     VmaAllocationCreateInfo vma_info = {.usage = VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE};
-    ImageAllocation image_alloc =
-        image_allocation_create(data->width, data->height, VK_SAMPLE_COUNT_1_BIT, vk_format, VK_IMAGE_TILING_OPTIMAL,
-                                VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, mip_levels, vma_info, "texture_upload_with_blitting image");
+    ImageAllocation image_alloc = image_allocation_create(
+        data->width, data->height, VK_SAMPLE_COUNT_1_BIT, vk_format, VK_IMAGE_TILING_OPTIMAL,
+        VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, mip_levels,
+        vma_info, "texture_upload_with_blitting image");
 
     // TODO: Implement error handling
-    VK_CHECK_RESULT(vmaCopyMemoryToAllocation(asset_manager->allocator, data->data, staging_allocation.allocation, 0, data->data_byte_size));
+    VK_CHECK_RESULT(vmaCopyMemoryToAllocation(asset_manager->allocator, data->data, staging_allocation.allocation, 0,
+                                              data->data_byte_size));
 
-    ImageViewResource image_view_resource = image_view_resource_create(asset_manager->device, image_alloc.image, vk_format, VK_IMAGE_ASPECT_COLOR_BIT, mip_levels);
+    ImageViewResource image_view_resource = image_view_resource_create(
+        asset_manager->device, image_alloc.image, vk_format, VK_IMAGE_ASPECT_COLOR_BIT, mip_levels);
 
     VkImageMemoryBarrier barrier = {
         .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
@@ -167,19 +194,26 @@ texture_upload_with_blitting(VkCommandBuffer cmd, render::TextureUploadData* dat
         .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
         .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
         .image = image_alloc.image,
-        .subresourceRange = {.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT, .baseMipLevel = 0, .levelCount = mip_levels, .baseArrayLayer = 0, .layerCount = 1},
+        .subresourceRange = {.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+                             .baseMipLevel = 0,
+                             .levelCount = mip_levels,
+                             .baseArrayLayer = 0,
+                             .layerCount = 1},
     };
-    vkCmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0, NULL, 0, NULL, 1, &barrier);
+    vkCmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0, NULL, 0, NULL, 1,
+                         &barrier);
 
     VkBufferImageCopy region;
     region.bufferOffset = 0;
     region.bufferRowLength = 0;
     region.bufferImageHeight = 0;
-    region.imageSubresource = {.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT, .mipLevel = 0, .baseArrayLayer = 0, .layerCount = 1};
+    region.imageSubresource = {
+        .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT, .mipLevel = 0, .baseArrayLayer = 0, .layerCount = 1};
     region.imageOffset = {.x = 0, .y = 0, .z = 0};
     region.imageExtent = {.width = (U32)data->width, .height = (U32)data->height, .depth = 1};
 
-    vkCmdCopyBufferToImage(cmd, staging_allocation.buffer, image_alloc.image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &region);
+    vkCmdCopyBufferToImage(cmd, staging_allocation.buffer, image_alloc.image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1,
+                           &region);
 
     S32 dst_img_width = data->width;
     S32 dst_img_height = data->height;
@@ -190,7 +224,8 @@ texture_upload_with_blitting(VkCommandBuffer cmd, render::TextureUploadData* dat
         dst_img_width = Max((src_img_width >> 1), 1);
         dst_img_height = Max((src_img_height >> 1), 1);
 
-        blit_transition_image(cmd, image_alloc.image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, blit_lvl - 1);
+        blit_transition_image(cmd, image_alloc.image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                              VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, blit_lvl - 1);
 
         VkImageBlit2 image_blit = {
             .sType = VK_STRUCTURE_TYPE_IMAGE_BLIT_2,
@@ -231,11 +266,14 @@ texture_upload_with_blitting(VkCommandBuffer cmd, render::TextureUploadData* dat
             .filter = VK_FILTER_NEAREST,
         };
         vkCmdBlitImage2(cmd, &blit_info);
-        blit_transition_image(cmd, image_alloc.image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, blit_lvl - 1);
+        blit_transition_image(cmd, image_alloc.image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+                              VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, blit_lvl - 1);
     }
-    blit_transition_image(cmd, image_alloc.image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, mip_levels - 1);
+    blit_transition_image(cmd, image_alloc.image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                          VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, mip_levels - 1);
 
-    ImageAllocationResource image_allocation_resource = ImageAllocationResource(ImageResource(image_alloc, image_view_resource), staging_allocation);
+    ImageAllocationResource image_allocation_resource =
+        ImageAllocationResource(ImageResource(image_alloc, image_view_resource), staging_allocation);
     return image_allocation_resource;
 }
 
@@ -246,6 +284,8 @@ texture_cmd_record_with_stb(VkCommandBuffer cmd, TextureHandle* tex, Buffer<U8> 
     S32 height;
     S32 desired_num_channels = STBI_rgb_alpha;
     U8* image_data = stbi_load_from_memory(tex_buf.data, tex_buf.size, &width, &height, NULL, desired_num_channels);
+    defer(stbi_image_free(image_data));
+
     B32 err = false;
     err = !image_data;
 
@@ -253,7 +293,8 @@ texture_cmd_record_with_stb(VkCommandBuffer cmd, TextureHandle* tex, Buffer<U8> 
     if (image_data)
     {
         constexpr U32 bytes_per_pixel = 1;
-        render::TextureUploadData tex_data = render::TextureUploadData::init(image_data, (U32)width, (U32)height, (U32)desired_num_channels, bytes_per_pixel);
+        render::TextureUploadData tex_data = render::TextureUploadData::init(
+            image_data, (U32)width, (U32)height, (U32)desired_num_channels, bytes_per_pixel);
         ImageAllocationResource image_allocation_resource = texture_upload_with_blitting(cmd, &tex_data);
         tex->image_resource = image_allocation_resource.image_resource;
         tex->staging_allocation = image_allocation_resource.staging_buffer_alloc;
@@ -293,7 +334,8 @@ buffer_loading_thread(void* data, render::ThreadWorkerCmdCtx* thread_input)
 
     // ~mgj: copy to staging and record copy command
     BufferAllocation staging_buffer_alloc = _staging_buffer_create(buffer.size);
-    VK_CHECK_RESULT(vmaCopyMemoryToAllocation(asset_manager->allocator, buffer.data, staging_buffer_alloc.allocation, 0, buffer.size));
+    VK_CHECK_RESULT(vmaCopyMemoryToAllocation(asset_manager->allocator, buffer.data, staging_buffer_alloc.allocation, 0,
+                                              buffer.size));
 
     os_mutex_scope_w(asset_manager->buffer_mutex)
     {
@@ -304,7 +346,8 @@ buffer_loading_thread(void* data, render::ThreadWorkerCmdCtx* thread_input)
 
             VkBufferCopy copy_region = {0};
             copy_region.size = buffer.size;
-            vkCmdCopyBuffer((VkCommandBuffer)thread_input->cmd_buffer, staging_buffer_alloc.buffer, asset_buffer->buffer_alloc.buffer, 1, &copy_region);
+            vkCmdCopyBuffer((VkCommandBuffer)thread_input->cmd_buffer, staging_buffer_alloc.buffer,
+                            asset_buffer->buffer_alloc.buffer, 1, &copy_region);
 
             asset_buffer->staging_buffer = staging_buffer_alloc;
             asset_buffer->item_byte_size = buffer_info->type_size;
@@ -463,7 +506,8 @@ deletion_queue_empty_all()
 }
 
 static AssetManager*
-asset_manager_create(VkPhysicalDevice physical_device, VkDevice device, VkInstance instance, VkQueue graphics_queue, U32 queue_family_index, async::ThreadPool* threads, U64 total_size_in_bytes,
+asset_manager_create(VkPhysicalDevice physical_device, VkDevice device, VkInstance instance, VkQueue graphics_queue,
+                     U32 queue_family_index, async::ThreadPool* threads, U64 total_size_in_bytes,
                      VkDescriptorPool desc_pool)
 {
     Arena* arena = arena_alloc();
@@ -529,16 +573,20 @@ _asset_manager_live_resources_destroy(AssetManager* asset_manager)
     {
         const char* buffer_name = _allocation_name_get(asset_manager->allocator, item->item.buffer_alloc.allocation);
         const char* staging_name = _allocation_name_get(asset_manager->allocator, item->item.staging_buffer.allocation);
-        DEBUG_LOG("Buffer Not Destroyed: gen_id=%llu, name=%s, staging=%s", (U64)item->gen_id, buffer_name, staging_name);
+        DEBUG_LOG("Buffer Not Destroyed: gen_id=%llu, name=%s, staging=%s", (U64)item->gen_id, buffer_name,
+                  staging_name);
         buffer_destroy(&item->item.buffer_alloc);
         buffer_destroy(&item->item.staging_buffer);
     }
 
     for (render::AssetItem<TextureHandle>* item = asset_manager->texture_list.first; item != NULL; item = item->next)
     {
-        const char* image_name = _allocation_name_get(asset_manager->allocator, item->item.image_resource.image_alloc.allocation);
-        const char* staging_name = _allocation_name_get(asset_manager->allocator, item->item.staging_allocation.allocation);
-        DEBUG_LOG("Texture Not Destroyed: gen_id=%llu, image=%s, staging=%s", (U64)item->gen_id, image_name, staging_name);
+        const char* image_name =
+            _allocation_name_get(asset_manager->allocator, item->item.image_resource.image_alloc.allocation);
+        const char* staging_name =
+            _allocation_name_get(asset_manager->allocator, item->item.staging_allocation.allocation);
+        DEBUG_LOG("Texture Not Destroyed: gen_id=%llu, image=%s, staging=%s", (U64)item->gen_id, image_name,
+                  staging_name);
         descriptor_index_free(&asset_manager->descriptor_index_allocator, item->item.descriptor_set_idx);
         texture_destroy(&item->item);
     }
@@ -687,7 +735,8 @@ asset_manager_texture_item_get(render::Handle handle)
 // arena_mutex to prevent races across different asset types on the shared arena.
 template <typename T>
 static render::Handle
-asset_manager_item_create(render::AssetItemList<T>* list, render::AssetItemList<T>* free_list, render::HandleType handle_type)
+asset_manager_item_create(render::AssetItemList<T>* list, render::AssetItemList<T>* free_list,
+                          render::HandleType handle_type)
 {
     AssetManager* asset_manager = asset_manager_get();
     Arena* arena = asset_manager->arena;
@@ -720,7 +769,8 @@ asset_manager_item_create(render::AssetItemList<T>* list, render::AssetItemList<
 }
 
 render::Handle
-asset_manager_buffer_allocation_create(render::ThreadWorkerCmdCtx* thread_ctx, render::BufferInfo* buffer_info, VmaAllocationCreateInfo vma_info)
+asset_manager_buffer_allocation_create(render::ThreadWorkerCmdCtx* thread_ctx, render::BufferInfo* buffer_info,
+                                       VmaAllocationCreateInfo vma_info)
 {
     render::Handle handle = _asset_manager_buffer_create(buffer_info, vma_info, VK_BUFFER_USAGE_TRANSFER_DST_BIT);
     render::handle_list_push(thread_ctx, handle);
@@ -738,7 +788,8 @@ asset_manager_buffer_immediate_create(render::BufferInfo* buffer_info, String8 d
     render::Handle handle = _asset_manager_buffer_create(buffer_info, vma_info, 0);
     render::AssetItem<vulkan::BufferHandle>* asset_item = vulkan::asset_manager_buffer_item_get(handle);
     AssertAlways(asset_item);
-    VK_CHECK_RESULT(vmaCopyMemoryToAllocation(asset_manager->allocator, buffer_info->buffer.data, asset_item->item.buffer_alloc.allocation, 0, buffer_info->buffer.size));
+    VK_CHECK_RESULT(vmaCopyMemoryToAllocation(asset_manager->allocator, buffer_info->buffer.data,
+                                              asset_item->item.buffer_alloc.allocation, 0, buffer_info->buffer.size));
     asset_item->is_loaded = 1;
 
 #if BUILD_DEBUG
@@ -749,7 +800,8 @@ asset_manager_buffer_immediate_create(render::BufferInfo* buffer_info, String8 d
 }
 
 static render::Handle
-_asset_manager_buffer_create(render::BufferInfo* buffer_info, VmaAllocationCreateInfo vma_info, VkBufferUsageFlags additional_usage_flags)
+_asset_manager_buffer_create(render::BufferInfo* buffer_info, VmaAllocationCreateInfo vma_info,
+                             VkBufferUsageFlags additional_usage_flags)
 {
     AssetManager* asset_manager = asset_manager_get();
     render::Handle handle = render::Handle::buffer_handle_create((render::BufferType)buffer_info->buffer_type);
@@ -766,7 +818,8 @@ _asset_manager_buffer_create(render::BufferInfo* buffer_info, VmaAllocationCreat
         usage_flags |= VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
     Assert(usage_flags != 0);
     usage_flags |= additional_usage_flags;
-    vulkan::BufferAllocation buffer_alloc = _buffer_allocation_create(buffer_info->buffer.size, usage_flags, &vma_info, nullptr);
+    vulkan::BufferAllocation buffer_alloc =
+        _buffer_allocation_create(buffer_info->buffer.size, usage_flags, &vma_info, nullptr);
 
     render::AssetItem<vulkan::BufferHandle>* asset_item = vulkan::asset_manager_buffer_item_get(handle);
     vulkan::BufferHandle* asset_buffer = (vulkan::BufferHandle*)&asset_item->item;
@@ -786,7 +839,8 @@ asset_manager_buffer_from_staging(VkCommandBuffer cmd_buffer, render::BufferInfo
 {
     vulkan::BufferAllocation staging_alloc = vulkan::_staging_buffer_create(buffer_info->buffer.size);
     vulkan::AssetManager* asset_manager = vulkan::asset_manager_get();
-    VK_CHECK_RESULT(vmaCopyMemoryToAllocation(asset_manager->allocator, buffer_info->buffer.data, staging_alloc.allocation, 0, buffer_info->buffer.size));
+    VK_CHECK_RESULT(vmaCopyMemoryToAllocation(asset_manager->allocator, buffer_info->buffer.data,
+                                              staging_alloc.allocation, 0, buffer_info->buffer.size));
     VkBufferCopy copy_region = {0};
     copy_region.size = buffer_info->buffer.size;
     vkCmdCopyBuffer(cmd_buffer, staging_alloc.buffer, dest_buffer, 1, &copy_region);
@@ -807,13 +861,15 @@ asset_manager_cmd_done_check()
             AssetManagerCommandPool cmd_pool = asset_manager_cmd_pool_get(asset_manager, cmd_queue_item->thread_id);
             if (OS_HandleMatch(cmd_pool.mutex, OS_HandleIsZero()))
             {
-                vkFreeCommandBuffers(asset_manager->device, cmd_pool.cmd_pool, 1, (VkCommandBuffer*)&thread_input->cmd_buffer);
+                vkFreeCommandBuffers(asset_manager->device, cmd_pool.cmd_pool, 1,
+                                     (VkCommandBuffer*)&thread_input->cmd_buffer);
             }
             else
             {
                 os_mutex_scope(cmd_pool.mutex)
                 {
-                    vkFreeCommandBuffers(asset_manager->device, cmd_pool.cmd_pool, 1, (VkCommandBuffer*)&thread_input->cmd_buffer);
+                    vkFreeCommandBuffers(asset_manager->device, cmd_pool.cmd_pool, 1,
+                                         (VkCommandBuffer*)&thread_input->cmd_buffer);
                 }
             }
 
@@ -1133,7 +1189,8 @@ _staging_buffer_create(VkDeviceSize size)
     vma_staging_info.usage = VMA_MEMORY_USAGE_AUTO;
     vma_staging_info.flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT;
     vma_staging_info.requiredFlags = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT;
-    BufferAllocation staging_buffer = _buffer_allocation_create(size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, &vma_staging_info, nullptr);
+    BufferAllocation staging_buffer =
+        _buffer_allocation_create(size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, &vma_staging_info, nullptr);
     return staging_buffer;
 }
 
@@ -1142,15 +1199,18 @@ _staging_buffer_mapped_create(VkDeviceSize size)
 {
     VmaAllocationCreateInfo staging_alloc_create_info = {};
     staging_alloc_create_info.usage = VMA_MEMORY_USAGE_AUTO;
-    staging_alloc_create_info.flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT | VMA_ALLOCATION_CREATE_MAPPED_BIT;
+    staging_alloc_create_info.flags =
+        VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT | VMA_ALLOCATION_CREATE_MAPPED_BIT;
 
-    BufferAllocation allocation = _buffer_allocation_create(size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, &staging_alloc_create_info, nullptr);
+    BufferAllocation allocation =
+        _buffer_allocation_create(size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, &staging_alloc_create_info, nullptr);
 
     return allocation;
 }
 
 static BufferAllocation
-_buffer_allocation_create(VkDeviceSize size, VkBufferUsageFlags buffer_usage, VmaAllocationCreateInfo* vma_info, VmaAllocationInfo* alloc_info)
+_buffer_allocation_create(VkDeviceSize size, VkBufferUsageFlags buffer_usage, VmaAllocationCreateInfo* vma_info,
+                          VmaAllocationInfo* alloc_info)
 {
     AssetManager* asset_manager = asset_manager_get();
     BufferAllocation buffer = {};
@@ -1165,7 +1225,8 @@ _buffer_allocation_create(VkDeviceSize size, VkBufferUsageFlags buffer_usage, Vm
     bufferInfo.usage = buffer_usage;
     bufferInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
 
-    VkResult create_result = vmaCreateBuffer(asset_manager->allocator, &bufferInfo, vma_info, &buffer.buffer, &buffer.allocation, alloc_info);
+    VkResult create_result = vmaCreateBuffer(asset_manager->allocator, &bufferInfo, vma_info, &buffer.buffer,
+                                             &buffer.allocation, alloc_info);
     if (create_result != VK_SUCCESS)
     {
         VmaBudget budgets[VK_MAX_MEMORY_HEAPS] = {};
@@ -1174,12 +1235,16 @@ _buffer_allocation_create(VkDeviceSize size, VkBufferUsageFlags buffer_usage, Vm
         {
             if (budgets[heap_idx].budget || budgets[heap_idx].usage)
             {
-                ERROR_LOG("VMA heap %u: usage=%llu budget=%llu allocation_bytes=%llu block_bytes=%llu", heap_idx, (U64)budgets[heap_idx].usage, (U64)budgets[heap_idx].budget,
-                          (U64)budgets[heap_idx].statistics.allocationBytes, (U64)budgets[heap_idx].statistics.blockBytes);
+                ERROR_LOG("VMA heap %u: usage=%llu budget=%llu allocation_bytes=%llu block_bytes=%llu", heap_idx,
+                          (U64)budgets[heap_idx].usage, (U64)budgets[heap_idx].budget,
+                          (U64)budgets[heap_idx].statistics.allocationBytes,
+                          (U64)budgets[heap_idx].statistics.blockBytes);
             }
         }
-        ERROR_LOG("Failed to create buffer: result=%d size=%llu usage=0x%x alloc_usage=%d alloc_flags=0x%x required_flags=0x%x preferred_flags=0x%x", create_result, (U64)size, (U32)buffer_usage,
-                  (S32)vma_info->usage, (U32)vma_info->flags, (U32)vma_info->requiredFlags, (U32)vma_info->preferredFlags);
+        ERROR_LOG("Failed to create buffer: result=%d size=%llu usage=0x%x alloc_usage=%d alloc_flags=0x%x "
+                  "required_flags=0x%x preferred_flags=0x%x",
+                  create_result, (U64)size, (U32)buffer_usage, (S32)vma_info->usage, (U32)vma_info->flags,
+                  (U32)vma_info->requiredFlags, (U32)vma_info->preferredFlags);
         Trap();
         exit(EXIT_FAILURE);
     }
@@ -1223,7 +1288,8 @@ buffer_alloc_create_or_resize(U32 total_buffer_byte_count, render::Handle handle
         vma_info.flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT | VMA_ALLOCATION_CREATE_MAPPED_BIT;
         vma_info.requiredFlags = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT;
 
-        asset_item_buffer->item.buffer_alloc = _buffer_allocation_create(total_buffer_byte_count, usage, &vma_info, nullptr);
+        asset_item_buffer->item.buffer_alloc =
+            _buffer_allocation_create(total_buffer_byte_count, usage, &vma_info, nullptr);
         asset_item_buffer->item.item_byte_size = 1;
         asset_item_buffer->item.elem_count = total_buffer_byte_count;
     }
@@ -1238,7 +1304,8 @@ buffer_readback_create(VkDeviceSize size, VkBufferUsageFlags buffer_usage, Buffe
     alloc_create_info.flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_RANDOM_BIT | VMA_ALLOCATION_CREATE_MAPPED_BIT;
 
     VmaAllocationInfo alloc_info = {};
-    BufferAllocation allocation = _buffer_allocation_create(size, VK_BUFFER_USAGE_TRANSFER_DST_BIT | buffer_usage, &alloc_create_info, &alloc_info);
+    BufferAllocation allocation = _buffer_allocation_create(size, VK_BUFFER_USAGE_TRANSFER_DST_BIT | buffer_usage,
+                                                            &alloc_create_info, &alloc_info);
     out_buffer_readback->buffer_alloc = allocation;
     out_buffer_readback->mapped_ptr = alloc_info.pMappedData;
 }
@@ -1262,8 +1329,9 @@ asset_manager_allocation_cpu_pointer_get(void* allocation)
 
 //~mgj: Image Allocation Functions (VMA)
 static ImageAllocation
-image_allocation_create(U32 width, U32 height, VkSampleCountFlagBits numSamples, VkFormat format, VkImageTiling tiling, VkImageUsageFlags usage, U32 mipmap_level, VmaAllocationCreateInfo vma_info,
-                        const char* name, VkImageType image_type)
+image_allocation_create(U32 width, U32 height, VkSampleCountFlagBits numSamples, VkFormat format, VkImageTiling tiling,
+                        VkImageUsageFlags usage, U32 mipmap_level, VmaAllocationCreateInfo vma_info, const char* name,
+                        VkImageType image_type)
 {
     AssetManager* asset_manager = asset_manager_get();
     ImageAllocation image_alloc = {0};
@@ -1283,7 +1351,8 @@ image_allocation_create(U32 width, U32 height, VkSampleCountFlagBits numSamples,
     image_create_info.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
 
     VmaAllocationInfo alloc_info;
-    VK_CHECK_RESULT(vmaCreateImage(asset_manager->allocator, &image_create_info, &vma_info, &image_alloc.image, &image_alloc.allocation, &alloc_info))
+    VK_CHECK_RESULT(vmaCreateImage(asset_manager->allocator, &image_create_info, &vma_info, &image_alloc.image,
+                                   &image_alloc.allocation, &alloc_info))
     vmaSetAllocationName(asset_manager->allocator, image_alloc.allocation, name);
     image_alloc.size = alloc_info.size;
     image_alloc.extent = extent;

@@ -1,5 +1,8 @@
 #pragma once
 
+#include <glm/glm.hpp>
+#include "base/base_inc.hpp"
+
 #include "third_party/cgltf.h"
 
 struct gltfw_Vertex3D

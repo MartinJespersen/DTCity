@@ -1,3 +1,7 @@
+#include "diagnostics.hpp"
+#include "base/base_inc.hpp"
+#include "resource_paths.hpp"
+
 static String8
 simulator_resource_root_get(Arena* arena)
 {

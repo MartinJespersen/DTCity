@@ -1,6 +1,7 @@
 **.spv
 build
 *.o
+*.so
 *.obj
 *.exe
 *.exe.manifest

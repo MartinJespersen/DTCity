@@ -1,3 +1,5 @@
+#include "../test_inc.hpp"
+
 TEST_CASE("Simulator discovers database filenames and selects the requested database")
 {
     Arena* arena = arena_alloc();

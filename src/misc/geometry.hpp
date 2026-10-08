@@ -1,5 +1,9 @@
 #pragma once
 
+#include <glm/glm.hpp>
+#include <limits>
+#include "base/base_inc.hpp"
+
 namespace render
 {
 struct PrimitiveMesh;

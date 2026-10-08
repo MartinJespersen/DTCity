@@ -1,5 +1,8 @@
 #pragma once
 
+#include "async_task.hpp"
+#include "async_http.hpp"
+
 // Template implementations
 namespace async
 {

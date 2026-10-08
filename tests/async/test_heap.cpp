@@ -1,3 +1,5 @@
+#include "../test_inc.hpp"
+
 TEST_CASE("async min heap keeps the smallest key at the top")
 {
     async::Heap<S64>* heap = async::async_heap_alloc<S64>();

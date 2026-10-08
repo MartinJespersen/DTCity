@@ -1,5 +1,7 @@
 #pragma once
 
+#include "base_core.hpp"
+
 #if defined(TRACY_PROFILE_ENABLE)
 #include "third_party/tracy/tracy/Tracy.hpp"
 #if defined(TRACY_VULKAN_ENABLE)

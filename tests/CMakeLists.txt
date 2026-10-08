@@ -31,6 +31,21 @@ add_executable(utm_tests utility/utm_test_main.cpp)
 target_include_directories(utm_tests PRIVATE ${CMAKE_SOURCE_DIR}/src)
 add_test(NAME utm_tests COMMAND utm_tests)
 
+if(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND NOT ASAN_ENABLED)
+  # Exercise the real OS entry point and fatal-signal path in isolated children.
+  add_executable(linux_crash_probe os_core/linux_crash_probe.cpp)
+  target_include_directories(linux_crash_probe PRIVATE ${CMAKE_SOURCE_DIR}/src)
+  target_link_libraries(linux_crash_probe PRIVATE glm::glm dtcity_mimalloc Threads::Threads ${CMAKE_DL_LIBS} m)
+  target_compile_options(linux_crash_probe PRIVATE -g)
+  find_program(DTCITY_TEST_LLVM_SYMBOLIZER NAMES llvm-symbolizer)
+  foreach(mode main worker abort segv overflow safe_call no_symbolizer quoted_path stalled_symbolizer)
+    add_test(NAME linux_crash_${mode}
+      COMMAND ${CMAKE_COMMAND} -DPROBE=$<TARGET_FILE:linux_crash_probe> -DMODE=${mode}
+              -DWORK_DIR=${CMAKE_CURRENT_BINARY_DIR} -DSYMBOLIZER_AVAILABLE=${DTCITY_TEST_LLVM_SYMBOLIZER}
+              -P ${CMAKE_CURRENT_SOURCE_DIR}/os_core/linux_crash_report.cmake)
+  endforeach()
+endif()
+
 if(ASAN_ENABLED)
   add_executable(mimalloc_asan_probe base/mimalloc_asan_probe.cpp)
   target_link_libraries(mimalloc_asan_probe PRIVATE dtcity_mimalloc)

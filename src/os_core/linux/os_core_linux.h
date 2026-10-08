@@ -1,5 +1,7 @@
 #pragma once
 
+#include "os_core/os_core.hpp"
+
 // Copyright (c) 2024 Epic Games Tools
 // Licensed under the MIT license (https://opensource.org/license/mit/)
 
@@ -11,14 +13,17 @@
 
 #include <dirent.h>
 #include <dlfcn.h>
-#include <errno.h>
+#include <cerrno>
+#include <execinfo.h>
 #include <fcntl.h>
 #include <features.h>
 #include <linux/limits.h>
+#include <poll.h>
 #include <pthread.h>
 #include <semaphore.h>
-#include <signal.h>
-#include <stdlib.h>
+#include <csignal>
+#include <spawn.h>
+#include <cstdlib>
 #include <sys/mman.h>
 #include <sys/random.h>
 #include <sys/sendfile.h>
@@ -27,8 +32,10 @@
 #include <sys/sysinfo.h>
 #include <sys/types.h>
 #include <sys/time.h>
+#include <sys/wait.h>
 #include <time.h>
 #include <unistd.h>
+#include <ucontext.h>
 
 pid_t
 gettid();
@@ -50,8 +57,7 @@ struct OS_LNX_FileIter
     struct dirent* dp;
     String8 path;
 };
-StaticAssert(sizeof(Member(OS_FileIter, memory)) >= sizeof(OS_LNX_FileIter),
-             os_lnx_file_iter_size_check);
+StaticAssert(sizeof(Member(OS_FileIter, memory)) >= sizeof(OS_LNX_FileIter), os_lnx_file_iter_size_check);
 
 ////////////////////////////////
 //~ rjf: Safe Call Handler Chain
@@ -110,6 +116,8 @@ struct OS_LNX_State
     pthread_mutex_t entity_mutex;
     Arena* entity_arena;
     OS_LNX_Entity* entity_free;
+    char crash_symbolizer_path[PATH_MAX];
+    U32 crash_report_started;
 };
 
 ////////////////////////////////
@@ -130,8 +138,6 @@ lib_internal DenseTime
 os_lnx_dense_time_from_timespec(timespec in);
 lib_internal FileProperties
 os_lnx_file_properties_from_stat(struct stat* s);
-lib_internal void
-os_lnx_safe_call_sig_handler(int x);
 
 ////////////////////////////////
 //~ rjf: Entities
@@ -146,5 +152,21 @@ os_lnx_entity_release(OS_LNX_Entity* entity);
 
 lib_internal void*
 os_lnx_thread_entry_point(void* ptr);
+
+////////////////////////////////
+//~ mgj: Private Crash Reporting Helpers
+
+lib_internal void
+_os_lnx_crash_thread_init();
+lib_internal void
+_os_lnx_crash_write(const char* text, U64 size);
+lib_internal void
+_os_lnx_crash_reraise(int signal_number);
+lib_internal void
+_os_lnx_crash_frame_symbolize(const char* module_path, U64 module_offset, U64 deadline_us);
+lib_internal void
+_os_lnx_crash_signal_handler(int signal_number, siginfo_t* signal_info, void* context);
+lib_internal void
+_os_lnx_safe_call_sig_handler(int signal_number, siginfo_t* signal_info, void* context);
 
 #endif // OS_CORE_LINUX_H

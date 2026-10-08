@@ -1,5 +1,10 @@
 #pragma once
 
+#include "base_arena.hpp"
+
+#include <mimalloc.h>
+#include "base_core.hpp"
+
 
 ///////////////////////////////////////////////////////////////////////
 // Heap-backed contiguous array. Growth invalidates pointers and iterators.

@@ -1,5 +1,9 @@
 #pragma once
 
+#include "async/async_http.hpp"
+#include "osm/osm.hpp"
+#include "third_party/simdjson/simdjson.h"
+
 namespace async
 {
 struct ThreadPool;

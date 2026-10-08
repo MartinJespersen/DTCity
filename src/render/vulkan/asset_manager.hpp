@@ -1,5 +1,9 @@
 #pragma once
 
+#include "core_inc.hpp"
+#include "async/thread_pool.hpp"
+#include "render/render.hpp"
+
 namespace vulkan
 {
 

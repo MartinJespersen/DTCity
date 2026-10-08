@@ -1,5 +1,9 @@
 #pragma once
 
+#include "base_container.hpp"
+#include "os_core/os_core_inc.hpp"
+#include "debug_forward_ref.hpp"
+
 // Template implementations
 ///////////////////////////////////////////////////////////////////////////////////////
 // Dynamic Array

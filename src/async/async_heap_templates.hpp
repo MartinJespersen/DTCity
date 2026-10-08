@@ -1,5 +1,8 @@
 #pragma once
 
+#include "async_heap.hpp"
+#include "segment_buffer_templates.hpp"
+
 // Template implementations
 namespace async
 {

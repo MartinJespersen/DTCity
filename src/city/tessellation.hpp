@@ -1,5 +1,9 @@
 #pragma once
 
+#include "render/render.hpp"
+#include "misc/geometry.hpp"
+#include "osm/osm.hpp"
+
 namespace city
 {
 

@@ -1,3 +1,13 @@
+#include "core_inc.hpp"
+#include "async/segment_buffer.hpp"
+#include "async/async_heap.hpp"
+#include "async/mpmc_queue.hpp"
+#include "async/segment_buffer_templates.hpp"
+#include "async/async_heap_templates.hpp"
+#include "async/mpmc_queue_templates.hpp"
+
+#include "async/async_inc.hpp"
+
 namespace async
 {
 thread_local U32 t_cur_thread_id = max_U32;

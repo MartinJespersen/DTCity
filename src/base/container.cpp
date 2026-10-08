@@ -1,3 +1,6 @@
+#include "diagnostics.hpp"
+#include "base/base_inc.hpp"
+
 
 ////////////////////////////////
 //~Array

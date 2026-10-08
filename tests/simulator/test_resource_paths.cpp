@@ -1,3 +1,5 @@
+#include "../test_inc.hpp"
+
 TEST_CASE("simulator uses resources beside its executable before the development tree")
 {
     Arena* arena = arena_alloc();

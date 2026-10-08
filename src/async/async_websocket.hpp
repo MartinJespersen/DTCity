@@ -1,5 +1,7 @@
 #pragma once
 
+#include "async_http.hpp"
+
 namespace async
 {
 

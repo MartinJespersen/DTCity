@@ -240,8 +240,10 @@ find_package(absl CONFIG REQUIRED)
 # Clang driver treats it as an input path, so remove it from the imported target.
 if(CMAKE_CXX_COMPILER_ID MATCHES "Clang" AND CMAKE_CXX_COMPILER_FRONTEND_VARIANT STREQUAL "GNU")
   get_target_property(ASYNC_COMPILE_OPTIONS Async++ INTERFACE_COMPILE_OPTIONS)
-  list(REMOVE_ITEM ASYNC_COMPILE_OPTIONS "/Zc:__cplusplus")
-  set_target_properties(Async++ PROPERTIES INTERFACE_COMPILE_OPTIONS "${ASYNC_COMPILE_OPTIONS}")
+  if(ASYNC_COMPILE_OPTIONS)
+    list(REMOVE_ITEM ASYNC_COMPILE_OPTIONS "/Zc:__cplusplus")
+    set_target_properties(Async++ PROPERTIES INTERFACE_COMPILE_OPTIONS "${ASYNC_COMPILE_OPTIONS}")
+  endif()
 
   get_property(IMPORTED_TARGETS DIRECTORY PROPERTY IMPORTED_TARGETS)
   foreach(IMPORTED_TARGET IN LISTS IMPORTED_TARGETS)
@@ -271,51 +273,8 @@ target_link_libraries(city PRIVATE
     glfw
     KTX::ktx
     Vulkan::Vulkan
-)
-
-
-# Link Cesium Native libraries (transitive dependencies resolved via vcpkg config)
-target_link_libraries(city PRIVATE
     Cesium3DTilesSelection
-    Cesium3DTilesContent
-    Cesium3DTilesReader
-    Cesium3DTiles
-    CesiumGltfContent
-    CesiumGltfReader
-    CesiumGltf
-    CesiumRasterOverlays
-    CesiumQuantizedMeshTerrain
-    CesiumGeospatial
-    CesiumGeometry
-    CesiumAsync
-    CesiumJsonReader
-    CesiumUtility
     CesiumCurl
-    Cesium3DTilesWriter
-    CesiumGltfWriter
-    CesiumJsonWriter
-    CesiumIonClient
-    CesiumITwinClient
-    CesiumClientCommon
-    CesiumVectorData
-    absl::base
-    absl::strings
-    absl::status
-    absl::statusor
-    absl::hash
-    absl::time
-    absl::synchronization
-    absl::log
-    absl::log_internal_check_op
-    absl::log_internal_message
-    absl::log_internal_nullguard
-    absl::log_internal_format
-    absl::log_internal_globals
-    absl::log_internal_log_sink_set
-    absl::raw_logging_internal
-    absl::cord
-    absl::int128
-    absl::str_format
 )
 
 # Cesium-native requires some additional compile definitions
@@ -348,6 +307,7 @@ if(BUILD_SIMULATOR)
   list(APPEND ALL_TARGETS Simulator)
 endif()
 
+# install
 if(BUILD_CITY AND BUILD_SIMULATOR)
   set(DTCITY_PACKAGE_DIR "${CMAKE_BINARY_DIR}/dist" CACHE PATH "Directory for the portable application bundle")
   set(DTCITY_PACKAGE_SIMULATOR_DATABASE "${CMAKE_SOURCE_DIR}/simulator/database/eskiltuna_test.sqlite"

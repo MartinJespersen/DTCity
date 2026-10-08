@@ -1,3 +1,6 @@
+#include "core_inc.hpp"
+#include "utility/utility_inc.hpp"
+
 namespace util
 {
 // builds a wgs84 bounding box from a corner point and a size in metres. the

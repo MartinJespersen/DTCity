@@ -1,3 +1,6 @@
+#include "base/base_inc.hpp"
+#include "city/simulator_shared_interface.hpp"
+
 using namespace simdjson;
 namespace city
 {

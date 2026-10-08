@@ -1,5 +1,7 @@
 #pragma once
 
+#include "base/base_strings.hpp"
+
 // The Digital Grove Codebase
 // Copyright (c) 2024 Ryan Fleury. All rights reserved.
 

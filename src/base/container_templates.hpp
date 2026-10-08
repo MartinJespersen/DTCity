@@ -1,5 +1,9 @@
 #pragma once
 
+#include "container.hpp"
+#include "base_allocator_templates.hpp"
+#include "base_profile.hpp"
+
 // Template implementations
 // Arrays
 template <typename T>

@@ -1,5 +1,8 @@
 #pragma once
 
+#include "base/base_inc.hpp"
+#include "segment_buffer.hpp"
+
 namespace async
 {
 

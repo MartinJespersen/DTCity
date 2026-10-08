@@ -1,3 +1,14 @@
+#include "diagnostics.hpp"
+#include "base/base_inc.hpp"
+#include <atomic>
+#include "resource_paths.hpp"
+#include "third_party/sqlite/sqlite3.h"
+#include "third_party/yyjson/yyjson.h"
+#include "city/simulator_shared_interface.hpp"
+#include "scenarios.hpp"
+#include "event_snapshot.hpp"
+#include "event_worker.hpp"
+
 static void
 simulator_event_worker_start(SimulatorEventWorker* worker)
 {

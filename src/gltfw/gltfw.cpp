@@ -1,3 +1,6 @@
+#include "core_inc.hpp"
+#include "gltfw/gltfw.hpp"
+
 #define CGLTF_IMPLEMENTATION
 #include "third_party/cgltf.h"
 

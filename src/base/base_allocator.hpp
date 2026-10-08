@@ -1,5 +1,10 @@
 #pragma once
 
+#include <new>
+#include <utility>
+#include <type_traits>
+#include "base_arena.hpp"
+
 #ifndef BASE_ALLOCATOR_HPP
 #define BASE_ALLOCATOR_HPP
 

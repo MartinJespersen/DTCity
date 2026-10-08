@@ -1,5 +1,12 @@
 #pragma once
 
+#include <string>
+#include <string_view>
+#include <vector>
+#include <glm/glm.hpp>
+#include "base/container.hpp"
+#include "third_party/simdjson/simdjson.h"
+
 // Propagate the first parsing error from functions returning simdjson::error_code.
 #define JSON_TRY(expression)                             \
     do                                                   \

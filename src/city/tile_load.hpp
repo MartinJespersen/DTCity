@@ -1,5 +1,9 @@
 #pragma once
 
+#include "async/async_task.hpp"
+#include "render/render.hpp"
+#include "base/base_container.hpp"
+
 namespace cesium
 {
 struct TileRenderResources;

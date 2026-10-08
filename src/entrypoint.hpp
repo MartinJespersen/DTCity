@@ -1,5 +1,13 @@
 #pragma once
 
+#include "base/base_inc.hpp"
+#include "async/thread_pool.hpp"
+
+namespace vulkan
+{
+struct Context;
+}
+
 namespace io
 {
 struct IO;
@@ -83,3 +91,6 @@ dt_main_loop(void* ptr);
 
 static Buffer<String8>
 dt_dir_create(Arena* arena, String8 parent, dt_DataDirPair* dirs, U32 count);
+
+static void
+dt_time_init(dt_Time* time);

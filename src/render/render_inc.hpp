@@ -1,5 +1,7 @@
 #pragma once
 
+#include "core_inc.hpp"
+
 // ~mgj: user lib includes
 #include "render.hpp"
 #include "vulkan/asset_manager.hpp"

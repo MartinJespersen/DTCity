@@ -1,5 +1,17 @@
 #pragma once
 
+#include "render/render.hpp"
+#include "simulator_messages.hpp"
+
+namespace ui
+{
+struct Camera;
+}
+namespace cesium
+{
+struct TilesetRenderer;
+}
+
 namespace city
 {
 

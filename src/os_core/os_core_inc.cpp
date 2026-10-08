@@ -1,3 +1,6 @@
+#include "diagnostics.hpp"
+#include "base/base_inc.hpp"
+
 #include "os_core/os_core.cpp"
 
 #if OS_WINDOWS

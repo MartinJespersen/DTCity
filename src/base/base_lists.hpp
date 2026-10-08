@@ -1,5 +1,7 @@
 #pragma once
 
+#include "base_arena.hpp"
+
 
 template <typename T>
 struct LinkedListNode

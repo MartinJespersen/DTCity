@@ -1,5 +1,7 @@
 #pragma once
 
+#include "base_allocator.hpp"
+
 // Template implementations
 template <typename T>
 T

@@ -1,5 +1,8 @@
 #pragma once
 
+#include <glm/glm.hpp>
+#include "base/base_inc.hpp"
+
 namespace async
 {
 struct ThreadPool;

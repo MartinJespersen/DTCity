@@ -1,3 +1,5 @@
+#include "../test_inc.hpp"
+
 TEST_CASE("hover icon mesh is an outward-facing diamond above its origin")
 {
     Arena* arena = arena_alloc();

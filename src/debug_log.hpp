@@ -1,5 +1,8 @@
 #pragma once
 
+#include <atomic>
+#include "base/container.hpp"
+
 #include "os_core/os_core_inc.hpp"
 
 #if BUILD_DEBUG

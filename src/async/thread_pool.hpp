@@ -1,5 +1,8 @@
 #pragma once
 
+#include <atomic>
+#include "base/base_inc.hpp"
+
 namespace async
 {
 template <typename T>

@@ -1,3 +1,7 @@
+#include "diagnostics.hpp"
+#include "base/base_inc.hpp"
+#include "scenarios.hpp"
+
 static Buffer<SimulatorScenario>
 simulator_scenarios_find(Arena* arena, String8 directory)
 {

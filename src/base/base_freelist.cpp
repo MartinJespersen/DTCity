@@ -1,3 +1,6 @@
+#include "diagnostics.hpp"
+#include "base/base_inc.hpp"
+
 // Pow2 Free list
 Pow2Freelist*
 pow2_freelist_create(Arena* arena, U32 exponent_min, U32 exponent_count)

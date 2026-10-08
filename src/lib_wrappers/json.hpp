@@ -1,5 +1,7 @@
 #pragma once
 
+#include "base/base_strings.hpp"
+
 namespace osm
 {
 struct RoadNodeList;

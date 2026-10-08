@@ -1,3 +1,6 @@
+#include "diagnostics.hpp"
+#include "base/base_inc.hpp"
+
 lib_internal OS_LNX_State os_lnx_state = {0};
 
 thread_static OS_LNX_SafeCallChain* os_lnx_safe_call_chain = 0;
@@ -72,17 +75,6 @@ os_lnx_file_properties_from_stat(struct stat* s)
     return props;
 }
 
-lib_internal void
-os_lnx_safe_call_sig_handler(int x)
-{
-    OS_LNX_SafeCallChain* chain = os_lnx_safe_call_chain;
-    if (chain != 0 && chain->fail_handler != 0)
-    {
-        chain->fail_handler(chain->ptr);
-    }
-    abort();
-}
-
 ////////////////////////////////
 //~ rjf: Entities
 
@@ -122,6 +114,7 @@ os_lnx_entity_release(OS_LNX_Entity* entity)
 lib_internal void*
 os_lnx_thread_entry_point(void* ptr)
 {
+    _os_lnx_crash_thread_init();
     OS_LNX_Entity* entity = (OS_LNX_Entity*)ptr;
     OS_ThreadFunctionType* func = entity->thread.func;
     void* thread_ptr = entity->thread.ptr;
@@ -329,7 +322,8 @@ os_file_read(OS_Handle file, Rng1U64 rng, void* out_data)
     U64 total_num_bytes_left_to_read = total_num_bytes_to_read;
     for (; total_num_bytes_left_to_read > 0;)
     {
-        int read_result = pread(fd, (U8*)out_data + total_num_bytes_read, total_num_bytes_left_to_read, rng.min + total_num_bytes_read);
+        int read_result = pread(fd, (U8*)out_data + total_num_bytes_read, total_num_bytes_left_to_read,
+                                rng.min + total_num_bytes_read);
         if (read_result >= 0)
         {
             total_num_bytes_read += read_result;
@@ -356,7 +350,8 @@ os_file_write(OS_Handle file, Rng1U64 rng, void* data)
     U64 total_num_bytes_left_to_write = total_num_bytes_to_write;
     for (; total_num_bytes_left_to_write > 0;)
     {
-        int write_result = pwrite(fd, (U8*)data + total_num_bytes_written, total_num_bytes_left_to_write, rng.min + total_num_bytes_written);
+        int write_result = pwrite(fd, (U8*)data + total_num_bytes_written, total_num_bytes_left_to_write,
+                                  rng.min + total_num_bytes_written);
         if (write_result >= 0)
         {
             total_num_bytes_written += write_result;
@@ -639,8 +634,11 @@ os_file_iter_next(Arena* arena, OS_FileIter* iter, OS_FileInfo* info_out)
         B32 filtered = 0;
         if (good)
         {
-            filtered = ((S_ISDIR(st.st_mode) && iter->flags & OS_FileIterFlag_SkipFolders) || (S_ISREG(st.st_mode) && iter->flags & OS_FileIterFlag_SkipFiles) ||
-                        (lnx_iter->dp->d_name[0] == '.' && lnx_iter->dp->d_name[1] == 0) || (lnx_iter->dp->d_name[0] == '.' && lnx_iter->dp->d_name[1] == '.' && lnx_iter->dp->d_name[2] == 0));
+            filtered =
+                ((S_ISDIR(st.st_mode) && iter->flags & OS_FileIterFlag_SkipFolders) ||
+                 (S_ISREG(st.st_mode) && iter->flags & OS_FileIterFlag_SkipFiles) ||
+                 (lnx_iter->dp->d_name[0] == '.' && lnx_iter->dp->d_name[1] == 0) ||
+                 (lnx_iter->dp->d_name[0] == '.' && lnx_iter->dp->d_name[1] == '.' && lnx_iter->dp->d_name[2] == 0));
         }
 
         // rjf: output & exit, if good & unfiltered
@@ -1099,7 +1097,8 @@ os_condition_variable_wait_rw_r(OS_Handle cv, OS_Handle mutex_rw, U64 endt_us)
     for (;;)
     {
         pthread_mutex_lock(&cv_entity->cv.rwlock_mutex_handle);
-        int wait_result = pthread_cond_timedwait(&cv_entity->cv.cond_handle, &cv_entity->cv.rwlock_mutex_handle, &endt_timespec);
+        int wait_result =
+            pthread_cond_timedwait(&cv_entity->cv.cond_handle, &cv_entity->cv.rwlock_mutex_handle, &endt_timespec);
         if (wait_result != ETIMEDOUT)
         {
             pthread_rwlock_rdlock(&rw_mutex_entity->rwmutex_handle);
@@ -1140,7 +1139,8 @@ os_condition_variable_wait_rw_w(OS_Handle cv, OS_Handle mutex_rw, U64 endt_us)
     for (;;)
     {
         pthread_mutex_lock(&cv_entity->cv.rwlock_mutex_handle);
-        int wait_result = pthread_cond_timedwait(&cv_entity->cv.cond_handle, &cv_entity->cv.rwlock_mutex_handle, &endt_timespec);
+        int wait_result =
+            pthread_cond_timedwait(&cv_entity->cv.cond_handle, &cv_entity->cv.rwlock_mutex_handle, &endt_timespec);
         if (wait_result != ETIMEDOUT)
         {
             pthread_rwlock_wrlock(&rw_mutex_entity->rwmutex_handle);
@@ -1417,12 +1417,15 @@ os_safe_call(OS_ThreadFunctionType* func, OS_ThreadFunctionType* fail_handler, v
     // rjf: push handler to chain
     OS_LNX_SafeCallChain chain = {0};
     SLLStackPush(os_lnx_safe_call_chain, &chain);
+    defer(SLLStackPop(os_lnx_safe_call_chain));
     chain.fail_handler = fail_handler;
     chain.ptr = ptr;
 
     // rjf: set up sig handler info
     struct sigaction new_act = {0};
-    new_act.sa_handler = os_lnx_safe_call_sig_handler;
+    new_act.sa_sigaction = _os_lnx_safe_call_sig_handler;
+    new_act.sa_flags = SA_SIGINFO | SA_ONSTACK;
+    sigfillset(&new_act.sa_mask);
     int signals_to_handle[] = {
         SIGILL, SIGFPE, SIGSEGV, SIGBUS, SIGTRAP,
     };
@@ -1476,6 +1479,55 @@ os_graphical_message(B32 error, String8 title, String8 message)
 int
 main(int argc, char** argv)
 {
+    // Resolve the optional symbolizer and load unwinding support before a crash.
+    const char* search_path = getenv("PATH");
+    if (search_path)
+    {
+        for (const char* directory = search_path;;)
+        {
+            const char* end = strchr(directory, ':');
+            U64 directory_size = 0;
+            if (end)
+                directory_size = (U64)(end - directory);
+            else
+                directory_size = strlen(directory);
+            int path_size =
+                snprintf(os_lnx_state.crash_symbolizer_path, sizeof(os_lnx_state.crash_symbolizer_path),
+                         "%.*s%sllvm-symbolizer", (int)directory_size, directory, directory_size ? "/" : "");
+            if (path_size > 0 && (U64)path_size < sizeof(os_lnx_state.crash_symbolizer_path))
+            {
+                int executable = access(os_lnx_state.crash_symbolizer_path, X_OK);
+                if (executable == 0)
+                    break;
+            }
+            os_lnx_state.crash_symbolizer_path[0] = 0;
+            if (!end)
+                break;
+            directory = end + 1;
+        }
+    }
+    void* preload_frames[1];
+    backtrace(preload_frames, ArrayCount(preload_frames));
+    _os_lnx_crash_thread_init();
+
+    // Install once for the process; synchronous faults run on the failing thread.
+    struct sigaction crash_handler = {};
+    crash_handler.sa_sigaction = _os_lnx_crash_signal_handler;
+    crash_handler.sa_flags = SA_SIGINFO | SA_ONSTACK;
+    sigfillset(&crash_handler.sa_mask);
+    const int crash_signals[] = {SIGILL, SIGTRAP, SIGABRT, SIGFPE, SIGBUS, SIGSEGV, SIGQUIT};
+    for (int signal_number : crash_signals)
+    {
+#if ASAN_ENABLED
+        // Keep sanitizer diagnostics for signals the sanitizer already handles.
+        struct sigaction existing_handler = {};
+        sigaction(signal_number, 0, &existing_handler);
+        if (existing_handler.sa_handler != SIG_DFL)
+            continue;
+#endif
+        sigaction(signal_number, &crash_handler, 0);
+    }
+
     //- rjf: set up OS layer
     {
         //- rjf: get statically-allocated system/process info
@@ -1584,4 +1636,219 @@ main(int argc, char** argv)
 
     //- rjf: call into "real" entry point
     return App(argc, argv);
+}
+
+////////////////////////////////
+//~ mgj: Private Crash Reporting Helpers
+
+lib_internal void
+_os_lnx_crash_thread_init()
+{
+    // Alternate stacks are per-thread. Keep them outside arenas so a damaged
+    // arena or exhausted application stack does not prevent crash reporting.
+    local_persist thread_static U8 signal_stack[KB(64)];
+    stack_t stack = {};
+    sigaltstack(0, &stack);
+    if (!(stack.ss_flags & SS_DISABLE))
+        return;
+    stack.ss_sp = signal_stack;
+    stack.ss_size = sizeof(signal_stack);
+    stack.ss_flags = 0;
+    sigaltstack(&stack, 0);
+}
+
+lib_internal void
+_os_lnx_crash_write(const char* text, U64 size)
+{
+    while (size > 0)
+    {
+        ssize_t written = write(STDERR_FILENO, text, size);
+        if (written < 0 && errno == EINTR)
+            continue;
+        if (written <= 0)
+            break;
+        text += written;
+        size -= written;
+    }
+}
+
+lib_internal void
+_os_lnx_crash_reraise(int signal_number)
+{
+    // Preserve signal termination and core dumps instead of converting the crash
+    // to a normal exit code. This also handles recursive/concurrent failures.
+    struct sigaction default_handler = {};
+    default_handler.sa_handler = SIG_DFL;
+    sigemptyset(&default_handler.sa_mask);
+    sigaction(signal_number, &default_handler, 0);
+    sigset_t signal_set;
+    sigemptyset(&signal_set);
+    sigaddset(&signal_set, signal_number);
+    sigprocmask(SIG_UNBLOCK, &signal_set, 0);
+    raise(signal_number);
+    _exit(128 + signal_number);
+}
+
+lib_internal void
+_os_lnx_crash_frame_symbolize(const char* module_path, U64 module_offset, U64 deadline_us)
+{
+    // As in RAD, symbolization is best effort after a fatal fault. Use direct
+    // arguments so spaces and shell metacharacters in paths stay literal.
+    int output_pipe[2];
+    int pipe_result = pipe2(output_pipe, O_CLOEXEC);
+    if (pipe_result != 0)
+        return;
+    defer(close(output_pipe[0]));
+
+    pid_t symbolizer_pid = 0;
+    {
+        defer(close(output_pipe[1]));
+        posix_spawn_file_actions_t actions;
+        int actions_result = posix_spawn_file_actions_init(&actions);
+        if (actions_result != 0)
+            return;
+        defer(posix_spawn_file_actions_destroy(&actions));
+        posix_spawnattr_t attributes;
+        int attributes_result = posix_spawnattr_init(&attributes);
+        if (attributes_result != 0)
+            return;
+        defer(posix_spawnattr_destroy(&attributes));
+
+        sigset_t child_mask;
+        sigemptyset(&child_mask);
+        int setup_result = posix_spawnattr_setsigmask(&attributes, &child_mask);
+        setup_result |= posix_spawnattr_setflags(&attributes, POSIX_SPAWN_SETSIGMASK);
+        setup_result |= posix_spawn_file_actions_addopen(&actions, STDIN_FILENO, "/dev/null", O_RDONLY, 0);
+        setup_result |= posix_spawn_file_actions_adddup2(&actions, output_pipe[1], STDOUT_FILENO);
+        setup_result |= posix_spawn_file_actions_adddup2(&actions, output_pipe[1], STDERR_FILENO);
+        setup_result |= posix_spawn_file_actions_addclose(&actions, output_pipe[0]);
+        setup_result |= posix_spawn_file_actions_addclose(&actions, output_pipe[1]);
+        if (setup_result != 0)
+            return;
+
+        char address[32];
+        snprintf(address, sizeof(address), "0x%llx", (unsigned long long)module_offset);
+        char* arguments[] = {os_lnx_state.crash_symbolizer_path,
+                             (char*)"--relative-address",
+                             (char*)"--functions",
+                             (char*)"--demangle",
+                             (char*)"--no-debuginfod",
+                             (char*)"--obj",
+                             (char*)module_path,
+                             address,
+                             0};
+        int spawn_result = posix_spawn(&symbolizer_pid, arguments[0], &actions, &attributes, arguments, environ);
+        if (spawn_result != 0)
+            return;
+    }
+    // All waits are confined to fatal reporting. Bound the entire report's
+    // symbolization time; an absent or stalled tool must not hide raw frames.
+    defer({
+        kill(symbolizer_pid, SIGKILL);
+        int status;
+        pid_t joined;
+        do
+        {
+            joined = waitpid(symbolizer_pid, &status, 0);
+        } while (joined < 0 && errno == EINTR);
+    });
+    for (;;)
+    {
+        U64 now_us = os_now_microseconds();
+        if (now_us >= deadline_us)
+            break;
+        int timeout_ms = (int)((deadline_us - now_us + 999) / 1000);
+        pollfd output = {output_pipe[0], POLLIN, 0};
+        int poll_result = poll(&output, 1, timeout_ms);
+        if (poll_result < 0 && errno == EINTR)
+            continue;
+        if (poll_result <= 0 || !(output.revents & (POLLIN | POLLHUP)))
+            break;
+        char text[512];
+        ssize_t text_size = read(output_pipe[0], text, sizeof(text));
+        if (text_size < 0 && errno == EINTR)
+            continue;
+        if (text_size <= 0)
+            break;
+        _os_lnx_crash_write(text, (U64)text_size);
+    }
+}
+
+lib_internal void
+_os_lnx_crash_signal_handler(int signal_number, siginfo_t* signal_info, void* context)
+{
+    U32 already_reporting = ins_atomic_u32_eval_assign(&os_lnx_state.crash_report_started, 1);
+    if (already_reporting)
+        _os_lnx_crash_reraise(signal_number);
+
+    const char* signal_name = "unknown signal";
+    switch (signal_number)
+    {
+        case SIGILL: signal_name = "SIGILL"; break;
+        case SIGTRAP: signal_name = "SIGTRAP"; break;
+        case SIGABRT: signal_name = "SIGABRT"; break;
+        case SIGFPE: signal_name = "SIGFPE"; break;
+        case SIGBUS: signal_name = "SIGBUS"; break;
+        case SIGSEGV: signal_name = "SIGSEGV"; break;
+        case SIGQUIT: signal_name = "SIGQUIT"; break;
+    }
+    void* fault_address = 0;
+    if (signal_info->si_code > 0)
+        fault_address = signal_info->si_addr;
+    U64 instruction_address = 0;
+    ucontext_t* signal_context = (ucontext_t*)context;
+#if ARCH_X64
+    instruction_address = (U64)signal_context->uc_mcontext.gregs[REG_RIP];
+#elif ARCH_X86
+    instruction_address = (U64)signal_context->uc_mcontext.gregs[REG_EIP];
+#elif ARCH_ARM64
+    instruction_address = (U64)signal_context->uc_mcontext.pc;
+#elif ARCH_ARM32
+    instruction_address = (U64)signal_context->uc_mcontext.arm_pc;
+#endif
+    char text[PATH_MAX + 256];
+    int text_size =
+        snprintf(text, sizeof(text),
+                 "\n--- Fatal Signal ---\nA fatal signal was received: %s (%d). The process is terminating.\n"
+                 "Fault address: %p\nInstruction address: 0x%llx\nCallstack:\n",
+                 signal_name, signal_number, fault_address, (unsigned long long)instruction_address);
+    _os_lnx_crash_write(text, (U64)text_size);
+
+    // Fixed buffers avoid arena allocation in the damaged process. Unwinding,
+    // dladdr, formatting, and spawning are best effort, not async-signal-safe.
+    void* frames[64];
+    int frame_count = backtrace(frames, ArrayCount(frames));
+    U64 started_us = os_now_microseconds();
+    U64 symbolizer_deadline_us = started_us + (U64)Million(3);
+    for (int frame_idx = 0; frame_idx < frame_count; ++frame_idx)
+    {
+        Dl_info module = {};
+        int module_found = dladdr(frames[frame_idx], &module);
+        const char* module_path = module_found && module.dli_fname ? module.dli_fname : "<unknown module>";
+        U64 module_offset = (U64)frames[frame_idx] - (U64)module.dli_fbase;
+        text_size = snprintf(text, sizeof(text), "%d. [%p] %s +0x%llx\n", frame_idx + 1, frames[frame_idx], module_path,
+                             (unsigned long long)module_offset);
+        U64 write_size = Min((U64)text_size, sizeof(text) - 1);
+        _os_lnx_crash_write(text, write_size);
+        U64 now_us = os_now_microseconds();
+        if (module_found && os_lnx_state.crash_symbolizer_path[0] && now_us < symbolizer_deadline_us)
+            _os_lnx_crash_frame_symbolize(module_path, module_offset, symbolizer_deadline_us);
+    }
+    if (!os_lnx_state.crash_symbolizer_path[0])
+    {
+        const char unavailable[] = "llvm-symbolizer unavailable; showing module addresses.\n";
+        _os_lnx_crash_write(unavailable, sizeof(unavailable) - 1);
+    }
+    const char version[] = "\nVersion: " BUILD_VERSION_STRING_LITERAL BUILD_GIT_HASH_STRING_LITERAL_APPEND "\n";
+    _os_lnx_crash_write(version, sizeof(version) - 1);
+    _os_lnx_crash_reraise(signal_number);
+}
+
+lib_internal void
+_os_lnx_safe_call_sig_handler(int signal_number, siginfo_t* signal_info, void* context)
+{
+    OS_LNX_SafeCallChain* chain = os_lnx_safe_call_chain;
+    if (chain != 0 && chain->fail_handler != 0)
+        chain->fail_handler(chain->ptr);
+    _os_lnx_crash_signal_handler(signal_number, signal_info, context);
 }

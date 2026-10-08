@@ -1,7 +1,12 @@
 {
   "dependencies": [
     { "name": "ktx", "features": ["vulkan"] },
-    "vulkan-loader",
+    {
+      "name": "vulkan-loader",
+      "platform": "linux",
+      "features": ["xcb", "xlib", "wayland"]
+    },
+    { "name": "vulkan-loader", "platform": "!linux" },
     "glfw3",
     { "name": "glslang", "features": ["tools"] },
     { "name": "curl", "features": ["websockets"] },

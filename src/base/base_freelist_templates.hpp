@@ -1,5 +1,7 @@
 #pragma once
 
+#include "base_freelist.hpp"
+
 // Template implementations
 template <typename T>
 BufferHandle<T>

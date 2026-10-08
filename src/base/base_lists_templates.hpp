@@ -1,5 +1,7 @@
 #pragma once
 
+#include "base_lists.hpp"
+
 // Template implementations
 template <typename T>
 LinkedList<T>

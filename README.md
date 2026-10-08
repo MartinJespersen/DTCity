@@ -100,6 +100,19 @@ files without deleting the output folder; use a fresh output folder for a clean 
 Windows and graphics driver components (including Vulkan/OpenGL) are still required
 on the destination machine. Cesium ion credentials and network access are not bundled.
 
+### Linux crash reports
+
+Fatal signals print a stack report to `stderr` before the process terminates with
+the original signal. Put `llvm-symbolizer` on `PATH` to include function names,
+source files, and line numbers. Keep debug symbols in the executable (`Debug` or
+`RelWithDebInfo`) for source locations. Without the tool, reports include module
+paths and addresses that can be resolved later with GDB.
+
+Symbolization uses local debug files and has a three-second time limit. Reporting
+is best effort if the process state is damaged. Core dumps remain subject to the
+system's core-dump configuration. Existing AddressSanitizer signal handlers are
+preserved in sanitizer builds.
+
 ### C Macros
 The following application specific macros are used to enable address sanitization, build tools and profiling:
 * -DBUILD_DEBUG (Additional debug information e.g vulkan validation layer support)

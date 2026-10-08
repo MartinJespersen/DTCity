@@ -1,5 +1,9 @@
 #pragma once
 
+#include "async/async_websocket.hpp"
+#include "simulator_messages.hpp"
+#include "simulator_shared_interface.hpp"
+
 namespace city
 {
 

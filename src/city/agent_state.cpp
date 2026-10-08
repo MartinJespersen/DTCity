@@ -1,3 +1,10 @@
+#include "base/base_inc.hpp"
+#include <glm/glm.hpp>
+#include "render/render.hpp"
+#include "city/simulator_messages.hpp"
+#include "city/agent.hpp"
+#include "city/simulator_shared_interface.hpp"
+
 namespace city
 {
 

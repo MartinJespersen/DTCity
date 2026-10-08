@@ -1,3 +1,12 @@
+#include "diagnostics.hpp"
+#include "base/base_inc.hpp"
+#include "third_party/sqlite/sqlite3.h"
+#include "third_party/yyjson/yyjson.h"
+#include "city/simulator_shared_interface.hpp"
+#include "scenarios.hpp"
+#include "event_snapshot.hpp"
+#include "metadata.hpp"
+
 static String8
 simulator_metadata_reply_from_directory(Arena* arena, String8 directory, F64 timestamp_start, F64 timestamp_end)
 {

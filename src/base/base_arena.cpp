@@ -1,3 +1,6 @@
+#include "diagnostics.hpp"
+#include "base/base_inc.hpp"
+
 U64 arena_default_reserve_size = MB(64);
 U64 arena_default_commit_size = KB(64);
 ArenaFlags arena_default_flags = 0;

@@ -1,5 +1,7 @@
 #pragma once
 
+#include "base_core.hpp"
+
 
 U32
 random_u32();

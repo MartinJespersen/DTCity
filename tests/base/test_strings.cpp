@@ -1,3 +1,5 @@
+#include "../test_inc.hpp"
+
 TEST_CASE("char classification")
 {
     CHECK(char_is_alpha('a'));

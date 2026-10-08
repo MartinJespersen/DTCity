@@ -1,3 +1,5 @@
+#include "../test_inc.hpp"
+
 TEST_CASE("client only consumes events strictly before playback and owns emitted IDs")
 {
     Arena* arena = arena_alloc();

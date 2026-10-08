@@ -1,3 +1,7 @@
+#include "base/base_inc.hpp"
+#include "city/simulator_shared_interface.hpp"
+#include "city/simulator_messages.hpp"
+
 namespace city
 {
 

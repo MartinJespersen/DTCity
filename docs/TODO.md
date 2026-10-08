@@ -1,6 +1,7 @@
 # Sim refactor
 - remember to handle changing id ;
 - polling for metadata should be done regularly
+- cpp files themselves should include the headers. This will improve clangd support.
 
 # Simulator regressions
 
@@ -16,7 +17,7 @@
 - Config should be moved to static array of struct or a static initialized global variable in separate file
 
 # Project TODO:
-- Agents need to be added and removed 
+- Make mesh shaders optional
 - Make debug logging internal to layer.
 - Improve performance to be able to visualize large simulations.
   - multithreaded addition

@@ -3,7 +3,6 @@
 #include <string>
 #include <vector>
 // third party header
-#define DOCTEST_CONFIG_IMPLEMENT
 #include "third_party/doctest/doctest.h"
 #include "glm/glm.hpp"
 #include <limits>

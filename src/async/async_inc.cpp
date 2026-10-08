@@ -1,3 +1,6 @@
+#include "core_inc.hpp"
+#include "async/async_inc.hpp"
+
 // Worker queue and timer heap implementations belong to the async unit.
 #include "segment_buffer.hpp"
 #include "async_heap.hpp"
