@@ -1,5 +1,7 @@
 BasedOnStyle: Microsoft
+Language: Cpp
 
+ColumnLimit: 0
 # Place function return type on a separate line
 AlwaysBreakAfterReturnType: All
 AlignEscapedNewlines: Left
@@ -19,4 +21,3 @@ KeepEmptyLinesAtTheStartOfBlocks: false
 MaxEmptyLinesToKeep: 1
 PointerAlignment: Left
 SortIncludes: Never
-Language: Cpp

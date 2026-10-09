@@ -49,9 +49,9 @@ tile_pipeline_create(Context* vk_ctx, String8 shader_path)
     ScratchScope scratch = ScratchScope(0, 0);
 
     String8 vert_path = CreatePathFromStrings(
-        scratch.arena, Str8BufferFromCString(scratch.arena, {(char*)shader_path.str, "bin", "tile_vert.spv"}));
+        scratch.arena, str8_buffer_from_c_string(scratch.arena, {(char*)shader_path.str, "bin", "tile_vert.spv"}));
     String8 frag_path = CreatePathFromStrings(
-        scratch.arena, Str8BufferFromCString(scratch.arena, {(char*)shader_path.str, "bin", "tile_frag.spv"}));
+        scratch.arena, str8_buffer_from_c_string(scratch.arena, {(char*)shader_path.str, "bin", "tile_frag.spv"}));
 
     ShaderModuleInfo vert_shader_stage_info =
         shader_stage_from_spirv(scratch.arena, vk_ctx->device, VK_SHADER_STAGE_VERTEX_BIT, vert_path);
@@ -319,10 +319,10 @@ blend_3d_pipeline_create(String8 shader_path)
 
     String8 vert_path = CreatePathFromStrings(
         scratch.arena,
-        Str8BufferFromCString(scratch.arena, {(char*)shader_path.str, "bin", "colormap_blend_3d_vert.spv"}));
+        str8_buffer_from_c_string(scratch.arena, {(char*)shader_path.str, "bin", "colormap_blend_3d_vert.spv"}));
     String8 frag_path = CreatePathFromStrings(
         scratch.arena,
-        Str8BufferFromCString(scratch.arena, {(char*)shader_path.str, "bin", "colormap_blend_3d_frag.spv"}));
+        str8_buffer_from_c_string(scratch.arena, {(char*)shader_path.str, "bin", "colormap_blend_3d_frag.spv"}));
 
     ShaderModuleInfo vert_shader_stage_info =
         shader_stage_from_spirv(scratch.arena, vk_ctx->device, VK_SHADER_STAGE_VERTEX_BIT, vert_path);
@@ -560,9 +560,9 @@ primitive_pipeline_create(String8 shader_path)
     ScratchScope scratch = ScratchScope(0, 0);
 
     String8 vert_path = CreatePathFromStrings(
-        scratch.arena, Str8BufferFromCString(scratch.arena, {(char*)shader_path.str, "bin", "primitive_vert.spv"}));
+        scratch.arena, str8_buffer_from_c_string(scratch.arena, {(char*)shader_path.str, "bin", "primitive_vert.spv"}));
     String8 frag_path = CreatePathFromStrings(
-        scratch.arena, Str8BufferFromCString(scratch.arena, {(char*)shader_path.str, "bin", "primitive_frag.spv"}));
+        scratch.arena, str8_buffer_from_c_string(scratch.arena, {(char*)shader_path.str, "bin", "primitive_frag.spv"}));
 
     ShaderModuleInfo vert_shader_stage_info =
         shader_stage_from_spirv(scratch.arena, vk_ctx->device, VK_SHADER_STAGE_VERTEX_BIT, vert_path);
@@ -816,19 +816,14 @@ mesh_instance_pipeline_create(String8 shader_path)
     Context* vk_ctx = ctx_get();
     ScratchScope scratch = ScratchScope(0, 0);
 
-    String8 mesh_path = CreatePathFromStrings(
-        scratch.arena, Str8BufferFromCString(scratch.arena, {(char*)shader_path.str, "bin", "mesh_instance_mesh.spv"}));
-    String8 frag_path = CreatePathFromStrings(
-        scratch.arena, Str8BufferFromCString(scratch.arena, {(char*)shader_path.str, "bin", "mesh_instance_frag.spv"}));
-
-    ShaderModuleInfo mesh_shader_stage_info =
-        shader_stage_from_spirv(scratch.arena, vk_ctx->device, VK_SHADER_STAGE_MESH_BIT_EXT, mesh_path);
-    ShaderModuleInfo frag_shader_stage_info =
-        shader_stage_from_spirv(scratch.arena, vk_ctx->device, VK_SHADER_STAGE_FRAGMENT_BIT, frag_path);
-
+    String8 mesh_path = str8_path_from_str8_list(scratch.arena, {shader_path, S("bin"), S("mesh_instance_mesh.spv")});
+    String8 frag_path = str8_path_from_str8_list(scratch.arena, {shader_path, S("bin"), S("mesh_instance_frag.spv")});
     String8 task_path = str8_path_from_str8_list(scratch.arena, {shader_path, S("bin"), S("mesh_instance_task.spv")});
-    ShaderModuleInfo task_shader_stage_info =
-        shader_stage_from_spirv(scratch.arena, vk_ctx->device, VK_SHADER_STAGE_TASK_BIT_EXT, task_path);
+
+    ShaderModuleInfo mesh_shader_stage_info = shader_stage_from_spirv(scratch.arena, vk_ctx->device, VK_SHADER_STAGE_MESH_BIT_EXT, mesh_path);
+    ShaderModuleInfo frag_shader_stage_info = shader_stage_from_spirv(scratch.arena, vk_ctx->device, VK_SHADER_STAGE_FRAGMENT_BIT, frag_path);
+    ShaderModuleInfo task_shader_stage_info = shader_stage_from_spirv(scratch.arena, vk_ctx->device, VK_SHADER_STAGE_TASK_BIT_EXT, task_path);
+
     VkPipelineShaderStageCreateInfo shader_stages[] = {task_shader_stage_info.info, mesh_shader_stage_info.info,
                                                        frag_shader_stage_info.info};
 
@@ -904,10 +899,8 @@ mesh_instance_pipeline_create(String8 shader_path)
     layout_info.flags = VK_DESCRIPTOR_SET_LAYOUT_CREATE_PUSH_DESCRIPTOR_BIT_KHR;
     layout_info.bindingCount = ArrayCount(bindings);
     layout_info.pBindings = bindings;
-    VK_CHECK_RESULT(vkCreateDescriptorSetLayout(vk_ctx->device, &layout_info, nullptr,
-                                                &vk_ctx->mesh_instance_descriptor_set_layout));
-    VkDescriptorSetLayout descriptor_set_layouts[] = {vk_ctx->mesh_instance_descriptor_set_layout,
-                                                      vk_ctx->bindless_descriptor_set_layout};
+    VK_CHECK_RESULT(vkCreateDescriptorSetLayout(vk_ctx->device, &layout_info, nullptr, &vk_ctx->mesh_instance_descriptor_set_layout));
+    VkDescriptorSetLayout descriptor_set_layouts[] = {vk_ctx->mesh_instance_descriptor_set_layout, vk_ctx->bindless_descriptor_set_layout};
 
     VkPipelineLayoutCreateInfo pipelineLayoutInfo{};
     pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
@@ -951,8 +944,7 @@ mesh_instance_pipeline_create(String8 shader_path)
     pipeline_create_info.layout = pipeline_layout;
 
     VkPipeline pipeline;
-    VK_CHECK_RESULT(
-        vkCreateGraphicsPipelines(vk_ctx->device, VK_NULL_HANDLE, 1, &pipeline_create_info, nullptr, &pipeline));
+    VK_CHECK_RESULT(vkCreateGraphicsPipelines(vk_ctx->device, VK_NULL_HANDLE, 1, &pipeline_create_info, nullptr, &pipeline));
 
     Pipeline pipeline_info = {.pipeline = pipeline, .pipeline_layout = pipeline_layout};
     return pipeline_info;
@@ -1127,9 +1119,9 @@ line_pipeline_create(Context* vk_ctx, String8 shader_path)
     ScratchScope scratch = ScratchScope(&vk_ctx->arena, 1);
 
     String8 vert_path = CreatePathFromStrings(
-        scratch.arena, Str8BufferFromCString(scratch.arena, {(char*)shader_path.str, "bin", "line_vert.spv"}));
+        scratch.arena, str8_buffer_from_c_string(scratch.arena, {(char*)shader_path.str, "bin", "line_vert.spv"}));
     String8 frag_path = CreatePathFromStrings(
-        scratch.arena, Str8BufferFromCString(scratch.arena, {(char*)shader_path.str, "bin", "line_frag.spv"}));
+        scratch.arena, str8_buffer_from_c_string(scratch.arena, {(char*)shader_path.str, "bin", "line_frag.spv"}));
 
     ShaderModuleInfo vert_shader_stage_info =
         shader_stage_from_spirv(scratch.arena, vk_ctx->device, VK_SHADER_STAGE_VERTEX_BIT, vert_path);

@@ -1,31 +1,14 @@
 #include "diagnostics.hpp"
 #include "base/base_inc.hpp"
 
-
 ////////////////////////////////
 //~Array
 
-
-
-
-
-
-
-
-
-
 //~mgj: Container
-
-
-
-
-
-
-
 
 ////////////////////////////////
 Buffer<String8>
-Str8BufferFromCString(Arena* arena, std::initializer_list<const char*> strings)
+str8_buffer_from_c_string(Arena* arena, std::initializer_list<const char*> strings)
 {
     Buffer<String8> buffer = buffer_alloc<String8>(arena, strings.size());
     U32 index = 0;
@@ -110,15 +93,6 @@ CStrArrFromStr8Buffer(Arena* arena, Buffer<String8> buffer)
 }
 
 //~mgj: ChunckList: safe T value in contigous Chunks usually for intermediate storage
-
-
-
-
-
-
-
-
-
 
 String8
 str8_from_chunk_list(Arena* arena, ChunkList<U8>* list)

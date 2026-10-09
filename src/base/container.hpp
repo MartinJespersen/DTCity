@@ -128,7 +128,7 @@ template <typename T>
 Buffer<T>
 buffer_concat(Arena* arena, Buffer<T> a, Buffer<T> b);
 Buffer<String8>
-Str8BufferFromCString(Arena* arena, std::initializer_list<const char*> strings);
+str8_buffer_from_c_string(Arena* arena, std::initializer_list<const char*> strings);
 String8
 str8_path_from_str8_list(Arena* arena, std::initializer_list<String8> strings);
 String8

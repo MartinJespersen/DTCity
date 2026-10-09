@@ -3,7 +3,7 @@ project(DTCity)
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 set(THIRD_PARTY_LIBS_DIR ${CMAKE_CURRENT_SOURCE_DIR}/src/third_party)
-set(SHADER_DIR ${CMAKE_CURRENT_SOURCE_DIR}/data/shaders)
+set(SHADER_SRC ${CMAKE_CURRENT_SOURCE_DIR}/src/shaders)
 set(SHADER_BINARY_DIR ${CMAKE_CURRENT_BINARY_DIR}/shaders/bin)
 set(ASAN_LINK_FLAGS "")
 set(ASAN_COMPILE_FLAGS "")
@@ -163,13 +163,13 @@ if(BUILD_CITY)
 
 # compile shaders
 file(GLOB_RECURSE GLSL_SOURCE_FILES CONFIGURE_DEPENDS
-    "${SHADER_DIR}/*.vert"
-    "${SHADER_DIR}/*.frag"
-    "${SHADER_DIR}/*.comp"
-    "${SHADER_DIR}/*.tesc"
-    "${SHADER_DIR}/*.tese"
-    "${SHADER_DIR}/*.mesh"
-    "${SHADER_DIR}/*.task"
+    "${SHADER_SRC}/*.vert"
+    "${SHADER_SRC}/*.frag"
+    "${SHADER_SRC}/*.comp"
+    "${SHADER_SRC}/*.tesc"
+    "${SHADER_SRC}/*.tese"
+    "${SHADER_SRC}/*.mesh"
+    "${SHADER_SRC}/*.task"
 )
 
 
