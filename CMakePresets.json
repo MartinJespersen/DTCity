@@ -13,7 +13,6 @@
       "hidden": true,
       "inherits": "base",
       "cacheVariables": {
-        "ASAN_ENABLED": "ON",
         "CMAKE_C_COMPILER": "clang",
         "CMAKE_CXX_COMPILER": "clang++",
         "CMAKE_BUILD_TYPE": "Debug",
@@ -92,7 +91,22 @@
         "CMAKE_C_COMPILER": "clang",
         "CMAKE_CXX_COMPILER": "clang++",
         "CMAKE_BUILD_TYPE": "Debug",
-        "VCPKG_TARGET_TRIPLET": "x64-linux"
+        "VCPKG_TARGET_TRIPLET": "x64-linux",
+        "ASAN_ENABLED": "ON"
+      }
+    },
+    {
+      "name": "debug-linux-no-asan",
+      "displayName": "Debug No Asan (Linux)",
+      "inherits": "debug-base",
+      "generator": "Unix Makefiles",
+      "binaryDir": "${sourceDir}/build/linux/debug-no-asan",
+      "cacheVariables": {
+        "CMAKE_C_COMPILER": "clang",
+        "CMAKE_CXX_COMPILER": "clang++",
+        "CMAKE_BUILD_TYPE": "Debug",
+        "VCPKG_TARGET_TRIPLET": "x64-linux",
+        "ASAN_ENABLED": "OFF"
       }
     },
     {

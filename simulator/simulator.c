@@ -74,7 +74,7 @@ _server_thread_exit(const struct mg_context* context, int thread_type, void* thr
 #define SERVER_PORT 8080
 #define MAX_STATUS_TEXT 8192
 #define MAX_PATH_TEXT 1024
-#define DEFAULT_DB_PATH "simulator/database/eskiltuna_test.sqlite"
+#define DEFAULT_DB_PATH "simulator/output/1_scenario.sqlite"
 #define CUSTOM_FONT_PATH "simulator/fonts/segoeuithis.ttf"
 #define CUSTOM_FONT_SIZE 18.0f
 #define DEFAULT_WS_PATH "/ws"

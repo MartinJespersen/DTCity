@@ -21,6 +21,6 @@ static String8
 simulator_database_directory_get(Arena* arena)
 {
     String8 root = simulator_resource_root_get(arena);
-    String8 directory = str8_path_from_str8_list(arena, {root, S("simulator"), S("database")});
+    String8 directory = str8_path_from_str8_list(arena, {root, S("simulator"), S("output")});
     return directory;
 }

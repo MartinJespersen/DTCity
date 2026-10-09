@@ -100,7 +100,7 @@ render_ctx_create(String8 shader_path, io::IO* io_ctx, async::ThreadPool* thread
     vk_ctx->arena = arena;
     vk_ctx->render_thread_id = os_tid();
 
-    const char* validation_layers[] = {"VK_LAYER_KHRONOS_validation", "VK_LAYER_KHRONOS_synchronization2"};
+    const char* validation_layers[] = {"VK_LAYER_KHRONOS_validation"};
     vk_ctx->validation_layers = buffer_alloc<String8>(vk_ctx->arena, ArrayCount(validation_layers));
     for (U32 i = 0; i < ArrayCount(validation_layers); i++)
     {
