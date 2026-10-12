@@ -210,13 +210,26 @@ struct BufferInfo
     copy_to_arena(Arena* arena);
 };
 
+struct MeshletRender
+{
+    Handle vertex_buffer_handle;
+    Handle meshlet_buffer_handle;
+    U32 meshlet_count;    // Maximum meshlets in any LOD, used to size task dispatches.
+    F32 lod_error_pixels; // Zero keeps full detail; otherwise maximum projected simplification error.
+};
+
+struct IndexedVertexHandles
+{
+    Handle vertex_h;
+    Handle index_h;
+};
+
 struct AgentModelInfo
 {
-    render::Handle vertex_handle;
-    render::Handle index_handle;
-    U32 meshlet_count;
-    U32 texture_handle_idx;
+    render::Handle texture_h;
     glm::vec4 color;
+    IndexedVertexHandles indexed_vert_handles;
+    MeshletRender meshlet_info;
 };
 
 template <typename T>
@@ -384,23 +397,15 @@ struct PrimitiveInstance
     MeshHandle mesh_handle;
 };
 
-struct MeshletMeshHandle
-{
-    Handle vertex_buffer_handle;
-    Handle meshlet_buffer_handle;
-    U32 meshlet_count; // Maximum meshlets in any LOD, used to size task dispatches.
-};
-
 // Mesh handles must be created by mesh_shader_handles_create_and_upload.
 // Uses PrimitiveVertex meshes and one non-singular, orientation-preserving
 // affine model-to-world transform per instance (translation, rotation, scale).
-struct MeshInstanceBatch
+struct AgentMeshInstanceBatch
 {
     Buffer<Transform> transforms;
-    MeshletMeshHandle mesh_handle;
+    AgentModelInfo agent_model_info;
     Handle texture_handle;
     B32 textured;
-    F32 lod_error_pixels; // Zero keeps full detail; otherwise maximum projected simplification error.
 };
 
 struct TextureUploadData
@@ -543,10 +548,10 @@ is_resource_loaded(Handle handle);
 
 render::MeshHandle
 mesh_handles_create_and_upload(render::PrimitiveMesh& prim_mesh);
-MeshletMeshHandle
+MeshletRender
 mesh_shader_handles_create_and_upload(PrimitiveMesh& mesh);
-MeshletMeshHandle
-mesh_shader_handles_create_and_upload(Buffer<PrimitiveVertex> vertices, Buffer<U32> indices, Arena* source_arena = 0);
+MeshletRender
+mesh_shader_handles_create_and_upload(Buffer<PrimitiveVertex> vertices, Buffer<U32> indices);
 void
-mesh_shader_handles_destroy(MeshletMeshHandle mesh);
+mesh_shader_handles_destroy(MeshletRender mesh);
 } // namespace render

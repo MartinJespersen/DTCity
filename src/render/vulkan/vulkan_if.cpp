@@ -193,8 +193,15 @@ render_ctx_create(String8 shader_path, io::IO* io_ctx, async::ThreadPool* thread
     vk_ctx->model_3D_pipeline = vulkan::tile_pipeline_create(vk_ctx, shader_path);
     vk_ctx->blend_3d_pipeline = vulkan::blend_3d_pipeline_create(shader_path);
     vk_ctx->primitive_pipeline = vulkan::primitive_pipeline_create(shader_path);
-    vk_ctx->mesh_instance_pipeline = vulkan::mesh_instance_pipeline_create(shader_path);
     vk_ctx->line_pipeline = vulkan::line_pipeline_create(vk_ctx, shader_path);
+    if (vk_ctx->mesh_shading_enabled)
+    {
+        vk_ctx->model_instance_mesh_pipeline = vulkan::model_instance_mesh_pipeline_create(shader_path);
+    }
+    else
+    {
+        vk_ctx->model_instance_mesh_pipeline = vulkan::model_instance_pipeline_create(shader_path);
+    }
 
     // sync objects
     VkSemaphoreTypeCreateInfo type_create_info{VK_STRUCTURE_TYPE_SEMAPHORE_TYPE_CREATE_INFO};
@@ -255,11 +262,12 @@ render_ctx_destroy()
     vulkan::pipeline_destroy(&vk_ctx->model_3D_pipeline);
     vulkan::pipeline_destroy(&vk_ctx->blend_3d_pipeline);
     vulkan::pipeline_destroy(&vk_ctx->primitive_pipeline);
-    vulkan::pipeline_destroy(&vk_ctx->mesh_instance_pipeline);
-    vkDestroyDescriptorSetLayout(vk_ctx->device, vk_ctx->mesh_instance_descriptor_set_layout, nullptr);
+    vulkan::pipeline_destroy(&vk_ctx->model_instance_mesh_pipeline);
     vulkan::pipeline_destroy(&vk_ctx->line_pipeline);
     vulkan::pipeline_destroy(&vk_ctx->bbox_pipeline);
 
+    vkDestroyDescriptorSetLayout(vk_ctx->device, vk_ctx->model_instance_mesh_descriptor_set_layout, nullptr);
+    vkDestroyDescriptorSetLayout(vk_ctx->device, vk_ctx->model_instance_mesh_descriptor_set_layout, nullptr);
     vkDestroyDescriptorSetLayout(vk_ctx->device, vk_ctx->bindless_descriptor_set_layout, nullptr);
     vkDestroyDescriptorSetLayout(vk_ctx->device, vk_ctx->camera_descriptor_set_layout, nullptr);
     vkDestroyDescriptorSetLayout(vk_ctx->device, vk_ctx->road_segment_descriptor_set_layout, nullptr);
@@ -915,7 +923,7 @@ mesh_handles_create_and_upload(PrimitiveMesh& prim_mesh)
     return render::MeshHandle{vertex_handle, index_handle};
 }
 
-MeshletMeshHandle
+MeshletRender
 mesh_shader_handles_create_and_upload(PrimitiveMesh& mesh)
 {
     ScratchScope scratch = ScratchScope(0, 0);
@@ -927,15 +935,16 @@ mesh_shader_handles_create_and_upload(PrimitiveMesh& mesh)
         Assert(mesh.indices.data[i] < mesh.vertices.size);
         indices.data[i] = mesh.indices.data[i];
     }
-    MeshletMeshHandle result = mesh_shader_handles_create_and_upload(mesh.vertices, indices, scratch.arena);
+    MeshletRender result = mesh_shader_handles_create_and_upload(mesh.vertices, indices);
     return result;
 }
 
-MeshletMeshHandle
-mesh_shader_handles_create_and_upload(Buffer<PrimitiveVertex> vertices, Buffer<U32> indices, Arena* source_arena)
+MeshletRender
+mesh_shader_handles_create_and_upload(Buffer<PrimitiveVertex> vertices, Buffer<U32> indices)
 {
     prof_scope_marker;
-    if (indices.size == 0)
+    ScratchScope scratch = ScratchScope(0, 0);
+    if (!vulkan::ctx_get()->mesh_shading_enabled || indices.size == 0)
     {
         return {};
     }
@@ -944,7 +953,6 @@ mesh_shader_handles_create_and_upload(Buffer<PrimitiveVertex> vertices, Buffer<U
     {
         Assert(index < vertices.size);
     }
-    ScratchScope scratch = ScratchScope(&source_arena, 1);
     // Output limits match mesh_instance.mesh. Build once, not per instance.
     constexpr U32 max_vertices = 64;
     constexpr U32 max_triangles = 64;
@@ -1050,12 +1058,12 @@ mesh_shader_handles_create_and_upload(Buffer<PrimitiveVertex> vertices, Buffer<U
     defer(thread_cmd_buffer_end(thread_ctx));
     Handle vertex_handle = buffer_load_sync(thread_ctx, &vertex_info, S("Mesh Shader Vertices"));
     Handle index_handle = buffer_load_sync(thread_ctx, &index_info, S("Mesh Shader Meshlets"));
-    MeshletMeshHandle result = {vertex_handle, index_handle, max_meshlet_count};
+    MeshletRender result = {vertex_handle, index_handle, max_meshlet_count, 1.0f};
     return result;
 }
 
 void
-mesh_shader_handles_destroy(MeshletMeshHandle mesh)
+mesh_shader_handles_destroy(MeshletRender mesh)
 {
     if (mesh.meshlet_count > 0)
     {

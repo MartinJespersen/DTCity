@@ -19,6 +19,69 @@
 namespace city
 {
 
+AgentModelRenderInfo
+agent_model_render_info_create(render::ThreadWorkerCmdCtx* t_ctx, gltfw_Result& glb_result, Vec3F32& model_pivot)
+{
+    ScratchScope scratch = ScratchScope(0, 0);
+    AgentModelRenderInfo info = {};
+
+    info.geometry = Array<render::AgentModelInfo>(glb_result.primitives.count);
+    info.texture_handles = Array<render::Handle>(glb_result.textures.size);
+    Assert(info.texture_handles.size);
+    Assert(info.geometry.size);
+
+    // assign texture handles
+    {
+        info.texture_handles[0] = render::texture_zero_handle_get();
+        for (U32 tex_idx = 1; tex_idx < glb_result.textures.size; ++tex_idx)
+        {
+            gltfw_Texture* tex = &glb_result.textures[tex_idx];
+            render::SamplerInfo sampler_info = sampler_from_cgltf_sampler(tex->sampler);
+            info.texture_handles.data[tex_idx] =
+                render::texture_load_sync(t_ctx, &sampler_info, tex->tex_buf);
+        }
+    }
+
+    U32 mesh_idx = 0;
+    for (gltfw_Primitive* node = glb_result.primitives.first; node; node = node->next)
+    {
+        Assert(node->tex_idx < info.texture_handles.size);
+
+        // vertex and index extraction
+        Buffer<render::PrimitiveVertex> vertex_buffer =
+            buffer_alloc<render::PrimitiveVertex>(scratch.arena, node->vertices.size);
+        for (U64 vertex_idx = 0; vertex_idx < node->vertices.size; ++vertex_idx)
+        {
+            gltfw_Vertex3D& source = node->vertices.data[vertex_idx];
+            vertex_buffer.data[vertex_idx] = {.pos = glm::vec3(source.pos.x, source.pos.y, source.pos.z),
+                                              .normal = glm::vec3(0, 1, 0),
+                                              .color = node->color,
+                                              .uv = glm::vec2(source.uv.x, source.uv.y)};
+        }
+
+        // offset vertices based on new pivot
+        for (U32 vertex_idx = 0; vertex_idx < vertex_buffer.size; vertex_idx++)
+        {
+            vertex_buffer.data[vertex_idx].pos.x -= model_pivot.x;
+            vertex_buffer.data[vertex_idx].pos.y -= model_pivot.y;
+            vertex_buffer.data[vertex_idx].pos.z -= model_pivot.z;
+        }
+
+        // load geometry and textures
+
+        render::BufferInfo vertex_info = render::BufferInfo(vertex_buffer, render::BufferType_Vertex);
+        render::BufferInfo index_info = render::BufferInfo(node->indices, render::BufferType_Index);
+        info.geometry.data[mesh_idx].indexed_vert_handles.vertex_h = render::buffer_load_sync(t_ctx, &vertex_info, S("Agent Vertex Buffer"));
+        info.geometry.data[mesh_idx].indexed_vert_handles.index_h = render::buffer_load_sync(t_ctx, &index_info, S("Agent Index Buffer"));
+        info.geometry.data[mesh_idx].texture_h = info.texture_handles[node->tex_idx];
+        info.geometry.data[mesh_idx].color = node->color;
+        info.geometry.data[mesh_idx].meshlet_info = render::mesh_shader_handles_create_and_upload(vertex_buffer, node->indices);
+
+        mesh_idx++;
+    }
+    return info;
+}
+
 // IMPORTANT: Runs on worker thread
 g_internal void
 agents_create(AgentSimThread* agent_sim_thread)
@@ -27,110 +90,52 @@ agents_create(AgentSimThread* agent_sim_thread)
     ScratchScope scratch = ScratchScope(0, 0);
     AgentSimConfig& agent_sim_config = agent_sim_thread->config;
 
+    render::ThreadWorkerCmdCtx* thread_ctx = render::thread_ctx_create();
+    render::thread_cmd_buffer_record(thread_ctx);
+    defer(render::thread_cmd_buffer_end(thread_ctx));
+
     for (U32 agent_cfg_idx = 0; agent_cfg_idx < ArrayCount(agent_sim_config.agent_config); ++agent_cfg_idx)
     {
         AgentConfig* agent_config = &agent_sim_config.agent_config[agent_cfg_idx];
         AgentModelRenderInfo* model_render_info = &agent_sim_config.models[agent_cfg_idx];
 
-        // parse glb file
         String8 glb_path =
-            str8_path_from_str8_list(scratch.arena, {agent_sim_config.asset_dir, agent_config->asset_file_name});
+            str8_path_from_str8_list(scratch.arena, {agent_sim_config.asset_dir, agent_sim_config.agent_config[agent_cfg_idx].asset_file_name});
         gltfw_Result glb_result = gltfw_glb_read(scratch.arena, glb_path);
-        U32 primitive_count = 0;
-        for (gltfw_Primitive* node = glb_result.primitives.first; node; node = node->next)
-        {
-            primitive_count++;
-        }
-        AssertAlways(primitive_count > 0);
 
         // calculate model bounds
         Rng3F32 model_bounds = {};
-        B32 model_bounds_initialized = false;
-        for (gltfw_Primitive* node = glb_result.primitives.first; node; node = node->next)
-        {
-            Rng3F32 primitive_bounds = gltfw_model_bounds_calc(node->vertices);
-            if (!model_bounds_initialized)
-            {
-                model_bounds = primitive_bounds;
-                model_bounds_initialized = true;
-            }
-            else
-            {
-                model_bounds.min.x = Min(model_bounds.min.x, primitive_bounds.min.x);
-                model_bounds.min.y = Min(model_bounds.min.y, primitive_bounds.min.y);
-                model_bounds.min.z = Min(model_bounds.min.z, primitive_bounds.min.z);
-
-                model_bounds.max.x = Max(model_bounds.max.x, primitive_bounds.max.x);
-                model_bounds.max.y = Max(model_bounds.max.y, primitive_bounds.max.y);
-                model_bounds.max.z = Max(model_bounds.max.z, primitive_bounds.max.z);
-            }
-        }
-
-        // set pivot based on model bounds
         Vec3F32 model_pivot = {};
-        model_pivot.x = (model_bounds.min.x + model_bounds.max.x) * 0.5f;
-        model_pivot.y = model_bounds.min.y;
-        model_pivot.z = (model_bounds.min.z + model_bounds.max.z) * 0.5f;
+        {
+            B32 model_bounds_initialized = false;
+            for (gltfw_Primitive* node = glb_result.primitives.first; node; node = node->next)
+            {
+                Rng3F32 primitive_bounds = gltfw_model_bounds_calc(node->vertices);
+                if (!model_bounds_initialized)
+                {
+                    model_bounds = primitive_bounds;
+                    model_bounds_initialized = true;
+                }
+                else
+                {
+                    model_bounds.min.x = Min(model_bounds.min.x, primitive_bounds.min.x);
+                    model_bounds.min.y = Min(model_bounds.min.y, primitive_bounds.min.y);
+                    model_bounds.min.z = Min(model_bounds.min.z, primitive_bounds.min.z);
 
-        // new bounds from pivot
+                    model_bounds.max.x = Max(model_bounds.max.x, primitive_bounds.max.x);
+                    model_bounds.max.y = Max(model_bounds.max.y, primitive_bounds.max.y);
+                    model_bounds.max.z = Max(model_bounds.max.z, primitive_bounds.max.z);
+                }
+            }
+
+            // set pivot based on model bounds
+            model_pivot.x = (model_bounds.min.x + model_bounds.max.x) * 0.5f;
+            model_pivot.y = model_bounds.min.y;
+            model_pivot.z = (model_bounds.min.z + model_bounds.max.z) * 0.5f;
+        }
         agent_config->model_bounds = sub_rng3f32(model_bounds, model_pivot);
 
-        model_render_info->geometry = Array<render::AgentModelInfo>(primitive_count);
-        model_render_info->texture_handles = Array<render::Handle>(glb_result.textures.size);
-        for (auto& geometry : model_render_info->geometry)
-            geometry = {};
-        for (auto& texture : model_render_info->texture_handles)
-            texture = {};
-        render::ThreadWorkerCmdCtx* thread_ctx = render::thread_ctx_create();
-        render::thread_cmd_buffer_record(thread_ctx);
-        defer(render::thread_cmd_buffer_end(thread_ctx));
-
-        Assert(model_render_info->texture_handles.size > 0);
-        model_render_info->texture_handles[0] = render::texture_zero_handle_get();
-        for (U32 tex_idx = 1; tex_idx < glb_result.textures.size; ++tex_idx)
-        {
-            gltfw_Texture* tex = &glb_result.textures[tex_idx];
-            render::SamplerInfo sampler_info = sampler_from_cgltf_sampler(tex->sampler);
-            model_render_info->texture_handles.data[tex_idx] =
-                render::texture_load_sync(thread_ctx, &sampler_info, tex->tex_buf);
-        }
-
-        U32 mesh_idx = 0;
-        for (gltfw_Primitive* node = glb_result.primitives.first; node; node = node->next)
-        {
-            Assert(node->tex_idx < model_render_info->texture_handles.size);
-
-            // vertex and index extraction
-            Buffer<render::PrimitiveVertex> vertex_buffer =
-                buffer_alloc<render::PrimitiveVertex>(scratch.arena, node->vertices.size);
-            for (U64 vertex_idx = 0; vertex_idx < node->vertices.size; ++vertex_idx)
-            {
-                gltfw_Vertex3D& source = node->vertices.data[vertex_idx];
-                vertex_buffer.data[vertex_idx] = {.pos = glm::vec3(source.pos.x, source.pos.y, source.pos.z),
-                                                  .normal = glm::vec3(0, 1, 0),
-                                                  .color = node->color,
-                                                  .uv = glm::vec2(source.uv.x, source.uv.y)};
-            }
-
-            // offset vertices based on new pivot
-            for (U32 vertex_idx = 0; vertex_idx < vertex_buffer.size; vertex_idx++)
-            {
-                vertex_buffer.data[vertex_idx].pos.x -= model_pivot.x;
-                vertex_buffer.data[vertex_idx].pos.y -= model_pivot.y;
-                vertex_buffer.data[vertex_idx].pos.z -= model_pivot.z;
-            }
-
-            // load geometry and textures
-            render::MeshletMeshHandle mesh =
-                render::mesh_shader_handles_create_and_upload(vertex_buffer, node->indices, scratch.arena);
-            model_render_info->geometry.data[mesh_idx].vertex_handle = mesh.vertex_buffer_handle;
-            model_render_info->geometry.data[mesh_idx].index_handle = mesh.meshlet_buffer_handle;
-            model_render_info->geometry.data[mesh_idx].meshlet_count = mesh.meshlet_count;
-            model_render_info->geometry.data[mesh_idx].texture_handle_idx = node->tex_idx;
-            model_render_info->geometry.data[mesh_idx].color = node->color;
-
-            mesh_idx++;
-        }
+        agent_sim_config.models[agent_cfg_idx] = agent_model_render_info_create(thread_ctx, glb_result, model_pivot);
     }
 }
 
@@ -242,7 +247,6 @@ AgentSystem::update(ui::Camera* camera,
         for (Agent& active_agent : this->agent_sim->agents_active)
         {
             B32 visible = ui::frustum_check_from_bounding_box(&camera->frustum_planes, active_agent.world_bounds);
-            constexpr F32 hover_icon_scale_factor = 10.0f;
             this->agent_icon_add(active_agent, hover_icon_mesh_handle,
                                  hover_icon_scale_factor); // TODO: Frustum cull icon as well
             if (visible)
@@ -265,8 +269,7 @@ AgentSystem::update(ui::Camera* camera,
             render::BufferInfo instance_buffer_info =
                 render::BufferInfo(transform_buffer, render::BufferType_Vertex | render::BufferType_StorageBuffer);
 
-            this->agent_draw(model_render_info->geometry, model_render_info->texture_handles,
-                             &instance_buffer_info);
+            this->agent_draw(model_render_info->geometry, &instance_buffer_info);
         }
     }
 }
@@ -290,8 +293,7 @@ AgentSystem::agent_icon_add(Agent& agent, render::MeshHandle hover_icon_mesh_han
 }
 
 void
-AgentSystem::agent_draw(Array<render::AgentModelInfo>& meshes,
-                        Array<render::Handle>& texture_handles, render::BufferInfo* instance_buffer_info)
+AgentSystem::agent_draw(Array<render::AgentModelInfo>& meshes, render::BufferInfo* instance_buffer_info)
 {
     draw::DrawFrame* frame = draw::draw_frame_get();
     Assert(instance_buffer_info->type_size == sizeof(render::Transform));
@@ -301,12 +303,11 @@ AgentSystem::agent_draw(Array<render::AgentModelInfo>& meshes,
     Buffer<render::Transform> frame_transforms = buffer_arena_copy(frame_arena, transforms);
     for (render::AgentModelInfo& mesh : meshes)
     {
-        render::MeshInstanceBatch batch = {};
+        render::AgentMeshInstanceBatch batch = {};
+        batch.agent_model_info = mesh;
         batch.transforms = frame_transforms;
-        batch.mesh_handle = {mesh.vertex_handle, mesh.index_handle, mesh.meshlet_count};
-        batch.texture_handle = texture_handles.data[mesh.texture_handle_idx];
+        batch.texture_handle = mesh.texture_h;
         batch.textured = true;
-        batch.lod_error_pixels = 1.0f;
         chunk_list_insert(frame_arena, frame->mesh_instance_batches, batch);
     }
 }
@@ -431,8 +432,11 @@ _agent_models_release(AgentSimConfig* config)
     {
         for (auto& geometry : model.geometry)
         {
-            render::handle_destroy(geometry.vertex_handle);
-            render::handle_destroy(geometry.index_handle);
+            render::handle_destroy(geometry.indexed_vert_handles.vertex_h);
+            render::handle_destroy(geometry.indexed_vert_handles.index_h);
+
+            render::handle_destroy(geometry.meshlet_info.meshlet_buffer_handle);
+            render::handle_destroy(geometry.meshlet_info.vertex_buffer_handle);
             geometry = {};
         }
         // Index zero is the renderer's shared fallback texture.

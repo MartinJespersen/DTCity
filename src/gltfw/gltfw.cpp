@@ -271,6 +271,7 @@ gltfw_primitives_read(Arena* arena, cgltf_data* data)
                         gltfw_Primitive* primitive_w = gltfw_primitive_create(arena, data, primitive, node_to_scene);
                         SLLQueuePush(prim_list.first, prim_list.last, primitive_w);
                     }
+                    prim_list.count += mesh->primitives_count;
                 }
             }
         }

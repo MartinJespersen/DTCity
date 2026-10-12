@@ -142,7 +142,7 @@ file_read(Arena* arena, String8 filename);
 }
 
 char**
-CStrArrFromStr8Buffer(Arena* arena, Buffer<String8> buffer);
+c_str_arr_from_str8_buffer(Arena* arena, Buffer<String8> buffer);
 
 // ~mgj: ChunkList
 template <typename T>

@@ -16,7 +16,6 @@ PFN_vkCmdPushDescriptorSetKHR cmd_push_descriptor_set_khr = VK_NULL_HANDLE;
 PFN_vkCmdBeginDebugUtilsLabelEXT cmd_begin_debug_utils_label_ext = VK_NULL_HANDLE;
 PFN_vkCmdEndDebugUtilsLabelEXT cmd_end_debug_utils_label_ext = VK_NULL_HANDLE;
 
-
 // TODO: check for blitting format beforehand
 
 static render::BufferType
@@ -318,7 +317,7 @@ create_instance(Context* vk_ctx)
     required_instance_extensions_validate(scratch.arena, extensions);
 
     createInfo.enabledExtensionCount = (U32)extensions.size;
-    createInfo.ppEnabledExtensionNames = CStrArrFromStr8Buffer(scratch.arena, extensions);
+    createInfo.ppEnabledExtensionNames = c_str_arr_from_str8_buffer(scratch.arena, extensions);
 
     VkDebugUtilsMessengerCreateInfoEXT debugCreateInfo{};
     VkValidationFeatureEnableEXT validation_feature_enables[4] = {};
@@ -341,7 +340,7 @@ create_instance(Context* vk_ctx)
     if (vk_ctx->enable_validation_layers)
     {
         createInfo.enabledLayerCount = (U32)vk_ctx->validation_layers.size;
-        createInfo.ppEnabledLayerNames = CStrArrFromStr8Buffer(scratch.arena, vk_ctx->validation_layers);
+        createInfo.ppEnabledLayerNames = c_str_arr_from_str8_buffer(scratch.arena, vk_ctx->validation_layers);
 
         populate_debug_messenger_create_info(debugCreateInfo);
         validation_features.pNext = &debugCreateInfo;
@@ -399,8 +398,6 @@ logical_device_create(Arena* arena, Context* vk_ctx)
     supported_features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
     VkPhysicalDeviceTimelineSemaphoreFeatures supported_timeline_semaphore{};
     supported_timeline_semaphore.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_TIMELINE_SEMAPHORE_FEATURES;
-    VkPhysicalDeviceMeshShaderFeaturesEXT supported_mesh_shader{};
-    supported_mesh_shader.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MESH_SHADER_FEATURES_EXT;
 #if BUILD_DEBUG && SHADER_DEBUG
     VkPhysicalDeviceShaderRelaxedExtendedInstructionFeaturesKHR supported_relaxed_instruction{};
     supported_relaxed_instruction.sType =
@@ -409,9 +406,8 @@ logical_device_create(Arena* arena, Context* vk_ctx)
 
     // Support-query chain, in traversal order.
     supported_features.pNext = &supported_timeline_semaphore;
-    supported_timeline_semaphore.pNext = &supported_mesh_shader;
 #if BUILD_DEBUG && SHADER_DEBUG
-    supported_mesh_shader.pNext = &supported_relaxed_instruction;
+    supported_timeline_semaphore.pNext = &supported_relaxed_instruction;
 #endif
     vkGetPhysicalDeviceFeatures2(vk_ctx->physical_device, &supported_features);
 
@@ -423,20 +419,23 @@ logical_device_create(Arena* arena, Context* vk_ctx)
                         "debug information");
     }
 #endif
-    if (!supported_mesh_shader.meshShader || !supported_mesh_shader.taskShader)
+    if (!vk_ctx->mesh_shading_enabled)
     {
-        exit_with_error("Selected Vulkan device requires VK_EXT_mesh_shader meshShader and taskShader");
+        INFO_LOG("Mesh shading is unavailable; mesh instances will not be drawn.\n");
     }
     if (!supported_timeline_semaphore.timelineSemaphore)
     {
         exit_with_error("Selected Vulkan physical device does not support timeline semaphores");
     }
 
-    vk_ctx->mesh_shader_properties.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MESH_SHADER_PROPERTIES_EXT;
-    VkPhysicalDeviceProperties2 mesh_properties = {};
-    mesh_properties.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2;
-    mesh_properties.pNext = &vk_ctx->mesh_shader_properties;
-    vkGetPhysicalDeviceProperties2(vk_ctx->physical_device, &mesh_properties);
+    if (vk_ctx->mesh_shading_enabled)
+    {
+        vk_ctx->mesh_shader_properties.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MESH_SHADER_PROPERTIES_EXT;
+        VkPhysicalDeviceProperties2 mesh_properties = {};
+        mesh_properties.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2;
+        mesh_properties.pNext = &vk_ctx->mesh_shader_properties;
+        vkGetPhysicalDeviceProperties2(vk_ctx->physical_device, &mesh_properties);
+    }
 
     // Configure requested features. All fields not assigned remain disabled.
     VkPhysicalDeviceFeatures device_features{};
@@ -501,10 +500,14 @@ logical_device_create(Arena* arena, Context* vk_ctx)
     synchronization2_features.pNext = &descriptor_indexing_features;
     descriptor_indexing_features.pNext = &color_write_enable_features;
     color_write_enable_features.pNext = &buffer_device_address_features;
-    buffer_device_address_features.pNext = &mesh_shader_features;
 #if BUILD_DEBUG && SHADER_DEBUG
-    mesh_shader_features.pNext = &relaxed_instruction_features;
+    buffer_device_address_features.pNext = &relaxed_instruction_features;
 #endif
+    if (vk_ctx->mesh_shading_enabled)
+    {
+        mesh_shader_features.pNext = buffer_device_address_features.pNext;
+        buffer_device_address_features.pNext = &mesh_shader_features;
+    }
 
     createInfo.pQueueCreateInfos = queueCreateInfos;
 
@@ -512,14 +515,25 @@ logical_device_create(Arena* arena, Context* vk_ctx)
 
     createInfo.pEnabledFeatures = &device_features;
 
+    // Do not request the optional extension when the mesh pipeline is disabled.
+    U64 enabled_extension_count = 0;
+    for (String8 extension : vk_ctx->device_extensions)
+    {
+        if (vk_ctx->mesh_shading_enabled ||
+            !c_str_equal((char*)extension.str, VK_EXT_MESH_SHADER_EXTENSION_NAME))
+        {
+            vk_ctx->device_extensions.data[enabled_extension_count++] = extension;
+        }
+    }
+    vk_ctx->device_extensions.size = enabled_extension_count;
     createInfo.enabledExtensionCount = (U32)vk_ctx->device_extensions.size;
-    createInfo.ppEnabledExtensionNames = CStrArrFromStr8Buffer(vk_ctx->arena, vk_ctx->device_extensions);
+    createInfo.ppEnabledExtensionNames = c_str_arr_from_str8_buffer(vk_ctx->arena, vk_ctx->device_extensions);
 
     // NOTE: This if statement is no longer necessary on newer versions
     if (vk_ctx->enable_validation_layers)
     {
         createInfo.enabledLayerCount = (U32)vk_ctx->validation_layers.size;
-        createInfo.ppEnabledLayerNames = CStrArrFromStr8Buffer(vk_ctx->arena, vk_ctx->validation_layers);
+        createInfo.ppEnabledLayerNames = c_str_arr_from_str8_buffer(vk_ctx->arena, vk_ctx->validation_layers);
     }
     else
     {
@@ -532,11 +546,14 @@ logical_device_create(Arena* arena, Context* vk_ctx)
     }
 
     vkGetDeviceQueue(vk_ctx->device, queueFamilyIndicies.graphicsFamilyIndex, 0, &vk_ctx->graphics_queue);
-    vk_ctx->cmd_draw_mesh_tasks_ext =
-        (PFN_vkCmdDrawMeshTasksEXT)vkGetDeviceProcAddr(vk_ctx->device, "vkCmdDrawMeshTasksEXT");
-    if (!vk_ctx->cmd_draw_mesh_tasks_ext)
+    if (vk_ctx->mesh_shading_enabled)
     {
-        exit_with_error("Could not load vkCmdDrawMeshTasksEXT");
+        vk_ctx->cmd_draw_mesh_tasks_ext =
+            (PFN_vkCmdDrawMeshTasksEXT)vkGetDeviceProcAddr(vk_ctx->device, "vkCmdDrawMeshTasksEXT");
+        if (!vk_ctx->cmd_draw_mesh_tasks_ext)
+        {
+            exit_with_error("Could not load vkCmdDrawMeshTasksEXT");
+        }
     }
     vkGetDeviceQueue(vk_ctx->device, queueFamilyIndicies.presentFamilyIndex, 0, &vk_ctx->present_queue);
     cmd_set_color_write_enable_ext =
@@ -575,6 +592,7 @@ physical_device_pick(Context* vk_ctx)
     Temp scratch = ScratchBegin(0, 0);
 
     vk_ctx->physical_device = VK_NULL_HANDLE;
+    vk_ctx->mesh_shading_enabled = false;
 
     uint32_t deviceCount = 0;
     vkEnumeratePhysicalDevices(vk_ctx->instance, &deviceCount, nullptr);
@@ -591,22 +609,36 @@ physical_device_pick(Context* vk_ctx)
     {
         VkPhysicalDeviceProperties properties{};
         vkGetPhysicalDeviceProperties(devices[i], &properties);
-        QueueFamilyIndexBits familyIndexBits = queue_families_find(vk_ctx, devices[i]);
-        if (is_device_suitable(vk_ctx, devices[i], familyIndexBits))
+        if (properties.deviceType == VK_PHYSICAL_DEVICE_TYPE_CPU)
         {
-            INFO_LOG("Name of device: %s\nDevice Type: %d\n", properties.deviceName, properties.deviceType);
+            INFO_LOG("Skipping software Vulkan device: %s\n", properties.deviceName);
+            continue;
+        }
+
+        QueueFamilyIndexBits familyIndexBits = queue_families_find(vk_ctx, devices[i]);
+        bool mesh_shading_supported = false;
+        bool suitable = is_device_suitable(vk_ctx, devices[i], familyIndexBits, &mesh_shading_supported);
+        // Retain the first hardware fallback, but prefer a device that supports both shader stages.
+        if (suitable && (vk_ctx->physical_device == VK_NULL_HANDLE || mesh_shading_supported))
+        {
             vk_ctx->physical_device = devices[i];
             vk_ctx->physical_device_properties = properties;
-            vk_ctx->msaa_samples = Min(VK_SAMPLE_COUNT_4_BIT, max_usable_sample_count_get(devices[i]));
             vk_ctx->queue_family_indices = queue_family_indices_from_bit_fields(familyIndexBits);
-            break;
+            vk_ctx->mesh_shading_enabled = mesh_shading_supported;
+            if (mesh_shading_supported)
+                break;
         }
     }
 
     if (vk_ctx->physical_device == VK_NULL_HANDLE)
     {
-        exit_with_error("failed to find a suitable GPU!");
+        exit_with_error("Failed to find a suitable hardware GPU; software rendering is disabled.");
     }
+
+    vk_ctx->msaa_samples = Min(VK_SAMPLE_COUNT_4_BIT, max_usable_sample_count_get(vk_ctx->physical_device));
+    INFO_LOG("Name of device: %s\nDevice Type: %d\nMesh and task shaders supported: %s\n",
+             vk_ctx->physical_device_properties.deviceName, vk_ctx->physical_device_properties.deviceType,
+             vk_ctx->mesh_shading_enabled ? "yes" : "no");
 
     ScratchEnd(scratch);
 }
@@ -721,8 +753,9 @@ populate_debug_messenger_create_info(VkDebugUtilsMessengerCreateInfoEXT& createI
 }
 
 static bool
-check_device_extension_support(Context* vk_ctx, VkPhysicalDevice device)
+check_device_extension_support(Context* vk_ctx, VkPhysicalDevice device, bool* mesh_shader_extension_supported)
 {
+    *mesh_shader_extension_supported = false;
     Temp scratch = ScratchBegin(0, 0);
     uint32_t extensionCount;
     vkEnumerateDeviceExtensionProperties(device, nullptr, &extensionCount, nullptr);
@@ -743,7 +776,14 @@ check_device_extension_support(Context* vk_ctx, VkPhysicalDevice device)
             }
         }
 
-        if (found)
+        // Mesh support is a selection preference. Other renderer extensions remain required.
+        bool mesh_shader_extension = c_str_equal((char*)vk_ctx->device_extensions.data[j].str,
+                                                 VK_EXT_MESH_SHADER_EXTENSION_NAME);
+        if (mesh_shader_extension)
+        {
+            *mesh_shader_extension_supported = found;
+        }
+        if (found || mesh_shader_extension)
         {
             numberOfRequiredExtenstionsLeft--;
         }
@@ -888,9 +928,22 @@ queue_families_find(Context* vk_ctx, VkPhysicalDevice device)
 }
 
 static bool
-is_device_suitable(Context* vk_ctx, VkPhysicalDevice device, QueueFamilyIndexBits indexBits)
+is_device_suitable(Context* vk_ctx, VkPhysicalDevice device, QueueFamilyIndexBits indexBits,
+                   bool* mesh_shading_supported)
 {
-    bool extensionsSupported = check_device_extension_support(vk_ctx, device);
+    bool mesh_shader_extension_supported = false;
+    bool extensionsSupported = check_device_extension_support(vk_ctx, device, &mesh_shader_extension_supported);
+    *mesh_shading_supported = false;
+    if (mesh_shader_extension_supported)
+    {
+        VkPhysicalDeviceMeshShaderFeaturesEXT mesh_features{};
+        mesh_features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MESH_SHADER_FEATURES_EXT;
+        VkPhysicalDeviceFeatures2 features{};
+        features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
+        features.pNext = &mesh_features;
+        vkGetPhysicalDeviceFeatures2(device, &features);
+        *mesh_shading_supported = mesh_features.meshShader && mesh_features.taskShader;
+    }
 
     bool swapChainAdequate = false;
     if (extensionsSupported)

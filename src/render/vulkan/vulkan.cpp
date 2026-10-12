@@ -334,9 +334,12 @@ command_buffer_record(U32 image_index, U32 current_frame, Vec2S64 mouse_cursor_p
 
             if (draw_frame->mesh_instance_batches->total_count > 0)
             {
-                Buffer<render::MeshInstanceBatch> mesh_batches =
+                Buffer<render::AgentMeshInstanceBatch> mesh_batches =
                     buffer_from_chunk_list(vk_ctx->render_frame_arena, draw_frame->mesh_instance_batches);
-                mesh_instance_rendering(mesh_batches, camera_handle_void);
+                if (vk_ctx->mesh_shading_enabled)
+                {
+                    model_instance_mesh_rendering(mesh_batches, camera_handle_void);
+                }
             }
 
             if (draw_frame->line_vertex_chunk_list->total_count > 0)

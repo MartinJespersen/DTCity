@@ -1,6 +1,3 @@
-# Sim refactor
-- remember to handle changing id ;
-- polling for metadata should be done regularly
 
 # Simulator regressions
 
@@ -14,13 +11,15 @@
 - Task System refactor
   - The generic value should be wrapped in a unique ptr to allow so it will always be destroyed
 - Config should be moved to static array of struct or a static initialized global variable in separate file
+- ChunkList implementation having a max capacity? What happens when whole chunks are inserted?
+- Improve buffer loading; reconsider the use of BufferInfo and BufferType and buffer_load_sync
 
 # Project TODO:
 - Make mesh shaders optional
 - Make debug logging internal to layer.
 - Improve performance to be able to visualize large simulations.
   - multithreaded addition
-- make sure the vulkan function are not used in city layer
+- Look at potential memory leaks. What to do about arenas and allocators?
 - Ability to change camera for each agent?
 - Visualize multiple scenarios (with dashboard for changing them)
   - Visualization -> simulation communication for scenario change 
@@ -29,8 +28,6 @@
 
 # features
 * chunk_list should not allow chunk items with count larger than capacity
-* Show a clock in the application allowing 
-* agents cannot be deleted due to caching and cesium async height calculation
 * delete draw flush and related code
 * Osm data visualizer should not be affected by netascore not showing
 * Use the OSM data for showing data about buildings

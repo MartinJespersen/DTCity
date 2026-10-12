@@ -53,6 +53,7 @@ struct gltfw_PrimitiveList
 {
     gltfw_Primitive* first;
     gltfw_Primitive* last;
+    U32 count;
 };
 
 struct gltfw_Texture

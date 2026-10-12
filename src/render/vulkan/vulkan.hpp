@@ -1,5 +1,7 @@
 #pragma once
 
+#include "shaders/shader_shared.h"
+
 #include "asset_manager.hpp"
 #include "vulkan_common.hpp"
 #include "pipelines.hpp"
@@ -8,22 +10,7 @@
 namespace vulkan
 {
 
-struct TilePipelinePushConstants
-{
-    U32 tex_idx;
-    U32 overlay_tex_idx;
-    U32 overlay_enabled;
-    U64 colormap_address;
-    U32 colormap_len;
-    F32 overlay_translation_x;
-    F32 overlay_translation_y;
-    F32 overlay_scale_x;
-    F32 overlay_scale_y;
-    F32 height_offset;
-    F32 lod_fade;
-    U32 road_test_enabled;
-    U32 overlay_option_idx;
-};
+using TilePipelinePushConstants = shader::TilePipelinePushConstants;
 
 struct TilePipelineNode
 {
@@ -44,17 +31,9 @@ struct TilePipelineList
     TilePipelineNode* last;
 };
 
-struct Blend3dPushConstants
-{
-    U32 texture_index;
-    U32 colormap_index;
-};
+using Blend3dPushConstants = shader::Blend3dPushConstants;
 
-struct RoadIntersectionPushConstants
-{
-    U32 road_segment_buffer_elem_count;
-    U32 overlay_option_idx;
-};
+using RoadIntersectionPushConstants = shader::RoadIntersectionPushConstants;
 
 struct Blend3DNode
 {
@@ -92,7 +71,6 @@ struct RenderFrame
     TilePipelineList model_3D_list;
     Blend3DList blend_3d_list;
     RoadIntersectionList road_intersection_list;
-
 };
 
 struct MappedHandle
@@ -184,24 +162,34 @@ struct Context
 
     // ~mgj: Rendering
     Arena* render_frame_arena;
+
     RenderFrame* render_frame;
+
     Pipeline model_3D_pipeline;
     Pipeline blend_3d_pipeline;
     Pipeline primitive_pipeline;
-    Pipeline mesh_instance_pipeline;
-    VkDescriptorSetLayout mesh_instance_descriptor_set_layout;
-    VkPhysicalDeviceMeshShaderPropertiesEXT mesh_shader_properties;
-    PFN_vkCmdDrawMeshTasksEXT cmd_draw_mesh_tasks_ext;
+    Pipeline model_instance_mesh_pipeline;
+    Pipeline model_instance_pipeline;
     Pipeline line_pipeline;
     Pipeline bbox_pipeline;
+
+    VkDescriptorSetLayout model_instance_mesh_descriptor_set_layout;
+    VkDescriptorSetLayout model_instance_descriptor_set_layout;
     VkDescriptorSetLayout road_segment_descriptor_set_layout;
     VkDescriptorSetLayout storage_buffer_descriptor_set_layout;
     VkDescriptorSetLayout car_height_calculate_descriptor_set_layout;
+
     render::Handle model_3D_instance_buffer[render::MAX_FRAMES_IN_FLIGHT];
     render::Handle primitive_instance_buffer[render::MAX_FRAMES_IN_FLIGHT];
     render::Handle mesh_instance_buffer[render::MAX_FRAMES_IN_FLIGHT];
     render::Handle line_buffer_handle[render::MAX_FRAMES_IN_FLIGHT];
+
+    VkPhysicalDeviceMeshShaderPropertiesEXT mesh_shader_properties;
+    PFN_vkCmdDrawMeshTasksEXT cmd_draw_mesh_tasks_ext;
+
     LinkedList<MappedHandleTransfer> mapped_handle_list; // mapped handles
+    // extensions enabled
+    bool mesh_shading_enabled;
 };
 
 // ~mgj: Vulkan Lifetime

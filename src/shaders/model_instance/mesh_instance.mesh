@@ -1,5 +1,7 @@
 #version 460
 #extension GL_EXT_mesh_shader : require
+#extension GL_GOOGLE_include_directive : require
+#include "../shader_shared.h"
 
 layout(local_size_x = 32) in;
 layout(triangles, max_vertices = 64, max_primitives = 64) out;
@@ -7,33 +9,19 @@ layout(location = 0) out vec4 out_color[];
 layout(location = 1) out vec3 out_normal[];
 layout(location = 2) out vec2 out_uv[];
 
-layout(set = 0, binding = 0) uniform UBO_Camera
+layout(std140, set = 0, binding = 0) uniform UBO_Camera
 {
-    mat4 view;
-    mat4 projection;
-    vec4 frustum_planes[6];
-    vec2 viewport_dim;
-} camera_ubo;
+    CameraUniformBuffer camera_ubo;
+};
 // Word offsets honor the CPU PrimitiveVertex layout, including GLM padding.
 layout(std430, set = 0, binding = 1) readonly buffer Vertices { uint words[]; } vertices;
 layout(std430, set = 0, binding = 2) readonly buffer Meshlets { uint words[]; } meshlets;
 layout(std430, set = 0, binding = 3) readonly buffer Transforms { mat4 models[]; } transforms;
-layout(push_constant) uniform PushConstants
+layout(push_constant, std430) uniform PushConstants
 {
-    uint first_meshlet;
-    uint first_instance;
-    uint transform_offset;
-    uint vertex_stride;
-    uint position_offset;
-    uint normal_offset;
-    uint color_offset;
-    uint uv_offset;
-    uint texture_index;
-    uint textured;
-    float lod_error_pixels;
-} pc;
+    MeshInstancePushConstants pc;
+};
 
-struct LodPayload { uint descriptor; uint instance_index; };
 taskPayloadSharedEXT LodPayload payload;
 
 vec3 read_vec3(uint offset)
@@ -59,7 +47,7 @@ void main()
         uint vertex = meshlets.words[vertex_offset + output_index];
         uint base = vertex * pc.vertex_stride;
         vec3 position = read_vec3(base + pc.position_offset);
-        gl_MeshVerticesEXT[output_index].gl_Position = camera_ubo.projection * camera_ubo.view * model * vec4(position, 1.0);
+        gl_MeshVerticesEXT[output_index].gl_Position = camera_ubo.proj * camera_ubo.view * model * vec4(position, 1.0);
         out_normal[output_index] = normal_matrix * read_vec3(base + pc.normal_offset);
         out_uv[output_index] = uintBitsToFloat(uvec2(vertices.words[base + pc.uv_offset], vertices.words[base + pc.uv_offset + 1]));
         out_color[output_index] = vec4(read_vec3(base + pc.color_offset), uintBitsToFloat(vertices.words[base + pc.color_offset + 3]));

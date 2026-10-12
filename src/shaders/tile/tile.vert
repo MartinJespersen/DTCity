@@ -14,22 +14,19 @@ layout(location = 1) out vec2 out_overlay_uv;
 layout(location = 2) flat out uvec2 out_object_id;
 layout(location = 3) flat out float out_overlay_option;
 
-layout(set = 0, binding = 0) uniform UBO_Camera
+layout(std140, set = 0, binding = 0) uniform UBO_Camera
 {
-    mat4 view;
-    mat4 projection;
-    vec4 frustum_planes[6];
-    vec2 viewport_dim;
-} camera_ubo;
+    CameraUniformBuffer camera_ubo;
+};
 
-layout(push_constant) uniform Constants
+layout(push_constant, std430) uniform Constants
 {
-    RenderPushConstants push_constants;
+    TilePipelinePushConstants push_constants;
 };
 
 layout(std430, set = 0, binding = 1) readonly buffer RoadSegmentBuffer
 {
-    RoadSegment road_segments[];
+    RoadSegmentCorners road_segments[];
 };
 
 void main() {
@@ -43,8 +40,8 @@ void main() {
     {
         uint road_segment_index = in_road_segment_index - 1;
 
-        out_object_id = road_segments[road_segment_index].id;
-        out_overlay_option = road_segments[road_segment_index].options[push_constants.overlay_option_idx];
+        out_object_id = road_segments[road_segment_index].edge_id;
+        out_overlay_option = road_segments[road_segment_index].road_info.options[push_constants.overlay_option_idx];
 
     }
     else
@@ -53,5 +50,5 @@ void main() {
         out_overlay_option = 0.0;
     }
 
-    gl_Position = camera_ubo.projection * camera_ubo.view * vec4(pos, 1.0);
+    gl_Position = camera_ubo.proj * camera_ubo.view * vec4(pos, 1.0);
 }

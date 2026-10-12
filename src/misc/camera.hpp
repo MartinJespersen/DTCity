@@ -1,5 +1,7 @@
 #pragma once
 
+#include "shaders/shader_shared.h"
+
 #include "render/render.hpp"
 #include "io.hpp"
 
@@ -17,19 +19,10 @@ enum PlaneType
     PlaneType_Count
 };
 
-struct Frustum
-{
-    glm::vec4 planes[PlaneType_Count];
-};
+static_assert(PlaneType_Count == shader::frustum_plane_count);
+using Frustum = shader::Frustum;
 
-struct CameraUniformBuffer
-{
-    glm::mat4 view;
-    glm::mat4 proj;
-    Frustum frustum;
-    glm::vec2 viewport_dim;
-    glm::vec2 _padding;
-};
+using CameraUniformBuffer = shader::CameraUniformBuffer;
 
 struct Camera
 {

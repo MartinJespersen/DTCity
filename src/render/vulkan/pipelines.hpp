@@ -1,5 +1,7 @@
 #pragma once
 
+#include "shaders/shader_shared.h"
+
 #include "core_inc.hpp"
 #include "render/render.hpp"
 namespace vulkan
@@ -18,20 +20,7 @@ struct Pipeline
     VkPipelineLayout pipeline_layout;
 };
 
-struct MeshInstancePushConstants
-{
-    U32 first_meshlet;
-    U32 first_instance;
-    U32 transform_offset;
-    U32 vertex_stride;
-    U32 position_offset;
-    U32 normal_offset;
-    U32 color_offset;
-    U32 uv_offset;
-    U32 texture_index;
-    U32 textured;
-    F32 lod_error_pixels;
-};
+using MeshInstancePushConstants = shader::MeshInstancePushConstants;
 // general pipeline functions
 g_internal void
 pipeline_destroy(Pipeline* draw_ctx);
@@ -54,11 +43,16 @@ primitive_pipeline_create(String8 shader_path);
 g_internal void
 primitive_rendering(Buffer<render::PrimitiveInstance> primitive_instances, render::MappedHandle<void> camera_handle);
 
+g_internal Pipeline
+model_instance_pipeline_create(String8 shader_path);
+g_internal void
+model_instance_rendering(Buffer<render::AgentMeshInstanceBatch> mesh_batches, render::MappedHandle<void> camera_handle);
+
 // EXT mesh shaders: PrimitiveVertex storage, packed meshlets, per-instance transforms.
 g_internal Pipeline
-mesh_instance_pipeline_create(String8 shader_path);
+model_instance_mesh_pipeline_create(String8 shader_path);
 g_internal void
-mesh_instance_rendering(Buffer<render::MeshInstanceBatch> mesh_batches, render::MappedHandle<void> camera_handle);
+model_instance_mesh_rendering(Buffer<render::AgentMeshInstanceBatch> mesh_batches, render::MappedHandle<void> camera_handle);
 
 // Line rendering
 g_internal Pipeline

@@ -81,7 +81,7 @@ file_read(Arena* arena, String8 filename)
 //~mgj: Strings functions
 
 char**
-CStrArrFromStr8Buffer(Arena* arena, Buffer<String8> buffer)
+c_str_arr_from_str8_buffer(Arena* arena, Buffer<String8> buffer)
 {
     char** arr = PushArray(arena, char*, buffer.size);
 

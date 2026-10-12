@@ -1,35 +1,23 @@
 #version 460
 #extension GL_EXT_mesh_shader : require
+#extension GL_GOOGLE_include_directive : require
+#include "../shader_shared.h"
 
 layout(local_size_x = 1) in;
 
-layout(set = 0, binding = 0) uniform UBO_Camera
+layout(std140, set = 0, binding = 0) uniform UBO_Camera
 {
-    mat4 view;
-    mat4 projection;
-    vec4 frustum_planes[6];
-    vec2 viewport_dim;
-} camera_ubo;
+    CameraUniformBuffer camera_ubo;
+};
 // Word offsets honor the CPU PrimitiveVertex layout, including GLM padding.
 layout(std430, set = 0, binding = 1) readonly buffer Vertices { uint words[]; } vertices;
 layout(std430, set = 0, binding = 2) readonly buffer Meshlets { uint words[]; } meshlets;
 layout(std430, set = 0, binding = 3) readonly buffer Transforms { mat4 models[]; } transforms;
-layout(push_constant) uniform PushConstants
+layout(push_constant, std430) uniform PushConstants
 {
-    uint first_meshlet;
-    uint first_instance;
-    uint transform_offset;
-    uint vertex_stride;
-    uint position_offset;
-    uint normal_offset;
-    uint color_offset;
-    uint uv_offset;
-    uint texture_index;
-    uint textured;
-    float lod_error_pixels;
-} pc;
+    MeshInstancePushConstants pc;
+};
 
-struct LodPayload { uint descriptor; uint instance_index; };
 taskPayloadSharedEXT LodPayload payload;
 void main()
 {
@@ -41,7 +29,7 @@ void main()
     float stretch = sqrt(dot(model[0].xyz, model[0].xyz) + dot(model[1].xyz, model[1].xyz) + dot(model[2].xyz, model[2].xyz));
     vec3 view_center = (camera_ubo.view * model * vec4(center, 1)).xyz;
     float nearest_depth = -view_center.z - radius * stretch;
-    float projection_scale = abs(camera_ubo.projection[1][1]) * camera_ubo.viewport_dim.y * 0.5;
+    float projection_scale = abs(camera_ubo.proj[1][1]) * camera_ubo.viewport_dim.y * 0.5;
     uint lod = 0;
     if (pc.lod_error_pixels > 0 && nearest_depth > 0)
     {

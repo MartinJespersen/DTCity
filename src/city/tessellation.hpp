@@ -1,5 +1,7 @@
 #pragma once
 
+#include "shaders/shader_shared.h"
+
 #include "render/render.hpp"
 #include "misc/geometry.hpp"
 #include "osm/osm.hpp"
@@ -37,17 +39,12 @@ read_only g_internal const char* road_overlay_option_strs[] = {
 #undef X
 };
 
-struct RoadInfo
-{
-    F32 options[RoadOverlayOption_Count];
-};
+static_assert(RoadOverlayOption_Count == shader::road_option_count);
+static_assert(RoadSegmentCornerCoord_Count == shader::road_corner_count);
 
-struct alignas(8) RoadSegmentCorners
-{
-    osm::EdgeId edge_id;
-    Vec2F32 corners[RoadSegmentCornerCoord_Count];
-    RoadInfo road_info;
-};
+using RoadInfo = shader::RoadInfo;
+
+using RoadSegmentCorners = shader::RoadSegmentCorners;
 // BVH types
 enum Bounds : U32
 {

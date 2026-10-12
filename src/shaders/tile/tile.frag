@@ -21,9 +21,9 @@ layout(std430, buffer_reference, buffer_reference_align = 8) readonly buffer Col
     vec3 data[];
 };
 
-layout(push_constant) uniform Constants
+layout(push_constant, std430) uniform Constants
 {
-    RenderPushConstants push_constants;
+    TilePipelinePushConstants push_constants;
 };
 
 void main()
@@ -35,7 +35,7 @@ void main()
         discard;
     }
 
-    vec4 base_color = texture(texture_sampler[push_constants.base_tex], in_uv);
+    vec4 base_color = texture(texture_sampler[push_constants.tex_idx], in_uv);
 
     vec4 surface_color;
 

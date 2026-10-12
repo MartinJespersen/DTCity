@@ -119,6 +119,15 @@ else()
   message(FATAL_ERROR "Unsupported compiler")
 endif()
 
+# Temporarily suppress Clang warnings, including those in Simulator builds.
+if(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+  if(MSVC)
+    add_compile_options(/w)
+  else()
+    add_compile_options(-w)
+  endif()
+endif()
+
 function(disable_warnings_for_sources)
   set_source_files_properties(
     ${ARGV}
@@ -191,7 +200,7 @@ foreach(GLSL ${GLSL_SOURCE_FILES})
         OUTPUT ${SPIRV}
         COMMAND ${CMAKE_COMMAND} -E make_directory "${SHADER_BINARY_DIR}"
         COMMAND ${GLSL_VALIDATOR} -V ${GLSL} ${GLSL_SHADER_FLAGS} ${SHADER_TARGET_FLAGS} -o ${SPIRV}
-        DEPENDS ${GLSL}
+        DEPENDS ${GLSL} "${SHADER_SRC}/shader_shared.h" "${SHADER_SRC}/tile/includes.glsl"
         COMMENT "Compiling ${FILE_NAME} to SPIR-V"
     )
   list(APPEND SPIRV_BINARY_FILES ${SPIRV})

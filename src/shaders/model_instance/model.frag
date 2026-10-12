@@ -1,24 +1,16 @@
 #version 450
 #extension GL_EXT_nonuniform_qualifier : require
+#extension GL_GOOGLE_include_directive : require
+#include "../shader_shared.h"
 layout(location = 0) in vec4 in_color;
 layout(location = 1) in vec3 in_normal;
 layout(location = 2) in vec2 in_uv;
 layout(location = 0) out vec4 out_color;
 layout(set = 1, binding = 0) uniform sampler2D texture_sampler[];
-layout(push_constant) uniform PushConstants
+layout(push_constant, std430) uniform PushConstants
 {
-    uint first_meshlet;
-    uint first_instance;
-    uint transform_offset;
-    uint vertex_stride;
-    uint position_offset;
-    uint normal_offset;
-    uint color_offset;
-    uint uv_offset;
-    uint texture_index;
-    uint textured;
-    float lod_error_pixels;
-} pc;
+    MeshInstancePushConstants pc;
+};
 void main()
 {
     if (pc.textured != 0)

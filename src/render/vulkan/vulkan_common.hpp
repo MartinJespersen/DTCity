@@ -120,7 +120,8 @@ static QueueFamilyIndexBits
 queue_families_find(Context* vk_ctx, VkPhysicalDevice device);
 
 static bool
-is_device_suitable(Context* vk_ctx, VkPhysicalDevice device, QueueFamilyIndexBits indexBits);
+is_device_suitable(Context* vk_ctx, VkPhysicalDevice device, QueueFamilyIndexBits indexBits,
+                   bool* mesh_shading_supported);
 
 static SwapChainSupportDetails
 query_swapchain_support(Arena* arena, VkPhysicalDevice device, VkSurfaceKHR surface);
@@ -203,7 +204,7 @@ static VkSampleCountFlagBits
 max_usable_sample_count_get(VkPhysicalDevice device);
 
 static bool
-check_device_extension_support(Context* vk_ctx, VkPhysicalDevice device);
+check_device_extension_support(Context* vk_ctx, VkPhysicalDevice device, bool* mesh_shader_extension_supported);
 
 static bool
 check_validation_layer_support(Context* vk_ctx);

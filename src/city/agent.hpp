@@ -2,6 +2,7 @@
 
 #include "render/render.hpp"
 #include "simulator_messages.hpp"
+#include "gltfw/gltfw.hpp"
 
 namespace ui
 {
@@ -15,6 +16,7 @@ struct TilesetRenderer;
 namespace city
 {
 
+constexpr F32 hover_icon_scale_factor = 10.0f;
 constexpr F32 agent_hover_icon_offset = 100.0f;
 constexpr glm::vec4 agent_hover_icon_color = glm::vec4(1.0f, 0.65f, 0.0f, 1.0f);
 typedef S64 WsId;
@@ -103,7 +105,7 @@ _gltf_rotation_to_world(glm::dvec3 world_dir, glm::dvec3 model_dir);
 struct AgentSystem
 {
     std::unique_ptr<AgentSimConfig> agent_sim_config; // lifetime = city lifetime
-    std::unique_ptr<AgentSim> agent_sim; // agent sim data should be able to reset it therefore has its own allocator
+    std::unique_ptr<AgentSim> agent_sim;              // agent sim data should be able to reset it therefore has its own allocator
     ~AgentSystem();
 
     void
@@ -116,8 +118,7 @@ struct AgentSystem
     void
     agent_icon_add(Agent& agent, render::MeshHandle hover_icon_mesh_handle, F32 hover_icon_scale_factor);
     void
-    agent_draw(Array<render::AgentModelInfo>& meshes,
-               Array<render::Handle>& texture_handles, render::BufferInfo* instance_buffer_info);
+    agent_draw(Array<render::AgentModelInfo>& meshes, render::BufferInfo* instance_buffer_info);
     void
     _agent_height_updates_start(cesium::TilesetRenderer* renderer);
     void
@@ -126,6 +127,8 @@ struct AgentSystem
     _agent_height_update_async(cesium::TilesetRenderer* renderer);
 };
 
+AgentModelRenderInfo
+agent_model_render_info_create(render::ThreadWorkerCmdCtx* t_ctx, gltfw_Result& glb_result, Vec3F32& model_pivot);
 g_internal void
 agents_create(AgentSimThread* agent_sim);
 g_internal void
