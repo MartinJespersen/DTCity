@@ -815,15 +815,28 @@ g_internal Pipeline
 model_instance_pipeline_create(String8 shader_path)
 {
     Context* vk_ctx = ctx_get();
-    ScratchScope scratch = ScratchScope(0, 0);
+    ScratchScope scratch = ScratchScope(&vk_ctx->arena, 1);
+    bool mesh_shading = vk_ctx->mesh_shading_enabled;
 
-    String8 frag_path = str8_path_from_str8_list(scratch.arena, {shader_path, S("bin"), S("model_frag.spv")});
-    String8 vert_path = str8_path_from_str8_list(scratch.arena, {shader_path, S("bin"), S("model_vert.spv")});
-
-    ShaderModuleInfo vert_shader_stage_info = shader_stage_from_spirv(scratch.arena, vk_ctx->device, VK_SHADER_STAGE_VERTEX_BIT, vert_path);
-    ShaderModuleInfo frag_shader_stage_info = shader_stage_from_spirv(scratch.arena, vk_ctx->device, VK_SHADER_STAGE_FRAGMENT_BIT, frag_path);
-
-    VkPipelineShaderStageCreateInfo shader_stages[] = {vert_shader_stage_info.info, frag_shader_stage_info.info};
+    // Both backends use the same material and rasterization state.
+    VkPipelineShaderStageCreateInfo shader_stages[3] = {};
+    defer(for (VkPipelineShaderStageCreateInfo& stage : shader_stages) { vkDestroyShaderModule(vk_ctx->device, stage.module, nullptr); });
+    U32 stage_count = mesh_shading ? 3 : 2;
+    String8 shader_files[] = {mesh_shading ? S("mesh_instance_mesh.spv") : S("model_vert.spv"),
+                              S("model_frag.spv"), S("mesh_instance_task.spv")};
+    VkShaderStageFlagBits stages[] = {mesh_shading ? VK_SHADER_STAGE_MESH_BIT_EXT : VK_SHADER_STAGE_VERTEX_BIT,
+                                      VK_SHADER_STAGE_FRAGMENT_BIT, VK_SHADER_STAGE_TASK_BIT_EXT};
+    for (U32 i = 0; i < stage_count; ++i)
+    {
+        String8 path = str8_path_from_str8_list(scratch.arena, {shader_path, S("bin"), shader_files[i]});
+        shader_stages[i].sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+        shader_stages[i].stage = stages[i];
+        shader_stages[i].module = shader_module_create(vk_ctx->device, io::file_read(scratch.arena, path));
+        shader_stages[i].pName = "main";
+    }
+    VkShaderStageFlags geometry_stages = mesh_shading
+                                             ? VK_SHADER_STAGE_TASK_BIT_EXT | VK_SHADER_STAGE_MESH_BIT_EXT
+                                             : VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_COMPUTE_BIT;
 
     VkDynamicState dynamic_states[] = {VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR,
                                        VK_DYNAMIC_STATE_COLOR_WRITE_ENABLE_EXT};
@@ -877,24 +890,28 @@ model_instance_pipeline_create(String8 shader_path)
         {.binding = 0,
          .descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
          .descriptorCount = 1,
-         .stageFlags = VK_SHADER_STAGE_TASK_BIT_EXT | VK_SHADER_STAGE_MESH_BIT_EXT},
+         .stageFlags = geometry_stages},
         {.binding = 1,
          .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
          .descriptorCount = 1,
-         .stageFlags = VK_SHADER_STAGE_TASK_BIT_EXT | VK_SHADER_STAGE_MESH_BIT_EXT},
+         .stageFlags = geometry_stages},
         {.binding = 2,
          .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
          .descriptorCount = 1,
-         .stageFlags = VK_SHADER_STAGE_TASK_BIT_EXT | VK_SHADER_STAGE_MESH_BIT_EXT},
+         .stageFlags = geometry_stages},
         {.binding = 3,
          .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
          .descriptorCount = 1,
-         .stageFlags = VK_SHADER_STAGE_TASK_BIT_EXT | VK_SHADER_STAGE_MESH_BIT_EXT},
+         .stageFlags = geometry_stages},
+        {.binding = 4,
+         .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+         .descriptorCount = 1,
+         .stageFlags = VK_SHADER_STAGE_COMPUTE_BIT},
     };
     VkDescriptorSetLayoutCreateInfo layout_info = {};
     layout_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
     layout_info.flags = VK_DESCRIPTOR_SET_LAYOUT_CREATE_PUSH_DESCRIPTOR_BIT_KHR;
-    layout_info.bindingCount = ArrayCount(bindings);
+    layout_info.bindingCount = mesh_shading ? 4 : 5;
     layout_info.pBindings = bindings;
     VK_CHECK_RESULT(vkCreateDescriptorSetLayout(vk_ctx->device, &layout_info, nullptr, &vk_ctx->model_instance_descriptor_set_layout));
     VkDescriptorSetLayout descriptor_set_layouts[] = {vk_ctx->model_instance_descriptor_set_layout, vk_ctx->bindless_descriptor_set_layout};
@@ -903,7 +920,7 @@ model_instance_pipeline_create(String8 shader_path)
     pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
     pipelineLayoutInfo.setLayoutCount = ArrayCount(descriptor_set_layouts);
     pipelineLayoutInfo.pSetLayouts = descriptor_set_layouts;
-    VkPushConstantRange push_range = {.stageFlags = VK_SHADER_STAGE_TASK_BIT_EXT | VK_SHADER_STAGE_MESH_BIT_EXT |
+    VkPushConstantRange push_range = {.stageFlags = geometry_stages |
                                                     VK_SHADER_STAGE_FRAGMENT_BIT,
                                       .offset = 0,
                                       .size = sizeof(MeshInstancePushConstants)};
@@ -927,11 +944,18 @@ model_instance_pipeline_create(String8 shader_path)
     pipeline_rendering_info.pColorAttachmentFormats = color_attachment_formats;
     pipeline_rendering_info.depthAttachmentFormat = vk_ctx->swapchain_resources->depth_format;
 
+    // Vertices are pulled from storage by gl_VertexIndex; only the index buffer is bound.
+    VkPipelineVertexInputStateCreateInfo vertex_input{VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO};
+    VkPipelineInputAssemblyStateCreateInfo input_assembly{VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO};
+    input_assembly.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+
     VkGraphicsPipelineCreateInfo pipeline_create_info{};
     pipeline_create_info.pNext = &pipeline_rendering_info;
     pipeline_create_info.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
-    pipeline_create_info.stageCount = ArrayCount(shader_stages);
+    pipeline_create_info.stageCount = stage_count;
     pipeline_create_info.pStages = shader_stages;
+    pipeline_create_info.pVertexInputState = mesh_shading ? nullptr : &vertex_input;
+    pipeline_create_info.pInputAssemblyState = mesh_shading ? nullptr : &input_assembly;
     pipeline_create_info.pViewportState = &viewport_state;
     pipeline_create_info.pRasterizationState = &rasterizer;
     pipeline_create_info.pMultisampleState = &multisampling;
@@ -943,8 +967,73 @@ model_instance_pipeline_create(String8 shader_path)
     VkPipeline pipeline;
     VK_CHECK_RESULT(vkCreateGraphicsPipelines(vk_ctx->device, VK_NULL_HANDLE, 1, &pipeline_create_info, nullptr, &pipeline));
 
+    if (!mesh_shading)
+    {
+        // Compute and graphics share descriptor and push-constant layouts.
+        String8 compute_path = str8_path_from_str8_list(scratch.arena, {shader_path, S("bin"), S("model_lod_comp.spv")});
+        ShaderModuleInfo compute_stage = shader_stage_from_spirv(scratch.arena, vk_ctx->device,
+                                                                 VK_SHADER_STAGE_COMPUTE_BIT, compute_path);
+        VkComputePipelineCreateInfo compute_info{VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO};
+        compute_info.stage = compute_stage.info;
+        compute_info.layout = pipeline_layout;
+        VK_CHECK_RESULT(vkCreateComputePipelines(vk_ctx->device, VK_NULL_HANDLE, 1, &compute_info, nullptr,
+                                                 &vk_ctx->model_lod_compute_pipeline));
+    }
+
     Pipeline pipeline_info = {.pipeline = pipeline, .pipeline_layout = pipeline_layout};
     return pipeline_info;
+}
+
+g_internal void
+model_instance_rendering(Buffer<ModelIndirectBatch> batches)
+{
+    Context* vk_ctx = ctx_get();
+    VkCommandBuffer cmd = vk_ctx->command_buffers.data[vk_ctx->current_frame];
+    TracyVkZone(vk_ctx->tracy_ctx[vk_ctx->current_frame], cmd, "model_instance_rendering");
+
+    if (batches.size == 0)
+        return;
+    Pipeline* pipeline = &vk_ctx->model_instance_pipeline;
+    vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline->pipeline);
+    VkExtent2D extent = vk_ctx->swapchain_resources->swapchain_extent;
+    VkViewport viewport{0, 0, F32(extent.width), F32(extent.height), 0, 1};
+    VkRect2D scissor{{0, 0}, extent};
+    vkCmdSetViewport(cmd, 0, 1, &viewport);
+    vkCmdSetScissor(cmd, 0, 1, &scissor);
+    VkBool32 color_write_enables[] = {VK_TRUE, VK_FALSE};
+    cmd_set_color_write_enable_ext(cmd, ArrayCount(color_write_enables), color_write_enables);
+    vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline->pipeline_layout, 1, 1,
+                            &vk_ctx->bindless_descriptor_set, 0, nullptr);
+    for (ModelIndirectBatch& batch : batches)
+    {
+        VkWriteDescriptorSet writes[4] = {};
+        for (U32 binding = 0; binding < ArrayCount(writes); ++binding)
+        {
+            writes[binding].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+            writes[binding].dstBinding = binding;
+            writes[binding].descriptorCount = 1;
+            writes[binding].descriptorType = binding == 0 ? VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER : VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+            writes[binding].pBufferInfo = &batch.buffers[binding];
+        }
+        cmd_push_descriptor_set_khr(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline->pipeline_layout, 0, ArrayCount(writes), writes);
+        vkCmdBindIndexBuffer(cmd, batch.buffers[2].buffer, 0, VK_INDEX_TYPE_UINT32);
+        U32 max_draws = vk_ctx->multi_draw_indirect_enabled && vk_ctx->indirect_first_instance_enabled
+                            ? vk_ctx->physical_device_properties.limits.maxDrawIndirectCount
+                            : 1;
+        for (U32 first = 0; first < batch.constants.instance_count;)
+        {
+            U32 count = Min(batch.constants.instance_count - first, max_draws);
+            MeshInstancePushConstants constants = batch.constants;
+            // When indirect firstInstance is unsupported, a per-draw constant selects the transform.
+            constants.first_instance = first;
+            vkCmdPushConstants(cmd, pipeline->pipeline_layout,
+                               VK_SHADER_STAGE_COMPUTE_BIT | VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT,
+                               0, sizeof(constants), &constants);
+            VkDeviceSize offset = VkDeviceSize(batch.constants.draw_offset + first) * sizeof(VkDrawIndexedIndirectCommand);
+            vkCmdDrawIndexedIndirect(cmd, batch.buffers[4].buffer, offset, count, sizeof(VkDrawIndexedIndirectCommand));
+            first += count;
+        }
+    }
 }
 
 g_internal void
@@ -959,7 +1048,7 @@ model_instance_mesh_rendering(Buffer<render::AgentMeshInstanceBatch> mesh_batche
     VkCommandBuffer cmd_buffer = vk_ctx->command_buffers.data[vk_ctx->current_frame];
     TracyVkZone(vk_ctx->tracy_ctx[vk_ctx->current_frame], cmd_buffer, "mesh_instance_rendering");
 
-    Pipeline* pipeline = &vk_ctx->model_instance_mesh_pipeline;
+    Pipeline* pipeline = &vk_ctx->model_instance_pipeline;
     SwapchainResources* swapchain_resources = vk_ctx->swapchain_resources;
     VkExtent2D swapchain_extent = swapchain_resources->swapchain_extent;
     vkCmdBindPipeline(cmd_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline->pipeline);
@@ -1029,17 +1118,14 @@ model_instance_mesh_rendering(Buffer<render::AgentMeshInstanceBatch> mesh_batche
             instance_buffer_offset += (U32)(mesh_batch.transforms.size * sizeof(render::Transform));
             continue;
         }
-        if (vk_ctx->mesh_shading_enabled)
-        {
-        }
-        render::MeshletRender& meshlet_info = mesh_batch.agent_model_info.meshlet_info;
-        if (meshlet_info.meshlet_count > 0 &&
-            asset_manager_handles_loaded_check({meshlet_info.meshlet_buffer_handle, meshlet_info.vertex_buffer_handle}))
+        render::ModelLodGeometry& lod_geometry = mesh_batch.agent_model_info.lod_geometry;
+        if (lod_geometry.meshlet_count > 0 &&
+            asset_manager_handles_loaded_check({lod_geometry.lod_buffer_handle, lod_geometry.vertex_buffer_handle}))
         {
             render::AssetItem<BufferHandle>* vertex_buffer_asset =
-                asset_manager_buffer_item_get(meshlet_info.vertex_buffer_handle);
+                asset_manager_buffer_item_get(lod_geometry.vertex_buffer_handle);
             render::AssetItem<BufferHandle>* index_buffer_asset =
-                asset_manager_buffer_item_get(meshlet_info.meshlet_buffer_handle);
+                asset_manager_buffer_item_get(lod_geometry.lod_buffer_handle);
 
             U64 transform_byte_count = mesh_batch.transforms.size * sizeof(render::Transform);
             VK_CHECK_RESULT(vmaCopyMemoryToAllocation(vk_ctx->asset_manager->allocator, mesh_batch.transforms.data,
@@ -1082,314 +1168,8 @@ model_instance_mesh_rendering(Buffer<render::AgentMeshInstanceBatch> mesh_batche
             }
             vkCmdBindDescriptorSets(cmd_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline->pipeline_layout, 1, 1,
                                     &vk_ctx->bindless_descriptor_set, 0, nullptr);
-            U32 meshlet_count = (meshlet_info.meshlet_count + 31) / 32;
-            constants.lod_error_pixels = meshlet_info.lod_error_pixels;
-            VkPhysicalDeviceMeshShaderPropertiesEXT* limits = &vk_ctx->mesh_shader_properties;
-            // X selects task groups of up to 32 meshlets; Y selects instances. Split both axes
-            // so large batches respect per-axis and total workgroup limits.
-            for (U32 first_instance = 0; first_instance < mesh_batch.transforms.size;)
-            {
-                U32 instances =
-                    (U32)Min(mesh_batch.transforms.size - first_instance, (U64)limits->maxTaskWorkGroupCount[1]);
-                instances = Min(instances, limits->maxTaskWorkGroupTotalCount);
-                U32 max_chunks = Min(limits->maxTaskWorkGroupCount[0], limits->maxTaskWorkGroupTotalCount / instances);
-                for (U32 first_meshlet = 0; first_meshlet < meshlet_count;)
-                {
-                    U32 chunks = Min(meshlet_count - first_meshlet, max_chunks);
-                    constants.first_instance = first_instance;
-                    constants.first_meshlet = first_meshlet;
-                    vkCmdPushConstants(cmd_buffer, pipeline->pipeline_layout,
-                                       VK_SHADER_STAGE_TASK_BIT_EXT | VK_SHADER_STAGE_MESH_BIT_EXT |
-                                           VK_SHADER_STAGE_FRAGMENT_BIT,
-                                       0, sizeof(constants), &constants);
-                    vk_ctx->cmd_draw_mesh_tasks_ext(cmd_buffer, chunks, instances, 1);
-                    first_meshlet += chunks;
-                }
-                first_instance += instances;
-            }
-        }
-        U64 transform_byte_count = mesh_batch.transforms.size * sizeof(render::Transform);
-        instance_buffer_offset += (U32)transform_byte_count;
-    }
-}
-
-g_internal Pipeline
-model_instance_mesh_pipeline_create(String8 shader_path)
-{
-    Context* vk_ctx = ctx_get();
-    ScratchScope scratch = ScratchScope(0, 0);
-
-    String8 mesh_path = str8_path_from_str8_list(scratch.arena, {shader_path, S("bin"), S("mesh_instance_mesh.spv")});
-    String8 task_path = str8_path_from_str8_list(scratch.arena, {shader_path, S("bin"), S("mesh_instance_task.spv")});
-    String8 frag_path = str8_path_from_str8_list(scratch.arena, {shader_path, S("bin"), S("model_frag.spv")});
-
-    ShaderModuleInfo mesh_shader_stage_info = shader_stage_from_spirv(scratch.arena, vk_ctx->device, VK_SHADER_STAGE_MESH_BIT_EXT, mesh_path);
-    ShaderModuleInfo frag_shader_stage_info = shader_stage_from_spirv(scratch.arena, vk_ctx->device, VK_SHADER_STAGE_FRAGMENT_BIT, frag_path);
-    ShaderModuleInfo task_shader_stage_info = shader_stage_from_spirv(scratch.arena, vk_ctx->device, VK_SHADER_STAGE_TASK_BIT_EXT, task_path);
-
-    VkPipelineShaderStageCreateInfo shader_stages[] = {task_shader_stage_info.info, mesh_shader_stage_info.info,
-                                                       frag_shader_stage_info.info};
-
-    VkDynamicState dynamic_states[] = {VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR,
-                                       VK_DYNAMIC_STATE_COLOR_WRITE_ENABLE_EXT};
-
-    VkPipelineDynamicStateCreateInfo dynamic_state{};
-    dynamic_state.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
-    dynamic_state.dynamicStateCount = ArrayCount(dynamic_states);
-    dynamic_state.pDynamicStates = dynamic_states;
-
-    VkViewport viewport{};
-    viewport.x = 0.0f;
-    viewport.y = 0.0f;
-    viewport.width = (F32)vk_ctx->swapchain_resources->swapchain_extent.width;
-    viewport.height = (F32)vk_ctx->swapchain_resources->swapchain_extent.height;
-    viewport.minDepth = 0.0f;
-    viewport.maxDepth = 1.0f;
-
-    VkRect2D scissor{};
-    scissor.offset = {0, 0};
-    scissor.extent = vk_ctx->swapchain_resources->swapchain_extent;
-
-    VkPipelineViewportStateCreateInfo viewport_state{};
-    viewport_state.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
-    viewport_state.viewportCount = 1;
-    viewport_state.scissorCount = 1;
-    viewport_state.pViewports = &viewport;
-    viewport_state.pScissors = &scissor;
-
-    VkPipelineRasterizationStateCreateInfo rasterizer{};
-    rasterizer.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
-    rasterizer.polygonMode = VK_POLYGON_MODE_FILL;
-    rasterizer.cullMode = VK_CULL_MODE_BACK_BIT;
-    rasterizer.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
-    rasterizer.lineWidth = 1.0f;
-
-    VkPipelineMultisampleStateCreateInfo multisampling{};
-    multisampling.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
-    multisampling.sampleShadingEnable = VK_FALSE;
-    multisampling.rasterizationSamples = vk_ctx->msaa_samples;
-    multisampling.minSampleShading = 0.0f;
-
-    VkPipelineColorBlendAttachmentState color_blend_attachment{.colorWriteMask =
-                                                                   VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT |
-                                                                   VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT};
-    VkPipelineColorBlendAttachmentState color_blend_attachments[] = {color_blend_attachment, color_blend_attachment};
-    VkPipelineColorBlendStateCreateInfo color_blending{};
-    color_blending.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
-    color_blending.attachmentCount = ArrayCount(color_blend_attachments);
-    color_blending.pAttachments = color_blend_attachments;
-
-    VkDescriptorSetLayoutBinding bindings[] = {
-        {.binding = 0,
-         .descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
-         .descriptorCount = 1,
-         .stageFlags = VK_SHADER_STAGE_TASK_BIT_EXT | VK_SHADER_STAGE_MESH_BIT_EXT},
-        {.binding = 1,
-         .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
-         .descriptorCount = 1,
-         .stageFlags = VK_SHADER_STAGE_TASK_BIT_EXT | VK_SHADER_STAGE_MESH_BIT_EXT},
-        {.binding = 2,
-         .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
-         .descriptorCount = 1,
-         .stageFlags = VK_SHADER_STAGE_TASK_BIT_EXT | VK_SHADER_STAGE_MESH_BIT_EXT},
-        {.binding = 3,
-         .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
-         .descriptorCount = 1,
-         .stageFlags = VK_SHADER_STAGE_TASK_BIT_EXT | VK_SHADER_STAGE_MESH_BIT_EXT},
-    };
-    VkDescriptorSetLayoutCreateInfo layout_info = {};
-    layout_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-    layout_info.flags = VK_DESCRIPTOR_SET_LAYOUT_CREATE_PUSH_DESCRIPTOR_BIT_KHR;
-    layout_info.bindingCount = ArrayCount(bindings);
-    layout_info.pBindings = bindings;
-    VK_CHECK_RESULT(vkCreateDescriptorSetLayout(vk_ctx->device, &layout_info, nullptr, &vk_ctx->model_instance_mesh_descriptor_set_layout));
-    VkDescriptorSetLayout descriptor_set_layouts[] = {vk_ctx->model_instance_mesh_descriptor_set_layout, vk_ctx->bindless_descriptor_set_layout};
-
-    VkPipelineLayoutCreateInfo pipelineLayoutInfo{};
-    pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
-    pipelineLayoutInfo.setLayoutCount = ArrayCount(descriptor_set_layouts);
-    pipelineLayoutInfo.pSetLayouts = descriptor_set_layouts;
-    VkPushConstantRange push_range = {.stageFlags = VK_SHADER_STAGE_TASK_BIT_EXT | VK_SHADER_STAGE_MESH_BIT_EXT |
-                                                    VK_SHADER_STAGE_FRAGMENT_BIT,
-                                      .offset = 0,
-                                      .size = sizeof(MeshInstancePushConstants)};
-    pipelineLayoutInfo.pushConstantRangeCount = 1;
-    pipelineLayoutInfo.pPushConstantRanges = &push_range;
-
-    VkPipelineDepthStencilStateCreateInfo depth_stencil{};
-    depth_stencil.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
-    depth_stencil.depthTestEnable = VK_TRUE;
-    depth_stencil.depthWriteEnable = VK_TRUE;
-    depth_stencil.depthCompareOp = VK_COMPARE_OP_LESS;
-
-    VkPipelineLayout pipeline_layout;
-    VK_CHECK_RESULT(vkCreatePipelineLayout(vk_ctx->device, &pipelineLayoutInfo, nullptr, &pipeline_layout));
-
-    VkFormat color_attachment_formats[] = {vk_ctx->swapchain_resources->color_format,
-                                           vk_ctx->swapchain_resources->object_id_image_format};
-    VkPipelineRenderingCreateInfo pipeline_rendering_info{};
-    pipeline_rendering_info.sType = VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO;
-    pipeline_rendering_info.colorAttachmentCount = ArrayCount(color_attachment_formats);
-    pipeline_rendering_info.pColorAttachmentFormats = color_attachment_formats;
-    pipeline_rendering_info.depthAttachmentFormat = vk_ctx->swapchain_resources->depth_format;
-
-    VkGraphicsPipelineCreateInfo pipeline_create_info{};
-    pipeline_create_info.pNext = &pipeline_rendering_info;
-    pipeline_create_info.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
-    pipeline_create_info.stageCount = ArrayCount(shader_stages);
-    pipeline_create_info.pStages = shader_stages;
-    pipeline_create_info.pViewportState = &viewport_state;
-    pipeline_create_info.pRasterizationState = &rasterizer;
-    pipeline_create_info.pMultisampleState = &multisampling;
-    pipeline_create_info.pDepthStencilState = &depth_stencil;
-    pipeline_create_info.pColorBlendState = &color_blending;
-    pipeline_create_info.pDynamicState = &dynamic_state;
-    pipeline_create_info.layout = pipeline_layout;
-
-    VkPipeline pipeline;
-    VK_CHECK_RESULT(vkCreateGraphicsPipelines(vk_ctx->device, VK_NULL_HANDLE, 1, &pipeline_create_info, nullptr, &pipeline));
-
-    Pipeline pipeline_info = {.pipeline = pipeline, .pipeline_layout = pipeline_layout};
-    return pipeline_info;
-}
-
-g_internal void
-model_instance_rendering(Buffer<render::AgentMeshInstanceBatch> mesh_batches, render::MappedHandle<void> mapped_camera_handle)
-{
-    Context* vk_ctx = ctx_get();
-    if (!vk_ctx->mesh_shading_enabled || mesh_batches.size == 0)
-    {
-        return;
-    }
-
-    VkCommandBuffer cmd_buffer = vk_ctx->command_buffers.data[vk_ctx->current_frame];
-    TracyVkZone(vk_ctx->tracy_ctx[vk_ctx->current_frame], cmd_buffer, "model_instance_rendering");
-
-    Pipeline* pipeline = &vk_ctx->model_instance_mesh_pipeline;
-    SwapchainResources* swapchain_resources = vk_ctx->swapchain_resources;
-    VkExtent2D swapchain_extent = swapchain_resources->swapchain_extent;
-    vkCmdBindPipeline(cmd_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline->pipeline);
-
-    VkViewport viewport{};
-    viewport.x = 0.0f;
-    viewport.y = 0.0f;
-    viewport.width = (F32)(swapchain_extent.width);
-    viewport.height = (F32)(swapchain_extent.height);
-    viewport.minDepth = 0.0f;
-    viewport.maxDepth = 1.0f;
-    vkCmdSetViewport(cmd_buffer, 0, 1, &viewport);
-
-    VkRect2D scissor{};
-    scissor.offset = {0, 0};
-    scissor.extent = swapchain_extent;
-    vkCmdSetScissor(cmd_buffer, 0, 1, &scissor);
-
-    VkBool32 color_write_enables[] = {VK_TRUE, VK_FALSE};
-    cmd_set_color_write_enable_ext(cmd_buffer, ArrayCount(color_write_enables), color_write_enables);
-
-    U64 instance_count = 0;
-    for (render::AgentMeshInstanceBatch& mesh_batch : mesh_batches)
-    {
-        instance_count += mesh_batch.transforms.size;
-    }
-    if (instance_count == 0)
-    {
-        return;
-    }
-    U64 instance_buffer_byte_count = instance_count * sizeof(render::Transform);
-    Assert(instance_buffer_byte_count <= max_U32);
-    U32 current_frame = vk_ctx->current_frame;
-    render::Handle instance_buffer_handle =
-        buffer_alloc_create_or_resize((U32)instance_buffer_byte_count, vk_ctx->mesh_instance_buffer[current_frame],
-                                      VK_BUFFER_USAGE_STORAGE_BUFFER_BIT);
-    vk_ctx->mesh_instance_buffer[current_frame] = instance_buffer_handle;
-
-    render::AssetItem<BufferHandle>* instance_buffer_asset = asset_manager_buffer_item_get(instance_buffer_handle);
-    Assert(instance_buffer_asset);
-    BufferAllocation* instance_buffer_alloc = &instance_buffer_asset->item.buffer_alloc;
-
-    render::Handle camera_handle = mapped_camera_handle.buffer[current_frame].handle;
-    if (!asset_manager_handles_loaded_check({camera_handle}))
-    {
-        return;
-    }
-
-    render::AssetItem<BufferHandle>* camera_buffer_handle = asset_manager_buffer_item_get(camera_handle);
-    Assert(camera_buffer_handle);
-    BufferHandle* camera_buffer = &camera_buffer_handle->item;
-
-    VkDescriptorBufferInfo camera_buffer_info{};
-    camera_buffer_info.buffer = camera_buffer->buffer_alloc.buffer;
-    camera_buffer_info.offset = 0;
-    camera_buffer_info.range = VK_WHOLE_SIZE;
-
-    U32 instance_buffer_offset = 0;
-    for (render::AgentMeshInstanceBatch& mesh_batch : mesh_batches)
-    {
-        if (mesh_batch.transforms.size == 0)
-        {
-            continue;
-        }
-        if (mesh_batch.textured && !asset_manager_handles_loaded_check({mesh_batch.texture_handle}))
-        {
-            instance_buffer_offset += (U32)(mesh_batch.transforms.size * sizeof(render::Transform));
-            continue;
-        }
-        if (vk_ctx->mesh_shading_enabled)
-        {
-        }
-        render::MeshletRender& meshlet_info = mesh_batch.agent_model_info.meshlet_info;
-        if (meshlet_info.meshlet_count > 0 &&
-            asset_manager_handles_loaded_check({meshlet_info.meshlet_buffer_handle, meshlet_info.vertex_buffer_handle}))
-        {
-            render::AssetItem<BufferHandle>* vertex_buffer_asset =
-                asset_manager_buffer_item_get(meshlet_info.vertex_buffer_handle);
-            render::AssetItem<BufferHandle>* index_buffer_asset =
-                asset_manager_buffer_item_get(meshlet_info.meshlet_buffer_handle);
-
-            U64 transform_byte_count = mesh_batch.transforms.size * sizeof(render::Transform);
-            VK_CHECK_RESULT(vmaCopyMemoryToAllocation(vk_ctx->asset_manager->allocator, mesh_batch.transforms.data,
-                                                      instance_buffer_alloc->allocation, instance_buffer_offset,
-                                                      transform_byte_count));
-
-            Assert(index_buffer_asset->item.item_byte_size == sizeof(U32));
-            Assert(vertex_buffer_asset->item.item_byte_size == sizeof(render::PrimitiveVertex));
-            VkDescriptorBufferInfo buffer_infos[] = {
-                camera_buffer_info,
-                {.buffer = vertex_buffer_asset->item.buffer_alloc.buffer, .offset = 0, .range = VK_WHOLE_SIZE},
-                {.buffer = index_buffer_asset->item.buffer_alloc.buffer, .offset = 0, .range = VK_WHOLE_SIZE},
-                {.buffer = instance_buffer_alloc->buffer, .offset = 0, .range = VK_WHOLE_SIZE},
-            };
-            VkWriteDescriptorSet writes[4] = {};
-            for (U32 binding = 0; binding < ArrayCount(writes); ++binding)
-            {
-                writes[binding].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-                writes[binding].dstBinding = binding;
-                writes[binding].descriptorCount = 1;
-                writes[binding].descriptorType =
-                    binding == 0 ? VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER : VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-                writes[binding].pBufferInfo = &buffer_infos[binding];
-            }
-            cmd_push_descriptor_set_khr(cmd_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline->pipeline_layout, 0,
-                                        ArrayCount(writes), writes);
-
-            MeshInstancePushConstants constants = {};
-            constants.transform_offset = instance_buffer_offset / sizeof(render::Transform);
-            constants.vertex_stride = sizeof(render::PrimitiveVertex) / sizeof(U32);
-            constants.position_offset = offsetof(render::PrimitiveVertex, pos) / sizeof(U32);
-            constants.normal_offset = offsetof(render::PrimitiveVertex, normal) / sizeof(U32);
-            constants.color_offset = offsetof(render::PrimitiveVertex, color) / sizeof(U32);
-            constants.uv_offset = offsetof(render::PrimitiveVertex, uv) / sizeof(U32);
-            constants.textured = mesh_batch.textured;
-            if (mesh_batch.textured)
-            {
-                render::AssetItem<TextureHandle>* texture = asset_manager_texture_item_get(mesh_batch.texture_handle);
-                constants.texture_index = texture->item.descriptor_set_idx;
-            }
-            vkCmdBindDescriptorSets(cmd_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline->pipeline_layout, 1, 1,
-                                    &vk_ctx->bindless_descriptor_set, 0, nullptr);
-            U32 meshlet_count = (meshlet_info.meshlet_count + 31) / 32;
-            constants.lod_error_pixels = meshlet_info.lod_error_pixels;
+            U32 meshlet_count = (lod_geometry.meshlet_count + 31) / 32;
+            constants.lod_error_pixels = lod_geometry.lod_error_pixels;
             VkPhysicalDeviceMeshShaderPropertiesEXT* limits = &vk_ctx->mesh_shader_properties;
             // X selects task groups of up to 32 meshlets; Y selects instances. Split both axes
             // so large batches respect per-axis and total workgroup limits.
@@ -1610,6 +1390,116 @@ lines_render(Buffer<render::LineVertex> line_vertices, render::MappedHandle<void
         vkCmdBindVertexBuffers(cmd_buffer, 0, ArrayCount(vertex_buffers), vertex_buffers, vertex_offsets);
         vkCmdDraw(cmd_buffer, (U32)line_vertices.size, 1, 0, 0);
     }
+}
+
+g_internal Buffer<ModelIndirectBatch>
+_vulkan_model_compute_prepare(Buffer<render::AgentMeshInstanceBatch> mesh_batches,
+                              render::MappedHandle<void> mapped_camera_handle)
+{
+    Context* vk_ctx = ctx_get();
+    Buffer<ModelIndirectBatch> batches = {};
+    if (vk_ctx->mesh_shading_enabled || mesh_batches.size == 0)
+        return batches;
+
+    U32 frame = vk_ctx->current_frame;
+    render::Handle camera_handle = mapped_camera_handle.buffer[frame].handle;
+    if (!asset_manager_handles_loaded_check({camera_handle}))
+        return batches;
+
+    U64 instance_count = 0;
+    for (render::AgentMeshInstanceBatch& batch : mesh_batches)
+        instance_count += batch.transforms.size;
+    if (instance_count == 0)
+        return batches;
+    Assert(instance_count <= max_U32 / sizeof(render::Transform));
+    Assert(instance_count <= max_U32 / sizeof(VkDrawIndexedIndirectCommand));
+
+    // Each frame owns its output so compute never overwrites a draw still in flight.
+    vk_ctx->mesh_instance_buffer[frame] = buffer_alloc_create_or_resize(
+        (U32)(instance_count * sizeof(render::Transform)), vk_ctx->mesh_instance_buffer[frame], VK_BUFFER_USAGE_STORAGE_BUFFER_BIT);
+    vk_ctx->model_indirect_buffer[frame] = buffer_alloc_create_or_resize(
+        (U32)(instance_count * sizeof(VkDrawIndexedIndirectCommand)), vk_ctx->model_indirect_buffer[frame],
+        VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT);
+    BufferAllocation* transforms = &asset_manager_buffer_item_get(vk_ctx->mesh_instance_buffer[frame])->item.buffer_alloc;
+    BufferAllocation* indirect = &asset_manager_buffer_item_get(vk_ctx->model_indirect_buffer[frame])->item.buffer_alloc;
+    BufferAllocation* camera = &asset_manager_buffer_item_get(camera_handle)->item.buffer_alloc;
+    batches = buffer_alloc<ModelIndirectBatch>(vk_ctx->render_frame_arena, mesh_batches.size);
+    batches.size = 0;
+
+    VkCommandBuffer cmd = vk_ctx->command_buffers.data[frame];
+    VkPipelineLayout layout = vk_ctx->model_instance_pipeline.pipeline_layout;
+    vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, vk_ctx->model_lod_compute_pipeline);
+    U32 transform_offset = 0;
+    for (render::AgentMeshInstanceBatch& source : mesh_batches)
+    {
+        render::ModelLodGeometry& geometry = source.agent_model_info.lod_geometry;
+        if (source.transforms.size == 0 || geometry.lod_count == 0 ||
+            !asset_manager_handles_loaded_check({geometry.vertex_buffer_handle, geometry.lod_buffer_handle}) ||
+            (source.textured && !asset_manager_handles_loaded_check({source.texture_handle})))
+            continue;
+
+        ModelIndirectBatch* batch = &batches.data[batches.size++];
+        *batch = {};
+        batch->buffers[0] = {camera->buffer, 0, VK_WHOLE_SIZE};
+        batch->buffers[1] = {asset_manager_buffer_item_get(geometry.vertex_buffer_handle)->item.buffer_alloc.buffer, 0, VK_WHOLE_SIZE};
+        batch->buffers[2] = {asset_manager_buffer_item_get(geometry.lod_buffer_handle)->item.buffer_alloc.buffer, 0, VK_WHOLE_SIZE};
+        batch->buffers[3] = {transforms->buffer, 0, VK_WHOLE_SIZE};
+        batch->buffers[4] = {indirect->buffer, 0, VK_WHOLE_SIZE};
+        batch->constants.transform_offset = transform_offset;
+        batch->constants.draw_offset = transform_offset;
+        batch->constants.instance_count = (U32)source.transforms.size;
+        batch->constants.vertex_stride = sizeof(render::PrimitiveVertex) / sizeof(U32);
+        batch->constants.position_offset = offsetof(render::PrimitiveVertex, pos) / sizeof(U32);
+        batch->constants.normal_offset = offsetof(render::PrimitiveVertex, normal) / sizeof(U32);
+        batch->constants.color_offset = offsetof(render::PrimitiveVertex, color) / sizeof(U32);
+        batch->constants.uv_offset = offsetof(render::PrimitiveVertex, uv) / sizeof(U32);
+        batch->constants.lod_error_pixels = geometry.lod_error_pixels;
+        batch->constants.indirect_first_instance = vk_ctx->indirect_first_instance_enabled;
+        batch->constants.textured = source.textured;
+        if (source.textured)
+            batch->constants.texture_index = asset_manager_texture_item_get(source.texture_handle)->item.descriptor_set_idx;
+        VK_CHECK_RESULT(vmaCopyMemoryToAllocation(vk_ctx->asset_manager->allocator, source.transforms.data,
+                                                  transforms->allocation, U64(transform_offset) * sizeof(render::Transform), source.transforms.size * sizeof(render::Transform)));
+
+        VkWriteDescriptorSet writes[5] = {};
+        for (U32 binding = 0; binding < ArrayCount(writes); ++binding)
+        {
+            writes[binding].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+            writes[binding].dstBinding = binding;
+            writes[binding].descriptorCount = 1;
+            writes[binding].descriptorType = binding == 0 ? VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER : VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+            writes[binding].pBufferInfo = &batch->buffers[binding];
+        }
+        cmd_push_descriptor_set_khr(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, layout, 0, ArrayCount(writes), writes);
+        // Bound dispatches to the device limit; the shader guards the final partial workgroup.
+        U64 dispatch_capacity = U64(vk_ctx->physical_device_properties.limits.maxComputeWorkGroupCount[0]) * 64;
+        for (U32 first = 0; first < batch->constants.instance_count;)
+        {
+            U32 count = (U32)Min(U64(batch->constants.instance_count - first), dispatch_capacity);
+            MeshInstancePushConstants constants = batch->constants;
+            constants.first_instance = first;
+            vkCmdPushConstants(cmd, layout, VK_SHADER_STAGE_COMPUTE_BIT | VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT,
+                               0, sizeof(constants), &constants);
+            vkCmdDispatch(cmd, (count + 63) / 64, 1, 1);
+            first += count;
+        }
+        transform_offset += batch->constants.instance_count;
+    }
+
+    // Make the GPU-written commands visible to indirect drawing, without a CPU wait.
+    if (batches.size > 0)
+    {
+        VkMemoryBarrier2 barrier{VK_STRUCTURE_TYPE_MEMORY_BARRIER_2};
+        barrier.srcStageMask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT;
+        barrier.srcAccessMask = VK_ACCESS_2_SHADER_WRITE_BIT;
+        barrier.dstStageMask = VK_PIPELINE_STAGE_2_DRAW_INDIRECT_BIT;
+        barrier.dstAccessMask = VK_ACCESS_2_INDIRECT_COMMAND_READ_BIT;
+        VkDependencyInfo dependency{VK_STRUCTURE_TYPE_DEPENDENCY_INFO};
+        dependency.memoryBarrierCount = 1;
+        dependency.pMemoryBarriers = &barrier;
+        vkCmdPipelineBarrier2(cmd, &dependency);
+    }
+    return batches;
 }
 
 } // namespace vulkan

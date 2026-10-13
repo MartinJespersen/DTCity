@@ -350,6 +350,8 @@ void
 OS_MutexRelease(OS_Handle mutex);
 void
 os_mutex_take(OS_Handle mutex);
+B32
+os_mutex_try_take(OS_Handle mutex);
 void
 os_mutex_drop(OS_Handle mutex);
 

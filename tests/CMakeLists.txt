@@ -56,3 +56,38 @@ if(ASAN_ENABLED)
               -P ${CMAKE_CURRENT_SOURCE_DIR}/base/mimalloc_asan_failure.cmake)
   endforeach()
 endif()
+
+# Execute the production LOD shader without a window. Software Vulkan also works.
+find_package(Vulkan QUIET)
+if(Vulkan_FOUND AND Vulkan_GLSLANG_VALIDATOR_EXECUTABLE)
+  set(MODEL_LOD_SHADER "${CMAKE_CURRENT_BINARY_DIR}/model_lod_comp.spv")
+  add_custom_command(OUTPUT "${MODEL_LOD_SHADER}"
+    COMMAND "${Vulkan_GLSLANG_VALIDATOR_EXECUTABLE}" -V
+            "${CMAKE_SOURCE_DIR}/src/shaders/model_instance/model_lod.comp" -o "${MODEL_LOD_SHADER}"
+    DEPENDS "${CMAKE_SOURCE_DIR}/src/shaders/model_instance/model_lod.comp"
+            "${CMAKE_SOURCE_DIR}/src/shaders/model_instance/lod_select.glsl"
+            "${CMAKE_SOURCE_DIR}/src/shaders/shader_shared.h")
+  add_executable(model_lod_compute_test render/test_model_lod_compute.cpp
+    ../src/render/vulkan/synchronization.cpp "${MODEL_LOD_SHADER}")
+  target_include_directories(model_lod_compute_test PRIVATE "${CMAKE_SOURCE_DIR}/src")
+  target_link_libraries(model_lod_compute_test PRIVATE Vulkan::Vulkan glm::glm)
+  list(APPEND ALL_TARGETS model_lod_compute_test)
+  set(ALL_TARGETS "${ALL_TARGETS}" PARENT_SCOPE)
+  add_test(NAME model_lod_compute COMMAND model_lod_compute_test "${MODEL_LOD_SHADER}")
+  set_tests_properties(model_lod_compute PROPERTIES SKIP_RETURN_CODE 77)
+endif()
+
+# Exercise acquire/render/present synchronization with a real swapchain.
+if(Vulkan_FOUND)
+  find_package(glfw3 CONFIG QUIET)
+  if(TARGET glfw)
+    add_executable(swapchain_sync_test render/test_swapchain_sync.cpp
+      ../src/render/vulkan/synchronization.cpp)
+    target_include_directories(swapchain_sync_test PRIVATE "${CMAKE_SOURCE_DIR}/src")
+    target_link_libraries(swapchain_sync_test PRIVATE Vulkan::Vulkan glfw)
+    list(APPEND ALL_TARGETS swapchain_sync_test)
+    set(ALL_TARGETS "${ALL_TARGETS}" PARENT_SCOPE)
+    add_test(NAME swapchain_sync COMMAND swapchain_sync_test)
+    set_tests_properties(swapchain_sync PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 60)
+  endif()
+endif()

@@ -60,6 +60,8 @@ SimulationClient::server_update_send(const ServerUpdate& update, U64 request_id)
     ScratchScope scratch = ScratchScope(0, 0);
     String8 message = simulator_server_update_to_json(scratch.arena, update, request_id);
     expected_request_id = request_id;
+    DEBUG_LOG("Simulation request: id=%llu scenario=\"%s\" playback=%.17g period=%.17g",
+              request_id, update.name.c_str(), update.playback, update.period);
     _simulator_message_push(&msg_send_queue, message);
 }
 
@@ -91,7 +93,8 @@ SimulationClient::update(Arena* arena)
         {
             case SimulationErrorType::Json:
             {
-                ERROR_LOG("Json error code: %llu\n", error.error_code);
+                ERROR_LOG("Simulation JSON error: %s (code %llu)",
+                          simdjson::error_message((simdjson::error_code)error.error_code), error.error_code);
                 return {};
             };
 
@@ -217,6 +220,7 @@ SimulationClient::_update(Arena* arena, StreamUpdate* out_stream_update)
                 return SimulationError(SimulationErrorType::Json, json_error);
             }
 
+            DEBUG_LOG("Simulation received: message=%llu bytes=%llu", msg_id, msg.size);
             switch ((SimulationMessageKind)msg_id)
             {
                 case SimulationMessageKind::MetadataRequest:
@@ -228,6 +232,7 @@ SimulationClient::_update(Arena* arena, StreamUpdate* out_stream_update)
                         return SimulationError(SimulationErrorType::Json, json_error);
                     }
                     out_stream_update->update_type |= UpdateType::Metadata;
+                    DEBUG_LOG("Simulation metadata: scenarios=%llu", (U64)received_metadata.scenarios.size());
                     out_stream_update->metadata = std::move(received_metadata);
                 };
                 break;
@@ -241,6 +246,7 @@ SimulationClient::_update(Arena* arena, StreamUpdate* out_stream_update)
                     }
                     if (request_id != expected_request_id)
                     {
+                        DEBUG_LOG("Simulation stream ignored: reply=%llu expected=%llu", request_id, expected_request_id);
                         break;
                     }
                     ondemand::array array;
@@ -257,6 +263,7 @@ SimulationClient::_update(Arena* arena, StreamUpdate* out_stream_update)
                     {
                         return SimulationError(SimulationErrorType::Json, json_error);
                     }
+                    DEBUG_LOG("Simulation stream accepted: request=%llu events=%llu", request_id, incoming.size);
                     agent_update_buffer = incoming;
                 };
                 break;

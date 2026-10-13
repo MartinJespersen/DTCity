@@ -1,6 +1,45 @@
 #ifndef DTCITY_SHADER_SHARED_H
 #define DTCITY_SHADER_SHARED_H
 
+// Packed model geometry layout shared by the C++ writer and GLSL readers.
+// All offsets and strides are in uint32 words, except triangle bit shifts.
+#define MODEL_GEOMETRY_CENTER_X_OFFSET 0
+#define MODEL_GEOMETRY_CENTER_Y_OFFSET 1
+#define MODEL_GEOMETRY_CENTER_Z_OFFSET 2
+#define MODEL_GEOMETRY_CENTER_COMPONENT_COUNT 3
+#define MODEL_GEOMETRY_RADIUS_OFFSET 3
+#define MODEL_GEOMETRY_LOD_COUNT_OFFSET 4
+// Header words 5..7 are reserved; the LOD table starts at word 8.
+#define MODEL_GEOMETRY_LOD_TABLE_OFFSET 8
+#define MODEL_LOD_MAX_COUNT 4
+#define MODEL_LOD_ENTRY_WORD_COUNT 4
+// Data points to meshlet descriptors on the mesh path, or indices on the fallback.
+// Element count is correspondingly a meshlet count or an index count.
+#define MODEL_LOD_DATA_OFFSET 0
+#define MODEL_LOD_ELEMENT_COUNT_OFFSET 1
+#define MODEL_LOD_ERROR_OFFSET 2
+#define MODEL_LOD_RESERVED_OFFSET 3
+#define MODEL_GEOMETRY_HEADER_WORD_COUNT (MODEL_GEOMETRY_LOD_TABLE_OFFSET + MODEL_LOD_MAX_COUNT * MODEL_LOD_ENTRY_WORD_COUNT)
+
+#define MODEL_MESHLET_DESCRIPTOR_WORD_COUNT 4
+#define MODEL_MESHLET_VERTEX_OFFSET 0
+#define MODEL_MESHLET_TRIANGLE_OFFSET 1
+#define MODEL_MESHLET_VERTEX_COUNT_OFFSET 2
+#define MODEL_MESHLET_TRIANGLE_COUNT_OFFSET 3
+// Each triangle stores three local vertex indices in one word.
+#define MODEL_TRIANGLE_INDEX_MASK 255u
+#define MODEL_TRIANGLE_INDEX_0_SHIFT 0
+#define MODEL_TRIANGLE_INDEX_1_SHIFT 8
+#define MODEL_TRIANGLE_INDEX_2_SHIFT 16
+
+// VkDrawIndexedIndirectCommand layout, also measured in uint32 words.
+#define MODEL_DRAW_INDEXED_WORD_COUNT 5
+#define MODEL_DRAW_INDEX_COUNT_OFFSET 0
+#define MODEL_DRAW_INSTANCE_COUNT_OFFSET 1
+#define MODEL_DRAW_FIRST_INDEX_OFFSET 2
+#define MODEL_DRAW_VERTEX_OFFSET 3
+#define MODEL_DRAW_FIRST_INSTANCE_OFFSET 4
+
 // GPU data only. Bindings and shader-stage interfaces belong in the shader files.
 // Root records (buffer elements, push constants, and task payloads) start on
 // 16-byte boundaries. Nested structs and members follow std430 alignment.
@@ -108,7 +147,10 @@ struct SHADER_ROOT MeshInstancePushConstants
     uint texture_index;
     uint textured;
     float lod_error_pixels;
-    uint _padding;
+    uint instance_count;
+    uint draw_offset;
+    uint indirect_first_instance;
+    uint _padding[2];
 };
 
 struct SHADER_ROOT LodPayload
@@ -154,7 +196,7 @@ static_assert(offsetof(TilePipelinePushConstants, overlay_option_idx) == 56);
 static_assert(sizeof(Blend3dPushConstants) == 16);
 static_assert(sizeof(RoadIntersectionPushConstants) == 16);
 static_assert(sizeof(PrimitivePushConstants) == 16);
-static_assert(sizeof(MeshInstancePushConstants) == 48);
+static_assert(sizeof(MeshInstancePushConstants) == 64);
 static_assert(offsetof(MeshInstancePushConstants, lod_error_pixels) == 40);
 static_assert(sizeof(LodPayload) == 16);
 static_assert(sizeof(Bounds) == 16);

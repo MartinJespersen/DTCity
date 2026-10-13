@@ -1240,6 +1240,15 @@ os_mutex_take(OS_Handle mutex)
     EnterCriticalSection(&entity->mutex);
 }
 
+B32
+os_mutex_try_take(OS_Handle mutex)
+{
+    if (OS_HandleMatch(mutex, OS_HandleIsZero()))
+        return true;
+    OS_W32_Entity* entity = (OS_W32_Entity*)PtrFromInt(mutex.u64[0]);
+    return TryEnterCriticalSection(&entity->mutex) != 0;
+}
+
 void
 os_mutex_drop(OS_Handle mutex)
 {

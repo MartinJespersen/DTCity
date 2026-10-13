@@ -1,0 +1,27 @@
+#version 450
+#extension GL_GOOGLE_include_directive : require
+#include "../shader_shared.h"
+
+layout(local_size_x = 64) in;
+layout(std140, set = 0, binding = 0) uniform Camera { CameraUniformBuffer camera_ubo; };
+// On the compute path, each LOD entry stores [first index, index count, error, reserved].
+layout(std430, set = 0, binding = 2) readonly buffer Geometry { uint words[]; } meshlets;
+layout(std430, set = 0, binding = 3) readonly buffer Transforms { mat4 models[]; } transforms;
+// Five words per VkDrawIndexedIndirectCommand. Keep the Vulkan ABI's 20-byte stride.
+layout(std430, set = 0, binding = 4) writeonly buffer Draws { uint words[]; } draws;
+layout(push_constant, std430) uniform PushConstants { MeshInstancePushConstants pc; };
+#include "lod_select.glsl"
+
+void main()
+{
+    uint instance = pc.first_instance + gl_GlobalInvocationID.x;
+    if (instance >= pc.instance_count) { return; }
+    uint lod = model_lod_select(transforms.models[pc.transform_offset + instance]);
+    uint lod_entry = MODEL_GEOMETRY_LOD_TABLE_OFFSET + lod * MODEL_LOD_ENTRY_WORD_COUNT;
+    uint command = (pc.draw_offset + instance) * MODEL_DRAW_INDEXED_WORD_COUNT;
+    draws.words[command + MODEL_DRAW_INDEX_COUNT_OFFSET] = meshlets.words[lod_entry + MODEL_LOD_ELEMENT_COUNT_OFFSET];
+    draws.words[command + MODEL_DRAW_INSTANCE_COUNT_OFFSET] = 1;
+    draws.words[command + MODEL_DRAW_FIRST_INDEX_OFFSET] = meshlets.words[lod_entry + MODEL_LOD_DATA_OFFSET];
+    draws.words[command + MODEL_DRAW_VERTEX_OFFSET] = 0; // vertexOffset
+    draws.words[command + MODEL_DRAW_FIRST_INSTANCE_OFFSET] = pc.indirect_first_instance != 0 ? instance : 0;
+}

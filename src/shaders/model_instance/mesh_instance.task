@@ -19,31 +19,17 @@ layout(push_constant, std430) uniform PushConstants
 };
 
 taskPayloadSharedEXT LodPayload payload;
+#include "lod_select.glsl"
 void main()
 {
     uint instance_index = pc.transform_offset + pc.first_instance + gl_WorkGroupID.y;
     mat4 model = transforms.models[instance_index];
-    vec3 center = uintBitsToFloat(uvec3(meshlets.words[0], meshlets.words[1], meshlets.words[2]));
-    float radius = uintBitsToFloat(meshlets.words[3]);
-    // Frobenius norm bounds stretch even for nonuniform scale/shear.
-    float stretch = sqrt(dot(model[0].xyz, model[0].xyz) + dot(model[1].xyz, model[1].xyz) + dot(model[2].xyz, model[2].xyz));
-    vec3 view_center = (camera_ubo.view * model * vec4(center, 1)).xyz;
-    float nearest_depth = -view_center.z - radius * stretch;
-    float projection_scale = abs(camera_ubo.proj[1][1]) * camera_ubo.viewport_dim.y * 0.5;
-    uint lod = 0;
-    if (pc.lod_error_pixels > 0 && nearest_depth > 0)
-    {
-        for (uint candidate = 1; candidate < meshlets.words[4]; ++candidate)
-        {
-            float error = uintBitsToFloat(meshlets.words[10 + candidate * 4]);
-            float pixels = error * stretch * projection_scale / nearest_depth;
-            if (pixels <= pc.lod_error_pixels) { lod = candidate; }
-        }
-    }
+    uint lod = model_lod_select(model);
     uint first_meshlet = (pc.first_meshlet + gl_WorkGroupID.x) * 32;
-    uint count = meshlets.words[9 + lod * 4];
+    uint lod_entry = MODEL_GEOMETRY_LOD_TABLE_OFFSET + lod * MODEL_LOD_ENTRY_WORD_COUNT;
+    uint count = meshlets.words[lod_entry + MODEL_LOD_ELEMENT_COUNT_OFFSET];
     uint emitted = first_meshlet < count ? min(32u, count - first_meshlet) : 0;
-    payload.descriptor = meshlets.words[8 + lod * 4] + first_meshlet * 4;
+    payload.descriptor = meshlets.words[lod_entry + MODEL_LOD_DATA_OFFSET] + first_meshlet * MODEL_MESHLET_DESCRIPTOR_WORD_COUNT;
     payload.instance_index = instance_index;
     EmitMeshTasksEXT(emitted, 1, 1);
 }

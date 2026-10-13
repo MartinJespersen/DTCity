@@ -19,6 +19,7 @@
 #include "base/test_arena.cpp"
 #include "base/test_container.cpp"
 #include "base/test_math.cpp"
+#include "base/test_mutex.cpp"
 #include "base/test_strings.cpp"
 #include "cesium/test_tessellation.cpp"
 #include "misc/test_geometry.cpp"

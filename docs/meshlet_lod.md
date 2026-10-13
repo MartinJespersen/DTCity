@@ -1,11 +1,12 @@
 # Meshlet LOD
 
-Agent models build up to four discrete LODs during `mesh_shader_handles_create_and_upload`.
+Agent models build up to four discrete LODs during `render_model_lod_upload`.
 Each level is simplified from the original indices with meshoptimizer, targeting
 100%, 50%, 25%, and 12.5% of the triangle count. A 5% object-relative geometric
 error cap and locked borders may prevent reaching these targets. Levels that
 do not reduce the triangle count are omitted. All levels share the original
-vertices; each has its own meshlets and local triangle indices.
+vertices; on the mesh-shader path, each has its own meshlets and local triangle indices.
+For the compute fallback, see the [draws buffer layout](model_draws_buffer.md).
 
 ## Build and upload algorithm
 

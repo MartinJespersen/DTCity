@@ -5,9 +5,9 @@
 
 layout(local_size_x = 32) in;
 layout(triangles, max_vertices = 64, max_primitives = 64) out;
-layout(location = 0) out vec4 out_color[];
-layout(location = 1) out vec3 out_normal[];
-layout(location = 2) out vec2 out_uv[];
+layout(location = 0) out vec4 vertex_color[];
+layout(location = 1) out vec3 vertex_normal[];
+layout(location = 2) out vec2 vertex_uv[];
 
 layout(std140, set = 0, binding = 0) uniform UBO_Camera
 {
@@ -31,11 +31,11 @@ vec3 read_vec3(uint offset)
 
 void main()
 {
-    uint descriptor = payload.descriptor + gl_WorkGroupID.x * 4;
-    uint vertex_offset = meshlets.words[descriptor];
-    uint triangle_offset = meshlets.words[descriptor + 1];
-    uint vertex_count = meshlets.words[descriptor + 2];
-    uint triangle_count = meshlets.words[descriptor + 3];
+    uint descriptor = payload.descriptor + gl_WorkGroupID.x * MODEL_MESHLET_DESCRIPTOR_WORD_COUNT;
+    uint vertex_offset = meshlets.words[descriptor + MODEL_MESHLET_VERTEX_OFFSET];
+    uint triangle_offset = meshlets.words[descriptor + MODEL_MESHLET_TRIANGLE_OFFSET];
+    uint vertex_count = meshlets.words[descriptor + MODEL_MESHLET_VERTEX_COUNT_OFFSET];
+    uint triangle_count = meshlets.words[descriptor + MODEL_MESHLET_TRIANGLE_COUNT_OFFSET];
     SetMeshOutputsEXT(vertex_count, triangle_count);
     uint lane = gl_LocalInvocationIndex;
 
@@ -48,13 +48,16 @@ void main()
         uint base = vertex * pc.vertex_stride;
         vec3 position = read_vec3(base + pc.position_offset);
         gl_MeshVerticesEXT[output_index].gl_Position = camera_ubo.proj * camera_ubo.view * model * vec4(position, 1.0);
-        out_normal[output_index] = normal_matrix * read_vec3(base + pc.normal_offset);
-        out_uv[output_index] = uintBitsToFloat(uvec2(vertices.words[base + pc.uv_offset], vertices.words[base + pc.uv_offset + 1]));
-        out_color[output_index] = vec4(read_vec3(base + pc.color_offset), uintBitsToFloat(vertices.words[base + pc.color_offset + 3]));
+        vertex_normal[output_index] = normal_matrix * read_vec3(base + pc.normal_offset);
+        vertex_uv[output_index] = uintBitsToFloat(uvec2(vertices.words[base + pc.uv_offset], vertices.words[base + pc.uv_offset + 1]));
+        vertex_color[output_index] = vec4(read_vec3(base + pc.color_offset), uintBitsToFloat(vertices.words[base + pc.color_offset + 3]));
     }
     for (uint triangle = lane; triangle < triangle_count; triangle += 32)
     {
         uint packed = meshlets.words[triangle_offset + triangle];
-        gl_PrimitiveTriangleIndicesEXT[triangle] = uvec3(packed & 255u, (packed >> 8) & 255u, (packed >> 16) & 255u);
+        gl_PrimitiveTriangleIndicesEXT[triangle] = uvec3(
+            (packed >> MODEL_TRIANGLE_INDEX_0_SHIFT) & MODEL_TRIANGLE_INDEX_MASK,
+            (packed >> MODEL_TRIANGLE_INDEX_1_SHIFT) & MODEL_TRIANGLE_INDEX_MASK,
+            (packed >> MODEL_TRIANGLE_INDEX_2_SHIFT) & MODEL_TRIANGLE_INDEX_MASK);
     }
 }

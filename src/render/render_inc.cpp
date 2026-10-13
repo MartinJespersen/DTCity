@@ -12,6 +12,7 @@
 // ~mgj: user libs
 #include "render.cpp"
 
+#include "vulkan/synchronization.cpp"
 #include "vulkan/vulkan_common.cpp"
 #include "vulkan/asset_manager.cpp"
 #include "vulkan/vulkan.cpp"

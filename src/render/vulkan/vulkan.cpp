@@ -1,3 +1,4 @@
+#include "synchronization.hpp"
 #include "core_inc.hpp"
 #include "base/base_container.hpp"
 #include "base/base_container_templates.hpp"
@@ -123,23 +124,7 @@ command_buffer_record(U32 image_index, U32 current_frame, Vec2S64 mouse_cursor_p
         {
             exit_with_error("failed to begin recording command buffer!");
         }
-        VkImageMemoryBarrier2 pre_render_swapchain_barrier{};
-        pre_render_swapchain_barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2;
-        pre_render_swapchain_barrier.pNext = nullptr;
-        pre_render_swapchain_barrier.srcStageMask = VK_PIPELINE_STAGE_2_NONE;
-        pre_render_swapchain_barrier.srcAccessMask = VK_ACCESS_2_NONE;
-        pre_render_swapchain_barrier.dstStageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT;
-        pre_render_swapchain_barrier.dstAccessMask = VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT;
-        pre_render_swapchain_barrier.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-        pre_render_swapchain_barrier.newLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-        pre_render_swapchain_barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-        pre_render_swapchain_barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-        pre_render_swapchain_barrier.image = swapchain_image;
-        pre_render_swapchain_barrier.subresourceRange = {.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
-                                                         .baseMipLevel = 0,
-                                                         .levelCount = 1,
-                                                         .baseArrayLayer = 0,
-                                                         .layerCount = 1};
+        VkImageMemoryBarrier2 pre_render_swapchain_barrier = vulkan_swapchain_image_barrier(swapchain_image, false);
 
         B32 shared_attachments_initialized = swapchain_resource->shared_attachment_images_initialized;
         VkImageMemoryBarrier2 pre_render_color_barrier{
@@ -302,17 +287,21 @@ command_buffer_record(U32 image_index, U32 current_frame, Vec2S64 mouse_cursor_p
             VkDebugUtilsLabelEXT debug_label{};
             debug_label.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_LABEL_EXT;
 
+            draw::DrawFrame* draw_frame = draw::draw_frame_get();
+            Buffer<render::AgentMeshInstanceBatch> mesh_batches =
+                buffer_from_chunk_list(vk_ctx->render_frame_arena, draw_frame->mesh_instance_batches);
+            Buffer<ModelIndirectBatch> indirect_batches = _vulkan_model_compute_prepare(mesh_batches, camera_handle_void);
+
             // ~mgj: Render pass
             vkCmdBeginRendering(current_cmd_buf, &rendering_info);
 
-            debug_label.pLabelName = "Model 3D Rendering";
+            debug_label.pLabelName = "Tile Rendering";
             CMD_BEGIN_DEBUG_UTILS_LABEL_EXT(current_cmd_buf, &debug_label);
             tile_rendering(camera_handle_void);
             CMD_END_DEBUG_UTILS_LABEL_EXT(current_cmd_buf);
 
             blend_3d_rendering();
 
-            draw::DrawFrame* draw_frame = draw::draw_frame_get();
             Buffer<render::PrimitiveInstance> primitive_instances = {};
             if (draw_frame->primitive_instance_list.count > 0)
             {
@@ -332,14 +321,14 @@ command_buffer_record(U32 image_index, U32 current_frame, Vec2S64 mouse_cursor_p
 
             primitive_rendering(primitive_instances, camera_handle_void);
 
-            if (draw_frame->mesh_instance_batches->total_count > 0)
+            debug_label.pLabelName = "Model 3D Rendering";
             {
-                Buffer<render::AgentMeshInstanceBatch> mesh_batches =
-                    buffer_from_chunk_list(vk_ctx->render_frame_arena, draw_frame->mesh_instance_batches);
+                CMD_BEGIN_DEBUG_UTILS_LABEL_EXT(current_cmd_buf, &debug_label);
                 if (vk_ctx->mesh_shading_enabled)
-                {
                     model_instance_mesh_rendering(mesh_batches, camera_handle_void);
-                }
+                else
+                    model_instance_rendering(indirect_batches);
+                CMD_END_DEBUG_UTILS_LABEL_EXT(current_cmd_buf);
             }
 
             if (draw_frame->line_vertex_chunk_list->total_count > 0)
@@ -381,23 +370,7 @@ command_buffer_record(U32 image_index, U32 current_frame, Vec2S64 mouse_cursor_p
 
             vkCmdEndRendering(current_cmd_buf);
 
-            VkImageMemoryBarrier2 present_barrier{};
-            present_barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2;
-            present_barrier.pNext = nullptr;
-            present_barrier.srcStageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT;
-            present_barrier.srcAccessMask = VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT;
-            present_barrier.dstStageMask = VK_PIPELINE_STAGE_2_NONE;
-            present_barrier.dstAccessMask = VK_ACCESS_2_NONE;
-            present_barrier.oldLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-            present_barrier.newLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
-            present_barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-            present_barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-            present_barrier.image = swapchain_image;
-            present_barrier.subresourceRange = {.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
-                                                .baseMipLevel = 0,
-                                                .levelCount = 1,
-                                                .baseArrayLayer = 0,
-                                                .layerCount = 1};
+            VkImageMemoryBarrier2 present_barrier = vulkan_swapchain_image_barrier(swapchain_image, true);
             VkImageMemoryBarrier2 object_id_read_barrier = {
                 .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
                 .srcStageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,

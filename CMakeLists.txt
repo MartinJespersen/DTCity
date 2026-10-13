@@ -200,7 +200,7 @@ foreach(GLSL ${GLSL_SOURCE_FILES})
         OUTPUT ${SPIRV}
         COMMAND ${CMAKE_COMMAND} -E make_directory "${SHADER_BINARY_DIR}"
         COMMAND ${GLSL_VALIDATOR} -V ${GLSL} ${GLSL_SHADER_FLAGS} ${SHADER_TARGET_FLAGS} -o ${SPIRV}
-        DEPENDS ${GLSL} "${SHADER_SRC}/shader_shared.h" "${SHADER_SRC}/tile/includes.glsl"
+        DEPENDS ${GLSL} "${SHADER_SRC}/shader_shared.h" "${SHADER_SRC}/tile/includes.glsl" "${SHADER_SRC}/model_instance/lod_select.glsl"
         COMMENT "Compiling ${FILE_NAME} to SPIR-V"
     )
   list(APPEND SPIRV_BINARY_FILES ${SPIRV})
@@ -237,7 +237,9 @@ target_include_directories(city SYSTEM PRIVATE
 )
 
 # Enable interprocedural optimization on the existing application target.
+if (NOT BUILD_DEBUG)
 set_property(TARGET city PROPERTY INTERPROCEDURAL_OPTIMIZATION TRUE)
+endif()
 
 target_precompile_headers(city PRIVATE src/pch.hpp)
 

@@ -21,6 +21,11 @@ struct Pipeline
 };
 
 using MeshInstancePushConstants = shader::MeshInstancePushConstants;
+struct ModelIndirectBatch
+{
+    VkDescriptorBufferInfo buffers[5];
+    MeshInstancePushConstants constants;
+};
 // general pipeline functions
 g_internal void
 pipeline_destroy(Pipeline* draw_ctx);
@@ -46,11 +51,9 @@ primitive_rendering(Buffer<render::PrimitiveInstance> primitive_instances, rende
 g_internal Pipeline
 model_instance_pipeline_create(String8 shader_path);
 g_internal void
-model_instance_rendering(Buffer<render::AgentMeshInstanceBatch> mesh_batches, render::MappedHandle<void> camera_handle);
+model_instance_rendering(Buffer<ModelIndirectBatch> batches);
 
 // EXT mesh shaders: PrimitiveVertex storage, packed meshlets, per-instance transforms.
-g_internal Pipeline
-model_instance_mesh_pipeline_create(String8 shader_path);
 g_internal void
 model_instance_mesh_rendering(Buffer<render::AgentMeshInstanceBatch> mesh_batches, render::MappedHandle<void> camera_handle);
 
@@ -59,5 +62,10 @@ g_internal Pipeline
 line_pipeline_create(Context* vk_ctx, String8 shader_path);
 g_internal void
 lines_render(Buffer<render::LineVertex> line_vertices, render::MappedHandle<void> mapped_camera_handle);
+
+// Record compute before entering dynamic rendering.
+g_internal Buffer<ModelIndirectBatch>
+_vulkan_model_compute_prepare(Buffer<render::AgentMeshInstanceBatch> mesh_batches,
+                              render::MappedHandle<void> camera_handle);
 
 } // namespace vulkan

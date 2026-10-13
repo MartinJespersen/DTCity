@@ -168,12 +168,11 @@ struct Context
     Pipeline model_3D_pipeline;
     Pipeline blend_3d_pipeline;
     Pipeline primitive_pipeline;
-    Pipeline model_instance_mesh_pipeline;
     Pipeline model_instance_pipeline;
+    VkPipeline model_lod_compute_pipeline;
     Pipeline line_pipeline;
     Pipeline bbox_pipeline;
 
-    VkDescriptorSetLayout model_instance_mesh_descriptor_set_layout;
     VkDescriptorSetLayout model_instance_descriptor_set_layout;
     VkDescriptorSetLayout road_segment_descriptor_set_layout;
     VkDescriptorSetLayout storage_buffer_descriptor_set_layout;
@@ -182,6 +181,7 @@ struct Context
     render::Handle model_3D_instance_buffer[render::MAX_FRAMES_IN_FLIGHT];
     render::Handle primitive_instance_buffer[render::MAX_FRAMES_IN_FLIGHT];
     render::Handle mesh_instance_buffer[render::MAX_FRAMES_IN_FLIGHT];
+    render::Handle model_indirect_buffer[render::MAX_FRAMES_IN_FLIGHT];
     render::Handle line_buffer_handle[render::MAX_FRAMES_IN_FLIGHT];
 
     VkPhysicalDeviceMeshShaderPropertiesEXT mesh_shader_properties;
@@ -190,6 +190,8 @@ struct Context
     LinkedList<MappedHandleTransfer> mapped_handle_list; // mapped handles
     // extensions enabled
     bool mesh_shading_enabled;
+    bool indirect_first_instance_enabled;
+    bool multi_draw_indirect_enabled;
 };
 
 // ~mgj: Vulkan Lifetime

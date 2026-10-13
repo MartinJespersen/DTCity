@@ -147,6 +147,10 @@ imgui_debug_window(city::City* city, async::ThreadPool* thread_pool)
     }
     ImGui::Text("Deletetion Queue Free List: %d active", asset_manager->deletion_queue_free_list_count);
     ImGui::Text("ThreadPool pending tasks: %u", thread_pool->pending_task_count.load());
+    if (city->agent_system && city->agent_system->agent_sim)
+    {
+        ImGui::Text("Agents active: %d", city->agent_system->agent_sim->agents_active.item_in_use_count);
+    }
     city::tile_load_debug_ui_draw(ctx->tile_load_state, city->tileset_handle);
 
     // netascore status
@@ -279,7 +283,7 @@ dt_main_loop(void* ptr)
     }
     U32 simulator_scenario_idx = 0;
     city::RoadOverlayOption neta_overlay_option = city::RoadOverlayOption_None;
-    S32 cur_area_option = 1;
+    S32 cur_area_option = 2;
     S32 area_option = cur_area_option;
     B32 area_switch_pending = false;
 
@@ -289,7 +293,7 @@ dt_main_loop(void* ptr)
     city_area_streaming_begin(area, area_config);
 
     F64 playback_time = 0;
-    F64 fetch_period_seconds = 10;
+    F64 fetch_period_seconds = 0.5;
     bool playback_running = true;
     bool agent_snapshot_needed = true;
     while (ctx->running)
@@ -498,7 +502,8 @@ dt_main_loop(void* ptr)
             // A worker may have queued a callback just before finishing.
             async::thread_pool_main_thread_queue_drain(ctx->thread_pool);
             pending_work = thread_pool_has_pending_work(ctx->thread_pool);
-            if (!pending_work) break;
+            if (!pending_work)
+                break;
         }
     }
     render::gpu_work_update();

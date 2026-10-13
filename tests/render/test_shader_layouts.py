@@ -92,6 +92,14 @@ def main():
                     assert f'OpMemberDecorate {type_id} {index} ColMajor' in assembly
             shader_count += 1
 
+        # Individual stage compilation cannot detect mismatched graphics interfaces.
+        model_dir = shader_dir / 'model_instance'
+        for stages in [('model.vert', 'model.frag'),
+                       ('mesh_instance.task', 'mesh_instance.mesh', 'model.frag')]:
+            subprocess.run([args.glslang, '-V', '--target-env', 'vulkan1.2', '-l',
+                            *[str(model_dir / stage) for stage in stages],
+                            '-o', str(temp / 'model_linked.spv')], check=True)
+
         assert shared_types == {name for name, _ in offsets}, 'Missing shader layout coverage'
         assert shared_types == set(strides), 'Missing struct array strides'
         assert shared_types == set(alignments), 'Missing struct alignments'

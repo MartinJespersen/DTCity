@@ -421,7 +421,7 @@ logical_device_create(Arena* arena, Context* vk_ctx)
 #endif
     if (!vk_ctx->mesh_shading_enabled)
     {
-        INFO_LOG("Mesh shading is unavailable; mesh instances will not be drawn.\n");
+        INFO_LOG("Mesh shading is unavailable; using compute LOD selection and indexed indirect draws.\n");
     }
     if (!supported_timeline_semaphore.timelineSemaphore)
     {
@@ -446,6 +446,11 @@ logical_device_create(Arena* arena, Context* vk_ctx)
     device_features.fillModeNonSolid = VK_TRUE;
     device_features.shaderInt64 = VK_TRUE;
     device_features.wideLines = VK_TRUE;
+    // These are optional: the compute path can issue one indirect draw per instance.
+    device_features.drawIndirectFirstInstance = supported_features.features.drawIndirectFirstInstance;
+    device_features.multiDrawIndirect = supported_features.features.multiDrawIndirect;
+    vk_ctx->indirect_first_instance_enabled = device_features.drawIndirectFirstInstance;
+    vk_ctx->multi_draw_indirect_enabled = device_features.multiDrawIndirect;
 
     VkPhysicalDeviceDynamicRenderingFeatures dynamic_rendering_features{};
     dynamic_rendering_features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DYNAMIC_RENDERING_FEATURES;
@@ -899,7 +904,8 @@ queue_families_find(Context* vk_ctx, VkPhysicalDevice device)
     vkGetPhysicalDeviceQueueFamilyProperties(device, &queueFamilyCount, queueFamilies);
     for (U32 i = 0; i < queueFamilyCount; i++)
     {
-        if (queueFamilies[i].queueFlags & VK_QUEUE_GRAPHICS_BIT)
+        if ((queueFamilies[i].queueFlags & (VK_QUEUE_GRAPHICS_BIT | VK_QUEUE_COMPUTE_BIT)) ==
+            (VK_QUEUE_GRAPHICS_BIT | VK_QUEUE_COMPUTE_BIT))
         {
             indices.graphicsFamilyIndexBits |= (1 << i);
         }

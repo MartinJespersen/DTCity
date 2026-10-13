@@ -194,14 +194,7 @@ render_ctx_create(String8 shader_path, io::IO* io_ctx, async::ThreadPool* thread
     vk_ctx->blend_3d_pipeline = vulkan::blend_3d_pipeline_create(shader_path);
     vk_ctx->primitive_pipeline = vulkan::primitive_pipeline_create(shader_path);
     vk_ctx->line_pipeline = vulkan::line_pipeline_create(vk_ctx, shader_path);
-    if (vk_ctx->mesh_shading_enabled)
-    {
-        vk_ctx->model_instance_mesh_pipeline = vulkan::model_instance_mesh_pipeline_create(shader_path);
-    }
-    else
-    {
-        vk_ctx->model_instance_mesh_pipeline = vulkan::model_instance_pipeline_create(shader_path);
-    }
+    vk_ctx->model_instance_pipeline = vulkan::model_instance_pipeline_create(shader_path);
 
     // sync objects
     VkSemaphoreTypeCreateInfo type_create_info{VK_STRUCTURE_TYPE_SEMAPHORE_TYPE_CREATE_INFO};
@@ -245,6 +238,7 @@ render_ctx_destroy()
         render::handle_destroy_deferred(vk_ctx->model_3D_instance_buffer[i]);
         render::handle_destroy_deferred(vk_ctx->primitive_instance_buffer[i]);
         render::handle_destroy_deferred(vk_ctx->mesh_instance_buffer[i]);
+        render::handle_destroy_deferred(vk_ctx->model_indirect_buffer[i]);
         render::handle_destroy_deferred(vk_ctx->line_buffer_handle[i]);
     }
 
@@ -262,12 +256,12 @@ render_ctx_destroy()
     vulkan::pipeline_destroy(&vk_ctx->model_3D_pipeline);
     vulkan::pipeline_destroy(&vk_ctx->blend_3d_pipeline);
     vulkan::pipeline_destroy(&vk_ctx->primitive_pipeline);
-    vulkan::pipeline_destroy(&vk_ctx->model_instance_mesh_pipeline);
+    vkDestroyPipeline(vk_ctx->device, vk_ctx->model_lod_compute_pipeline, nullptr);
+    vulkan::pipeline_destroy(&vk_ctx->model_instance_pipeline);
     vulkan::pipeline_destroy(&vk_ctx->line_pipeline);
     vulkan::pipeline_destroy(&vk_ctx->bbox_pipeline);
 
-    vkDestroyDescriptorSetLayout(vk_ctx->device, vk_ctx->model_instance_mesh_descriptor_set_layout, nullptr);
-    vkDestroyDescriptorSetLayout(vk_ctx->device, vk_ctx->model_instance_mesh_descriptor_set_layout, nullptr);
+    vkDestroyDescriptorSetLayout(vk_ctx->device, vk_ctx->model_instance_descriptor_set_layout, nullptr);
     vkDestroyDescriptorSetLayout(vk_ctx->device, vk_ctx->bindless_descriptor_set_layout, nullptr);
     vkDestroyDescriptorSetLayout(vk_ctx->device, vk_ctx->camera_descriptor_set_layout, nullptr);
     vkDestroyDescriptorSetLayout(vk_ctx->device, vk_ctx->road_segment_descriptor_set_layout, nullptr);
@@ -372,7 +366,7 @@ render_frame(Vec2U32 framebuffer_dim, B32* in_out_framebuffer_resized, Vec2S64 m
     VkSemaphoreSubmitInfo wait_semaphore_info{};
     wait_semaphore_info.sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO;
     wait_semaphore_info.semaphore = image_available_semaphore;
-    wait_semaphore_info.stageMask = VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT;
+    wait_semaphore_info.stageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT;
 
     VkSemaphoreSubmitInfo signal_info{};
     signal_info.sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO;
@@ -923,8 +917,8 @@ mesh_handles_create_and_upload(PrimitiveMesh& prim_mesh)
     return render::MeshHandle{vertex_handle, index_handle};
 }
 
-MeshletRender
-mesh_shader_handles_create_and_upload(PrimitiveMesh& mesh)
+ModelLodGeometry
+render_model_lod_upload(PrimitiveMesh& mesh)
 {
     ScratchScope scratch = ScratchScope(0, 0);
     Assert(mesh.indices.size % 3 == 0);
@@ -935,16 +929,17 @@ mesh_shader_handles_create_and_upload(PrimitiveMesh& mesh)
         Assert(mesh.indices.data[i] < mesh.vertices.size);
         indices.data[i] = mesh.indices.data[i];
     }
-    MeshletRender result = mesh_shader_handles_create_and_upload(mesh.vertices, indices);
+    ModelLodGeometry result = render_model_lod_upload(mesh.vertices, indices, scratch.arena);
     return result;
 }
 
-MeshletRender
-mesh_shader_handles_create_and_upload(Buffer<PrimitiveVertex> vertices, Buffer<U32> indices)
+ModelLodGeometry
+render_model_lod_upload(Buffer<PrimitiveVertex> vertices, Buffer<U32> indices, Arena* source_arena)
 {
     prof_scope_marker;
-    ScratchScope scratch = ScratchScope(0, 0);
-    if (!vulkan::ctx_get()->mesh_shading_enabled || indices.size == 0)
+    ScratchScope scratch = ScratchScope(&source_arena, 1);
+    bool mesh_shading = vulkan::ctx_get()->mesh_shading_enabled;
+    if (indices.size == 0)
     {
         return {};
     }
@@ -956,12 +951,13 @@ mesh_shader_handles_create_and_upload(Buffer<PrimitiveVertex> vertices, Buffer<U
     // Output limits match mesh_instance.mesh. Build once, not per instance.
     constexpr U32 max_vertices = 64;
     constexpr U32 max_triangles = 64;
-    constexpr U32 max_lods = 4;
-    constexpr U32 header_words = 8 + max_lods * 4;
+    constexpr U32 max_lods = MODEL_LOD_MAX_COUNT;
+    constexpr U32 header_words = MODEL_GEOMETRY_HEADER_WORD_COUNT;
     Buffer<meshopt_Meshlet> lod_meshlets[max_lods] = {};
     Buffer<U32> lod_vertex_refs[max_lods] = {};
     Buffer<U8> lod_triangles[max_lods] = {};
     F32 lod_errors[max_lods] = {};
+    Buffer<U32> indexed_lods[max_lods] = {};
     U32 lod_count = 0;
     U32 max_meshlet_count = 0;
     U64 word_count = header_words;
@@ -991,6 +987,13 @@ mesh_shader_handles_create_and_upload(Buffer<PrimitiveVertex> vertices, Buffer<U
             break;
         }
         previous_index_count = lod_indices.size;
+        if (!mesh_shading)
+        {
+            indexed_lods[lod] = lod_indices;
+            word_count += lod_indices.size;
+            ++lod_count;
+            continue;
+        }
         U64 capacity = meshopt_buildMeshletsBound(lod_indices.size, max_vertices, max_triangles);
         lod_meshlets[lod] = buffer_alloc<meshopt_Meshlet>(scratch.arena, capacity);
         lod_vertex_refs[lod] = buffer_alloc<U32>(scratch.arena, capacity * max_vertices);
@@ -1002,7 +1005,7 @@ mesh_shader_handles_create_and_upload(Buffer<PrimitiveVertex> vertices, Buffer<U
         max_meshlet_count = Max(max_meshlet_count, (U32)lod_meshlets[lod].size);
         for (meshopt_Meshlet& meshlet : lod_meshlets[lod])
         {
-            word_count += 4 + meshlet.vertex_count + meshlet.triangle_count;
+            word_count += MODEL_MESHLET_DESCRIPTOR_WORD_COUNT + meshlet.vertex_count + meshlet.triangle_count;
         }
         ++lod_count;
     }
@@ -1018,27 +1021,40 @@ mesh_shader_handles_create_and_upload(Buffer<PrimitiveVertex> vertices, Buffer<U
     glm::vec3 center = (minimum + maximum) * 0.5f;
     F32 radius = glm::length(maximum - center);
     // Header: bounding sphere, LOD count, then [descriptor offset, count, error, reserved].
-    MemoryCopy(meshlet_words.data, &center.x, 3 * sizeof(F32));
-    MemoryCopy(meshlet_words.data + 3, &radius, sizeof(F32));
-    meshlet_words.data[4] = lod_count;
+    MemoryCopy(meshlet_words.data + MODEL_GEOMETRY_CENTER_X_OFFSET, &center.x,
+               MODEL_GEOMETRY_CENTER_COMPONENT_COUNT * sizeof(F32));
+    MemoryCopy(meshlet_words.data + MODEL_GEOMETRY_RADIUS_OFFSET, &radius, sizeof(F32));
+    meshlet_words.data[MODEL_GEOMETRY_LOD_COUNT_OFFSET] = lod_count;
     U32 offset = header_words;
     for (U32 lod = 0; lod < lod_count; ++lod)
     {
+        U32 lod_entry = MODEL_GEOMETRY_LOD_TABLE_OFFSET + lod * MODEL_LOD_ENTRY_WORD_COUNT;
+        if (!mesh_shading)
+        {
+            // The index buffer shares the metadata allocation; firstIndex skips its header.
+            meshlet_words.data[lod_entry + MODEL_LOD_DATA_OFFSET] = offset;
+            meshlet_words.data[lod_entry + MODEL_LOD_ELEMENT_COUNT_OFFSET] = (U32)indexed_lods[lod].size;
+            MemoryCopy(meshlet_words.data + lod_entry + MODEL_LOD_ERROR_OFFSET, &lod_errors[lod], sizeof(F32));
+            MemoryCopy(meshlet_words.data + offset, indexed_lods[lod].data, indexed_lods[lod].size * sizeof(U32));
+            offset += (U32)indexed_lods[lod].size;
+            continue;
+        }
         U32 descriptors = offset;
-        meshlet_words.data[8 + lod * 4] = descriptors;
-        meshlet_words.data[9 + lod * 4] = (U32)lod_meshlets[lod].size;
-        MemoryCopy(meshlet_words.data + 10 + lod * 4, &lod_errors[lod], sizeof(F32));
-        offset += (U32)lod_meshlets[lod].size * 4;
+        meshlet_words.data[lod_entry + MODEL_LOD_DATA_OFFSET] = descriptors;
+        meshlet_words.data[lod_entry + MODEL_LOD_ELEMENT_COUNT_OFFSET] = (U32)lod_meshlets[lod].size;
+        MemoryCopy(meshlet_words.data + lod_entry + MODEL_LOD_ERROR_OFFSET, &lod_errors[lod], sizeof(F32));
+        offset += (U32)lod_meshlets[lod].size * MODEL_MESHLET_DESCRIPTOR_WORD_COUNT;
         for (U64 i = 0; i < lod_meshlets[lod].size; ++i)
         {
+            U32 descriptor = descriptors + (U32)i * MODEL_MESHLET_DESCRIPTOR_WORD_COUNT;
             meshopt_Meshlet& meshlet = lod_meshlets[lod].data[i];
             U32* vertex_refs = lod_vertex_refs[lod].data + meshlet.vertex_offset;
             U8* triangles = lod_triangles[lod].data + meshlet.triangle_offset;
             meshopt_optimizeMeshlet(vertex_refs, triangles, meshlet.triangle_count, meshlet.vertex_count);
-            meshlet_words.data[descriptors + i * 4 + 0] = offset;
-            meshlet_words.data[descriptors + i * 4 + 1] = offset + meshlet.vertex_count;
-            meshlet_words.data[descriptors + i * 4 + 2] = meshlet.vertex_count;
-            meshlet_words.data[descriptors + i * 4 + 3] = meshlet.triangle_count;
+            meshlet_words.data[descriptor + MODEL_MESHLET_VERTEX_OFFSET] = offset;
+            meshlet_words.data[descriptor + MODEL_MESHLET_TRIANGLE_OFFSET] = offset + meshlet.vertex_count;
+            meshlet_words.data[descriptor + MODEL_MESHLET_VERTEX_COUNT_OFFSET] = meshlet.vertex_count;
+            meshlet_words.data[descriptor + MODEL_MESHLET_TRIANGLE_COUNT_OFFSET] = meshlet.triangle_count;
             for (U32 v = 0; v < meshlet.vertex_count; ++v)
             {
                 meshlet_words.data[offset++] = vertex_refs[v];
@@ -1046,29 +1062,32 @@ mesh_shader_handles_create_and_upload(Buffer<PrimitiveVertex> vertices, Buffer<U
             for (U32 t = 0; t < meshlet.triangle_count; ++t)
             {
                 U8* triangle = triangles + t * 3;
-                meshlet_words.data[offset++] = U32(triangle[0]) | (U32(triangle[1]) << 8) | (U32(triangle[2]) << 16);
+                meshlet_words.data[offset++] = (U32(triangle[0]) << MODEL_TRIANGLE_INDEX_0_SHIFT) |
+                                               (U32(triangle[1]) << MODEL_TRIANGLE_INDEX_1_SHIFT) |
+                                               (U32(triangle[2]) << MODEL_TRIANGLE_INDEX_2_SHIFT);
             }
         }
     }
     Assert(offset == word_count);
     BufferInfo vertex_info = BufferInfo(vertices, BufferType_StorageBuffer);
-    BufferInfo index_info = BufferInfo(meshlet_words, BufferType_StorageBuffer);
+    BufferInfo index_info = BufferInfo(meshlet_words,
+        mesh_shading ? BufferType_StorageBuffer : BufferType_StorageBuffer | BufferType_Index);
     ThreadWorkerCmdCtx* thread_ctx = thread_ctx_create();
     thread_cmd_buffer_record(thread_ctx);
     defer(thread_cmd_buffer_end(thread_ctx));
-    Handle vertex_handle = buffer_load_sync(thread_ctx, &vertex_info, S("Mesh Shader Vertices"));
-    Handle index_handle = buffer_load_sync(thread_ctx, &index_info, S("Mesh Shader Meshlets"));
-    MeshletRender result = {vertex_handle, index_handle, max_meshlet_count, 1.0f};
+    Handle vertex_handle = buffer_load_sync(thread_ctx, &vertex_info, S("Model LOD Vertices"));
+    Handle index_handle = buffer_load_sync(thread_ctx, &index_info, S("Model LOD Geometry"));
+    ModelLodGeometry result = {vertex_handle, index_handle, lod_count, max_meshlet_count, 1.0f};
     return result;
 }
 
 void
-mesh_shader_handles_destroy(MeshletRender mesh)
+render_model_lod_destroy(ModelLodGeometry mesh)
 {
-    if (mesh.meshlet_count > 0)
+    if (mesh.lod_count > 0)
     {
         handle_destroy_deferred(mesh.vertex_buffer_handle);
-        handle_destroy_deferred(mesh.meshlet_buffer_handle);
+        handle_destroy_deferred(mesh.lod_buffer_handle);
     }
 }
 

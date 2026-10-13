@@ -1,3 +1,4 @@
+#include "synchronization.hpp"
 #include "core_inc.hpp"
 #include "base/base_container.hpp"
 #include "base/base_container_templates.hpp"
@@ -859,18 +860,17 @@ asset_manager_cmd_done_check()
         {
             render::ThreadWorkerCmdCtx* thread_input = cmd_queue_item->thread_input;
             AssetManagerCommandPool cmd_pool = asset_manager_cmd_pool_get(asset_manager, cmd_queue_item->thread_id);
-            if (OS_HandleMatch(cmd_pool.mutex, OS_HandleIsZero()))
+            // Recording any command buffer also accesses its pool. Never wait here for a worker.
+            B32 has_mutex = !OS_HandleMatch(cmd_pool.mutex, OS_HandleIsZero());
+            if (has_mutex && !os_mutex_try_take(cmd_pool.mutex))
             {
+                cmd_queue_item = next;
+                continue;
+            }
+            {
+                defer(if (has_mutex) os_mutex_drop(cmd_pool.mutex));
                 vkFreeCommandBuffers(asset_manager->device, cmd_pool.cmd_pool, 1,
                                      (VkCommandBuffer*)&thread_input->cmd_buffer);
-            }
-            else
-            {
-                os_mutex_scope(cmd_pool.mutex)
-                {
-                    vkFreeCommandBuffers(asset_manager->device, cmd_pool.cmd_pool, 1,
-                                         (VkCommandBuffer*)&thread_input->cmd_buffer);
-                }
             }
 
             render::handle_done_loading(thread_input->handles);
@@ -928,38 +928,24 @@ begin_command(VkDevice device, AssetManagerCommandPool* threaded_cmd_pool)
     beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
     beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
 
-    VkCommandBuffer commandBuffer;
-    if (OS_HandleMatch(threaded_cmd_pool->mutex, OS_HandleIsZero()))
-    {
-        VK_CHECK_RESULT(vkAllocateCommandBuffers(device, &allocInfo, &commandBuffer));
-        VK_CHECK_RESULT(vkBeginCommandBuffer(commandBuffer, &beginInfo));
-    }
-    else
-    {
-        os_mutex_scope(threaded_cmd_pool->mutex)
-        {
-            VK_CHECK_RESULT(vkAllocateCommandBuffers(device, &allocInfo, &commandBuffer));
-            VK_CHECK_RESULT(vkBeginCommandBuffer(commandBuffer, &beginInfo));
-        }
-    }
-
-    return commandBuffer;
+    // Keep ownership until end_command, including every vkCmd* call in between.
+    // OS mutexes are recursive, so nested model/texture upload recordings are supported.
+    if (!OS_HandleMatch(threaded_cmd_pool->mutex, OS_HandleIsZero()))
+        os_mutex_take(threaded_cmd_pool->mutex);
+    VkCommandBuffer command_buffer;
+    VK_CHECK_RESULT(vkAllocateCommandBuffers(device, &allocInfo, &command_buffer));
+    VK_CHECK_RESULT(vkBeginCommandBuffer(command_buffer, &beginInfo));
+    return command_buffer;
 }
 
 static void
 end_command(AssetManagerCommandPool* threaded_cmd_pool, VkCommandBuffer command_buffer)
 {
-    if (OS_HandleMatch(threaded_cmd_pool->mutex, OS_HandleIsZero()))
-    {
-        VK_CHECK_RESULT(vkEndCommandBuffer(command_buffer));
-    }
-    else
-    {
-        os_mutex_scope(threaded_cmd_pool->mutex)
-        {
-            VK_CHECK_RESULT(vkEndCommandBuffer(command_buffer));
-        }
-    }
+    // Publish every upload to all later buffer consumers, including ordinary vertex input.
+    vulkan_upload_barrier_record(command_buffer);
+    VK_CHECK_RESULT(vkEndCommandBuffer(command_buffer));
+    if (!OS_HandleMatch(threaded_cmd_pool->mutex, OS_HandleIsZero()))
+        os_mutex_drop(threaded_cmd_pool->mutex);
 }
 
 static AssetManagerCmdQueue*

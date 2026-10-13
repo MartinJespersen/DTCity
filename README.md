@@ -199,3 +199,22 @@ With `BUILD_TESTS=ON`, build `city_tests`, `utm_tests`, and `mimalloc_asan_probe
 run `ctest --test-dir <build-directory>/tests --output-on-failure`. The ASan probes
 check allocation ownership and poisoned boundaries, and run deliberate overflow
 and use-after-free accesses in separate processes, requiring an ASan error report.
+
+
+With Vulkan headers, a loader, and `glslangValidator` installed, `BUILD_TESTS=ON`
+also provides `model_lod_compute_test`. Build it and run
+`ctest --test-dir <build-directory>/tests -R model_lod_compute --output-on-failure`.
+It runs the production agent LOD compute shader on a hardware or software Vulkan
+device and checks indirect commands, instance offsets, dispatch boundaries, and
+buffer reuse, plus transfer-write visibility through the production upload barrier. It skips when no suitable compute device is available. Vulkan
+validation, including synchronization validation, is enabled when installed.
+The shader layout and graphics interface checks can be run separately with
+`python3 tests/render/test_shader_layouts.py --glslang <glslangValidator> --glm-include <include-directory>`.
+
+With GLFW available, `swapchain_sync_test` checks 128 acquire/render/present cycles
+with synchronization validation. It skips if the display, validation layer, or a
+suitable Vulkan device is unavailable. On Linux, a headless software run is:
+`VK_DRIVER_FILES=/usr/share/vulkan/icd.d/lvp_icd.json xvfb-run -a <build-directory>/tests/swapchain_sync_test`.
+The optional `--legacy-scopes` argument reproduces the old presentation hazards;
+`model_lod_compute_test <shader.spv> --legacy-upload-sync` omits the upload barrier
+to check that synchronization validation detects the transfer hazard.

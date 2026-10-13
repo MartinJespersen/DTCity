@@ -929,6 +929,17 @@ os_mutex_take(OS_Handle mutex)
     pthread_mutex_lock(&entity->mutex_handle);
 }
 
+B32
+os_mutex_try_take(OS_Handle mutex)
+{
+    if (OS_HandleMatch(mutex, OS_HandleIsZero()))
+        return true;
+    OS_LNX_Entity* entity = (OS_LNX_Entity*)mutex.u64[0];
+    int result = pthread_mutex_trylock(&entity->mutex_handle);
+    Assert(result == 0 || result == EBUSY);
+    return result == 0;
+}
+
 void
 os_mutex_drop(OS_Handle mutex)
 {

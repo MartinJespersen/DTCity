@@ -69,13 +69,9 @@ agent_model_render_info_create(render::ThreadWorkerCmdCtx* t_ctx, gltfw_Result& 
 
         // load geometry and textures
 
-        render::BufferInfo vertex_info = render::BufferInfo(vertex_buffer, render::BufferType_Vertex);
-        render::BufferInfo index_info = render::BufferInfo(node->indices, render::BufferType_Index);
-        info.geometry.data[mesh_idx].indexed_vert_handles.vertex_h = render::buffer_load_sync(t_ctx, &vertex_info, S("Agent Vertex Buffer"));
-        info.geometry.data[mesh_idx].indexed_vert_handles.index_h = render::buffer_load_sync(t_ctx, &index_info, S("Agent Index Buffer"));
         info.geometry.data[mesh_idx].texture_h = info.texture_handles[node->tex_idx];
         info.geometry.data[mesh_idx].color = node->color;
-        info.geometry.data[mesh_idx].meshlet_info = render::mesh_shader_handles_create_and_upload(vertex_buffer, node->indices);
+        info.geometry.data[mesh_idx].lod_geometry = render::render_model_lod_upload(vertex_buffer, node->indices, scratch.arena);
 
         mesh_idx++;
     }
@@ -432,11 +428,8 @@ _agent_models_release(AgentSimConfig* config)
     {
         for (auto& geometry : model.geometry)
         {
-            render::handle_destroy(geometry.indexed_vert_handles.vertex_h);
-            render::handle_destroy(geometry.indexed_vert_handles.index_h);
-
-            render::handle_destroy(geometry.meshlet_info.meshlet_buffer_handle);
-            render::handle_destroy(geometry.meshlet_info.vertex_buffer_handle);
+            render::handle_destroy(geometry.lod_geometry.lod_buffer_handle);
+            render::handle_destroy(geometry.lod_geometry.vertex_buffer_handle);
             geometry = {};
         }
         // Index zero is the renderer's shared fallback texture.

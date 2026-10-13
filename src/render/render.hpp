@@ -210,26 +210,21 @@ struct BufferInfo
     copy_to_arena(Arena* arena);
 };
 
-struct MeshletRender
+struct ModelLodGeometry
 {
     Handle vertex_buffer_handle;
-    Handle meshlet_buffer_handle;
+    // Shared sphere/error header, followed by meshlets or ordinary indices for the selected backend.
+    Handle lod_buffer_handle;
+    U32 lod_count;
     U32 meshlet_count;    // Maximum meshlets in any LOD, used to size task dispatches.
     F32 lod_error_pixels; // Zero keeps full detail; otherwise maximum projected simplification error.
-};
-
-struct IndexedVertexHandles
-{
-    Handle vertex_h;
-    Handle index_h;
 };
 
 struct AgentModelInfo
 {
     render::Handle texture_h;
     glm::vec4 color;
-    IndexedVertexHandles indexed_vert_handles;
-    MeshletRender meshlet_info;
+    ModelLodGeometry lod_geometry;
 };
 
 template <typename T>
@@ -397,7 +392,7 @@ struct PrimitiveInstance
     MeshHandle mesh_handle;
 };
 
-// Mesh handles must be created by mesh_shader_handles_create_and_upload.
+// Mesh handles must be created by render_model_lod_upload.
 // Uses PrimitiveVertex meshes and one non-singular, orientation-preserving
 // affine model-to-world transform per instance (translation, rotation, scale).
 struct AgentMeshInstanceBatch
@@ -548,10 +543,10 @@ is_resource_loaded(Handle handle);
 
 render::MeshHandle
 mesh_handles_create_and_upload(render::PrimitiveMesh& prim_mesh);
-MeshletRender
-mesh_shader_handles_create_and_upload(PrimitiveMesh& mesh);
-MeshletRender
-mesh_shader_handles_create_and_upload(Buffer<PrimitiveVertex> vertices, Buffer<U32> indices);
+ModelLodGeometry
+render_model_lod_upload(PrimitiveMesh& mesh);
+ModelLodGeometry
+render_model_lod_upload(Buffer<PrimitiveVertex> vertices, Buffer<U32> indices, Arena* source_arena);
 void
-mesh_shader_handles_destroy(MeshletRender mesh);
+render_model_lod_destroy(ModelLodGeometry mesh);
 } // namespace render
