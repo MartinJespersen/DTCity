@@ -63,6 +63,35 @@ The different build configurations are: debug, release and profile.
 To build for debug on either windows or linux, run the following commands:
 - cmake --build build/debug
 
+### Simulator debug build on Windows and Linux
+
+Use the same preset commands on both systems:
+
+```sh
+cmake --preset debug-simulator
+cmake --build --preset debug-simulator
+```
+
+This preset requires CMake 3.21 or newer and Ninja. It selects MSVC on Windows
+and Clang on Linux, with AddressSanitizer enabled. On Windows, run it from the
+x64 Developer Command Prompt. On Ubuntu, install Clang, LLD, and Ninja with
+`sudo apt install clang lld ninja-build`, along with the Linux prerequisites above.
+Outputs go to `simulator/build/Windows/debug-simulator/` or
+`simulator/build/Linux/debug-simulator/`. The preset replaces `debug-simulator-linux`.
+
+For Zed, keep the `Debug Simulator` task (F8) set to the two preset commands
+above. Set `Run Simulator Debug` (F7) to
+`cmake -P cmake/RunSimulator.cmake`, with the project root as its working
+directory. The launcher selects the executable and working directory for the
+current OS. Zed task files are ignored by Git and must be updated on each machine.
+
+For profiling, use `profile-simulator` with the same configure and build commands.
+It enables Tracy and optimization, with AddressSanitizer disabled. It replaces
+`profile-simulator-linux` and uses the `profile-simulator` output folder on each OS.
+Set Zed's `Simulator Profile Build` (Shift+F8) to these profile commands, and
+`Run Simulator Profile` (Shift+F7) to
+`cmake -Dsimulator_preset=profile-simulator -P cmake/RunSimulator.cmake`.
+
 ### Windows release with static dependencies
 
 Build both DTCity and the simulator with static libraries and the static MSVC runtime:

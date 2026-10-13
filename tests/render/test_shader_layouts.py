@@ -125,14 +125,15 @@ def main():
         command = [args.cxx, '-std=c++20', '-fsyntax-only', '-I' + str(root / 'src')]
         if args.glm_include:
             command += ['-I' + str(args.glm_include)]
-        # Check both standalone inclusion and the application's GLM configuration.
-        for flags in ([], ['-DGLM_FORCE_INTRINSICS', '-DGLM_FORCE_DEFAULT_ALIGNED_GENTYPES',
-                           '-DGLM_FORCE_EXPLICIT_CTOR', '-DGLM_FORCE_XYZW_ONLY']):
+        # Check standalone, application, and aligned configurations. XYZW_ONLY disables SIMD.
+        for flags in ([], ['-DGLM_FORCE_INTRINSICS', '-DGLM_FORCE_EXPLICIT_CTOR', '-DGLM_FORCE_XYZW_ONLY'],
+                      ['-DGLM_FORCE_INTRINSICS', '-DGLM_FORCE_DEFAULT_ALIGNED_GENTYPES',
+                       '-DGLM_FORCE_EXPLICIT_CTOR']):
             subprocess.run(command + flags + [str(path)], check=True)
     print(f'PASS: {shader_count} shaders, {len(offsets)} member offsets, '
           f'{len(strides)} struct strides, {len(member_strides)} member array strides, '
           f'{len(matrix_strides)} matrix strides, {len(alignments)} alignments; '
-          'default and aligned GLM configurations')
+          'default, application, and aligned GLM configurations')
 
 
 if __name__ == '__main__':

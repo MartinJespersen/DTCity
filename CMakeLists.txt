@@ -10,7 +10,6 @@ set(ASAN_COMPILE_FLAGS "")
 set(GLSL_SHADER_FLAGS "")
 set(DISABLE_WARNINGS_COMPILE_FLAG "")
 set(ALL_TARGETS)
-set(RADLINKER_PATH "C:/repos/raddebugger/build/radlink.exe")
 
 option(BUILD_DEBUG "Enable Additional Debugging Information (e.g Vulkan Validation Layers)" OFF)
 option(ASAN_ENABLED "Enable Address Sanitizer" OFF)
@@ -19,7 +18,6 @@ option(BUILD_CITY "Build the DTCity application" ON)
 option(BUILD_SIMULATOR "Build the vehicle simulator" OFF)
 option(BUILD_TESTS "Build tests" OFF)
 option(SHADER_DEBUG "Enable Shader Debugging" OFF)
-option(USE_RADLINKER "Use RAD linker for MSVC debug builds" ON)
 option(TRACY_PROFILE_ENABLE "Enable Tracy profiler" OFF)
 
 # cmake macro -> compiler macro
@@ -39,17 +37,10 @@ endif()
 
 # Compiler specific options
 if (MSVC)
-  if(ASAN_ENABLED)
+  if(CMAKE_CXX_COMPILER_ID STREQUAL "MSVC" OR ASAN_ENABLED)
     find_program(DTCITY_MSVC_LINKER_PATH NAMES link REQUIRED)
     set(DTCITY_LINKER_PATH "${DTCITY_MSVC_LINKER_PATH}")
-    message(STATUS "Using Microsoft linker for AddressSanitizer: ${DTCITY_LINKER_PATH}")
-  elseif(USE_RADLINKER)
-    if(EXISTS "${RADLINKER_PATH}")
-      set(DTCITY_LINKER_PATH "${RADLINKER_PATH}")
-      message(STATUS "Using RAD linker: ${DTCITY_LINKER_PATH}")
-    else()
-      message(FATAL_ERROR "RAD linker not found at ${RADLINKER_PATH}")
-    endif()
+    message(STATUS "Using Microsoft linker for MSVC whole-program optimization or AddressSanitizer: ${DTCITY_LINKER_PATH}")
   else()
     find_program(DTCITY_LLD_LINKER_PATH NAMES lld-link REQUIRED)
     set(DTCITY_LINKER_PATH "${DTCITY_LLD_LINKER_PATH}")
@@ -237,9 +228,11 @@ target_include_directories(city SYSTEM PRIVATE
 )
 
 # Enable interprocedural optimization on the existing application target.
-if (NOT BUILD_DEBUG)
-set_property(TARGET city PROPERTY INTERPROCEDURAL_OPTIMIZATION TRUE)
-endif()
+set_target_properties(city PROPERTIES
+    INTERPROCEDURAL_OPTIMIZATION FALSE
+    INTERPROCEDURAL_OPTIMIZATION_RELEASE TRUE
+    INTERPROCEDURAL_OPTIMIZATION_RELWITHDEBINFO TRUE
+)
 
 target_precompile_headers(city PRIVATE src/pch.hpp)
 

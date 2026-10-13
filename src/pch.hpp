@@ -4,7 +4,7 @@
 // mgj: third party libs
 #define GLM_FORCE_RADIANS
 #define GLM_FORCE_DEPTH_ZERO_TO_ONE
-#define GLM_FORCE_DEFAULT_ALIGNED_GENTYPES
+// Keep packed defaults: Cesium Native exports GLM_FORCE_XYZW_ONLY, which disables SIMD.
 #define GLM_FORCE_INTRINSICS
 #define GLM_FORCE_INLINE
 #include "glm/glm.hpp"
