@@ -1,0 +1,151 @@
+[
+  {
+    "label": "CMake Configure (Debug)",
+    "command": "cmake --preset debug-no-asan",
+    "cwd": "$ZED_WORKTREE_ROOT",
+  },
+  {
+    "label": "CMake Configure (Release)",
+    "command": "cmake --preset=release-windows",
+    "cwd": "$ZED_WORKTREE_ROOT",
+  },
+  {
+    "label": "CMake Configure (Profile)",
+    "command": "cmake --preset=profile-windows",
+    "cwd": "$ZED_WORKTREE_ROOT",
+  },
+  {
+    "label": "Debug Clang Build",
+    "command": "cmake --build build/win/clang-debug --parallel",
+    "cwd": "$ZED_WORKTREE_ROOT",
+  },
+  {
+    "label": "Debug Build (No ASan)",
+    "command": "cmake --preset debug-no-asan && cmake --build --preset debug-no-asan",
+    "cwd": "$ZED_WORKTREE_ROOT",
+  },
+  {
+    "label": "Release Build",
+    "command": "cmake --build build/win/release --parallel 4",
+    "cwd": "$ZED_WORKTREE_ROOT",
+  },
+  {
+    "label": "Profile Build",
+    "command": "cmake --build build/win/profile --parallel 4",
+    "cwd": "$ZED_WORKTREE_ROOT",
+  },
+  {
+    "label": "Debug Simulator",
+    "command": "cmake --preset debug-simulator && cmake --build --preset debug-simulator",
+    "cwd": "$ZED_WORKTREE_ROOT",
+  },
+  {
+    "label": "Simulator Profile Build",
+    "command": "cmake --preset profile-simulator && cmake --build --preset profile-simulator",
+    "cwd": "$ZED_WORKTREE_ROOT",
+  },
+  {
+    "label": "Simulator Release Build",
+    "command": "cmake --preset release-simulator-windows && cmake --build --preset release-simulator-windows",
+    "cwd": "$ZED_WORKTREE_ROOT",
+  },
+  {
+    "label": "Run Debug",
+    "command": "cmake -P cmake/RunCity.cmake",
+    "cwd": "$ZED_WORKTREE_ROOT",
+    "show_summary": true,
+  },
+  {
+    "label": "Run Release",
+    "command": "$ZED_WORKTREE_ROOT\\build\\win\\release\\city.exe",
+    "cwd": "$ZED_WORKTREE_ROOT\\build\\win\\release",
+    "show_summary": true,
+  },
+  {
+    "label": "Run Profile",
+    "command": "$ZED_WORKTREE_ROOT\\build\\win\\profile\\city.exe",
+    "cwd": "$ZED_WORKTREE_ROOT\\build\\win\\profile",
+    "show_summary": true,
+  },
+  {
+    "label": "Run Simulator Debug",
+    "command": "cmake -P cmake/RunSimulator.cmake",
+    "cwd": "$ZED_WORKTREE_ROOT",
+    "show_summary": true,
+  },
+  {
+    "label": "Run Simulator Profile",
+    "command": "cmake -Dsimulator_preset=profile-simulator -P cmake/RunSimulator.cmake",
+    "cwd": "$ZED_WORKTREE_ROOT",
+    "show_summary": true,
+  },
+  {
+    "label": "Run Simulator Release",
+    "command": "$ZED_WORKTREE_ROOT\\simulator\\build\\win\\release\\Simulator.exe",
+    "cwd": "$ZED_WORKTREE_ROOT\\simulator\\build\\win\\release",
+    "show_summary": true,
+  },
+  {
+    "label": "Start Profile Capture",
+    "command": "tracy-capture -a 127.0.0.1 -o $ZED_WORKTREE_ROOT\\trace.tracy -f",
+    "cwd": "$ZED_WORKTREE_ROOT",
+  },
+  {
+    "label": "Find Code Location",
+    "command": "C:\\repos\\raddebugger\\build\\raddbg.exe --ipc find_code_location \"$ZED_FILE:$ZED_ROW:$ZED_COLUMN\"",
+  },
+  {
+    "label": "Python Run",
+    "command": ".venv\\Scripts\\python.exe $ZED_FILE",
+    "cwd": "$ZED_WORKTREE_ROOT\\scripts",
+  },
+  {
+    "label": "Build Tests",
+    "command": "cmake --build \"$ZED_WORKTREE_ROOT/build/Windows/debug-no-asan\" --target city_tests",
+    "cwd": "$ZED_WORKTREE_ROOT"
+  },
+  {
+    "label": "RAD Debugger: jump to cursor",
+    "command": "C:/repos/raddebugger/build/raddbg.exe",
+    "args": ["--ipc", "find_code_location", "${ZED_FILE}:${ZED_ROW}:${ZED_COLUMN}"],
+    "reveal": "never",
+    "hide": "on_success"
+  },
+  {
+    "label": "RAD Debugger: toggle breakpoint at cursor",
+    "command": "C:/repos/raddebugger/build/raddbg.exe",
+    "args": ["--ipc", "toggle_breakpoint", "${ZED_FILE}:${ZED_ROW}:1"],
+    "reveal": "never",
+    "hide": "on_success",
+    "save": "none"
+  },
+  {
+    "label": "RAD Debugger: launch and break at cursor (debug)",
+    "command": "pwsh.exe",
+    "args": [
+      "-NoProfile",
+      "-ExecutionPolicy", "Bypass",
+      "-File", "${ZED_WORKTREE_ROOT}/.zed/debug-at-cursor.ps1",
+      "-SourceFile", "${ZED_FILE}",
+      "-Line", "${ZED_ROW}",
+      "-Executable", "${ZED_WORKTREE_ROOT}/build/Windows/debug-no-asan/city.exe"
+    ],
+    "reveal": "never",
+    "hide": "on_success"
+  },
+  {
+    "label": "RAD Debugger: launch and break at cursor (profile)",
+    "command": "pwsh.exe",
+    "args": [
+      "-NoProfile",
+      "-ExecutionPolicy", "Bypass",
+      "-File", "${ZED_WORKTREE_ROOT}/.zed/debug-at-cursor.ps1",
+      "-SourceFile", "${ZED_FILE}",
+      "-Line", "${ZED_ROW}",
+      "-Executable", "${ZED_WORKTREE_ROOT}/build/win/profile/city.exe"
+    ],
+    "reveal": "never",
+    "hide": "on_success"
+  }
+
+]
