@@ -2,7 +2,6 @@
 
 #include "base_arena.hpp"
 
-
 template <typename T>
 struct LinkedListNode
 {
@@ -15,6 +14,10 @@ struct LinkedList
 {
     LinkedListNode<T>* first;
     LinkedListNode<T>* last;
+    U32 count;
+
+    T&
+    emplace_back(Allocator& allocator);
 };
 
 template <typename T>

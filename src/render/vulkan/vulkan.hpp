@@ -5,6 +5,7 @@
 #include "asset_manager.hpp"
 #include "vulkan_common.hpp"
 #include "pipelines.hpp"
+#include "tile_height_compute.hpp"
 #include "base/base_lists.hpp"
 
 namespace vulkan
@@ -170,6 +171,7 @@ struct Context
     Pipeline primitive_pipeline;
     Pipeline model_instance_pipeline;
     VkPipeline model_lod_compute_pipeline;
+    TileHeightPipeline tile_height_pipeline;
     Pipeline line_pipeline;
     Pipeline bbox_pipeline;
 

@@ -14,6 +14,13 @@
 #include "osm/osm.hpp"
 #include "cesium/cesium_tileset.hpp"
 #include "city/city_inc.hpp"
+#include "city/city.hpp"
+#include "city/tile_bvh.hpp"
+#include "base/base_allocator.hpp"
+#include "base/base_core.hpp"
+#include "base/base_arena.hpp"
+#include "base/base_allocator_templates.hpp"
+#include "render/tile_bvh.hpp"
 #include "entrypoint.hpp"
 
 namespace city
@@ -38,12 +45,13 @@ city_area_wgs84_get(const AreaConfig* config)
 void
 city_init(City* city, String8 cache_path)
 {
-    ScratchScope scratch = ScratchScope(0, 0);
-
-    Arena* arena = arena_alloc();
+    // The city allocator owns the same lifetime as the original city arena.
+    city->allocator = new Allocator({arena_default_reserve_size, arena_default_commit_size, arena_default_flags});
+    Arena* arena = city->allocator->arena;
     Debug_SetName(arena, "city arena");
     city->cache_path = push_str8_copy(arena, cache_path);
     city->arena = arena;
+    city->tile_bvh = city->allocator->make<TileBvh>();
     city->all_agent_scale_factor = 1.0f;
 }
 
@@ -80,6 +88,8 @@ city_area_streaming_begin(City* city, const AreaConfig* area_config)
 
     cesium::TilesetRenderer* tileset = {};
     B32 tileset_exists = ctx->tile_load_state->tileset_pool->item_from_handle(tileset_handle, &tileset);
+    if (tileset_exists)
+        tileset->tile_bvh = city->tile_bvh;
     if (city->cars_creation_done && tileset_exists)
     {
         city->agent_system->_agent_height_updates_start(tileset);
@@ -247,7 +257,7 @@ city_update(City* city, async::ThreadPool* thread_pool, RoadOverlayOption neta_o
         RoadBuildTask* road_build_task = PushStruct(city->arena, RoadBuildTask);
         road_build_task->road = &city->road;
         road_build_task->network = city->osm_network;
-        city::Bvh* bvh = {};
+        city::RoadBvh* bvh = {};
         if (ctx->tile_load_state->polygon_bvh_pool->item_from_handle(city->road.bvh_handle, &bvh))
         {
             road_build_task->bvh = bvh;
@@ -277,11 +287,16 @@ city_update(City* city, async::ThreadPool* thread_pool, RoadOverlayOption neta_o
                      draw_frame->camera_resource_handle, city->road_building_done, road_overlay_changed,
                      neta_overlay_option, delta_time);
 
+    // Tile completion callbacks only queue registry changes. Advance the hierarchy
+    // once per frame, including frames with no new entries, without waiting.
+    render::TileBvhHandle ready_tile_bvh = city->tile_bvh->update({}, {});
+
     // Update and render Cesium 3D Tiles ////////////
     cesium::TilesetRenderer* tileset = {};
     B32 tileset_exists = ctx->tile_load_state->tileset_pool->item_from_handle(city->tileset_handle, &tileset);
     if (tileset_exists && !tileset->destruction_requested)
     {
+        tileset->ready_tile_bvh = ready_tile_bvh;
         if (city->road_building_done)
         {
             city->road.overlay_option_cur = neta_overlay_option;
@@ -461,10 +476,22 @@ city_release(City* city)
     {
         arena_release(city->neta_state->arena);
     }
-    if (city->arena)
+    if (city->tile_bvh)
     {
-        arena_release(city->arena);
+        // Pending tile reprocessing can drain after this city is released. Detach
+        // callbacks before releasing the registry; worker BVH snapshots own their buffers.
+        Context* ctx = dt_ctx_get();
+        for (cesium::TileRenderResources* tile = ctx->tile_load_state->tile_first; tile; tile = tile->next)
+        {
+            if (tile->tile_bvh == city->tile_bvh)
+                tile->tile_bvh = {};
+        }
+        city->tile_bvh->destroy();
+        city->tile_bvh = {};
     }
+    delete city->allocator;
+    city->allocator = {};
+    city->arena = {};
 }
 
 g_internal async::AsyncTaskContinuation<RoadBuildTask>
@@ -476,7 +503,7 @@ road_build(async::ThreadInfo info, async::AsyncTaskStatus<RoadBuildTask>* status
     RoadBuildTask* task = status->user_data;
     Road* road = task->road;
     osm::Network* network = task->network;
-    Bvh* bvh = task->bvh;
+    RoadBvh* bvh = task->bvh;
 
     render::ThreadWorkerCmdCtx* thread_ctx = render::thread_ctx_create();
     render::thread_cmd_buffer_record(thread_ctx);
@@ -533,7 +560,7 @@ road_destroy(Road* road)
 {
     Context* ctx = dt_ctx_get();
 
-    Bvh* bvh = 0;
+    RoadBvh* bvh = 0;
     if (ctx->tile_load_state->polygon_bvh_pool->item_from_handle(road->bvh_handle, &bvh))
     {
         bvh->deletion_requested = true;
@@ -727,7 +754,7 @@ split_axis_find(Buffer<BoundingBox> bb_buffer, U32 start_idx, U32 end_idx)
 }
 
 g_internal void
-bvh_create(Bvh* bvh, Buffer<RoadSegmentCorners> road_segment_buffer, U32 leaf_bb_max)
+bvh_create(RoadBvh* bvh, Buffer<RoadSegmentCorners> road_segment_buffer, U32 leaf_bb_max)
 {
     ScratchScope scratch = ScratchScope(0, 0);
     Buffer<BoundingBox> bb_buffer = buffer_alloc<BoundingBox>(scratch.arena, road_segment_buffer.size);
@@ -759,7 +786,7 @@ bvh_create(Bvh* bvh, Buffer<RoadSegmentCorners> road_segment_buffer, U32 leaf_bb
         bb_buffer.data[i].center = scale_2f32(center, 1.0f / (F32)Corner_COUNT);
     }
 
-    BvhContext* bvh_ctx = PushStruct(scratch.arena, BvhContext);
+    RoadBvhContext* bvh_ctx = PushStruct(scratch.arena, RoadBvhContext);
     bvh_ctx->road_segment_buffer = road_segment_buffer;
     bvh_ctx->bb_buffer = bb_buffer;
     bvh_ctx->leaf_bb_max = leaf_bb_max;
@@ -1650,7 +1677,7 @@ road_create(City* city, Road* in_out_road, glm::dmat4& ecef_to_local, String8 ar
     in_out_road->road_height = 10.0f;
     in_out_road->default_road_width = 2.0f;
     in_out_road->bvh_handle = ctx->tile_load_state->polygon_bvh_pool->handle_get();
-    Bvh* bvh = 0;
+    RoadBvh* bvh = 0;
     Assert(ctx->tile_load_state->polygon_bvh_pool->item_from_handle(in_out_road->bvh_handle, &bvh));
     bvh->arena = arena_alloc();
 

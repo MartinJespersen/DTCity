@@ -143,11 +143,15 @@ Allocator::_allocator_push_destructor()
             os_commit(cmt_ptr, cmt_size);
         }
         destructor_cmt_pos = cmt_pos;
+#if BUILD_DEBUG
+        this->arena->debug_destructor_cmt_pos = Min(this->arena->debug_destructor_cmt_pos, cmt_pos);
+#endif
     }
 
     Destructor* result = (Destructor*)((U8*)arena + pos_pst);
     arena->destructor_pos = pos_pst;
     AsanUnpoisonMemoryRegion(result, sizeof(*result));
+    Debug_ArenaUsage_Push(this->arena);
     return result;
 }
 
@@ -164,6 +168,7 @@ Allocator::_allocator_destroy_all()
         destructor_count -= 1;
     }
     arena->destructor_pos = arena->res;
+    Debug_ArenaUsage_Push(this->arena);
 }
 
 void

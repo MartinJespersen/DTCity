@@ -8,6 +8,7 @@ set(CMAKE_C_EXTENSIONS OFF)
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 option(TRACY_PROFILE_ENABLE "Enable Tracy profiler" OFF)
 
@@ -124,6 +125,14 @@ endif()
 
 target_link_libraries(Simulator PRIVATE glfw)
 target_link_libraries(Simulator PRIVATE dtcity_mimalloc)
+
+if(CMAKE_GENERATOR MATCHES "Ninja|Makefiles")
+    add_custom_target(simulator-clangd-database
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                "${CMAKE_BINARY_DIR}/compile_commands.json" "${CMAKE_CURRENT_SOURCE_DIR}/compile_commands.json"
+        VERBATIM)
+    add_dependencies(Simulator simulator-clangd-database)
+endif()
 
 if(MSVC)
     target_compile_options(Simulator PRIVATE /W4)

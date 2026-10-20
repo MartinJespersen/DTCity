@@ -35,6 +35,9 @@ struct ArenaParams
 };
 
 typedef struct Arena Arena;
+#if BUILD_DEBUG
+struct DebugArena;
+#endif
 struct Arena
 {
     Arena* prev;    // previous arena in chain
@@ -49,6 +52,10 @@ struct Arena
     U64 destructor_pos;
     U64 free_size;
     Arena* free_last;
+#if BUILD_DEBUG
+    DebugArena* debug_record;
+    U64 debug_destructor_cmt_pos;
+#endif
 };
 StaticAssert(sizeof(Arena) <= ARENA_HEADER_SIZE, arena_header_size_check);
 
@@ -76,6 +83,15 @@ arena_alloc(ArenaParams* params);
 
 Arena*
 arena_alloc();
+
+#if BUILD_DEBUG
+// Keep the original allocation functions available, including for function pointers.
+Arena*
+arena_alloc_debug(const char* source_file, U32 source_line, ArenaParams* params);
+
+Arena*
+arena_alloc_debug(const char* source_file, U32 source_line);
+#endif
 
 void
 arena_release(Arena* arena);
@@ -125,6 +141,11 @@ using ArenaUniquePtr = std::unique_ptr<T, ArenaRelease<T>>;
 #define PushArray(a, T, c) PushArrayAligned(a, T, c, Max(8, AlignOf(T)))
 #define PushStructNoZero(a, T) PushArrayNoZeroAligned(a, T, 1, Max(8, AlignOf(T)))
 #define PushStruct(a, T) PushArrayAligned(a, T, 1, Max(8, AlignOf(T)))
+
+#if BUILD_DEBUG
+// Expand at the caller, before either allocation overload enters the base layer.
+#define arena_alloc(...) arena_alloc_debug(__FILE__, __LINE__ __VA_OPT__(,) __VA_ARGS__)
+#endif
 
 lib_internal void
 _arena_trim_block(Arena* block, U64 retained_size);

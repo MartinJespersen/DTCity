@@ -9,6 +9,7 @@
 #include "draw/draw.hpp"
 #include "misc/io.hpp"
 #include "entrypoint.hpp"
+#include "third_party/tracy/tracy/TracyVulkan.hpp"
 
 namespace vulkan
 {
@@ -365,6 +366,7 @@ command_buffer_record(U32 image_index, U32 current_frame, Vec2S64 mouse_cursor_p
             const bool is_minimized = (draw_data->DisplaySize.x <= 0.0f || draw_data->DisplaySize.y <= 0.0f);
             if (!is_minimized)
             {
+                TracyVkZone(vk_ctx->tracy_ctx[current_frame], current_cmd_buf, "imgui_rendering"); // NOLINT(bugprone-reserved-identifier)
                 ImGui_ImplVulkan_RenderDrawData(draw_data, current_cmd_buf);
             }
 

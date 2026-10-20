@@ -2,7 +2,9 @@
 
 #include "core_inc.hpp"
 #include "base/base_container.hpp"
+#include "base/base_core.hpp"
 #include "render/render.hpp"
+#include "city/tile_bvh.hpp"
 
 namespace cesium
 {
@@ -51,12 +53,12 @@ struct TileDrawBatch
     Buffer<U32> index_buffer_orig;
 
     // Written to the load thread only
-    render::Handle vertex_buffer_handle_load_temp;
-    render::Handle index_buffer_handle_load_temp;
-    U32 index_count_load_temp;
+    city::TileMeshBvhEntry mesh_bvh_entry_load_temp;
     std::atomic<B32> has_load_replacement;
 
     render::TilePipelineData render_data;
+    // Prepared with the mesh on the worker and published by GPU completion.
+    city::TileMeshBvhEntry mesh_bvh_entry;
 };
 
 struct TileLoadCompletion;
@@ -69,6 +71,10 @@ struct TileRenderResources
     TileRenderResources* gpu_work_done_next;
     Arena* arena;
     ArrayResourcePoolHandle tileset_handle;
+    // Set on the owner thread after initial GPU upload completion.
+    city::TileBvh* tile_bvh;
+    // Owner-thread marker for membership in the current tile draw list.
+    U64 bvh_draw_frame;
     U64 tile_mesh_processor_generation;
     U64 tile_mesh_processor_pending_generation;
     std::atomic<U32> to_be_dealloced; // this is set to true (not null) in cesium free
@@ -95,6 +101,9 @@ struct RasterRenderResource
 struct TilesetRenderer
 {
     Allocator allocator;
+    city::TileBvh* tile_bvh;
+    render::TileBvhHandle ready_tile_bvh;
+    U64 bvh_draw_frame;
 
     TileMeshProcessor tile_mesh_processor;
     std::atomic<B32> tile_mesh_processor_enabled;

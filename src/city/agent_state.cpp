@@ -9,7 +9,7 @@ namespace city
 {
 
 AgentSim::AgentSim(U32 hashmap_bucket_capacity, U32 max_agent_count)
-    : allocator(Allocator::create()), height_updates_stop(false), height_update_in_flight(false),
+    : allocator(Allocator::create()), height_updates_stop(false),
       agent_map(&this->allocator, hashmap_bucket_capacity),
       agents_active(this->allocator.arena, max_agent_count)
 {

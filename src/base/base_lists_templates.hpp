@@ -1,6 +1,18 @@
 #pragma once
 
 #include "base_lists.hpp"
+#include <base/base_allocator.hpp>
+
+template <typename T>
+T&
+LinkedList<T>::emplace_back(Allocator& allocator)
+{
+    LinkedListNode<T>* v = PushStruct(allocator.arena, LinkedListNode<T>);
+    SLLQueuePush(this->first, this->last, v);
+    this->count++;
+
+    return v->v;
+}
 
 // Template implementations
 template <typename T>

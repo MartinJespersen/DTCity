@@ -1,0 +1,15 @@
+diff --git a/CesiumCurl/src/CurlAssetAccessor.cpp b/CesiumCurl/src/CurlAssetAccessor.cpp
+--- a/CesiumCurl/src/CurlAssetAccessor.cpp
++++ b/CesiumCurl/src/CurlAssetAccessor.cpp
+@@ -354,6 +354,11 @@ CurlAssetAccessor::CurlAssetAccessor(const CurlAssetAccessorOptions& options)
+ }
+ 
+ CurlAssetAccessor::~CurlAssetAccessor() {
++  // Cached easy handles own connections, TLS state, and transfer buffers.
++  // Release them before shutting down libcurl's global state.
++  for (const auto& entry : this->_pCurlCache->cache) {
++    curl_easy_cleanup(entry.curl);
++  }
+   if (this->_options.doGlobalInit) {
+     curl_global_cleanup();
+   }

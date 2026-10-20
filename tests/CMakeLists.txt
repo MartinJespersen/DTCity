@@ -24,8 +24,19 @@ if(NOT WIN32)
   target_link_libraries(city_tests PRIVATE Threads::Threads ${CMAKE_DL_LIBS} m)
 endif()
 
-enable_testing()
 add_test(NAME city_tests COMMAND city_tests)
+
+# Keep arena instrumentation covered even when the main test build disables debug logging.
+add_executable(arena_debug_tests base/test_arena_debug.cpp)
+target_include_directories(arena_debug_tests PRIVATE ${CMAKE_SOURCE_DIR}/src)
+target_compile_definitions(arena_debug_tests PRIVATE BUILD_TEST=1 BUILD_DEBUG=1)
+target_link_libraries(arena_debug_tests PRIVATE glm::glm dtcity_mimalloc)
+if(NOT WIN32)
+  target_link_libraries(arena_debug_tests PRIVATE Threads::Threads ${CMAKE_DL_LIBS} m)
+endif()
+list(APPEND ALL_TARGETS arena_debug_tests)
+set(ALL_TARGETS "${ALL_TARGETS}" PARENT_SCOPE)
+add_test(NAME arena_debug COMMAND arena_debug_tests)
 
 add_executable(utm_tests utility/utm_test_main.cpp)
 target_include_directories(utm_tests PRIVATE ${CMAKE_SOURCE_DIR}/src)
@@ -60,6 +71,21 @@ endif()
 # Execute the production LOD shader without a window. Software Vulkan also works.
 find_package(Vulkan QUIET)
 if(Vulkan_FOUND AND Vulkan_GLSLANG_VALIDATOR_EXECUTABLE)
+  set(TILE_HEIGHT_SHADER "${CMAKE_CURRENT_BINARY_DIR}/tile_height_comp.spv")
+  add_custom_command(OUTPUT "${TILE_HEIGHT_SHADER}"
+    COMMAND "${Vulkan_GLSLANG_VALIDATOR_EXECUTABLE}" -V --target-env vulkan1.2
+            "${CMAKE_SOURCE_DIR}/src/shaders/tile_height.comp" -o "${TILE_HEIGHT_SHADER}"
+    DEPENDS "${CMAKE_SOURCE_DIR}/src/shaders/tile_height.comp" "${CMAKE_SOURCE_DIR}/src/shaders/shader_shared.h")
+  add_executable(tile_height_compute_test render/test_tile_height_compute.cpp
+    ../src/render/vulkan/tile_height_compute.cpp "${TILE_HEIGHT_SHADER}")
+  # clangd also infers neighboring Vulkan app files from this shared source.
+  target_include_directories(tile_height_compute_test PRIVATE "${CMAKE_SOURCE_DIR}/src"
+    "${CMAKE_SOURCE_DIR}/src/third_party" "${CMAKE_SOURCE_DIR}/src/third_party/imgui")
+  target_link_libraries(tile_height_compute_test PRIVATE Vulkan::Vulkan glm::glm)
+  list(APPEND ALL_TARGETS tile_height_compute_test)
+  set(ALL_TARGETS "${ALL_TARGETS}" PARENT_SCOPE)
+  add_test(NAME tile_height_compute COMMAND tile_height_compute_test "${TILE_HEIGHT_SHADER}")
+  set_tests_properties(tile_height_compute PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 60)
   set(MODEL_LOD_SHADER "${CMAKE_CURRENT_BINARY_DIR}/model_lod_comp.spv")
   add_custom_command(OUTPUT "${MODEL_LOD_SHADER}"
     COMMAND "${Vulkan_GLSLANG_VALIDATOR_EXECUTABLE}" -V

@@ -1,4 +1,5 @@
 #include "core_inc.hpp"
+#include <vulkan/vulkan_core.h>
 #include "base/base_container.hpp"
 #include "base/base_container_templates.hpp"
 #include "base/base_lists.hpp"
@@ -397,6 +398,7 @@ logical_device_create(Arena* arena, Context* vk_ctx)
     VkPhysicalDeviceFeatures2 supported_features{};
     supported_features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
     VkPhysicalDeviceTimelineSemaphoreFeatures supported_timeline_semaphore{};
+    VkPhysicalDeviceBufferDeviceAddressFeatures supported_buffer_address{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_BUFFER_DEVICE_ADDRESS_FEATURES};
     supported_timeline_semaphore.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_TIMELINE_SEMAPHORE_FEATURES;
 #if BUILD_DEBUG && SHADER_DEBUG
     VkPhysicalDeviceShaderRelaxedExtendedInstructionFeaturesKHR supported_relaxed_instruction{};
@@ -405,11 +407,14 @@ logical_device_create(Arena* arena, Context* vk_ctx)
 #endif
 
     // Support-query chain, in traversal order.
-    supported_features.pNext = &supported_timeline_semaphore;
+    supported_features.pNext = &supported_buffer_address;
+    supported_buffer_address.pNext = &supported_timeline_semaphore;
 #if BUILD_DEBUG && SHADER_DEBUG
     supported_timeline_semaphore.pNext = &supported_relaxed_instruction;
 #endif
     vkGetPhysicalDeviceFeatures2(vk_ctx->physical_device, &supported_features);
+    if (!supported_buffer_address.bufferDeviceAddress)
+        exit_with_error("Selected Vulkan physical device does not support buffer device addresses");
 
 #if BUILD_DEBUG && SHADER_DEBUG
     // Nonsemantic shader debug information can contain forward references.

@@ -108,6 +108,9 @@ struct Buffer
 
 template <typename T>
 Buffer<T>
+buffer_alloc(Allocator* allocator, U64 count);
+template <typename T>
+Buffer<T>
 buffer_alloc(Arena* arena, U64 count);
 template <typename T>
 Buffer<T>

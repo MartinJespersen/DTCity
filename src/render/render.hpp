@@ -494,6 +494,9 @@ void
 handle_destroy(Handle handle);
 void
 handle_destroy_deferred(Handle handle);
+// Retain a buffer before its owner releases it. Release with handle_destroy_deferred().
+void
+buffer_retain(Handle handle);
 
 void
 handle_done_loading(render::HandleList handles);

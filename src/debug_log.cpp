@@ -1,4 +1,15 @@
+#if BUILD_TEST
+#include "base/base_inc.hpp"
+#else
 #include "core_inc.hpp"
+#endif
+#include "debug_log.hpp"
+#include "base/base_arena.hpp"
+#include "base/base_core.hpp"
+#include "base/base_strings.hpp"
+#include "base/container_templates.hpp"
+#include "diagnostics.hpp"
+#include "os_core/os_core.hpp"
 
 #if BUILD_DEBUG
 DebugTable g_debug_table = {};
@@ -54,134 +65,141 @@ debug_dump_str(String8 str, String8 filepath)
     }
 }
 
-g_internal void
-_debug_arena_create_event(DebugEvent* debug_event)
+void
+debug_arena_create(Arena* arena)
 {
-    Assert(debug_event->type == DebugEventType::ArenaCreate);
-    AllocationEvent* alloc_event = &debug_event->alloc_event;
+    // Do not allocate tracking records from the arenas that they track.
+    DebugArena* record = new (mi_new(sizeof(DebugArena))) DebugArena{};
+    record->arena_id = IntFromPtr(arena);
+    record->owner_id.store(record->arena_id, std::memory_order_relaxed);
+    record->tid = os_tid();
+    record->reserved = arena->res;
+    record->last_metrics = {arena->pos, arena->cmt, arena->res, 1};
+    arena->debug_record = record;
+    debug_arena_set_name(arena, "<unnamed>");
+    debug_arena_update(arena);
 
-    DebugArena* debug_arena = g_debug_table.debug_arena_first;
-    for (; debug_arena; debug_arena = debug_arena->next)
+    // Multi-producer publication. The frame thread alone owns the active list.
+    DebugArena* pending = g_debug_table.debug_arena_pending.load(std::memory_order_relaxed);
+    do
     {
-        if (OS_HandleMatch(debug_arena->arena_id, alloc_event->arena_block_handle))
+        record->next = pending;
+    } while (!g_debug_table.debug_arena_pending.compare_exchange_weak(
+        pending, record, std::memory_order_release, std::memory_order_relaxed));
+}
+
+void
+debug_arena_update(Arena* arena)
+{
+    DebugArena* record = arena->debug_record;
+    U64 destructor_used = arena->destructor_pos ? arena->res - arena->destructor_pos : 0;
+    U64 destructor_committed = arena->res - arena->debug_destructor_cmt_pos;
+    U64 committed = arena->cmt + Min(arena->res - arena->cmt, destructor_committed);
+
+    // A single arena owner publishes; readers keep the last complete sample on contention.
+    record->sequence.fetch_add(1, std::memory_order_acq_rel);
+    record->used.store(arena->pos + destructor_used, std::memory_order_relaxed);
+    record->committed.store(committed, std::memory_order_relaxed);
+    record->sequence.fetch_add(1, std::memory_order_release);
+}
+
+void
+debug_arena_release(Arena* arena)
+{
+    // No arena memory is read by the UI, including after this virtual mapping is released.
+    arena->debug_record->released.store(true, std::memory_order_release);
+}
+
+void
+debug_arena_set_name(Arena* arena, const char* name)
+{
+    // Copy names so temporary task-name strings can end with their owning arena.
+    DebugArena* record = arena->debug_record;
+    U64 index = 0;
+    for (; index + 1 < ArrayCount(record->name) && name[index]; ++index)
+    {
+        record->name[index].store(name[index], std::memory_order_relaxed);
+    }
+    record->name[index].store(0, std::memory_order_relaxed);
+}
+
+void
+debug_arena_set_owner(Arena* arena, Arena* block)
+{
+    block->debug_record->owner_id.store(IntFromPtr(arena), std::memory_order_relaxed);
+}
+
+void
+debug_arena_set_source(Arena* arena, const char* source_file, U32 source_line)
+{
+    DebugArena* record = arena->debug_record;
+    record->source_line = source_line;
+    record->source_file.store(source_file, std::memory_order_release);
+}
+
+Buffer<DebugArenaSnapshot>
+debug_arena_snapshot(Arena* arena)
+{
+    _debug_arena_collect();
+    U64 block_count = 0;
+    for (DebugArena* record = g_debug_table.debug_arena_first; record; record = record->next) ++block_count;
+
+    Buffer<DebugArenaSnapshot> result = buffer_alloc<DebugArenaSnapshot>(arena, block_count);
+    U64 index = 0;
+    for (DebugArena* record = g_debug_table.debug_arena_first; record; record = record->next)
+    {
+        DebugArenaSnapshot* row = &result[index++];
+        row->arena_id = record->owner_id.load(std::memory_order_relaxed);
+        row->metrics = record->last_metrics;
+        U64 sequence = record->sequence.load(std::memory_order_acquire);
+        if (!(sequence & 1))
         {
-            break;
+            DebugArenaMetrics metrics = {record->used.load(std::memory_order_relaxed),
+                                         record->committed.load(std::memory_order_relaxed), record->reserved, 1};
+            std::atomic_thread_fence(std::memory_order_acquire);
+            if (sequence == record->sequence.load(std::memory_order_relaxed))
+            {
+                record->last_metrics = metrics;
+                row->metrics = metrics;
+            }
+        }
+        if (row->arena_id == record->arena_id)
+        {
+            row->tid = record->tid;
+            row->source_file = record->source_file.load(std::memory_order_acquire);
+            if (row->source_file) row->source_line = record->source_line;
+            for (U64 name_index = 0; name_index + 1 < ArrayCount(row->name); ++name_index)
+                row->name[name_index] = record->name[name_index].load(std::memory_order_relaxed);
+            row->name[ArrayCount(row->name) - 1] = 0;
         }
     }
 
-    if (!debug_arena)
+    // Sum active and cached chain blocks without counting the unused gaps in base_pos.
+    qsort(result.data, result.size, sizeof(DebugArenaSnapshot), _debug_arena_compare_id);
+    U64 arena_count = 0;
+    for (U64 block_index = 0; block_index < result.size; ++block_index)
     {
-        debug_arena = g_debug_table.debug_arena_free_list;
-        if (debug_arena)
+        DebugArenaSnapshot row = result[block_index];
+        if (arena_count && result[arena_count - 1].arena_id == row.arena_id)
         {
-            SLLStackPop(g_debug_table.debug_arena_free_list);
-            MemoryZeroStruct(debug_arena);
+            DebugArenaSnapshot* owner = &result[arena_count - 1];
+            owner->metrics.used += row.metrics.used;
+            owner->metrics.committed += row.metrics.committed;
+            owner->metrics.reserved += row.metrics.reserved;
+            owner->metrics.block_count++;
+            if (row.name[0])
+            {
+                MemoryCopyArray(owner->name, row.name);
+                owner->tid = row.tid;
+                owner->source_file = row.source_file;
+                owner->source_line = row.source_line;
+            }
         }
         else
-        {
-            debug_arena = PushStruct(g_debug_table.arena, DebugArena);
-        }
-
-        DLLPushBack(g_debug_table.debug_arena_first, g_debug_table.debug_arena_last, debug_arena);
-        debug_arena->arena_id = alloc_event->arena_block_handle;
+            result[arena_count++] = row;
     }
-
-    debug_arena->total_memory_in_use = alloc_event->size;
-    debug_arena->max_memory_used = Max(debug_arena->max_memory_used, debug_arena->total_memory_in_use);
-    debug_arena->name = "<unnamed>";
-}
-
-g_internal void
-_debug_arena_page_release_event(DebugEvent* debug_event)
-{
-    Assert(debug_event->type == DebugEventType::ArenaPageRelease);
-    AllocationEvent* alloc_event = &debug_event->alloc_event;
-
-    DebugArena* debug_arena = g_debug_table.debug_arena_first;
-    for (; debug_arena; debug_arena = debug_arena->next)
-    {
-        if (OS_HandleMatch(debug_arena->arena_id, alloc_event->arena_block_handle))
-        {
-            break;
-        }
-    }
-    Assert(debug_arena);
-
-    debug_arena->total_memory_in_use = alloc_event->size;
-}
-
-g_internal void
-_debug_arena_page_allocation_event(DebugEvent* debug_event)
-{
-    Assert(debug_event->type == DebugEventType::ArenaPageAllocation);
-    AllocationEvent* alloc_event = &debug_event->alloc_event;
-    DebugArena* debug_arena = g_debug_table.debug_arena_first;
-
-    for (; debug_arena; debug_arena = debug_arena->next)
-    {
-        if (OS_HandleMatch(debug_arena->arena_id, alloc_event->arena_block_handle))
-        {
-            break;
-        }
-    }
-
-    if (!debug_arena)
-    {
-        debug_arena = g_debug_table.debug_arena_free_list;
-        if (debug_arena)
-        {
-            SLLStackPop(g_debug_table.debug_arena_free_list);
-            MemoryZeroStruct(debug_arena);
-        }
-        else
-        {
-            debug_arena = PushStruct(g_debug_table.arena, DebugArena);
-        }
-
-        DLLPushBack(g_debug_table.debug_arena_first, g_debug_table.debug_arena_last, debug_arena);
-        debug_arena->arena_id = alloc_event->arena_block_handle;
-    }
-
-    debug_arena->total_memory_in_use = alloc_event->size;
-    debug_arena->max_memory_used = Max(debug_arena->max_memory_used, debug_arena->total_memory_in_use);
-}
-
-g_internal void
-_debug_arena_release_event(DebugEvent* event)
-{
-    Assert(event->type == DebugEventType::ArenaRelease);
-    OS_Handle arena_handle = event->handle;
-
-    DebugArena* arena_to_release = 0;
-    for (DebugArena* debug_arena = g_debug_table.debug_arena_first; debug_arena; debug_arena = debug_arena->next)
-    {
-        if (OS_HandleMatch(debug_arena->arena_id, arena_handle))
-        {
-            arena_to_release = debug_arena;
-            break;
-        }
-    }
-    Assert(arena_to_release);
-    DLLRemove(g_debug_table.debug_arena_first, g_debug_table.debug_arena_last, arena_to_release);
-}
-
-g_internal void
-_debug_handle_name_set_event(DebugEvent* debug_event)
-{
-    Assert(debug_event->type == DebugEventType::HandleNameSet);
-    HandleNameSetEvent* handle_name_set_event = &debug_event->handle_name_set_event;
-
-    DebugArena* arena_to_name = 0;
-    for (DebugArena* debug_arena = g_debug_table.debug_arena_first; debug_arena; debug_arena = debug_arena->next)
-    {
-        if (OS_HandleMatch(debug_arena->arena_id, handle_name_set_event->handle))
-        {
-            arena_to_name = debug_arena;
-            break;
-        }
-    }
-    Assert(arena_to_name);
-    arena_to_name->name = handle_name_set_event->name;
+    result.size = arena_count;
+    return result;
 }
 
 void
@@ -193,6 +211,7 @@ debug_event_frame_end()
     U32 event_count = arr_idx_and_event_idx_prev & 0xFFFFFFFF;
 
     g_debug_table.frame_count++;
+    _debug_arena_collect();
     // init and resetting of debug arean
     if (!g_debug_table.frame_arena)
     {
@@ -209,31 +228,6 @@ debug_event_frame_end()
 
         switch (event->type)
         {
-            case DebugEventType::ArenaCreate:
-            {
-                _debug_arena_create_event(event);
-            }
-            break;
-            case DebugEventType::ArenaPageAllocation:
-            {
-                _debug_arena_page_allocation_event(event);
-            }
-            break;
-            case DebugEventType::ArenaPageRelease:
-            {
-                _debug_arena_page_release_event(event);
-            }
-            break;
-            case DebugEventType::ArenaRelease:
-            {
-                _debug_arena_release_event(event);
-            }
-            break;
-            case DebugEventType::HandleNameSet:
-            {
-                _debug_handle_name_set_event(event);
-            }
-            break;
             case DebugEventType::Asset:
             {
                 DebugEvent* chunk_list_asset_item = chunk_list_get_next(g_debug_table.frame_arena, &g_debug_table.asset_events);
@@ -285,17 +279,166 @@ debug_event_frame_end()
 void
 debug_memory_snapshot_dump()
 {
-    // Arena Log
-    U64 total_memory_committed = 0;
-    U64 arena_count = 0;
-    for (DebugArena* debug_arena = g_debug_table.debug_arena_first; debug_arena; debug_arena = debug_arena->next)
+    ScratchScope scratch = ScratchScope(&g_debug_table.frame_arena, 1);
+    Buffer<DebugArenaSnapshot> arenas = debug_arena_snapshot(scratch.arena);
+    DebugArenaMetrics total = {};
+    for (DebugArenaSnapshot& arena : arenas)
     {
-        total_memory_committed += debug_arena->total_memory_in_use;
-        arena_count++;
-        String8 name = str8_from_memory_size(g_debug_table.frame_arena, debug_arena->total_memory_in_use);
-        DEBUG_LOG("Arena Name: %s, memory: %.*s", debug_arena->name, str8_varg(name));
+        total.used += arena.metrics.used;
+        total.committed += arena.metrics.committed;
+        total.reserved += arena.metrics.reserved;
+        DEBUG_LOG("Arena: %s, used: %llu, committed: %llu, reserved: %llu, blocks: %llu, created at: %s:%u", arena.name,
+                  arena.metrics.used, arena.metrics.committed, arena.metrics.reserved, arena.metrics.block_count,
+                  arena.source_file ? arena.source_file : "<unknown>", arena.source_line);
     }
-    DEBUG_LOG("Arena Count: Count: %llu, Total memory committed: %llu", arena_count, total_memory_committed);
+    DEBUG_LOG("Arenas: %llu, used: %llu, committed: %llu, reserved: %llu", arenas.size, total.used, total.committed,
+              total.reserved);
+}
+
+#if !BUILD_TEST
+void
+debug_arena_window()
+{
+    const ImGuiViewport* viewport = ImGui::GetMainViewport();
+    ImGui::SetNextWindowPos(ImVec2(viewport->WorkPos.x + 16.0f, viewport->WorkPos.y + 16.0f), ImGuiCond_FirstUseEver);
+    ImGui::SetNextWindowSize(ImVec2(Min(1100.0f, viewport->WorkSize.x - 32.0f), Min(560.0f, viewport->WorkSize.y - 32.0f)), ImGuiCond_FirstUseEver);
+    ImGui::SetNextWindowBgAlpha(0.95f);
+    if (ImGui::Begin("Arena Memory"))
+    {
+        ScratchScope scratch = ScratchScope(&g_debug_table.frame_arena, 1);
+        Buffer<DebugArenaSnapshot> arenas = debug_arena_snapshot(scratch.arena);
+        qsort(arenas.data, arenas.size, sizeof(DebugArenaSnapshot), _debug_arena_compare_committed);
+
+        DebugArenaMetrics total = {};
+        for (DebugArenaSnapshot& arena : arenas)
+        {
+            total.used += arena.metrics.used;
+            total.committed += arena.metrics.committed;
+            total.reserved += arena.metrics.reserved;
+            total.block_count += arena.metrics.block_count;
+        }
+        String8 used = str8_from_memory_size(scratch.arena, total.used);
+        String8 committed = str8_from_memory_size(scratch.arena, total.committed);
+        String8 reserved = str8_from_memory_size(scratch.arena, total.reserved);
+        String8 unused = str8_from_memory_size(scratch.arena, total.committed - total.used);
+        ImGui::Text("%llu arenas / %llu blocks", arenas.size, total.block_count);
+        ImGui::Text("Used: %.*s    Committed: %.*s    Reserved: %.*s", str8_varg(used), str8_varg(committed),
+                    str8_varg(reserved));
+        ImGui::Text("Committed but unused: %.*s", str8_varg(unused));
+        ImGui::TextWrapped("Used includes headers, alignment, and destructor records. Chain blocks and cached blocks are grouped with their arena.");
+        ImGui::TextWrapped("Reserved is virtual address space. Committed is accessible memory, not a measure of resident RAM. Heap and GPU allocations are excluded.");
+
+        local_persist ImGuiTextFilter filter;
+        filter.Draw("Filter name or source", 280.0f);
+        U64 visible_count = 0;
+        for (DebugArenaSnapshot& arena : arenas)
+        {
+            String8 filter_text = {};
+            if (filter.IsActive())
+                filter_text = push_str8f(scratch.arena, "%s %s", arena.name, arena.source_file ? arena.source_file : "");
+            if (!filter.IsActive() || filter.PassFilter((const char*)filter_text.str, (const char*)filter_text.str + filter_text.size))
+                arenas[visible_count++] = arena;
+        }
+
+        ImGuiTableFlags flags = ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_Resizable |
+                                ImGuiTableFlags_ScrollY | ImGuiTableFlags_SizingStretchProp;
+        F32 inner_width = 0;
+        if (ImGui::GetContentRegionAvail().x < 720.0f)
+        {
+            flags |= ImGuiTableFlags_ScrollX;
+            inner_width = 720.0f;
+        }
+        if (ImGui::BeginTable("Arenas", 6, flags, ImVec2(0.0f, 0.0f), inner_width))
+        {
+            ImGui::TableSetupScrollFreeze(inner_width ? 1 : 0, 1);
+            ImGui::TableSetupColumn("Arena / created at", ImGuiTableColumnFlags_None, 2.8f);
+            ImGui::TableSetupColumn("Used", ImGuiTableColumnFlags_None, 1.2f);
+            ImGui::TableSetupColumn("Committed", ImGuiTableColumnFlags_None, 1.2f);
+            ImGui::TableSetupColumn("Reserved", ImGuiTableColumnFlags_None, 1.2f);
+            ImGui::TableSetupColumn("Blocks", ImGuiTableColumnFlags_None, 0.65f);
+            ImGui::TableSetupColumn("Usage", ImGuiTableColumnFlags_None, 1.5f);
+            ImGui::TableHeadersRow();
+            ImGuiListClipper clipper;
+            clipper.Begin((int)visible_count);
+            while (clipper.Step())
+            {
+                for (int row_index = clipper.DisplayStart; row_index < clipper.DisplayEnd; ++row_index)
+                {
+                    DebugArenaSnapshot& arena = arenas[row_index];
+                    ImGui::TableNextRow();
+                    ImGui::TableNextColumn();
+                    ImGui::BeginGroup();
+                    ImGui::TextUnformatted(arena.name[0] ? arena.name : "<unnamed>");
+                    if (arena.source_file)
+                    {
+                        String8 filename = str8_skip_last_slash(str8_c_string(arena.source_file));
+                        ImGui::TextDisabled("%.*s:%u", str8_varg(filename), arena.source_line);
+                    }
+                    else
+                        ImGui::TextDisabled("Location unavailable");
+                    ImGui::EndGroup();
+                    if (ImGui::IsItemHovered())
+                        ImGui::SetTooltip("%s\nCreated at: %s:%u\nAddress: 0x%llx\nCreated on thread %u", arena.name,
+                                          arena.source_file ? arena.source_file : "<unknown>", arena.source_line,
+                                          arena.arena_id, arena.tid);
+                    U64 sizes[] = {arena.metrics.used, arena.metrics.committed, arena.metrics.reserved};
+                    for (U64 size : sizes)
+                    {
+                        ImGui::TableNextColumn();
+                        String8 text = str8_from_memory_size(scratch.arena, size);
+                        ImGui::Text("%.*s", str8_varg(text));
+                        if (ImGui::IsItemHovered()) ImGui::SetTooltip("%llu bytes", size);
+                    }
+                    ImGui::TableNextColumn();
+                    ImGui::Text("%llu", arena.metrics.block_count);
+                    ImGui::TableNextColumn();
+                    F32 fraction = arena.metrics.committed ? (F32)((F64)arena.metrics.used / arena.metrics.committed) : 0;
+                    ImGui::ProgressBar(fraction, ImVec2(-1.0f, 0.0f));
+                    if (ImGui::IsItemHovered()) ImGui::SetTooltip("Used / committed");
+                }
+            }
+            ImGui::EndTable();
+        }
+    }
+    ImGui::End();
+}
+#endif
+
+g_internal int
+_debug_arena_compare_id(const void* lhs, const void* rhs)
+{
+    U64 a = ((const DebugArenaSnapshot*)lhs)->arena_id;
+    U64 b = ((const DebugArenaSnapshot*)rhs)->arena_id;
+    return (a > b) - (a < b);
+}
+
+g_internal int
+_debug_arena_compare_committed(const void* lhs, const void* rhs)
+{
+    U64 a = ((const DebugArenaSnapshot*)lhs)->metrics.committed;
+    U64 b = ((const DebugArenaSnapshot*)rhs)->metrics.committed;
+    return a == b ? _debug_arena_compare_id(lhs, rhs) : (a < b ? 1 : -1);
+}
+
+g_internal void
+_debug_arena_collect()
+{
+    DebugArena* pending = g_debug_table.debug_arena_pending.exchange(0, std::memory_order_acquire);
+    for (DebugArena* next = 0; pending; pending = next)
+    {
+        next = pending->next;
+        DLLPushBack(g_debug_table.debug_arena_first, g_debug_table.debug_arena_last, pending);
+    }
+    for (DebugArena *record = g_debug_table.debug_arena_first, *next = 0; record; record = next)
+    {
+        next = record->next;
+        if (record->released.load(std::memory_order_acquire))
+        {
+            DLLRemove(g_debug_table.debug_arena_first, g_debug_table.debug_arena_last, record);
+            record->~DebugArena();
+            mi_free(record);
+        }
+    }
 }
 
 #endif

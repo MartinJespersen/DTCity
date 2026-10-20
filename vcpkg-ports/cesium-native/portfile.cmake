@@ -17,6 +17,7 @@ vcpkg_from_github(
   HEAD_REF main
   PATCHES
     config.patch
+    curl-cache-cleanup.patch
 )
 
 vcpkg_cmake_configure(

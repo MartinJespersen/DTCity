@@ -99,6 +99,15 @@ Array<T>::operator[](U64 index) const noexcept
 // Buffers
 template <typename T>
 Buffer<T>
+buffer_alloc(Allocator* allocator, U64 count)
+{
+    Buffer<T> buffer = {0};
+    buffer.data = PushArray(allocator->arena, T, count);
+    buffer.size = count;
+    return buffer;
+};
+template <typename T>
+Buffer<T>
 buffer_alloc(Arena* arena, U64 count)
 {
     Buffer<T> buffer = {0};

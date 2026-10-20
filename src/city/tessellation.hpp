@@ -100,7 +100,7 @@ struct RoadSegmentNode
     U32 end_idx;
 };
 
-struct BvhContext
+struct RoadBvhContext
 {
     RoadSegmentNode* stack;
     RoadSegmentNode* root;
@@ -113,7 +113,7 @@ struct BvhContext
     U32 leaf_bb_max;
 };
 
-struct Bvh
+struct RoadBvh
 {
     Arena* arena;
     U32 loads_in_flight;
@@ -137,10 +137,10 @@ struct TileVertexFace
 
 g_internal render::TileMesh
 _tessellate_tile_face_for_roads(Arena* arena, city::RoadSegmentNode* root, Buffer<city::RoadSegmentCorners> road_buffer,
-                               Buffer<city::RoadSegmentNode*> node_stack, TileVertexFace& face);
+                                Buffer<city::RoadSegmentNode*> node_stack, TileVertexFace& face);
 
 g_internal bool
-tesselate_roads(Arena* arena, Buffer<render::TileVertex> vertices, Buffer<U32> indices, Bvh& bvh_result, render::TileMesh* out_mesh);
+tesselate_roads(Arena* arena, Buffer<render::TileVertex> vertices, Buffer<U32> indices, RoadBvh& bvh_result, render::TileMesh* out_mesh);
 
 g_internal geometry::Quad2d
 _to_glm_quad(city::RoadSegmentCorners* road);

@@ -10,6 +10,11 @@
 #include "city/simulator_shared_interface.cpp"
 #include "city/simulator_messages.cpp"
 #include "city/agent_state.cpp"
+#include "city/agent_height.cpp"
+#include "render/tile_bvh.cpp"
+#include "city/tile_bvh.cpp"
+#include "city/tile_height.cpp"
+#include "render/tile_bvh_test_backend.cpp"
 #include "../simulator/metadata.cpp"
 
 // test files
@@ -22,6 +27,9 @@
 #include "base/test_mutex.cpp"
 #include "base/test_strings.cpp"
 #include "cesium/test_tessellation.cpp"
+#include "cesium/test_tile_mesh_bvh.cpp"
+#include "cesium/test_tile_bvh.cpp"
+#include "cesium/test_tile_height.cpp"
 #include "misc/test_geometry.cpp"
 #include "simulator/test_resource_paths.cpp"
 #include "simulator/test_scenarios.cpp"

@@ -1,0 +1,161 @@
+#version 460
+#extension GL_GOOGLE_include_directive : require
+#extension GL_EXT_buffer_reference2 : require
+#include "shader_shared.h"
+
+layout(local_size_x = 64) in;
+layout(push_constant, std430) uniform Constants { TileHeightPushConstants data; } pc;
+layout(buffer_reference, std430, buffer_reference_align = 16) readonly buffer Nodes { TileBvhGpuNode data[]; };
+layout(buffer_reference, std430, buffer_reference_align = 16) readonly buffer Entries { TileBvhGpuEntry data[]; };
+layout(buffer_reference, std430, buffer_reference_align = 16) readonly buffer Meshes { TileBvhGpuMeshAddresses data[]; };
+layout(buffer_reference, std430, buffer_reference_align = 16) readonly buffer Queries { TileHeightGpuQuery data[]; };
+layout(buffer_reference, std430, buffer_reference_align = 16) writeonly buffer Results { TileHeightGpuResult data[]; };
+layout(buffer_reference, std430, buffer_reference_align = 4) readonly buffer Words { uint data[]; };
+
+bool _intersects_box(TileBvhGpuNode node, vec3 origin, vec3 direction, float closest)
+{
+    float near_distance = 0.0;
+    float far_distance = closest;
+    for (uint axis = 0; axis < 3; ++axis)
+    {
+        if (direction[axis] == 0.0)
+        {
+            if (origin[axis] < node.bounds_min[axis] || origin[axis] > node.bounds_max[axis])
+                return false;
+        }
+        else
+        {
+            float a = (node.bounds_min[axis] - origin[axis]) / direction[axis];
+            float b = (node.bounds_max[axis] - origin[axis]) / direction[axis];
+            near_distance = max(near_distance, min(a, b));
+            far_distance = min(far_distance, max(a, b));
+            if (near_distance > far_distance)
+                return false;
+        }
+    }
+    return true;
+}
+
+vec3 _position(uint64_t address)
+{
+    Words words = Words(address);
+    return vec3(uintBitsToFloat(words.data[0]), uintBitsToFloat(words.data[1]), uintBitsToFloat(words.data[2]));
+}
+
+bool _intersects_triangle(vec3 a, vec3 b, vec3 c, vec3 origin, vec3 direction, inout float closest)
+{
+    vec3 edge_a = b - a;
+    vec3 edge_b = c - a;
+    vec3 p = cross(direction, edge_b);
+    float determinant = dot(edge_a, p);
+    float parallel_limit = 1e-7 * sqrt(dot(edge_a, edge_a) * dot(p, p));
+    if (abs(determinant) <= parallel_limit)
+        return false;
+    vec3 offset = origin - a;
+    float u = dot(offset, p) / determinant;
+    vec3 q = cross(offset, edge_a);
+    float v = dot(direction, q) / determinant;
+    float distance = dot(edge_b, q) / determinant;
+    if (u < -1e-6 || v < -1e-6 || u + v > 1.000001 || distance < 0.0 || distance >= closest)
+        return false;
+    closest = distance;
+    return true;
+}
+
+bool _trace_mesh(TileBvhGpuEntry entry, vec3 city_origin, vec3 city_direction, inout float closest)
+{
+    vec3 origin;
+    vec3 direction;
+    for (uint row = 0; row < 3; ++row)
+    {
+        vec4 affine = vec4(entry.city_to_mesh_rows[row][0], entry.city_to_mesh_rows[row][1],
+                           entry.city_to_mesh_rows[row][2], entry.city_to_mesh_rows[row][3]);
+        origin[row] = dot(affine, vec4(city_origin, 1.0));
+        // Preserve the original ray parameter across nonuniform mesh transforms.
+        direction[row] = dot(affine.xyz, city_direction);
+    }
+    Meshes meshes = Meshes(pc.data.meshes);
+    TileBvhGpuMeshAddresses mesh = meshes.data[entry.mesh_buffer_index];
+    uint64_t vertices = mesh.vertices;
+    Words indices = Words(mesh.indices + uint64_t(entry.index_offset_bytes));
+    Nodes nodes = Nodes(mesh.nodes);
+    // Median-split builders cap depth below 32 for U32 item counts. 64 slots
+    // cover both trees, including uneven and coincident-center partitions.
+    uint stack[64];
+    uint count = 1;
+    stack[0] = entry.triangle_bvh_root;
+    bool hit = false;
+    while (count != 0)
+    {
+        TileBvhGpuNode node = nodes.data[stack[--count]];
+        if (!_intersects_box(node, origin, direction, closest))
+            continue;
+        if (node.count == 0)
+        {
+            stack[count++] = node.first;
+            stack[count++] = node.first + 1;
+        }
+        else
+        {
+            for (uint triangle = node.first; triangle < node.first + node.count; ++triangle)
+            {
+                uint64_t a = vertices + uint64_t(indices.data[triangle * 3]) * uint64_t(entry.vertex_stride_bytes) + uint64_t(entry.vertex_position_offset_bytes);
+                uint64_t b = vertices + uint64_t(indices.data[triangle * 3 + 1]) * uint64_t(entry.vertex_stride_bytes) + uint64_t(entry.vertex_position_offset_bytes);
+                uint64_t c = vertices + uint64_t(indices.data[triangle * 3 + 2]) * uint64_t(entry.vertex_stride_bytes) + uint64_t(entry.vertex_position_offset_bytes);
+                if (_intersects_triangle(_position(a), _position(b), _position(c), origin, direction, closest))
+                    hit = true;
+            }
+        }
+    }
+    return hit;
+}
+
+void main()
+{
+    uint query_index = gl_GlobalInvocationID.x;
+    if (query_index >= pc.data.query_count)
+        return;
+    TileHeightGpuQuery query = Queries(pc.data.queries).data[query_index];
+    vec3 origin = vec3(query.origin[0], query.origin[1], query.origin[2]);
+    vec3 direction = vec3(query.direction[0], query.direction[1], query.direction[2]);
+    float closest = 3.402823466e+38;
+    bool hit = false;
+    uint hit_entry_idx = 0;
+    uint hit_entry_gen_id = 0;
+    if (pc.data.node_count != 0)
+    {
+        Nodes nodes = Nodes(pc.data.nodes);
+        Entries entries = Entries(pc.data.entries);
+        uint stack[64];
+        uint count = 1;
+        stack[0] = 0;
+        while (count != 0)
+        {
+            TileBvhGpuNode node = nodes.data[stack[--count]];
+            if (!_intersects_box(node, origin, direction, closest))
+                continue;
+            if (node.count == 0)
+            {
+                stack[count++] = node.first;
+                stack[count++] = node.first + 1;
+            }
+            else
+                for (uint index = node.first; index < node.first + node.count; ++index)
+                {
+                    TileBvhGpuEntry entry = entries.data[index];
+                    if (_trace_mesh(entry, origin, direction, closest))
+                    {
+                        hit = true;
+                        hit_entry_idx = entry.entry_handle_idx;
+                        hit_entry_gen_id = entry.entry_handle_gen_id;
+                    }
+                }
+        }
+    }
+    TileHeightGpuResult result;
+    result.hit_distance = hit ? closest : 0.0;
+    result.hit = hit ? 1 : 0;
+    result.entry_handle_idx = hit_entry_idx;
+    result.entry_handle_gen_id = hit_entry_gen_id;
+    Results(pc.data.results).data[query_index] = result;
+}

@@ -1,6 +1,7 @@
 {
   "name": "cesium-native",
   "version-string": "0.56.0",
+  "port-version": 1,
   "description": "A set of geospatial 3D Tiles libraries for native applications",
   "homepage": "https://github.com/CesiumGS/cesium-native",
   "license": "Apache-2.0",

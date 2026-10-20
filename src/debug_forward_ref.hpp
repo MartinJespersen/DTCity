@@ -27,6 +27,18 @@
 #ifndef Debug_ArenaRelease_Push
 #define Debug_ArenaRelease_Push(...)
 #endif
+#ifndef Debug_ArenaUsage_Push
+#define Debug_ArenaUsage_Push(...)
+#endif
+#ifndef Debug_ArenaChain_Push
+#define Debug_ArenaChain_Push(...)
+#endif
+#ifndef Debug_ArenaSource_Push
+#define Debug_ArenaSource_Push(...)
+#endif
+#ifndef Debug_ArenaWindow
+#define Debug_ArenaWindow(...)
+#endif
 #ifndef Debug_Asset_Push_
 #define Debug_Asset_Push_(...)
 #endif

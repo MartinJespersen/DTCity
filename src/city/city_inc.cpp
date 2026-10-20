@@ -21,6 +21,7 @@
 #include "neta.cpp"
 
 #include "agent_state.cpp"
+#include "agent_height.cpp"
 #include "agent.cpp"
 #include "tessellation.cpp"
 #include "simulator_shared_interface.cpp"
@@ -28,4 +29,6 @@
 #include "simulation.cpp"
 #include "simulator_messages.cpp"
 #include "tile_load.cpp"
+#include "tile_bvh.cpp"
+#include "tile_height.cpp"
 #include "city/city.cpp"

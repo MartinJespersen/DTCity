@@ -26,7 +26,15 @@ _allocation_name_get(VmaAllocator allocator, VmaAllocation allocation)
 
     VmaAllocationInfo alloc_info = {};
     vmaGetAllocationInfo(allocator, allocation, &alloc_info);
-    const char* result = alloc_info.pName ? alloc_info.pName : "<unnamed>";
+    const char* result = 0;
+    if (alloc_info.pName)
+    {
+        result = alloc_info.pName;
+    }
+    else
+    {
+        result = "<unnamed>";
+    }
     return result;
 }
 
@@ -1264,7 +1272,7 @@ buffer_alloc_create_or_resize(U32 total_buffer_byte_count, render::Handle handle
 
     if (total_buffer_byte_count > asset_item_buffer->item.buffer_alloc.size)
     {
-        deletion_queue_push(final_handle);
+        render::handle_destroy_deferred(final_handle);
         final_handle = render::Handle::buffer_handle_create(buffer_type);
         asset_item_buffer = asset_manager_buffer_item_get(final_handle);
         Assert(asset_item_buffer);

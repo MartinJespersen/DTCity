@@ -75,6 +75,71 @@ const uint road_corner_count = 4;
 const uint road_option_count = 5;
 const uint frustum_plane_count = 6;
 
+// Shared by the tile hierarchy and per-mesh triangle trees. Node zero is the root.
+// Internal nodes have count == 0; first identifies two adjacent children.
+// Leaves reference contiguous mesh entries or triangles (three U32 indices each).
+struct SHADER_ROOT TileBvhGpuNode
+{
+    float bounds_min[3];
+    uint count;
+    float bounds_max[3];
+    uint first;
+};
+
+// Buffer indices address the mesh-address table owned by the complete BVH resource.
+// Three affine rows transform city-local points/directions into mesh space.
+struct SHADER_ROOT TileBvhGpuEntry
+{
+    float city_to_mesh_rows[3][4];
+    uint mesh_buffer_index;
+    uint triangle_bvh_root;
+    uint vertex_position_offset_bytes;
+    uint vertex_stride_bytes;
+    uint index_offset_bytes;
+    // Stable city registry identity, preserved when the outer BVH reorders entries.
+    uint entry_handle_idx;
+    uint entry_handle_gen_id;
+    uint reserved;
+};
+
+// Addresses remain valid while the immutable BVH resource is retained.
+struct SHADER_ROOT TileBvhGpuMeshAddresses
+{
+    uint64_t vertices;
+    uint64_t indices;
+    uint64_t nodes;
+    uint64_t reserved;
+};
+
+struct SHADER_ROOT TileHeightGpuQuery
+{
+    float origin[3];
+    uint reserved_origin;
+    float direction[3];
+    uint reserved_direction;
+};
+
+struct SHADER_ROOT TileHeightGpuResult
+{
+    float hit_distance;
+    uint hit;
+    // Zero on a miss. Includes the generation so unloaded/reused slots are distinct.
+    uint entry_handle_idx;
+    uint entry_handle_gen_id;
+};
+
+struct SHADER_ROOT TileHeightPushConstants
+{
+    uint64_t nodes;
+    uint64_t entries;
+    uint64_t meshes;
+    uint64_t queries;
+    uint64_t results;
+    uint node_count;
+    uint query_count;
+    uint reserved[4];
+};
+
 struct SHADER_ALIGN(16) Frustum
 {
     SHADER_ALIGN(16)
@@ -184,6 +249,18 @@ struct SHADER_ROOT RoadSegmentCorners
 
 #ifdef __cplusplus
 // Fail compilation if a host layout no longer matches the shader ABI.
+static_assert(sizeof(TileBvhGpuNode) == 32);
+static_assert(sizeof(TileBvhGpuMeshAddresses) == 32);
+static_assert(sizeof(TileHeightGpuQuery) == 32);
+static_assert(sizeof(TileHeightGpuResult) == 16);
+static_assert(sizeof(TileHeightPushConstants) == 64);
+static_assert(offsetof(TileBvhGpuNode, count) == 12);
+static_assert(offsetof(TileBvhGpuNode, bounds_max) == 16);
+static_assert(offsetof(TileBvhGpuNode, first) == 28);
+static_assert(sizeof(TileBvhGpuEntry) == 80);
+static_assert(offsetof(TileBvhGpuEntry, mesh_buffer_index) == 48);
+static_assert(offsetof(TileBvhGpuEntry, vertex_position_offset_bytes) == 56);
+static_assert(offsetof(TileBvhGpuEntry, entry_handle_idx) == 68);
 static_assert(sizeof(Frustum) == 96);
 static_assert(sizeof(CameraUniformBuffer) == 240);
 static_assert(offsetof(CameraUniformBuffer, proj) == 64);

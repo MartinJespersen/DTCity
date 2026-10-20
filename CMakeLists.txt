@@ -146,6 +146,7 @@ if(BUILD_CITY OR BUILD_TESTS OR BUILD_SIMULATOR)
 endif()
 
 if(BUILD_TESTS)
+  enable_testing()
   add_subdirectory(tests)
 endif()
 
@@ -184,7 +185,7 @@ foreach(GLSL ${GLSL_SOURCE_FILES})
   string(SUBSTRING ${EXT_WITH_DOT} 1 -1 EXT)
   set(SPIRV "${SHADER_BINARY_DIR}/${FILE_NAME}_${EXT}.spv")
   set(SHADER_TARGET_FLAGS "")
-  if(EXT STREQUAL "mesh" OR EXT STREQUAL "task")
+  if(EXT STREQUAL "mesh" OR EXT STREQUAL "task" OR FILE_NAME STREQUAL "tile_height")
     list(APPEND SHADER_TARGET_FLAGS --target-env vulkan1.2)
   endif()
   add_custom_command(
@@ -350,5 +351,17 @@ if(ASAN_ENABLED)
   foreach(target ${ALL_TARGETS})
     target_compile_options(${target} PRIVATE ${ASAN_COMPILE_FLAGS})
     target_link_options(${target} PRIVATE ${ASAN_LINK_FLAGS})
+  endforeach()
+endif()
+
+# Let clangd discover the database from the most recently built configuration,
+# independent of the host-specific preset directory. The source copy is ignored.
+if(CMAKE_GENERATOR MATCHES "Ninja|Makefiles")
+  add_custom_target(clangd-database
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${CMAKE_BINARY_DIR}/compile_commands.json" "${CMAKE_SOURCE_DIR}/compile_commands.json"
+    VERBATIM)
+  foreach(target ${ALL_TARGETS})
+    add_dependencies(${target} clangd-database)
   endforeach()
 endif()

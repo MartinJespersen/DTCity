@@ -480,6 +480,7 @@ dt_main_loop(void* ptr)
 
             // Build every ImGui window before render_frame ends the ImGui frame.
             imgui_debug_window(area, ctx->thread_pool);
+            Debug_ArenaWindow();
 
             render::MappedHandle<void> camera_handle_void = render::mapped_handle_erased(camera->mut_handles);
             render::render_frame(framebuffer_dim, &io_ctx->framebuffer_resized, io_ctx->mouse_pos_cur_s64,
@@ -491,7 +492,7 @@ dt_main_loop(void* ptr)
         ImGui::EndFrame();
         Debug_Frame_End();
     }
-#if GRACEFUL_SHUTDOWN
+    // Finish queued work before releasing city and renderer resources in every build.
     for (;;)
     {
         async::thread_pool_main_thread_queue_drain(ctx->thread_pool);
@@ -524,5 +525,4 @@ dt_main_loop(void* ptr)
     render::render_ctx_destroy();
     Debug_Frame_End();
     Debug_Memory_Snapshot_Dump();
-#endif
 }

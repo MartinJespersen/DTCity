@@ -1,9 +1,13 @@
 #pragma once
 
 #include <atomic>
+#include "base/base_arena.hpp"
+#include "base/base_core.hpp"
+#include "base/base_strings.hpp"
 #include "base/container.hpp"
 
 #include "os_core/os_core_inc.hpp"
+#include "os_core/os_core.hpp"
 
 #if BUILD_DEBUG
 
@@ -68,17 +72,42 @@ enum class DebugEventType : S32
 
 };
 
+struct DebugArenaMetrics
+{
+    // Used includes block headers and alignment, not unused gaps between chained blocks.
+    U64 used;
+    U64 committed;
+    U64 reserved;
+    U64 block_count;
+};
+
+// Records outlive the virtual memory they describe. Only the frame thread frees them.
 struct DebugArena
 {
     DebugArena* next;
     DebugArena* prev;
-    DebugArena* arena_block_first;
-    OS_Handle arena_id;
-    const char* name;
+    U64 arena_id;
+    U32 tid;
+    U32 source_line;
+    std::atomic<const char*> source_file; // Published once; compiler file literals have static lifetime.
+    std::atomic<U64> owner_id;
+    std::atomic<char> name[96];
+    std::atomic<U64> sequence;
+    std::atomic<U64> used;
+    std::atomic<U64> committed;
+    U64 reserved;
+    std::atomic<B32> released;
+    DebugArenaMetrics last_metrics; // Frame-thread fallback if a writer is publishing.
+};
 
-    // metrics
-    U64 total_memory_in_use;
-    U64 max_memory_used;
+struct DebugArenaSnapshot
+{
+    U64 arena_id;
+    U32 tid;
+    U32 source_line;
+    const char* source_file;
+    char name[96];
+    DebugArenaMetrics metrics;
 };
 
 struct HandleNameSetEvent
@@ -121,7 +150,7 @@ struct DebugTable
     // memory debugging
     DebugArena* debug_arena_first;
     DebugArena* debug_arena_last;
-    DebugArena* debug_arena_free_list;
+    std::atomic<DebugArena*> debug_arena_pending;
 };
 
 #define Debug_Name_(file, line, label) S(file ":" Stringify(line) "|" label)
@@ -146,20 +175,31 @@ debug_event_frame_end();
 
 void
 debug_memory_snapshot_dump();
-g_internal void
-_debug_arena_page_release_event(DebugEvent* debug_event);
 
-g_internal void
-_debug_arena_create_event(DebugEvent* debug_event);
+void
+debug_arena_create(Arena* arena);
 
-g_internal void
-_debug_arena_page_allocation_event(DebugEvent* debug_event);
+void
+debug_arena_update(Arena* arena);
 
-g_internal void
-_debug_arena_release_event(DebugEvent* debug_event);
+void
+debug_arena_release(Arena* arena);
 
-g_internal void
-_debug_handle_name_set_event(DebugEvent* debug_event);
+void
+debug_arena_set_name(Arena* arena, const char* name);
+
+void
+debug_arena_set_owner(Arena* arena, Arena* block);
+
+void
+debug_arena_set_source(Arena* arena, const char* source_file, U32 source_line);
+
+// Frame thread only. The returned rows belong to the supplied arena; no live Arena pointers are read.
+Buffer<DebugArenaSnapshot>
+debug_arena_snapshot(Arena* arena);
+
+void
+debug_arena_window();
 
 #define Debug_Asset_Push_(asset_state, handle)                                                                                  \
     {                                                                                                                           \
@@ -173,31 +213,16 @@ _debug_handle_name_set_event(DebugEvent* debug_event);
 
 #define Debug_Frame_End() debug_event_frame_end()
 #define Debug_Memory_Snapshot_Dump() debug_memory_snapshot_dump()
+#define Debug_ArenaWindow() debug_arena_window()
 
 // Arena debugging macros
-#define Debug_ArenaCreate_Push(arena_block, s)                                                                     \
-    {                                                                                                              \
-        DebugEvent* event = debug_event_record(DebugEventType::ArenaCreate, S("Arena Create"), S("Arena Create")); \
-        event->alloc_event.arena_block_handle = OS_HandleFromPtr(arena_block);                                     \
-        event->alloc_event.size = (s);                                                                             \
-    }
-#define Debug_PageAllocation_Push(arena_block, s)                                                                                                      \
-    {                                                                                                                                                  \
-        DebugEvent* event = debug_event_record(DebugEventType::ArenaPageAllocation, S("Arena Page Allocation Push"), S("Arena Page Allocation Push")); \
-        event->alloc_event.arena_block_handle = OS_HandleFromPtr(arena_block);                                                                         \
-        event->alloc_event.size = (s);                                                                                                                 \
-    }
-#define Debug_PageRelease_Push(arena_block, s)                                                                                                \
-    {                                                                                                                                         \
-        DebugEvent* event = debug_event_record(DebugEventType::ArenaPageRelease, S("Arena Page Release Push"), S("Arena Page Release Push")); \
-        event->alloc_event.arena_block_handle = OS_HandleFromPtr(arena_block);                                                                \
-        event->alloc_event.size = (s);                                                                                                        \
-    }
-#define Debug_ArenaRelease_Push(arena_block)                                                                          \
-    {                                                                                                                 \
-        DebugEvent* event = debug_event_record(DebugEventType::ArenaRelease, S("Arena Release"), S("Arena Release")); \
-        event->handle = OS_HandleFromPtr(arena_block);                                                                \
-    }
+#define Debug_ArenaCreate_Push(arena_block, s) debug_arena_create(arena_block)
+#define Debug_PageAllocation_Push(arena_block, s) debug_arena_update(arena_block)
+#define Debug_PageRelease_Push(arena_block, s) debug_arena_update(arena_block)
+#define Debug_ArenaRelease_Push(arena_block) debug_arena_release(arena_block)
+#define Debug_ArenaUsage_Push(arena_block) debug_arena_update(arena_block)
+#define Debug_ArenaChain_Push(arena, arena_block) debug_arena_set_owner(arena, arena_block)
+#define Debug_ArenaSource_Push(arena, source_file, source_line) debug_arena_set_source(arena, source_file, source_line)
 // Http debugging macros
 #define Debug_Http_Push(http_result)                                                                           \
     {                                                                                                          \
@@ -207,12 +232,7 @@ _debug_handle_name_set_event(DebugEvent* debug_event);
         event->http_event.error_code = debug_http_result__.curl_code;                                          \
     }
 
-#define Debug_SetName(h, n)                                                                                                 \
-    {                                                                                                                       \
-        DebugEvent* event = debug_event_record(DebugEventType::HandleNameSet, Debug_Name("Handle Name"), S("Handle Name")); \
-        event->handle_name_set_event.handle = OS_HandleFromPtr(h);                                                          \
-        event->handle_name_set_event.name = (n);                                                                            \
-    }
+#define Debug_SetName(h, n) debug_arena_set_name(h, n)
 ////////////////////////////////////////
 
 #define Debug_Asset_Push_Created(handle) Debug_Asset_Push_(Created, handle)
@@ -225,6 +245,13 @@ _debug_handle_name_set_event(DebugEvent* debug_event);
 #define Debug_Asset_Push_WrongHandleType(handle) Debug_Asset_Push_(WrongHandleType, handle)
 #define Debug_Asset_Push_WrongGenId(handle) Debug_Asset_Push_(WrongGenId, handle)
 
+g_internal int
+_debug_arena_compare_id(const void* lhs, const void* rhs);
 
+g_internal int
+_debug_arena_compare_committed(const void* lhs, const void* rhs);
+
+g_internal void
+_debug_arena_collect();
 
 #endif

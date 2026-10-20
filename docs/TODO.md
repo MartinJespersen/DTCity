@@ -7,7 +7,6 @@
 
 # Refactor
   - Agent memory especially for threading should be made safe (maybe the task system should be reworked);
-- Improve interface to AgentSystem in city_update
 - Task System refactor
   - The generic value should be wrapped in a unique ptr to allow so it will always be destroyed
 - Config should be moved to static array of struct or a static initialized global variable in separate file
@@ -15,14 +14,12 @@
 - Improve buffer loading; reconsider the use of BufferInfo and BufferType and buffer_load_sync
 
 # Project TODO:
-- Make mesh shaders optional
 - Make debug logging internal to layer.
-- Improve performance to be able to visualize large simulations.
-  - multithreaded addition
 - Look at potential memory leaks. What to do about arenas and allocators?
 - Ability to change camera for each agent?
 - Visualize multiple scenarios (with dashboard for changing them)
   - Visualization -> simulation communication for scenario change 
+- Ring buffer should be used and its state (how much it is filled up) should be what is controlling when new data should be fetched 
 - Agent pr road visualization
   - heap map?
 
@@ -43,7 +40,6 @@
   * Get 3D geometry from host path
   * Create window to list 5-by-5km geometry with corresponding connection point.
 * Make application work on arm arhitecture 
-  * Make clang work as compiler
   * Make app work on MACOS
 * Create visualizer for arena allocations
 * Make shader bin directory be build specific (so that recompilation is triggered if other build type is used)

@@ -11,10 +11,14 @@
 
 // ~mgj: user libs
 #include "render.cpp"
+#include "tile_bvh.cpp"
 
 #include "vulkan/synchronization.cpp"
 #include "vulkan/vulkan_common.cpp"
 #include "vulkan/asset_manager.cpp"
 #include "vulkan/vulkan.cpp"
 #include "vulkan/vulkan_if.cpp"
+#include "vulkan/tile_bvh.cpp"
+#include "vulkan/tile_height_compute.cpp"
+#include "vulkan/tile_height.cpp"
 #include "vulkan/pipelines.cpp"

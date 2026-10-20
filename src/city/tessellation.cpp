@@ -303,7 +303,7 @@ _tessellate_tile_face_for_roads(Arena* arena, city::RoadSegmentNode* root, Buffe
 }
 
 g_internal bool
-tesselate_roads(Arena* arena, Buffer<render::TileVertex> vertices, Buffer<U32> indices, Bvh& bvh_result,
+tesselate_roads(Arena* arena, Buffer<render::TileVertex> vertices, Buffer<U32> indices, RoadBvh& bvh_result,
                 render::TileMesh* out_mesh)
 {
     ScratchScope scratch = ScratchScope(&arena, 1);

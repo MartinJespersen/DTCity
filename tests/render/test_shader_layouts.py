@@ -49,7 +49,7 @@ def main():
                 continue
             binary = temp / (source.name + '.spv')
             command = [args.glslang, '-V', '-I' + str(shader_dir), str(source), '-o', str(binary)]
-            if source.suffix in ('.mesh', '.task'):
+            if source.suffix in ('.mesh', '.task') or source.name == 'tile_height.comp':
                 command += ['--target-env', 'vulkan1.2']
             subprocess.run(command, check=True, capture_output=True, text=True)
             assembly = subprocess.check_output([args.spirv_dis, str(binary)], text=True)

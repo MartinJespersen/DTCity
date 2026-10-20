@@ -105,6 +105,27 @@
       }
     },
     {
+      "name": "debug-no-asan",
+      "displayName": "Debug No ASan",
+      "binaryDir": "${sourceDir}/build/${hostSystemName}/${presetName}",
+      "generator": "Ninja",
+      "toolchainFile": "${sourceDir}/cmake/CityToolchain.cmake",
+      "condition": {
+        "type": "inList",
+        "string": "${hostSystemName}",
+        "list": ["Windows", "Linux"]
+      },
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "BUILD_DEBUG": "ON",
+        "ASAN_ENABLED": "OFF",
+        "BUILD_CITY": "ON",
+        "BUILD_SIMULATOR": "OFF",
+        "TRACY_PROFILE_ENABLE": "OFF",
+        "BUILD_TESTS": "ON"
+      }
+    },
+    {
       "name": "debug-linux-no-asan",
       "displayName": "Debug No Asan (Linux)",
       "inherits": "debug-base",
@@ -228,6 +249,12 @@
     }
   ],
   "buildPresets": [
+    {
+      "name": "debug-no-asan",
+      "configurePreset": "debug-no-asan",
+      "targets": ["city"],
+      "jobs": 4
+    },
     {
       "name": "package-release-static-windows",
       "configurePreset": "release-static-windows",

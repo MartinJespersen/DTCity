@@ -8,6 +8,7 @@
 #include "draw/draw.hpp"
 #include "misc/io.hpp"
 #include "entrypoint.hpp"
+#include "third_party/tracy/tracy/TracyVulkan.hpp"
 
 namespace vulkan
 {
@@ -1427,6 +1428,7 @@ _vulkan_model_compute_prepare(Buffer<render::AgentMeshInstanceBatch> mesh_batche
     batches.size = 0;
 
     VkCommandBuffer cmd = vk_ctx->command_buffers.data[frame];
+    TracyVkZone(vk_ctx->tracy_ctx[frame], cmd, "model_lod_compute"); // NOLINT(bugprone-reserved-identifier)
     VkPipelineLayout layout = vk_ctx->model_instance_pipeline.pipeline_layout;
     vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, vk_ctx->model_lod_compute_pipeline);
     U32 transform_offset = 0;

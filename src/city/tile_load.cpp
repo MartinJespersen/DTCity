@@ -1,4 +1,11 @@
 #include "core_inc.hpp"
+#include "tile_load.hpp"
+#include "base/base_arena.hpp"
+#include "base/base_core.hpp"
+#include "base/base_math.h"
+#include "base/base_strings.hpp"
+#include "base/base_thread_context.h"
+#include "base/container.hpp"
 #include "base/base_container.hpp"
 #include "base/base_container_templates.hpp"
 #include "base/cache.hpp"
@@ -6,7 +13,10 @@
 #include "base/base_lists_templates.hpp"
 #include "utility/utility_inc.hpp"
 #include "async/async_inc.hpp"
+#include "async/async_task.hpp"
+#include "async/async_task_templates.hpp"
 #include "render/render_inc.hpp"
+#include "render/render.hpp"
 #include "draw/draw.hpp"
 #include "misc/misc_inc.hpp"
 #include "lib_wrappers/lib_wrappers_inc.hpp"
@@ -14,7 +24,13 @@
 #include "osm/osm.hpp"
 #include "cesium/cesium_tileset.hpp"
 #include "city/city_inc.hpp"
+#include "city/tile_bvh.hpp"
+#include "city/city.hpp"
+#include "city/tessellation.hpp"
 #include "entrypoint.hpp"
+#include "debug_log.hpp"
+#include <atomic>
+#include <imgui.h>
 
 namespace city
 {
@@ -30,7 +46,7 @@ tile_load_create(async::ThreadPool* thread_pool, U32 tileset_capacity)
     state->arena = arena;
     state->thread_pool = thread_pool;
     state->tileset_pool = ArrayResourcePool<cesium::TilesetRenderer>::create(arena, tileset_capacity);
-    state->polygon_bvh_pool = ArrayResourcePool<Bvh>::create(arena, tileset_capacity);
+    state->polygon_bvh_pool = ArrayResourcePool<RoadBvh>::create(arena, tileset_capacity);
     return state;
 }
 
@@ -48,6 +64,31 @@ tile_load_destroy(TileLoadState* state)
     render::gpu_work_done_wait();
     render::gpu_work_update();
     arena_release(state->arena);
+}
+
+TileMeshBvhEntry
+tile_load_mesh_upload(Arena* arena, render::ThreadWorkerCmdCtx* thread_ctx,
+                      Buffer<const render::TileVertex> vertices, Buffer<const U32> indices, U64 mesh_revision)
+{
+    // Staging copies are recorded before this scope ends. Reuse the worker's
+    // existing arena lifetime rather than retaining CPU trees for every tile.
+    Temp temp = temp_begin(arena);
+    defer(temp_end(temp));
+    TileMeshBvhBuild build = tile_mesh_bvh_build(arena, vertices, indices);
+    render::MeshHandle mesh = {};
+    render::Handle triangle_bvh_buffer = {};
+    if (build.nodes.size > 0)
+    {
+        render::BufferInfo vertex_info(vertices, render::BufferType_Vertex | render::BufferType_StorageBuffer);
+        render::BufferInfo index_info(build.indices, render::BufferType_Index | render::BufferType_StorageBuffer);
+        render::BufferInfo node_info(build.nodes, render::BufferType_StorageBuffer);
+        mesh.vertex_buffer_handle = render::buffer_load_sync(thread_ctx, &vertex_info, S("Tile Mesh Vertices"));
+        mesh.index_buffer_handle = render::buffer_load_sync(thread_ctx, &index_info, S("Tile Mesh Indices"));
+        triangle_bvh_buffer = render::buffer_load_sync(thread_ctx, &node_info, S("Tile Triangle BVH"));
+    }
+    TileMeshBvhEntry entry = tile_mesh_bvh_entry_create(vertices, indices, mesh, mesh_revision);
+    entry.triangle_bvh_buffer = triangle_bvh_buffer;
+    return entry;
 }
 
 g_internal ArrayResourcePoolHandle
@@ -114,11 +155,13 @@ tile_load_update(TileLoadState* state, ArrayResourcePoolHandle tileset_handle, A
         return;
     }
 
+    _tile_load_bvh_selection_update(state, tileset, tileset_handle);
+
     if (road_building_done)
     {
         if (tileset->tile_mesh_processor.func == 0)
         {
-            Bvh* bvh = {};
+            RoadBvh* bvh = {};
             B32 bvh_exists = state->polygon_bvh_pool->item_from_handle(bvh_handle, &bvh);
             Assert(bvh_exists);
 
@@ -160,7 +203,7 @@ _tile_load_stale_meshes_schedule(TileLoadState* state, cesium::TilesetRenderer* 
                                  ArrayResourcePoolHandle tileset_handle, ArrayResourcePoolHandle bvh_handle,
                                  U64 mesh_processor_generation)
 {
-    Bvh* bvh = 0;
+    RoadBvh* bvh = 0;
     if (state->polygon_bvh_pool->item_from_handle(bvh_handle, &bvh) && bvh->deletion_requested == false)
     {
         U32 active_task_count = 0;
@@ -216,7 +259,7 @@ _tile_load_stale_meshes_schedule(TileLoadState* state, cesium::TilesetRenderer* 
 
 g_internal B32
 _tile_load_mesh_reprocess_task_start(TileLoadState* state, cesium::TileRenderResources* tile,
-                                     ArrayResourcePoolHandle tileset_handle, Bvh* bvh,
+                                     ArrayResourcePoolHandle tileset_handle, RoadBvh* bvh,
                                      ArrayResourcePoolHandle bvh_handle, U64 mesh_processor_generation)
 {
     B32 task_started = false;
@@ -273,7 +316,7 @@ _tile_load_task_completions_update(TileLoadState* state)
                 task_state->tile->tile_mesh_processor_pending_generation = 0;
             }
 
-            Bvh* bvh = task_state->bvh;
+            RoadBvh* bvh = task_state->bvh;
             Assert(bvh->loads_in_flight > 0);
             bvh->loads_in_flight--;
             if (bvh->loads_in_flight == 0 && bvh->deletion_requested)
@@ -299,12 +342,17 @@ _tile_load_task_completions_update(TileLoadState* state)
             {
                 render::handle_destroy_deferred(batch->render_data.vertex_buffer_render_handle);
                 render::handle_destroy_deferred(batch->render_data.index_buffer_render_handle);
-                batch->render_data.vertex_buffer_render_handle = batch->vertex_buffer_handle_load_temp;
-                batch->render_data.index_buffer_render_handle = batch->index_buffer_handle_load_temp;
-                batch->render_data.index_count = batch->index_count_load_temp;
-                batch->vertex_buffer_handle_load_temp = {};
-                batch->index_buffer_handle_load_temp = {};
-                batch->index_count_load_temp = 0;
+                render::handle_destroy_deferred(batch->mesh_bvh_entry.triangle_bvh_buffer);
+                batch->render_data.vertex_buffer_render_handle = batch->mesh_bvh_entry_load_temp.mesh.vertex_buffer_handle;
+                batch->render_data.index_buffer_render_handle = batch->mesh_bvh_entry_load_temp.mesh.index_buffer_handle;
+                batch->render_data.index_count = batch->mesh_bvh_entry_load_temp.triangle_count * 3;
+                // Publish metadata with the matching GPU mesh and preserve owner registration.
+                batch->mesh_bvh_entry_load_temp.handle = batch->mesh_bvh_entry.handle;
+                batch->mesh_bvh_entry_load_temp.query_enabled = batch->mesh_bvh_entry.query_enabled;
+                batch->mesh_bvh_entry = batch->mesh_bvh_entry_load_temp;
+                if (tile->tile_bvh)
+                    tile->tile_bvh->replace(batch->mesh_bvh_entry);
+                batch->mesh_bvh_entry_load_temp = {};
                 batch->has_load_replacement.store(false);
             }
         }
@@ -334,7 +382,7 @@ g_internal B32
 _tile_load_road_mesh_process(Arena* arena, Buffer<render::TileVertex> vertices, Buffer<U32> indices, void* user_data,
                              render::TileMesh* out_mesh)
 {
-    Bvh* bvh = (Bvh*)user_data;
+    RoadBvh* bvh = (RoadBvh*)user_data;
     B32 result = city::tesselate_roads(arena, vertices, indices, *bvh, out_mesh);
     return result;
 }
@@ -354,7 +402,7 @@ _tile_load_mesh_reprocess_task(async::ThreadInfo info, async::AsyncTaskStatus<Ti
     render::ThreadWorkerCmdCtx* thread_ctx = nullptr;
 
     cesium::TileRenderResources* tile = status->user_data->tile;
-    Bvh* bvh = status->user_data->bvh;
+    RoadBvh* bvh = status->user_data->bvh;
     for (cesium::TileDrawBatch* batch = tile->batch_first; batch; batch = batch->next)
     {
         render::TileMesh mesh = {};
@@ -375,16 +423,10 @@ _tile_load_mesh_reprocess_task(async::ThreadInfo info, async::AsyncTaskStatus<Ti
                 status->user_data->gpu_upload_submitted = true;
             }
 
-            render::BufferInfo vertex_buffer_info = render::BufferInfo(mesh.vertices, render::BufferType_Vertex);
-            render::BufferInfo index_buffer_info = render::BufferInfo(mesh.indices, render::BufferType_Index);
-            render::Handle vertex_buffer_render_handle =
-                render::buffer_load_sync(thread_ctx, &vertex_buffer_info, S("Vertex Tile Load"));
-            render::Handle index_buffer_render_handle =
-                render::buffer_load_sync(thread_ctx, &index_buffer_info, S("Index Tile Load"));
-
-            batch->vertex_buffer_handle_load_temp = vertex_buffer_render_handle;
-            batch->index_buffer_handle_load_temp = index_buffer_render_handle;
-            batch->index_count_load_temp = (U32)mesh.indices.size;
+            batch->mesh_bvh_entry_load_temp = tile_load_mesh_upload(
+                scratch.arena, thread_ctx,
+                {mesh.vertices.data, mesh.vertices.size}, {mesh.indices.data, mesh.indices.size},
+                status->user_data->mesh_processor_generation);
             batch->has_load_replacement.store(true);
         }
     }
@@ -395,6 +437,33 @@ _tile_load_mesh_reprocess_task(async::ThreadInfo info, async::AsyncTaskStatus<Ti
     }
 
     return {};
+}
+
+g_internal void
+_tile_load_bvh_selection_update(TileLoadState* state, cesium::TilesetRenderer* tileset,
+                                 ArrayResourcePoolHandle tileset_handle)
+{
+    // Cache residency does not imply query membership. Mark the draw list once,
+    // including fading tiles, then update only entries whose selection changed.
+    U64 draw_frame = ++tileset->bvh_draw_frame;
+    for (cesium::TileRenderResources* tile = tileset->tile_to_show_first; tile; tile = tile->render_next)
+        tile->bvh_draw_frame = draw_frame;
+    for (cesium::TileRenderResources* tile = state->tile_first; tile; tile = tile->next)
+    {
+        if (tile->tileset_handle.idx != tileset_handle.idx ||
+            tile->tileset_handle.gen_id != tileset_handle.gen_id || !tile->tile_bvh)
+            continue;
+        B32 query_enabled = tile->bvh_draw_frame == draw_frame && !tile->to_be_dealloced.load();
+        for (cesium::TileDrawBatch* batch = tile->batch_first; batch; batch = batch->next)
+        {
+            TileMeshBvhEntry& entry = batch->mesh_bvh_entry;
+            if (entry.query_enabled != query_enabled)
+            {
+                entry.query_enabled = query_enabled;
+                tile->tile_bvh->replace(entry);
+            }
+        }
+    }
 }
 
 } // namespace city

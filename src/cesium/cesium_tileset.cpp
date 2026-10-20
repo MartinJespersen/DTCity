@@ -7,6 +7,7 @@
 #include "misc/camera.hpp"
 #include "cesium/cesium_tileset.hpp"
 #include "city/tile_load.hpp"
+#include "city/tile_bvh.hpp"
 #include "entrypoint.hpp"
 
 namespace cesium
@@ -468,6 +469,15 @@ class DTCityPrepareRendererResources : public Cesium3DTilesSelection::IPrepareRe
 
         DLLPushBack(tile_load->tile_first, tile_load->tile_last, tile_render_resources);
         tile_load->tile_count++;
+
+        tile_render_resources->tile_bvh = this->tile_set_renderer->tile_bvh;
+        if (tile_render_resources->tile_bvh)
+        {
+            // Register cached metadata now. query_enabled remains false until
+            // tile_load_update finds this mesh in the current draw list.
+            for (TileDrawBatch* batch = tile_render_resources->batch_first; batch; batch = batch->next)
+                batch->mesh_bvh_entry.handle = tile_render_resources->tile_bvh->insert(batch->mesh_bvh_entry);
+        }
 
         return tile_render_resources;
     }
@@ -932,7 +942,6 @@ _tile_render_data_from_gltf(const CesiumGltf::Model& model, const glm::dmat4& ec
     for (U32 mat_idx = 0; mat_idx < mat_count; ++mat_idx)
     {
         TileDrawBatch* batch = PushStruct(tile_render_data_list->arena, TileDrawBatch);
-        SLLQueuePush(tile_render_data_list->batch_first, tile_render_data_list->batch_last, batch);
         batch->render_data.lod_fade = 1.0f;
 
         // Create and async load index and vertex buffer
@@ -978,10 +987,6 @@ _tile_render_data_from_gltf(const CesiumGltf::Model& model, const glm::dmat4& ec
             }
         }
 
-        glm::mat4 model_matrix = glm::identity<glm::mat4>();
-        render::BufferInfo model_matrix_info =
-            render::BufferInfo(tile_arena, &model_matrix, render::BufferType_Uniform);
-
         batch->vertex_buffer_orig = vertices;
         batch->index_buffer_orig = indices;
 
@@ -999,14 +1004,17 @@ _tile_render_data_from_gltf(const CesiumGltf::Model& model, const glm::dmat4& ec
             }
         }
 
+        // Empty materials have no queryable or drawable mesh and need no GPU buffers.
+        if (upload_indices.size == 0)
+            continue;
+        SLLQueuePush(tile_render_data_list->batch_first, tile_render_data_list->batch_last, batch);
+        batch->mesh_bvh_entry = city::tile_load_mesh_upload(
+            scratch.arena, thread_input,
+            {upload_vertices.data, upload_vertices.size}, {upload_indices.data, upload_indices.size},
+            mesh_processor_generation);
         batch->render_data.index_count = (U32)upload_indices.size;
-        render::BufferInfo vertex_info = render::BufferInfo(upload_vertices, render::BufferType_Vertex);
-        render::BufferInfo index_info = render::BufferInfo(upload_indices, render::BufferType_Index);
-
-        batch->render_data.vertex_buffer_render_handle =
-            render::buffer_load_sync(thread_input, &vertex_info, S("cesium_tile_vertex"));
-        batch->render_data.index_buffer_render_handle =
-            render::buffer_load_sync(thread_input, &index_info, S("cesium_tile_index"));
+        batch->render_data.vertex_buffer_render_handle = batch->mesh_bvh_entry.mesh.vertex_buffer_handle;
+        batch->render_data.index_buffer_render_handle = batch->mesh_bvh_entry.mesh.index_buffer_handle;
 
         // Texture Loading
         S32 tex_idx = -1;
@@ -1297,8 +1305,11 @@ tileset_render_resources_release(TileRenderResources* list)
 {
     for (TileDrawBatch* render_data = list->batch_first; render_data; render_data = render_data->next)
     {
+        if (list->tile_bvh)
+            list->tile_bvh->remove(render_data->mesh_bvh_entry.handle);
         render::handle_destroy_deferred(render_data->render_data.vertex_buffer_render_handle);
         render::handle_destroy_deferred(render_data->render_data.index_buffer_render_handle);
+        render::handle_destroy_deferred(render_data->mesh_bvh_entry.triangle_bvh_buffer);
         render::Handle null_texture_handle = render::texture_zero_handle_get();
         if (render_data->render_data.texture_handle.u64 != null_texture_handle.u64 ||
             render_data->render_data.texture_handle.gen_id != null_texture_handle.gen_id ||

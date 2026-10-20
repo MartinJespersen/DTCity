@@ -11,6 +11,8 @@
 #include <vector>
 #include <any>
 
+// Parse AlphaMode::OPAQUE before Cesium's Windows dependencies define OPAQUE.
+#include <CesiumGltf/Material.h>
 #include <Cesium3DTilesSelection/Tileset.h>
 #include <Cesium3DTilesSelection/Tile.h>
 #include <Cesium3DTilesSelection/TileContent.h>

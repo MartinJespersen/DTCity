@@ -1,9 +1,14 @@
 If:
   PathMatch: .*
 CompileFlags:
-  CompilationDatabase: build/linux/debug
-  Remove: [-include, -include-pch]
-  Compiler: clang++
+  # Builds copy compile_commands.json to the project directory on either host.
+  CompilationDatabase: Ancestors
+  # Keep the database's compiler so MSVC and Clang flags use the correct driver.
+  # clangd builds its own preamble; it cannot use MSVC's compiled PCH.
+  # Sanitizer instrumentation is unnecessary for parsing and conflicts with /MDd.
+  Remove: [-include, -include-pch, /Yu*, /Yc*, /Fp*, /fsanitize=*, -fsanitize=*]
+Completion:
+  HeaderInsertion: IWYU
 
 Index:
   Background: Build
@@ -11,6 +16,7 @@ Index:
 
 Diagnostics:
   UnusedIncludes: None
+  MissingIncludes: Strict
   Suppress:
     - undefined-internal
     - tautological-pointer-compare
@@ -32,20 +38,6 @@ Diagnostics:
   Suppress: "*"
 CompileFlags:
   Add: -ferror-limit=0
-
----
-If:
-  PathMatch: tests/.*
-CompileFlags:
-  CompilationDatabase: build/linux/crash-tests
-  Remove: [-include, -include-pch]
-
----
-If:
-  PathMatch: simulator/.*
-CompileFlags:
-  CompilationDatabase: simulator/build/linux/debug
-  Remove: [-include, -include-pch]
 
 # These implementation files and headers are compiled inside C++ unity units.
 ---

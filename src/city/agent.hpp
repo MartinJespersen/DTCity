@@ -3,6 +3,12 @@
 #include "render/render.hpp"
 #include "simulator_messages.hpp"
 #include "gltfw/gltfw.hpp"
+#include "city/tile_bvh.hpp"
+#include "base/base_core.hpp"
+#include "base/base_container.hpp"
+#include "base/container.hpp"
+#include <memory>
+#include <glm/ext/vector_double3.hpp>
 
 namespace ui
 {
@@ -36,6 +42,8 @@ struct Agent
     glm::dvec3 ecef_dir;
     AgentType vehicle_type;
     F32 height;
+    U64 height_request_id;
+    B32 transform_dirty;
     bool done;
 
     // updated per frame
@@ -82,7 +90,6 @@ struct AgentSim
     Allocator allocator;
 
     B32 height_updates_stop;
-    B32 height_update_in_flight;
     Map<WsId, AgentMapItem> agent_map;
     ArrayResourcePool<Agent> agents_active;
 
@@ -99,6 +106,21 @@ struct AgentSimThread
     ~AgentSimThread();
 };
 
+struct AgentHeightRequest
+{
+    U64 request_id;
+    U64 epoch;
+    ArrayResourcePoolHandle agent_handle;
+    glm::dvec3 sampled_ecef;
+    F64 origin_height;
+};
+
+// Applies only a matching generation/request/epoch. Completed misses and samples
+// more than five metres behind the agent clear the request and keep its old height.
+B32
+agent_height_result_apply(Agent* agent, const AgentHeightRequest& request,
+                          const TileHeightResult& result, U64 epoch);
+
 g_internal glm::dmat3
 _gltf_rotation_to_world(glm::dvec3 world_dir, glm::dvec3 model_dir);
 
@@ -106,6 +128,10 @@ struct AgentSystem
 {
     std::unique_ptr<AgentSimConfig> agent_sim_config; // lifetime = city lifetime
     std::unique_ptr<AgentSim> agent_sim;              // agent sim data should be able to reset it therefore has its own allocator
+    TileHeightSampler* height_sampler = {};
+    Array<AgentHeightRequest> height_requests = {};
+    U64 height_request_sequence = {};
+    U64 height_epoch = {};
     ~AgentSystem();
 
     void

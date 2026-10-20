@@ -1,4 +1,9 @@
 #include "core_inc.hpp"
+#include "asset_manager.hpp"
+#include "tile_height.hpp"
+#include "base/base_core.hpp"
+#include "render/render.hpp"
+#include <atomic>
 #include "base/base_container.hpp"
 #include "base/base_container_templates.hpp"
 #include "base/base_lists.hpp"
@@ -191,6 +196,7 @@ render_ctx_create(String8 shader_path, io::IO* io_ctx, async::ThreadPool* thread
     vk_ctx->render_frame_arena = arena_alloc();
     Debug_SetName(vk_ctx->render_frame_arena, "vulkan render frame arena");
     vk_ctx->model_3D_pipeline = vulkan::tile_pipeline_create(vk_ctx, shader_path);
+    vulkan::_tile_height_pipeline_initialize(shader_path);
     vk_ctx->blend_3d_pipeline = vulkan::blend_3d_pipeline_create(shader_path);
     vk_ctx->primitive_pipeline = vulkan::primitive_pipeline_create(shader_path);
     vk_ctx->line_pipeline = vulkan::line_pipeline_create(vk_ctx, shader_path);
@@ -228,6 +234,8 @@ render_ctx_destroy()
 
     vkDeviceWaitIdle(vk_ctx->device);
 
+    vulkan::_tile_height_retire_poll();
+
     vulkan::profile_buffers_destroy(vk_ctx);
 
     // Asset manager must be destroyed first — it flushes pending GPU commands
@@ -257,6 +265,8 @@ render_ctx_destroy()
     vulkan::pipeline_destroy(&vk_ctx->blend_3d_pipeline);
     vulkan::pipeline_destroy(&vk_ctx->primitive_pipeline);
     vkDestroyPipeline(vk_ctx->device, vk_ctx->model_lod_compute_pipeline, nullptr);
+    vkDestroyPipeline(vk_ctx->device, vk_ctx->tile_height_pipeline.pipeline, nullptr);
+    vkDestroyPipelineLayout(vk_ctx->device, vk_ctx->tile_height_pipeline.layout, nullptr);
     vulkan::pipeline_destroy(&vk_ctx->model_instance_pipeline);
     vulkan::pipeline_destroy(&vk_ctx->line_pipeline);
     vulkan::pipeline_destroy(&vk_ctx->bbox_pipeline);
@@ -427,6 +437,7 @@ gpu_work_update()
 {
     vulkan::asset_manager_execute_cmds();
     vulkan::asset_manager_cmd_done_check();
+    vulkan::_tile_height_retire_poll();
 }
 
 void
@@ -565,8 +576,29 @@ handle_destroy_deferred(render::Handle handle)
 {
     if (render::is_handle_zero(handle) == false)
     {
+        if (handle.type == HandleType::Buffer)
+        {
+            auto* item = vulkan::asset_manager_buffer_item_get(handle);
+            Assert(item);
+            U32 previous = item->item.reference_count.fetch_sub(1, std::memory_order_acq_rel);
+            Assert(previous > 0);
+            if (previous > 1)
+                return;
+        }
         vulkan::deletion_queue_push(handle);
     }
+}
+
+void
+buffer_retain(render::Handle handle)
+{
+    if (render::is_handle_zero(handle))
+        return;
+    Assert(handle.type == HandleType::Buffer);
+    auto* item = vulkan::asset_manager_buffer_item_get(handle);
+    Assert(item);
+    U32 previous = item->item.reference_count.fetch_add(1, std::memory_order_relaxed);
+    Assert(previous > 0);
 }
 
 Handle
@@ -830,6 +862,7 @@ Handle::buffer_handle_create(BufferType buffer_type)
                                               render::HandleType::Buffer);
     render::AssetItem<vulkan::BufferHandle>* asset_item = (render::AssetItem<vulkan::BufferHandle>*)handle.ptr;
     asset_item->item.type = buffer_type;
+    asset_item->item.reference_count.store(1, std::memory_order_relaxed);
 
     os_rw_mutex_drop_w(asset_manager->buffer_mutex);
     return handle;

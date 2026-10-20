@@ -15,6 +15,27 @@
 #include "cesium/cesium_tileset.hpp"
 #include "city/city_inc.hpp"
 #include "entrypoint.hpp"
+#include "city/agent.hpp"
+#include "city/city.hpp"
+#include "city/tile_bvh.hpp"
+#include "render/tile_bvh.hpp"
+#include "base/base_allocator_templates.hpp"
+#include "base/base_allocator.hpp"
+#include "base/base_core.hpp"
+#include "base/base_arena.hpp"
+#include "base/base_thread_context.h"
+#include "base/container.hpp"
+#include "base/container_templates.hpp"
+#include "base/base_templates.hpp"
+#include "base/base_strings.hpp"
+#include <CesiumGeospatial/Cartographic.h>
+#include <CesiumGeospatial/Ellipsoid.h>
+#include <glm/ext/vector_float4.hpp>
+#include <glm/ext/vector_double3.hpp>
+#include <glm/ext/vector_double4.hpp>
+#include <glm/ext/matrix_float4x4.hpp>
+#include <glm/geometric.hpp>
+#include <glm/trigonometric.hpp>
 
 namespace city
 {
@@ -93,8 +114,6 @@ agents_create(AgentSimThread* agent_sim_thread)
     for (U32 agent_cfg_idx = 0; agent_cfg_idx < ArrayCount(agent_sim_config.agent_config); ++agent_cfg_idx)
     {
         AgentConfig* agent_config = &agent_sim_config.agent_config[agent_cfg_idx];
-        AgentModelRenderInfo* model_render_info = &agent_sim_config.models[agent_cfg_idx];
-
         String8 glb_path =
             str8_path_from_str8_list(scratch.arena, {agent_sim_config.asset_dir, agent_sim_config.agent_config[agent_cfg_idx].asset_file_name});
         gltfw_Result glb_result = gltfw_glb_read(scratch.arena, glb_path);
@@ -149,7 +168,12 @@ AgentSystem::~AgentSystem()
 void
 AgentSystem::destroy()
 {
-    Assert(!agent_sim || !agent_sim->height_update_in_flight);
+    if (this->height_sampler)
+    {
+        this->height_sampler->destroy();
+        this->height_sampler = {};
+    }
+    this->height_requests = {};
     if (agent_sim_config)
     {
         AgentSimConfig* config = agent_sim_config.get();
@@ -207,6 +231,7 @@ AgentSystem::update(ui::Camera* camera,
             _agent_height_updates_start(tileset);
         }
         agent->cartographic_coords = glm::dvec2(coord.from.x, coord.from.y);
+        agent->transform_dirty = true;
 
         AgentConfig* agent_config = &this->agent_sim_config->agent_config[enum_idx(agent->vehicle_type)];
 
@@ -220,15 +245,24 @@ AgentSystem::update(ui::Camera* camera,
                                       (agent_scale_factor + agent_config->model_to_world_scale);
         agent->model_matrix.z_basis = glm::vec4(glm::dvec4(model_to_world_rotation[2], 0.0f)) *
                                       (agent_scale_factor + agent_config->model_to_world_scale);
-        CesiumGeospatial::Cartographic elevated_cartographic(glm::radians(coord.from.x), glm::radians(coord.from.y),
-                                                             agent->height);
-        glm::dvec3 elevated_ecef_coord =
-            CesiumGeospatial::Ellipsoid::WGS84.cartographicToCartesian(elevated_cartographic);
-        agent->model_matrix.w_basis = glm::vec4(ecef_to_local * glm::dvec4(elevated_ecef_coord, 1.0));
+    }
 
-        glm::mat4 model_transform = glm::mat4(agent->model_matrix.x_basis, agent->model_matrix.y_basis,
-                                              agent->model_matrix.z_basis, agent->model_matrix.w_basis);
-        agent->world_bounds = _agent_world_bounds_from_transform(agent_config->model_bounds, model_transform);
+    this->_agent_height_update_async(tileset);
+    // Height results can arrive on frames without simulator movement updates.
+    // Recalculate positions and bounds only after movement or a changed height.
+    for (Agent& agent : this->agent_sim->agents_active)
+    {
+        if (!agent.transform_dirty)
+            continue;
+        CesiumGeospatial::Cartographic cartographic(glm::radians(agent.cartographic_coords.x),
+                                                    glm::radians(agent.cartographic_coords.y), agent.height);
+        glm::dvec3 elevated_ecef = CesiumGeospatial::Ellipsoid::WGS84.cartographicToCartesian(cartographic);
+        agent.model_matrix.w_basis = glm::vec4(ecef_to_local * glm::dvec4(elevated_ecef, 1.0));
+        glm::mat4 transform(agent.model_matrix.x_basis, agent.model_matrix.y_basis,
+                             agent.model_matrix.z_basis, agent.model_matrix.w_basis);
+        AgentConfig& config = this->agent_sim_config->agent_config[enum_idx(agent.vehicle_type)];
+        agent.world_bounds = _agent_world_bounds_from_transform(config.model_bounds, transform);
+        agent.transform_dirty = false;
     }
 
     // rendering
@@ -311,86 +345,108 @@ AgentSystem::agent_draw(Array<render::AgentModelInfo>& meshes, render::BufferInf
 void
 AgentSystem::_agent_height_updates_start(cesium::TilesetRenderer* renderer)
 {
-    if (agent_sim->agents_active.item_in_use_count == 0 || agent_sim->height_update_in_flight)
-    {
-        return;
-    }
-
-    agent_sim->height_updates_stop = false;
-    _agent_height_update_async(renderer);
+    (void)renderer;
+    this->agent_sim->height_updates_stop = false;
 }
 
 void
 AgentSystem::_agent_height_updates_stop()
 {
-    agent_sim->height_updates_stop = true;
+    if (!this->agent_sim->height_updates_stop)
+    {
+        ++this->height_epoch;
+        for (Agent& agent : this->agent_sim->agents_active)
+            agent.height_request_id = 0;
+    }
+    this->agent_sim->height_updates_stop = true;
 }
 
-// TODO: This could be written as a general height calculation inside the cesium layer
 void
 AgentSystem::_agent_height_update_async(cesium::TilesetRenderer* renderer)
 {
-    if (agent_sim->height_updates_stop || renderer->height_sample_stop)
-    {
-        agent_sim->height_update_in_flight = false;
+    if (this->agent_sim->height_updates_stop || renderer->destruction_requested)
         return;
+    Allocator* allocator = &this->agent_sim->allocator;
+    Arena* arena = allocator->arena;
+    ScratchScope scratch = ScratchScope(&arena, 1);
+    U32 capacity = this->agent_sim_config->max_agent_count;
+    if (!this->height_sampler)
+    {
+        if (this->agent_sim->agents_active.item_in_use_count == 0)
+            return;
+        this->height_sampler = allocator->make<TileHeightSampler>(capacity);
+        this->height_requests = Array<AgentHeightRequest>(allocator, capacity + 1);
     }
 
-    std::vector<CesiumGeospatial::Cartographic> agent_positions;
-    std::vector<ArrayResourcePoolHandle> sampled_agents;
-    agent_positions.reserve(agent_sim->agents_active.item_in_use_count);
-    sampled_agents.reserve(agent_sim->agents_active.item_in_use_count);
-
-    for (Agent& agent : agent_sim->agents_active)
+    // Results identify the original agent generation and streaming epoch. A single
+    // outstanding request per agent prevents old batches from overwriting newer samples.
+    Buffer<TileHeightResult> results = buffer_alloc<TileHeightResult>(scratch.arena, capacity);
+    U32 result_count = this->height_sampler->collect(results);
+    // The published BVH and completed batches may precede the current draw list.
+    // Build a direct handle lookup once so hidden/reused entries cannot apply a
+    // stale height while a replacement hierarchy is being uploaded.
+    U32 maximum_drawn_entry = 0;
+    if (result_count)
+        for (cesium::TileRenderResources* tile = renderer->tile_to_show_first; tile; tile = tile->render_next)
+            for (cesium::TileDrawBatch* batch = tile->batch_first; batch; batch = batch->next)
+                maximum_drawn_entry = Max(maximum_drawn_entry, batch->mesh_bvh_entry.handle.idx);
+    Buffer<U32> drawn_generations = buffer_alloc<U32>(scratch.arena, (U64)maximum_drawn_entry + 1);
+    if (result_count)
+        for (cesium::TileRenderResources* tile = renderer->tile_to_show_first; tile; tile = tile->render_next)
+            for (cesium::TileDrawBatch* batch = tile->batch_first; batch; batch = batch->next)
+                drawn_generations.data[batch->mesh_bvh_entry.handle.idx] = batch->mesh_bvh_entry.handle.gen_id;
+    for (U32 index = 0; index < result_count; ++index)
     {
-        if (!agent.done)
+        TileHeightResult result = results.data[index];
+        B32 entry_drawn = result.entry_handle.idx != 0 && result.entry_handle.idx < drawn_generations.size &&
+                          drawn_generations.data[result.entry_handle.idx] == result.entry_handle.gen_id;
+        if (!entry_drawn)
+            result.hit = false;
+        const AgentHeightRequest& request = this->height_requests.data[result.request_id % this->height_requests.size];
+        if (request.request_id != result.request_id || request.epoch != this->height_epoch)
+            continue;
+        Agent* agent = {};
+        if (this->agent_sim->agents_active.item_from_handle(request.agent_handle, &agent))
+            agent_height_result_apply(agent, request, result, this->height_epoch);
+    }
+
+    if (this->agent_sim->agents_active.item_in_use_count == 0)
+        return;
+    render::TileBvhResourceView view = {};
+    if (!render::tile_bvh_resource_get(renderer->ready_tile_bvh, &view) || view.entry_count == 0)
+        return;
+    Buffer<TileHeightQuery> queries = buffer_alloc<TileHeightQuery>(scratch.arena, capacity);
+    Buffer<AgentHeightRequest> requests = buffer_alloc<AgentHeightRequest>(scratch.arena, capacity);
+    queries.size = 0;
+    for (Agent& agent : this->agent_sim->agents_active)
+    {
+        if (agent.done || agent.height_request_id)
+            continue;
+        CesiumGeospatial::Cartographic cartographic(glm::radians(agent.cartographic_coords.x),
+                                                    glm::radians(agent.cartographic_coords.y), 0.0);
+        glm::dvec3 ecef = CesiumGeospatial::Ellipsoid::WGS84.cartographicToCartesian(cartographic);
+        glm::dvec3 ecef_up = CesiumGeospatial::Ellipsoid::WGS84.geodeticSurfaceNormal(cartographic);
+        glm::dvec3 surface(renderer->ecef_to_local * glm::dvec4(ecef, 1.0));
+        glm::dvec3 up = glm::normalize(glm::dvec3(renderer->ecef_to_local * glm::dvec4(ecef_up, 0.0)));
+        TileHeightRay ray = tile_height_ray_create(surface, up, view.city_bounds);
+        // Encode the stable agent slot in the remainder. One pending sample per
+        // agent keeps metadata bounded without overwriting a different agent's request.
+        Assert(this->height_request_sequence < max_U64 / this->height_requests.size - 1);
+        ray.query.request_id = ++this->height_request_sequence * this->height_requests.size + agent.handle.idx;
+        Assert(ray.query.request_id != 0);
+        requests.data[queries.size] = {ray.query.request_id, this->height_epoch, agent.handle, ecef, ray.origin_height};
+        queries.data[queries.size++] = ray.query;
+    }
+    if (queries.size && this->height_sampler->submit(renderer->ready_tile_bvh, {queries.data, queries.size}))
+        for (U32 index = 0; index < queries.size; ++index)
         {
-            CesiumGeospatial::Cartographic agent_position(glm::radians(agent.cartographic_coords.x),
-                                                          glm::radians(agent.cartographic_coords.y), 0.0);
-            agent_positions.emplace_back(agent_position);
-            sampled_agents.emplace_back(agent.handle);
+            const AgentHeightRequest& request = requests.data[index];
+            this->height_requests.data[request.request_id % this->height_requests.size] = request;
+            Agent* agent = {};
+            B32 active = this->agent_sim->agents_active.item_from_handle(request.agent_handle, &agent);
+            Assert(active);
+            agent->height_request_id = request.request_id;
         }
-    }
-
-    if (agent_positions.empty())
-    {
-        agent_sim->height_update_in_flight = false;
-        return;
-    }
-
-    agent_sim->height_update_in_flight = true;
-    // The single tileset is also the displayed source.
-    CesiumAsync::Future<Cesium3DTilesSelection::SampleHeightResult> height_future =
-        renderer->tilesets.data[0]->sampleHeightMostDetailed(std::move(agent_positions));
-    std::move(height_future)
-        .thenInMainThread(
-            [renderer, this,
-             sampled_agents = std::move(sampled_agents)](Cesium3DTilesSelection::SampleHeightResult&& result)
-            {
-                Assert(result.positions.size() == sampled_agents.size());
-                Assert(result.sampleSuccess.size() == sampled_agents.size());
-                for (U64 agent_idx = 0; agent_idx < sampled_agents.size(); ++agent_idx)
-                {
-                    if (result.sampleSuccess[agent_idx])
-                    {
-                        ArrayResourcePoolHandle handle = sampled_agents[agent_idx];
-                        Agent* agent = {};
-                        if (this->agent_sim->agents_active.item_from_handle(handle, &agent))
-                        {
-                            agent->height = (F32)result.positions[agent_idx].height;
-                        }
-                    }
-                }
-
-                agent_sim->height_update_in_flight = false;
-                _agent_height_update_async(renderer);
-            })
-        .catchInMainThread(
-            [this](std::exception&& e)
-            {
-                this->agent_sim->height_update_in_flight = false;
-                DEBUG_LOG("Agent height sampling failed: %s\n", e.what());
-            });
 }
 
 // assumes forward direction is in the x direction and model coordinate system having +Y as upd and +Z being up in world

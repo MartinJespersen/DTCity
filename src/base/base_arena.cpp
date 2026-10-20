@@ -10,6 +10,11 @@ ArenaFlags arena_default_flags = 0;
 
 //- rjf: arena creation/destruction
 
+#if BUILD_DEBUG
+#pragma push_macro("arena_alloc")
+#undef arena_alloc
+#endif
+
 Arena*
 arena_alloc(ArenaParams* params)
 {
@@ -57,6 +62,7 @@ arena_alloc(ArenaParams* params)
     // NOTE(mgj): Unpoison header first so we can write to it (Windows may return
     // previously-poisoned virtual addresses)
     AsanUnpoisonMemoryRegion(base, commit_size);
+    arena->prev = 0;
     arena->current = arena;
     arena->flags = params->flags;
     arena->cmt_size = commit_size;
@@ -68,8 +74,11 @@ arena_alloc(ArenaParams* params)
     arena->destructor_pos = 0;
     arena->free_size = 0;
     arena->free_last = 0;
+#if BUILD_DEBUG
+    arena->debug_record = 0;
+    arena->debug_destructor_cmt_pos = reserve_size;
+#endif
     Debug_ArenaCreate_Push(arena, arena->cmt);
-    Debug_SetName(arena, "<unnamed>");
     return arena;
 }
 
@@ -82,6 +91,25 @@ arena_alloc()
     arena_params.flags = arena_default_flags;
     return arena_alloc(&arena_params);
 }
+
+#if BUILD_DEBUG
+Arena*
+arena_alloc_debug(const char* source_file, U32 source_line, ArenaParams* params)
+{
+    Arena* arena = arena_alloc(params);
+    Debug_ArenaSource_Push(arena, source_file, source_line);
+    return arena;
+}
+
+Arena*
+arena_alloc_debug(const char* source_file, U32 source_line)
+{
+    Arena* arena = arena_alloc();
+    Debug_ArenaSource_Push(arena, source_file, source_line);
+    return arena;
+}
+#pragma pop_macro("arena_alloc")
+#endif
 
 void
 arena_release(Arena* arena)
@@ -149,6 +177,7 @@ arena_push(Arena* arena, U64 size, U64 align)
         }
 
         new_block->base_pos = current->base_pos + current->res;
+        Debug_ArenaChain_Push(arena, new_block);
         SLLStackPush_N(arena->current, new_block, prev);
 
         current = new_block;
@@ -178,7 +207,6 @@ arena_push(Arena* arena, U64 size, U64 align)
             os_commit(cmt_ptr, cmt_size);
         }
         current->cmt = cmt_pst_clamped;
-        Debug_PageAllocation_Push(arena, current->cmt);
     }
 
     // rjf: push onto current block
@@ -188,6 +216,7 @@ arena_push(Arena* arena, U64 size, U64 align)
         result = (U8*)current + pos_pre;
         current->pos = pos_pst;
         AsanUnpoisonMemoryRegion(result, size);
+        Debug_ArenaUsage_Push(current);
     }
 
     // rjf: panic on failure
@@ -234,6 +263,7 @@ arena_pop_to(Arena* arena, U64 pos)
             {
                 _arena_trim_block(current, 0);
             }
+            Debug_ArenaUsage_Push(current);
         }
         else
         {
@@ -250,6 +280,7 @@ arena_pop_to(Arena* arena, U64 pos)
     {
         _arena_trim_block(current, 0);
     }
+    Debug_ArenaUsage_Push(current);
 }
 
 // Keep a bounded cache at task/idle boundaries, never inside the face loop.
@@ -332,6 +363,10 @@ _arena_trim_block(Arena* block, U64 retained_size)
             U64 decommit_size = block->cmt - decommit_pos;
             void* decommit_ptr = (U8*)block + decommit_pos;
             os_decommit(decommit_ptr, decommit_size);
+#if BUILD_DEBUG
+            // Front-page trimming can also unmap a previously overlapping destructor region.
+            block->debug_destructor_cmt_pos = Max(block->debug_destructor_cmt_pos, block->cmt);
+#endif
             block->cmt = decommit_pos;
             Debug_PageRelease_Push(block, block->cmt);
         }

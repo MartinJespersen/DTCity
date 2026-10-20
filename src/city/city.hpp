@@ -3,6 +3,8 @@
 #include "neta.hpp"
 #include "tessellation.hpp"
 #include "agent.hpp"
+#include "tile_bvh.hpp"
+#include "base/base_allocator.hpp"
 #include "utility/utm.hpp"
 
 struct gltfw_Sampler;
@@ -97,7 +99,7 @@ struct RoadBuildTask
 {
     Road* road;
     osm::Network* network;
-    Bvh* bvh;
+    RoadBvh* bvh;
 };
 
 struct AsyncCityTask
@@ -156,6 +158,8 @@ city_area_wgs84_get(const AreaConfig* config);
 struct City
 {
     Arena* arena;
+    Allocator* allocator;
+    TileBvh* tile_bvh;
 
     String8 tileset_url;
     Rng2F64 bbox;
@@ -263,7 +267,7 @@ bounds_union(Buffer<BoundingBox> center_buffer, U32 start_idx, U32 end_idx);
 g_internal Axis2
 split_axis_find(Buffer<BoundingBox> bb_buffer, U32 start_idx, U32 end_idx);
 g_internal void
-bvh_create(Bvh* bvh, Buffer<RoadSegmentCorners> road_segment_buffer, U32 leaf_bb_max);
+bvh_create(RoadBvh* bvh, Buffer<RoadSegmentCorners> road_segment_buffer, U32 leaf_bb_max);
 ////////////////////////////////////
 
 g_internal Vec3F64

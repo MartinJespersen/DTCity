@@ -1,8 +1,10 @@
 #pragma once
 
 #include "core_inc.hpp"
+#include "base/base_core.hpp"
 #include "async/thread_pool.hpp"
 #include "render/render.hpp"
+#include <atomic>
 
 namespace vulkan
 {
@@ -59,6 +61,7 @@ struct ImageAllocationResource
 
 struct BufferHandle
 {
+    std::atomic<U32> reference_count;
     render::BufferType type;
     BufferAllocation buffer_alloc;
     VkMemoryPropertyFlags mem_prop_flags;
@@ -187,6 +190,13 @@ struct AssetManager
     PendingDeletion* deletion_queue_free_list;
     U32 deletion_queue_free_list_count;
     B32 shutting_down;
+
+    // Immutable outer tile BVH resources; managed only on the owner thread.
+    struct TileBvhResource* tile_bvh_resource_first;
+    struct TileBvhResource* tile_bvh_resource_free;
+    U32 tile_bvh_next_index;
+    struct TileHeightBatch* tile_height_batch_first;
+    U32 tile_height_next_index;
 
     // ~mgj: Arena mutex - protects concurrent PushStruct calls across different asset types
     OS_Handle arena_mutex;
