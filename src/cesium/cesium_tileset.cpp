@@ -1050,12 +1050,17 @@ _tile_render_data_from_gltf(const CesiumGltf::Model& model, const glm::dmat4& ec
             U32 width = (U32)image.width;
             U32 height = (U32)image.height;
 
-            if (_cesium_image_rgba8_prepare(tile_render_data_list->arena, image, &tex_buffer, &byte_count))
+            // Upload copies pixels into staging memory before returning. Keep the
+            // conversion buffer only for this upload, not for the tile's lifetime.
             {
-                render::TextureUploadData tex_data =
-                    render::TextureUploadData::init(tex_buffer, width, height, 4, 1, byte_count);
-                batch->render_data.texture_handle =
-                    render::texture_load_sync(&sampler_info, &tex_data, thread_input->cmd_buffer);
+                ScratchScope tex_scratch = ScratchScope(&scratch.arena, 1);
+                if (_cesium_image_rgba8_prepare(tex_scratch.arena, image, &tex_buffer, &byte_count))
+                {
+                    render::TextureUploadData tex_data =
+                        render::TextureUploadData::init(tex_buffer, width, height, 4, 1, byte_count);
+                    batch->render_data.texture_handle =
+                        render::texture_load_sync(&sampler_info, &tex_data, thread_input->cmd_buffer);
+                }
             }
         }
     }
@@ -1220,7 +1225,8 @@ _height_offset_sample_async(TilesetRenderer* renderer, CesiumGeospatial::Cartogr
                     _height_offset_sample_async(renderer, center_position);
                 }
             })
-        .catchInMainThread([](std::exception&& e) { DEBUG_LOG("Height offset sampling failed: %s\n", e.what()); });
+        .catchInMainThread([](std::exception&& e)
+                           { DEBUG_LOG("Height offset sampling failed: %s\n", e.what()); });
 }
 
 void

@@ -134,14 +134,10 @@ Allocator::_allocator_push_destructor()
     {
         U64 cmt_size = destructor_cmt_pos - cmt_pos;
         U8* cmt_ptr = (U8*)arena + cmt_pos;
-        if (arena->flags & ArenaFlag_LargePages)
-        {
-            os_commit_large(cmt_ptr, cmt_size);
-        }
-        else
-        {
-            os_commit(cmt_ptr, cmt_size);
-        }
+        B32 committed = arena->flags & ArenaFlag_LargePages ? os_commit_large(cmt_ptr, cmt_size)
+                                                          : os_commit(cmt_ptr, cmt_size);
+        if (Unlikely(!committed))
+            _arena_allocation_failure("commit destructor storage", cmt_size);
         destructor_cmt_pos = cmt_pos;
 #if BUILD_DEBUG
         this->arena->debug_destructor_cmt_pos = Min(this->arena->debug_destructor_cmt_pos, cmt_pos);

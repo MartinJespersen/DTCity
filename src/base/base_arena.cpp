@@ -1,8 +1,8 @@
 #include "diagnostics.hpp"
 #include "base/base_inc.hpp"
 
-U64 arena_default_reserve_size = MB(64);
-U64 arena_default_commit_size = KB(64);
+U64 arena_default_reserve_size = MB(4);
+U64 arena_default_commit_size = KB(4);
 ArenaFlags arena_default_flags = 0;
 
 // Copyright (c) 2024 Epic Games Tools
@@ -39,23 +39,22 @@ arena_alloc(ArenaParams* params)
         if (params->flags & ArenaFlag_LargePages)
         {
             base = os_reserve_large(reserve_size);
-            os_commit_large(base, commit_size);
         }
         else
         {
             base = os_reserve(reserve_size);
-            os_commit(base, commit_size);
+        }
+        if (Unlikely(base == 0))
+            _arena_allocation_failure("reserve", reserve_size);
+
+        B32 committed = params->flags & ArenaFlag_LargePages ? os_commit_large(base, commit_size)
+                                                             : os_commit(base, commit_size);
+        if (Unlikely(!committed))
+        {
+            os_release(base, reserve_size);
+            _arena_allocation_failure("commit", commit_size);
         }
     }
-
-    // rjf: panic on arena creation failure
-#if OS_FEATURE_GRAPHICAL
-    if (Unlikely(base == 0))
-    {
-        os_graphical_message(1, str8_lit("Fatal Allocation Failure"), str8_lit("Unexpected memory allocation failure."));
-        os_abort(1);
-    }
-#endif
 
     // rjf: extract arena header & fill
     Arena* arena = (Arena*)base;
@@ -198,14 +197,10 @@ arena_push(Arena* arena, U64 size, U64 align)
         U64 cmt_pst_clamped = ClampTop(cmt_pst_aligned, current->res);
         U64 cmt_size = cmt_pst_clamped - current->cmt;
         U8* cmt_ptr = (U8*)current + current->cmt;
-        if (current->flags & ArenaFlag_LargePages)
-        {
-            os_commit_large(cmt_ptr, cmt_size);
-        }
-        else
-        {
-            os_commit(cmt_ptr, cmt_size);
-        }
+        B32 committed = current->flags & ArenaFlag_LargePages ? os_commit_large(cmt_ptr, cmt_size)
+                                                              : os_commit(cmt_ptr, cmt_size);
+        if (Unlikely(!committed))
+            _arena_allocation_failure("commit", cmt_size);
         current->cmt = cmt_pst_clamped;
     }
 
@@ -220,13 +215,8 @@ arena_push(Arena* arena, U64 size, U64 align)
     }
 
     // rjf: panic on failure
-#if OS_FEATURE_GRAPHICAL
     if (Unlikely(result == 0))
-    {
-        os_graphical_message(1, str8_lit("Fatal Allocation Failure"), str8_lit("Unexpected memory allocation failure."));
-        os_abort(1);
-    }
-#endif
+        _arena_allocation_failure("allocate", size);
 
     return result;
 }
@@ -371,4 +361,12 @@ _arena_trim_block(Arena* block, U64 retained_size)
             Debug_PageRelease_Push(block, block->cmt);
         }
     }
+}
+
+lib_internal void
+_arena_allocation_failure(const char* operation, U64 size)
+{
+    // Report without using scratch arenas: those allocations may also fail.
+    ERROR_LOG("Fatal arena allocation failure: cannot %s %llu bytes.", operation, (unsigned long long)size);
+    os_abort(1);
 }

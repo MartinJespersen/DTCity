@@ -150,4 +150,7 @@ using ArenaUniquePtr = std::unique_ptr<T, ArenaRelease<T>>;
 lib_internal void
 _arena_trim_block(Arena* block, U64 retained_size);
 
+lib_internal void
+_arena_allocation_failure(const char* operation, U64 size);
+
 #endif // BASE_ARENA_H

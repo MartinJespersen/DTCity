@@ -39,6 +39,13 @@ list(APPEND ALL_TARGETS arena_debug_tests)
 set(ALL_TARGETS "${ALL_TARGETS}" PARENT_SCOPE)
 add_test(NAME arena_debug COMMAND arena_debug_tests)
 
+# Test commit failures without consuming the machine's available memory.
+add_executable(arena_failure_tests base/test_arena_failure.cpp)
+target_include_directories(arena_failure_tests PRIVATE ${CMAKE_SOURCE_DIR}/src)
+target_compile_definitions(arena_failure_tests PRIVATE BUILD_TEST=1)
+target_link_libraries(arena_failure_tests PRIVATE glm::glm dtcity_mimalloc)
+add_test(NAME arena_failure COMMAND arena_failure_tests)
+
 add_executable(utm_tests utility/utm_test_main.cpp)
 target_include_directories(utm_tests PRIVATE ${CMAKE_SOURCE_DIR}/src)
 add_test(NAME utm_tests COMMAND utm_tests)
