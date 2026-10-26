@@ -17,7 +17,7 @@ agent_height_result_apply(Agent* agent, const AgentHeightRequest& request,
         agent->height_request_id != result.request_id)
         return false;
     agent->height_request_id = 0;
-    glm::dvec3 displacement = agent->ecef_coord - request.sampled_ecef;
+    glm::dvec3 displacement = agent->ecef_coord_cur - request.sampled_ecef;
     if (!result.hit || glm::dot(displacement, displacement) > 25.0 ||
         !std::isfinite(result.hit_distance) || result.hit_distance < 0)
         return false;

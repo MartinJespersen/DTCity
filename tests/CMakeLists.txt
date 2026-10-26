@@ -17,7 +17,8 @@ target_include_directories(city_tests PRIVATE
 
 target_compile_definitions(city_tests PRIVATE BUILD_TEST=1 DTCITY_PROJECT_ROOT="${CMAKE_SOURCE_DIR}")
 
-target_link_libraries(city_tests PRIVATE glm::glm)
+find_package(CURL REQUIRED)
+target_link_libraries(city_tests PRIVATE glm::glm CURL::libcurl)
 target_link_libraries(city_tests PRIVATE dtcity_mimalloc)
 if(NOT WIN32)
   find_package(Threads REQUIRED)

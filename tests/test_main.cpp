@@ -18,8 +18,13 @@
 #include "../simulator/metadata.cpp"
 
 // test files
+#include "async/async_error.cpp"
+#include "async/test_error.cpp"
 #include "async/test_heap.cpp"
 #include "base/test_allocator.cpp"
+#include "base/test_cache.cpp"
+#include "async/test_task_lifetime.cpp"
+#include "async/test_http.cpp"
 #include "base/test_layer_linkage.cpp"
 #include "base/test_arena.cpp"
 #include "base/test_container.cpp"

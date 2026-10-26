@@ -63,28 +63,6 @@ struct RoadSegment
     RoadCrossSection end;
 };
 
-struct BuildingRenderInfo
-{
-    Buffer<render::TileVertex> vertex_buffer;
-    Buffer<U32> index_buffer;
-    U32 roof_index_offset;
-    U32 roof_index_count;
-
-    U32 facade_index_offset;
-    U32 facade_index_count;
-};
-
-struct Buildings
-{
-    String8 cache_file_name;
-
-    String8 roof_texture_path;
-    String8 facade_texture_path;
-
-    render::TilePipelineData roof_model_handles;
-    render::TilePipelineData facade_model_handles;
-};
-
 enum class AsyncTaskType : U32
 {
     None,
@@ -166,7 +144,9 @@ struct City
     String8 cache_path;
     osm::Network* osm_network;
     bool neta_task_done;
+    bool neta_task_failed;
     bool osm_task_done;
+    bool osm_task_failed;
     bool road_building_started;
     bool road_building_done;
     bool agent_creation_started;
@@ -177,7 +157,6 @@ struct City
     Road road;
     AgentSystem* agent_system;
     F32 all_agent_scale_factor;
-    Buildings buildings;
     ArrayResourcePoolHandle tileset_handle;
     neta::NetaState* neta_state;
     ArrayResourcePoolHandle camera_handle;
@@ -199,23 +178,7 @@ _cache_and_parse_osm_json(async::ThreadPool* thread_pool, Road* road, osm::Netwo
 g_internal void
 quad_to_buffer_add(RoadSegmentCorners* road_segment, Buffer<render::Vertex3DBlend> buffer, Buffer<U32> indices,
                    U64 edge_id, F32 road_height, U32* cur_vertex_idx, U32* cur_index_idx);
-// ~mgj: Buildings
-g_internal Buildings*
-buildings_create(String8 cache_path, String8 texture_path, Rng2F64 bbox);
-g_internal void
-buildings_build(City* city, osm::Network* osm_network, render::SamplerInfo* sampler_info, glm::dmat4& ecef_to_local,
-                F32 road_height);
-g_internal void
-building_destroy(City* city);
-g_internal void
-buildings_buffers_create(Arena* arena, osm::Network* network, F32 road_height, glm::dmat4& ecef_to_local,
-                         BuildingRenderInfo* out_render_info);
-g_internal Buffer<U32>
-EarClipping(Arena* arena, Buffer<Vec2F64> node_buffer);
 
-// ~mgj: HTTP and caching
-g_internal String8
-str8_from_bbox(Arena* arena, Rng2F64 bbox);
 g_internal render::SamplerInfo
 sampler_from_cgltf_sampler(gltfw_Sampler sampler);
 g_internal async::AsyncTaskContinuation<RoadBuildTask>
@@ -244,16 +207,9 @@ city_release(City* city);
 g_internal neta::Edge*
 edge_from_road_edge(osm::Network* network, osm::RoadEdge* road_edge, Map<S64, neta::EdgeList>* edge_list_map);
 
-g_internal Buffer<render::TileVertex>
-vertex_3d_from_gltfw_vertex(Arena* arena, Buffer<gltfw_Vertex3D> in_vertex_buffer);
-
 g_internal void
 road_segment_from_road_nodes(RoadSegment* out_road_segment, osm::EcefLocation node_0, osm::EcefLocation node_1,
                              F32 road_width);
-g_internal void
-road_segments_coalesce(RoadSegment* in_out_road_segment_0, RoadSegment* in_out_road_segment_1, F32 road_width);
-g_internal F32
-tag_value_get(Arena* arena, String8 key, F32 default_width, Buffer<osm::Tag> tags);
 
 // BVH functions /////////////////////////////
 g_internal void
@@ -274,8 +230,6 @@ g_internal Vec3F64
 height_dim_add(Vec2F64 pos, F64 height);
 g_internal F64
 cross_2f64_z_component(Vec2F64 a, Vec2F64 b);
-g_internal B32
-AreTwoConnectedLineSegmentsCollinear(Vec2F64 prev, Vec2F64 cur, Vec2F64 next);
 
 enum Direction
 {
@@ -290,8 +244,6 @@ g_internal Buffer<U32>
 IndexBufferCreate(Arena* arena, U64 buffer_size, Direction direction);
 g_internal B32
 PointInTriangle(Vec2F64 p1, Vec2F64 p2, Vec2F64 p3, Vec2F64 point);
-g_internal void
-NodeBufferPrintDebug(Buffer<Vec2F64> node_buffer);
 
 // coordinates from str list
 

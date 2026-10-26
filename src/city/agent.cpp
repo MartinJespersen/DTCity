@@ -187,7 +187,7 @@ void
 AgentSystem::update(ui::Camera* camera,
                     render::MeshHandle& hover_icon_mesh_handle, cesium::TilesetRenderer* tileset,
                     Buffer<AgentUpdate>& agent_updates, bool agent_reset, bool snapshot_received,
-                    F32 agent_scale_factor, glm::dmat4& ecef_to_local)
+                    F32 agent_scale_factor, glm::dmat4& ecef_to_local, F64 playback_time)
 {
     prof_scope_marker;
     ScratchScope scratch = ScratchScope(0, 0);
@@ -201,50 +201,26 @@ AgentSystem::update(ui::Camera* camera,
     {
         this->agent_sim->reconcile_snapshot(agent_updates);
     }
+    bool agents_created = false;
     for (U32 agent_idx = 0; agent_idx < agent_updates.size; agent_idx++)
     {
-        AgentUpdate& coord = agent_updates[agent_idx];
+        AgentSlotUpdate slot = this->agent_sim->update_slot(agent_updates[agent_idx]);
+        agents_created |= slot.created;
+    }
+    if (agents_created)
+        this->_agent_height_updates_start(tileset);
 
-        AgentSlotUpdate slot = this->agent_sim->update_slot(coord);
-        if (!slot.active)
-        {
+    // Evaluate from the event's original position each frame, including frames
+    // without a new stream reply. Playback time also handles pause and speed changes.
+    this->agent_sim->update_positions(playback_time);
+    for (Agent& agent : this->agent_sim->agents_active)
+    {
+        if (!agent.transform_dirty)
             continue;
-        }
-        glm::dvec3 ecef_coord = util::ecef_from_wgs84(coord.from.x, coord.from.y);
-        Agent* agent = slot.agent;
-        if (!slot.created)
-        {
-            glm::dvec3 ecef_dir = ecef_coord - agent->ecef_coord;
-            F64 move_len_sq = glm::dot(ecef_dir, ecef_dir);
-            if (move_len_sq > 0.001)
-            {
-                agent->ecef_coord = ecef_coord;
-                agent->ecef_dir = ecef_dir;
-            }
-        }
-        else
-        {
-            agent->ecef_coord = ecef_coord;
-            agent->ecef_dir = glm::dvec3(1, 0, 0);
-            agent->vehicle_type = coord.vehicle_type;
-            agent->cartographic_coords = glm::dvec2(coord.from.x, coord.from.y);
-            _agent_height_updates_start(tileset);
-        }
-        agent->cartographic_coords = glm::dvec2(coord.from.x, coord.from.y);
-        agent->transform_dirty = true;
-
-        AgentConfig* agent_config = &this->agent_sim_config->agent_config[enum_idx(agent->vehicle_type)];
-
-        glm::dvec3 local_world_dir = glm::dvec3(ecef_to_local * glm::dvec4(agent->ecef_dir, 0.0));
-        glm::dmat3 model_to_world_rotation =
-            _gltf_rotation_to_world(local_world_dir, glm::dvec3(agent_config->model_forward_dir));
-
-        agent->model_matrix.x_basis = glm::vec4(glm::dvec4(model_to_world_rotation[0], 0.0f)) *
-                                      (agent_scale_factor + agent_config->model_to_world_scale);
-        agent->model_matrix.y_basis = glm::vec4(glm::dvec4(model_to_world_rotation[1], 0.0f)) *
-                                      (agent_scale_factor + agent_config->model_to_world_scale);
-        agent->model_matrix.z_basis = glm::vec4(glm::dvec4(model_to_world_rotation[2], 0.0f)) *
-                                      (agent_scale_factor + agent_config->model_to_world_scale);
+        auto cartographic = CesiumGeospatial::Ellipsoid::WGS84.cartesianToCartographic(agent.ecef_coord_cur);
+        Assert(cartographic.has_value());
+        agent.cartographic_coords = glm::dvec2(glm::degrees(cartographic->longitude),
+                                                glm::degrees(cartographic->latitude));
     }
 
     this->_agent_height_update_async(tileset);
@@ -254,13 +230,20 @@ AgentSystem::update(ui::Camera* camera,
     {
         if (!agent.transform_dirty)
             continue;
-        CesiumGeospatial::Cartographic cartographic(glm::radians(agent.cartographic_coords.x),
-                                                    glm::radians(agent.cartographic_coords.y), agent.height);
-        glm::dvec3 elevated_ecef = CesiumGeospatial::Ellipsoid::WGS84.cartographicToCartesian(cartographic);
+        AgentConfig& config = this->agent_sim_config->agent_config[enum_idx(agent.vehicle_type)];
+        glm::dvec3 local_world_dir = glm::dvec3(ecef_to_local * glm::dvec4(agent.ecef_dir, 0.0));
+        glm::dmat3 model_to_world_rotation =
+            _gltf_rotation_to_world(local_world_dir, glm::dvec3(config.model_forward_dir));
+        F32 model_scale = agent_scale_factor + config.model_to_world_scale;
+        agent.model_matrix.x_basis = glm::vec4(glm::dvec4(model_to_world_rotation[0], 0.0)) * model_scale;
+        agent.model_matrix.y_basis = glm::vec4(glm::dvec4(model_to_world_rotation[1], 0.0)) * model_scale;
+        agent.model_matrix.z_basis = glm::vec4(glm::dvec4(model_to_world_rotation[2], 0.0)) * model_scale;
+        CesiumGeospatial::Cartographic cartographic_from(glm::radians(agent.cartographic_coords.x),
+                                                         glm::radians(agent.cartographic_coords.y), agent.height);
+        glm::dvec3 elevated_ecef = CesiumGeospatial::Ellipsoid::WGS84.cartographicToCartesian(cartographic_from);
         agent.model_matrix.w_basis = glm::vec4(ecef_to_local * glm::dvec4(elevated_ecef, 1.0));
         glm::mat4 transform(agent.model_matrix.x_basis, agent.model_matrix.y_basis,
-                             agent.model_matrix.z_basis, agent.model_matrix.w_basis);
-        AgentConfig& config = this->agent_sim_config->agent_config[enum_idx(agent.vehicle_type)];
+                            agent.model_matrix.z_basis, agent.model_matrix.w_basis);
         agent.world_bounds = _agent_world_bounds_from_transform(config.model_bounds, transform);
         agent.transform_dirty = false;
     }
@@ -434,7 +417,8 @@ AgentSystem::_agent_height_update_async(cesium::TilesetRenderer* renderer)
         Assert(this->height_request_sequence < max_U64 / this->height_requests.size - 1);
         ray.query.request_id = ++this->height_request_sequence * this->height_requests.size + agent.handle.idx;
         Assert(ray.query.request_id != 0);
-        requests.data[queries.size] = {ray.query.request_id, this->height_epoch, agent.handle, ecef, ray.origin_height};
+        requests.data[queries.size] = {ray.query.request_id, this->height_epoch, agent.handle,
+                                      agent.ecef_coord_cur, ray.origin_height};
         queries.data[queries.size++] = ray.query;
     }
     if (queries.size && this->height_sampler->submit(renderer->ready_tile_bvh, {queries.data, queries.size}))

@@ -38,7 +38,10 @@ struct Agent
     ArrayResourcePoolHandle handle;
     WsId id;
     glm::dvec2 cartographic_coords;
-    glm::dvec3 ecef_coord;
+    glm::dvec3 ecef_coord_at_event;
+    F64 event_time;
+    glm::dvec3 ecef_velocity;
+    glm::dvec3 ecef_coord_cur;
     glm::dvec3 ecef_dir;
     AgentType vehicle_type;
     F32 height;
@@ -97,6 +100,8 @@ struct AgentSim
     AgentSlotUpdate
     update_slot(const AgentUpdate& update);
     void
+    update_positions(F64 playback_time);
+    void
     reconcile_snapshot(Buffer<AgentUpdate> updates);
 };
 
@@ -139,7 +144,7 @@ struct AgentSystem
     void
     update(ui::Camera* camera,
            render::MeshHandle& hover_icon_mesh_handle, cesium::TilesetRenderer* tileset,
-           Buffer<AgentUpdate>& agent_updates, bool agent_reset, bool snapshot_received, F32 agent_scale_factor, glm::dmat4& ecef_to_local);
+           Buffer<AgentUpdate>& agent_updates, bool agent_reset, bool snapshot_received, F32 agent_scale_factor, glm::dmat4& ecef_to_local, F64 playback_time);
 
     void
     agent_icon_add(Agent& agent, render::MeshHandle hover_icon_mesh_handle, F32 hover_icon_scale_factor);

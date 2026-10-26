@@ -8,15 +8,15 @@ CompileFlags:
   # Sanitizer instrumentation is unnecessary for parsing and conflicts with /MDd.
   Remove: [-include, -include-pch, /Yu*, /Yc*, /Fp*, /fsanitize=*, -fsanitize=*]
 Completion:
-  HeaderInsertion: IWYU
+  HeaderInsertion: Never
 
 Index:
   Background: Build
   StandardLibrary: false
 
 Diagnostics:
-  UnusedIncludes: None
-  MissingIncludes: Strict
+  UnusedIncludes: Strict
+  MissingIncludes: None
   Suppress:
     - undefined-internal
     - tautological-pointer-compare

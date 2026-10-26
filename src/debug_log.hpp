@@ -200,10 +200,10 @@ debug_arena_window();
 // Http debugging macros
 #define Debug_Http_Push(http_result)                                                                           \
     {                                                                                                          \
-        auto debug_http_result__ = (http_result);                                                              \
+        const auto& debug_http_result__ = (http_result);                                                              \
         DebugEvent* event = debug_event_record(DebugEventType::Http, Debug_Name("Http Push"), S("Http Push")); \
         event->http_event.async_result = (S32)debug_http_result__.result;                                      \
-        event->http_event.error_code = debug_http_result__.curl_code;                                          \
+        event->http_event.error_code = debug_http_result__.error_code;                                          \
     }
 
 #define Debug_SetName(h, n) debug_arena_set_name(h, n)

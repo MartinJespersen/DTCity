@@ -161,7 +161,14 @@ imgui_debug_window(city::City* city, async::ThreadPool* thread_pool)
     }
     else
     {
-        ImGui::Text("Waiting...");
+        if (city->neta_task_failed)
+        {
+            ImGui::Text("Failed");
+        }
+        else
+        {
+            ImGui::Text("Waiting...");
+        }
     }
 
     // osm status
@@ -172,7 +179,14 @@ imgui_debug_window(city::City* city, async::ThreadPool* thread_pool)
     }
     else
     {
-        ImGui::Text("Waiting...");
+        if (city->osm_task_failed)
+        {
+            ImGui::Text("Failed");
+        }
+        else
+        {
+            ImGui::Text("Waiting...");
+        }
     }
 
     // camera location
@@ -233,7 +247,7 @@ dt_main_loop(void* ptr)
                                                  .bbox_clipping_enabled = true,
                                                  .custom_geometry_enabled = true},
                                                 {.name = S("Eskiltuna"),
-                                                 .wgs84 = {16.49952138067, 59.36163877297},
+                                                 .wgs84 = {16.39547, 59.31576},
                                                  .bbox_width_meters = 5000,
                                                  .bbox_height_meters = 5000},
                                                 {.name = S("Zurich"),
@@ -283,7 +297,7 @@ dt_main_loop(void* ptr)
     }
     U32 simulator_scenario_idx = 0;
     city::RoadOverlayOption neta_overlay_option = city::RoadOverlayOption_None;
-    S32 cur_area_option = 2;
+    S32 cur_area_option = 1;
     S32 area_option = cur_area_option;
     B32 area_switch_pending = false;
 
@@ -330,7 +344,7 @@ dt_main_loop(void* ptr)
         ImGui::SeparatorText("Scenarios");
         ImGui::PopFont();
 
-        if (area->cars_creation_done)
+        // Scenario controls depend on simulator metadata, not on map/model loading.
         {
             if (simulator_scenario_idx > simulator.metadata.scenarios.size())
             {
@@ -461,21 +475,25 @@ dt_main_loop(void* ptr)
             }
             city::city_update(area, ctx->thread_pool, neta_overlay_option, framebuffer_dim, area_config);
 
-            // Gather agent batches using the displayed area and this frame's camera.
-            if (area->cars_creation_done && !area_switch_pending)
+            cesium::TilesetRenderer* tileset = {};
+            bool agents_ready = area->cars_creation_done && !area_switch_pending;
+            if (agents_ready)
             {
-                city::Simulation::Update updates =
-                    simulator.update(ctx->arena_frame, server_update, playback_changed || agent_snapshot_needed);
-                agent_snapshot_needed = false;
-                cesium::TilesetRenderer* tileset = {};
                 B32 tileset_found =
                     ctx->tile_load_state->tileset_pool->item_from_handle(area->tileset_handle, &tileset);
-                if (tileset_found && !tileset->destruction_requested)
-                {
-                    area->agent_system->update(camera, agent_hover_icon_mesh_handle, tileset,
-                                               updates.updates, updates.agents_clear, updates.snapshot_received,
-                                               area->all_agent_scale_factor, tileset->ecef_to_local);
-                }
+                agents_ready = tileset_found && !tileset->destruction_requested;
+            }
+
+            // Pump the connection every frame, including while OSM, models, or a
+            // replacement area load. Rebuild agent state once rendering is ready.
+            city::Simulation::Update updates = simulator.update(
+                ctx->arena_frame, server_update, playback_changed || (agents_ready && agent_snapshot_needed));
+            agent_snapshot_needed = !agents_ready;
+            if (agents_ready)
+            {
+                area->agent_system->update(camera, agent_hover_icon_mesh_handle, tileset,
+                                           updates.updates, updates.agents_clear, updates.snapshot_received,
+                                           area->all_agent_scale_factor, tileset->ecef_to_local, playback_time);
             }
 
             // Build every ImGui window before render_frame ends the ImGui frame.

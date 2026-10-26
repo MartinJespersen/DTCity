@@ -268,7 +268,8 @@ _tile_load_mesh_reprocess_task_start(TileLoadState* state, cesium::TileRenderRes
         tile->tile_mesh_processor_pending_generation == 0 && tile->to_be_dealloced.load() == false)
     {
         tile->tile_mesh_processor_pending_generation = mesh_processor_generation;
-        Arena* task_arena = arena_alloc();
+        Allocator task_allocator = Allocator::create();
+        Arena* task_arena = task_allocator.arena;
         Debug_SetName(task_arena, "Tile Load Task arena");
         TileLoadTaskState* tile_task_state = PushStruct(task_arena, TileLoadTaskState);
         tile_task_state->state = state;
@@ -278,7 +279,7 @@ _tile_load_mesh_reprocess_task_start(TileLoadState* state, cesium::TileRenderRes
         tile_task_state->mesh_processor_generation = mesh_processor_generation;
 
         async::AsyncTaskStatus<TileLoadTaskState>* tile_load_task =
-            async::async_task_run(task_arena, state->thread_pool, _tile_load_mesh_reprocess_task, tile_task_state,
+            async::async_task_run(std::move(task_allocator), state->thread_pool, _tile_load_mesh_reprocess_task, tile_task_state,
                                   "Tile Mesh Reprocess Task");
         TileLoadTaskStateNode* node = state->task_free_list;
         if (node)
@@ -305,11 +306,10 @@ _tile_load_task_completions_update(TileLoadState* state)
     for (TileLoadTaskStateNode* node = state->task_first; node; node = next_node)
     {
         next_node = node->next;
-        async::AsyncTaskResult<TileLoadTaskState> result = async::async_task_is_done(node->task_state);
-        if (result.done)
+        if (auto completed = async::async_task_take_completed(node->task_state))
         {
-            Assert(result.success);
-            TileLoadTaskState* task_state = result.task->user_data;
+            Assert(!completed->error);
+            TileLoadTaskState* task_state = completed->user_data;
             if (task_state->gpu_upload_submitted == false)
             {
                 task_state->tile->tile_mesh_processor_generation = task_state->mesh_processor_generation;

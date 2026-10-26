@@ -1,11 +1,14 @@
 #pragma once
 
 #include "thread_pool.hpp"
+#include <memory>
 namespace async
 {
 
 template <typename T>
 struct AsyncHttpTaskState;
+struct HttpInfo;
+struct AsyncGenericError;
 
 enum class ExtensionType
 {
@@ -22,7 +25,7 @@ enable_bitmask(ExtensionType)
 template <typename T>
 struct AsyncTaskStatus
 {
-    Arena* arena;
+    Allocator allocator;
     String8 task_name;
     ThreadPool* thread_pool;
 
@@ -31,9 +34,18 @@ struct AsyncTaskStatus
 
     B32 started;
     std::atomic<B32> done;
-    std::atomic<B32> error;
+    // Written by the executing task; readers acquire done before reading this flag.
+    B32 error;
 
     T* user_data;
+
+    void
+    add_error();
+    void
+    add_error(const AsyncGenericError& new_error);
+    // Reset and configure an HTTP task; return true and mark the task on failure.
+    Error
+    http_reconfigure(HttpInfo* http_info);
 };
 
 template <typename T>
@@ -57,90 +69,16 @@ struct AsyncTaskWork
 };
 
 template <typename T>
-struct AsyncTaskResult
-{
-    AsyncTaskResult()
-    {
-        this->task = 0;
-        this->done = false;
-        this->success = false;
-    }
-
-    AsyncTaskResult(AsyncTaskStatus<T>* task)
-    {
-        this->task = 0;
-        this->done = false;
-        this->success = false;
-
-        B32 expected = 1;
-        if (task->done.compare_exchange_strong(expected, 0))
-        {
-            this->done = true;
-            this->task = task;
-            this->success = !task->error.load(std::memory_order_acquire);
-        }
-    }
-
-    AsyncTaskResult(const AsyncTaskResult<T>& other) = delete;
-    AsyncTaskResult<T>&
-    operator=(const AsyncTaskResult<T>& other) = delete;
-
-    AsyncTaskResult(AsyncTaskResult<T>&& other) noexcept
-    {
-        this->task = other.task;
-        this->done = other.done;
-        this->success = other.success;
-
-        other.task = 0;
-        other.done = false;
-        other.success = false;
-    }
-
-    AsyncTaskResult<T>&
-    operator=(AsyncTaskResult<T>&& other) noexcept
-    {
-        if (this != &other)
-        {
-            if (this->task)
-            {
-                arena_release(this->task->arena);
-            }
-
-            this->task = other.task;
-            this->done = other.done;
-            this->success = other.success;
-
-            other.task = 0;
-            other.done = false;
-            other.success = false;
-        }
-        return *this;
-    }
-
-    ~AsyncTaskResult()
-    {
-        if (this->task)
-        {
-            arena_release(this->task->arena);
-        }
-    }
-
-    AsyncTaskStatus<T>* task;
-    B32 done;
-    B32 success;
-};
-
-template <typename T>
 AsyncTaskStatus<T>*
 async_task_run(AsyncTaskStatus<T>* task_status, ThreadPool* thread_pool, WorkerTaskFunc<T> func, S64 us_delay);
 
 template <typename T>
 AsyncTaskStatus<T>*
-_async_task_status_create(String8 name);
+_async_task_status_create(Allocator allocator, ThreadPool* thread_pool, String8 name, T* data);
 
 template <typename T>
-AsyncTaskResult<T>
-async_task_is_done(AsyncTaskStatus<T>* task);
+[[nodiscard]] std::unique_ptr<AsyncTaskStatus<T>>
+async_task_take_completed(AsyncTaskStatus<T>* task);
 
 template <typename T>
 AsyncTaskStatus<T>*
@@ -148,9 +86,9 @@ async_task_run(ThreadPool* thread_pool, WorkerTaskFunc<T> func, T* data, const c
 
 template <typename T>
 AsyncTaskStatus<T>*
-async_task_run(Arena* arena, ThreadPool* thread_pool, WorkerTaskFunc<T> func, T* data, const char* task_name, S64 us_delay = 0);
+async_task_run(Allocator allocator, ThreadPool* thread_pool, WorkerTaskFunc<T> func, T* data, const char* task_name, S64 us_delay = 0);
 
 template <typename T>
 AsyncTaskStatus<T>*
-async_task_with_ext_run(Arena* arena, ThreadPool* thread_pool, WorkerTaskFunc<T> func, T* data, const char* task_name, S64 us_delay, ExtensionType ext_type, void* ext);
+async_task_with_ext_run(Allocator allocator, ThreadPool* thread_pool, WorkerTaskFunc<T> func, T* data, const char* task_name, S64 us_delay, ExtensionType ext_type, void* ext);
 } // namespace async

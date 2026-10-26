@@ -53,9 +53,12 @@ structure_cleanup(Network* network)
 async::UserFuncResult<osm::Network>
 fetch_osm_data_and_parse(Arena* arena, async::ThreadPool* thread_pool, String8 response_body, osm::Network* osm_network)
 {
-    (void)arena;
     (void)thread_pool;
-    cache_write(osm_network->cache_file_location, response_body, osm_network->bbox_cache_str);
+    Error err = cache_write(osm_network->cache_file_location, response_body, osm_network->bbox_cache_str);
+    if (err)
+    {
+        return async::UserFuncResult<Network>::failure(arena, "Could not cache osm data");
+    }
 
     async::AsyncTaskContinuation<osm::Network> task_continuation = {.func = parse_osm_data};
     return async::UserFuncResult<osm::Network>::success(task_continuation);
@@ -66,7 +69,7 @@ parse_osm_data(async::ThreadInfo thread_info, async::AsyncTaskStatus<osm::Networ
 {
     (void)thread_info;
     B32 error = _parse_osm_data(task->user_data);
-    task->error.store(error);
+    task->error = error;
     return {};
 }
 

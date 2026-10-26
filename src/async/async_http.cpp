@@ -1,8 +1,33 @@
-#include "core_inc.hpp"
+#include "base/base_inc.hpp"
 #include "async/async_inc.hpp"
 
 namespace async
 {
+
+AsyncGenericError
+CurlContext::option_set(CURLoption option, curl_write_callback value, std::source_location location)
+{
+    return AsyncGenericError(curl_easy_setopt(this->session_handle, option, value), location);
+}
+
+AsyncGenericError
+CurlContext::option_set(CURLoption option, void* value, std::source_location location)
+{
+    return AsyncGenericError(curl_easy_setopt(this->session_handle, option, value), location);
+}
+
+AsyncGenericError
+CurlContext::option_set(CURLoption option, long value, std::source_location location)
+{
+    return AsyncGenericError(curl_easy_setopt(this->session_handle, option, value), location);
+}
+
+AsyncGenericError
+CurlContext::option_set_offset(CURLoption option, curl_off_t value, std::source_location location)
+{
+    return AsyncGenericError(curl_easy_setopt(this->session_handle, option, value), location);
+}
+
 
 HttpInfo*
 http_info_create(Arena* arena, HTTP_Method http_method, String8 http_path, String8 content_type,
@@ -115,14 +140,14 @@ _curl_reset(CurlContext* curl_ctx)
     arena_clear(curl_ctx->arena);
 }
 
-AsyncError
+AsyncGenericError
 async_http_configure(Arena* arena, CurlContext* curl_ctx, HttpInfo* http_info)
 {
     CURLU* url_handle = curl_url();
     defer(curl_url_cleanup(url_handle));
     if (curl_ctx->session_handle == 0 || curl_ctx->multi_handle == 0 || url_handle == 0)
     {
-        return async_user_error(AsyncResult::HandleInitError);
+        return AsyncGenericError(AsyncResult::HandleInitError);
     }
 
     B32 is_ws = str8_match(http_info->http_path, S("ws://"), MatchFlag_RightSideSloppy);
@@ -133,7 +158,7 @@ async_http_configure(Arena* arena, CurlContext* curl_ctx, HttpInfo* http_info)
     CURLUcode url_err = curl_url_set(url_handle, CURLUPART_URL, (const char*)http_info->http_path.str, url_flags);
     if (url_err)
     {
-        return async_curl_error(CurlCodeType::Url, url_err);
+        return AsyncGenericError(url_err);
     }
 
     char* query_str = 0;
@@ -146,14 +171,14 @@ async_http_configure(Arena* arena, CurlContext* curl_ctx, HttpInfo* http_info)
                                                CURLU_APPENDQUERY | CURLU_URLENCODE);
             if (query_err)
             {
-                return async_user_error(AsyncResult::QueryError);
+                return AsyncGenericError(AsyncResult::QueryError);
             }
         }
 
         CURLUcode query_err = curl_url_get(url_handle, CURLUPART_QUERY, &query_str, 0);
         if (query_err)
         {
-            return async_user_error(AsyncResult::QueryError);
+            return AsyncGenericError(AsyncResult::QueryError);
         }
     }
     defer(if (query_str) { curl_free(query_str); });
@@ -174,21 +199,26 @@ async_http_configure(Arena* arena, CurlContext* curl_ctx, HttpInfo* http_info)
         defer(if (url_str) { curl_free(url_str); });
         if (request_url_err)
         {
-            return async_curl_error(CurlCodeType::Url, request_url_err);
+            return AsyncGenericError(request_url_err);
         }
         request_url = push_str8_copy(arena, str8_c_string(url_str));
     }
     else if (!passthrough_url && http_info->http_method != HTTP_Method_Post)
     {
-        return async_user_error(AsyncResult::InvalidMethodTypeError);
+        return AsyncGenericError(AsyncResult::InvalidMethodTypeError);
     }
 
-    async_return_curl_error(CurlCodeType::Url,
-                            curl_easy_setopt(curl_ctx->session_handle, CURLOPT_URL, (const char*)request_url.str));
+    if (AsyncGenericError error{curl_easy_setopt(curl_ctx->session_handle, CURLOPT_URL, (const char*)request_url.str)}; error.has_error())
+    {
+        return error;
+    }
 
     if (http_info->http_method == HTTP_Method_Get)
     {
-        async_return_curl_error(CurlCodeType::Regular, curl_easy_setopt(curl_ctx->session_handle, CURLOPT_HTTPGET, 1L));
+        if (AsyncGenericError error{curl_easy_setopt(curl_ctx->session_handle, CURLOPT_HTTPGET, 1L)}; error.has_error())
+        {
+            return error;
+        }
     }
     else if (http_info->http_method == HTTP_Method_Post)
     {
@@ -203,12 +233,18 @@ async_http_configure(Arena* arena, CurlContext* curl_ctx, HttpInfo* http_info)
             body = push_str8_copy(arena, str8_c_string(query_str));
         }
 
-        async_return_curl_error(CurlCodeType::Regular, curl_easy_setopt(curl_ctx->session_handle, CURLOPT_POST, 1L));
-        async_return_curl_error(CurlCodeType::Regular,
-                                curl_easy_setopt(curl_ctx->session_handle, CURLOPT_POSTFIELDS, body.str));
-        async_return_curl_error(
-            CurlCodeType::Regular,
-            curl_easy_setopt(curl_ctx->session_handle, CURLOPT_POSTFIELDSIZE_LARGE, (curl_off_t)body.size));
+        if (AsyncGenericError error{curl_easy_setopt(curl_ctx->session_handle, CURLOPT_POST, 1L)}; error.has_error())
+        {
+            return error;
+        }
+        if (AsyncGenericError error{curl_easy_setopt(curl_ctx->session_handle, CURLOPT_POSTFIELDS, body.str)}; error.has_error())
+        {
+            return error;
+        }
+        if (AsyncGenericError error{curl_easy_setopt(curl_ctx->session_handle, CURLOPT_POSTFIELDSIZE_LARGE, (curl_off_t)body.size)}; error.has_error())
+        {
+            return error;
+        }
     }
 
     curl_slist* headers = 0;
@@ -224,17 +260,19 @@ async_http_configure(Arena* arena, CurlContext* curl_ctx, HttpInfo* http_info)
 
     curl_ctx->headers = headers;
 
-    async_return_curl_error(CurlCodeType::Regular,
-                            curl_easy_setopt(curl_ctx->session_handle, CURLOPT_HTTPHEADER, curl_ctx->headers));
+    if (AsyncGenericError error{curl_easy_setopt(curl_ctx->session_handle, CURLOPT_HTTPHEADER, curl_ctx->headers)}; error.has_error())
+    {
+        return error;
+    }
 
     CURLMcode multi_err = curl_multi_add_handle(curl_ctx->multi_handle, curl_ctx->session_handle);
     if (multi_err != CURLM_OK)
     {
-        return async_curl_error(CurlCodeType::Multi, multi_err);
+        return AsyncGenericError(multi_err);
     }
     curl_ctx->added_to_multi = true;
 
-    return async_no_error();
+    return {};
 }
 
 } // namespace async

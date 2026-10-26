@@ -117,7 +117,7 @@ TEST_CASE("Delayed full snapshots do not recreate completed trips in a full pool
     }
 
     Buffer<city::AgentUpdate> pending = {.data = events, .size = ArrayCount(events)};
-    Buffer<city::AgentUpdate> ready = city::simulator_events_before_playback(scratch.arena, pending, 110);
+    Buffer<city::AgentUpdate> ready = city::simulator_events_ready(scratch.arena, pending, 109);
     ready = city::simulator_snapshot_latest_events(scratch.arena, ready);
     REQUIRE(ready.size == 3);
     CHECK(ready[0].event_type == (S64)city::AgentEventType::Arrival);
@@ -138,7 +138,7 @@ TEST_CASE("Delayed full snapshots do not recreate completed trips in a full pool
     CHECK(simulation.agents_active.item_in_use_count == 2);
 
     // A retained future arrival is still applied on a later frame.
-    ready = city::simulator_events_before_playback(scratch.arena, pending, 111);
+    ready = city::simulator_events_ready(scratch.arena, pending, 110);
     REQUIRE(ready.size == 1);
     city::AgentSlotUpdate slot = simulation.update_slot(ready[0]);
     CHECK_FALSE(slot.active);
@@ -162,4 +162,60 @@ TEST_CASE("Snapshot compaction preserves final event order at equal timestamps")
     CHECK(ready[1].event_type == 1);
     ready = city::simulator_snapshot_latest_events(scratch.arena, {});
     CHECK(ready.size == 0);
+}
+
+TEST_CASE("Agent motion uses event time without frame accumulation and keeps its heading when stopped")
+{
+    city::AgentSim simulation(8, 1);
+    city::AgentUpdate entry = {.id = 7, .time = 100, .event_type = 1,
+                               .position = {4000000, 3000000, 2000000},
+                               .direction = {0, 1, 0}, .speed = 8};
+    city::AgentSlotUpdate slot = simulation.update_slot(entry);
+    REQUIRE(slot.active);
+    city::Agent* agent = slot.agent;
+    simulation.update_positions(102.5);
+    CHECK(agent->ecef_coord_cur.y == 3000020);
+    CHECK(agent->ecef_coord_cur.x == 4000000);
+    CHECK(agent->ecef_dir.y == 1);
+    CHECK(agent->transform_dirty);
+    agent->transform_dirty = false;
+    simulation.update_positions(102.5);
+    CHECK(agent->ecef_coord_cur.y == 3000020);
+    CHECK_FALSE(agent->transform_dirty);
+    simulation.update_positions(104);
+    CHECK(agent->ecef_coord_cur.y == 3000032);
+    CHECK(agent->transform_dirty);
+
+    city::AgentUpdate exit = {.id = 7, .time = 105, .event_type = 2,
+                              .position = {4000000, 3000040, 2000000}};
+    simulation.update_slot(exit);
+    simulation.update_positions(107);
+    CHECK(agent->ecef_coord_cur.y == 3000040);
+    CHECK(agent->ecef_velocity.y == 0);
+    CHECK(agent->ecef_dir.y == 1);
+
+    city::AgentUpdate turn = {.id = 7, .time = 108, .event_type = 1,
+                              .position = exit.position, .direction = {0, 0, -1}, .speed = 2};
+    simulation.update_slot(turn);
+    simulation.update_positions(110);
+    CHECK(agent->ecef_coord_cur.y == 3000040);
+    CHECK(agent->ecef_coord_cur.z == 1999996);
+    CHECK(agent->ecef_dir.z == -1);
+
+    // A backward seek replaces the motion anchor with the earlier event.
+    simulation.update_slot(entry);
+    simulation.update_positions(101);
+    CHECK(agent->ecef_coord_cur.y == 3000008);
+    CHECK(agent->ecef_coord_cur.z == 2000000);
+    CHECK(agent->ecef_dir.y == 1);
+    agent->height = 50;
+    city::AgentUpdate arrival = {.id = 7, .time = 105, .event_type = (S64)city::AgentEventType::Arrival};
+    simulation.update_slot(arrival);
+    slot = simulation.update_slot(exit);
+    REQUIRE(slot.created);
+    simulation.update_positions(110);
+    CHECK(slot.agent->ecef_velocity.y == 0);
+    CHECK(slot.agent->ecef_coord_cur.y == 3000040);
+    CHECK(slot.agent->height == 0);
+    CHECK(slot.agent->ecef_dir.x == 1);
 }

@@ -163,7 +163,6 @@ Prepare MATSim imports with this folder layout:
 ```text
 simulator/input/event_files/<scenario>.xml  # one or more events files
 simulator/input/network_file/network.xml   # shared network
-simulator/input/map_file/<map file>         # one map file
 ```
 
 Run `python simulator/scripts/import_playback_sqlite.py` from the repository root.
@@ -174,13 +173,75 @@ another working directory produces the same outputs. The network is loaded once;
 event limits apply separately to each events file. Existing matching databases
 are replaced on each run.
 
-The network and map files must exist before importing. Coordinates come from the
-network XML; the map file is checked for presence and is not inserted into SQLite.
+Coordinates come from the network XML, which must match the link IDs in the events.
 Projected network coordinates require `pyproj` (`python -m pip install pyproj`).
 Use `--network-crs` to override the network CRS when needed. Use `--events` with
-one or more XML files or folders, `--network` and `--map` to select shared input
-files, and `--output` to select an output folder. These options also support files
+one or more XML files or folders, `--network` to select the shared network
+file, and `--output` to select an output folder. These options also support files
 placed directly in `simulator/input/`.
+
+To create or replace only one scenario database, pass its XML file instead of a folder:
+
+```powershell
+python simulator/scripts/import_playback_sqlite.py --events simulator/input/event_files/1_scenario.xml
+```
+
+This creates or replaces only `simulator/output/1_scenario.sqlite`. Other event
+files are not imported and their databases remain unchanged.
+
+The importer writes motion records to `agent_events`:
+
+| Columns | Meaning |
+| --- | --- |
+| `agent_info_rowid` | Original XML event number, including gaps for ignored events |
+| `time`, `agent_id`, `event_type` | Original simulation time in seconds, vehicle ID and event type |
+| `position_x`, `position_y`, `position_z` | Position at `time`, in WGS84 ECEF metres |
+| `direction_x`, `direction_y`, `direction_z` | Unit direction in ECEF; zero when stationary |
+| `speed` | Speed in metres per second |
+
+The importer pairs entries with the next movement event for the same vehicle
+when that event exits the same link. It divides the straight-line ECEF distance
+between those positions by the recorded travel time. Network free speed is not
+used. `relativePosition` also supports entry or exit partway along a link.
+Network nodes are placed at zero WGS84 ellipsoid height; terrain height is not
+part of this import. The application needs no link IDs, node IDs, destination
+position or destination time. It selects the latest event with `time <= playback`,
+breaking ties by the greatest `agent_info_rowid`, then uses:
+
+```text
+current_position = position + direction * speed * (playback - time)
+```
+
+Link exits store zero speed to stop further movement. Equal entry/exit times
+produce an instantaneous jump to the exit position; the source event order
+selects that exit. Event type 4 removes the agent. Arrival rows are retained even
+when their position is unavailable, with `NULL` position coordinates; readers
+must process removal before using coordinates. Other records without a position
+are skipped and counted in the import summary.
+
+Entries without a matching exit are excluded from `agent_events` and saved in
+`debug_unmatched_entries`. This separate table contains the source filename,
+event number, original XML attributes as JSON, reason, and the following movement
+event when available. Reasons distinguish `end_of_file`, `event_limit`,
+`next_entry_before_exit`, `exit_link_mismatch` and `missing_vehicle`. Entries on
+unknown network links are still checked for matching exits. For example:
+
+```sql
+SELECT event_index, agent_id, link_id, reason, entry_attributes_json,
+       next_event_attributes_json
+FROM debug_unmatched_entries
+ORDER BY event_index;
+```
+
+The temporary debug table is implemented entirely in the marked
+`TEMPORARY UNMATCHED-ENTRY DEBUGGING` section of the script. Remove that section
+and the `on_unmatched_entry` argument in `main` to disable it; motion generation
+does not depend on the debug table.
+
+Reimport older databases to create the motion schema. The simulator reads this
+schema directly. The client calculates each agent's ECEF position on every frame
+from its latest event position, direction, speed, and elapsed playback time.
+Terrain height and model orientation are applied at the current position.
 
 The simulator discovers `.sqlite`, `.sqlite3`, and `.db` files in `simulator/database/`.
 Metadata lists their filenames without the final extension as scenario names.
@@ -191,11 +252,16 @@ The client sends `ServerUpdate` with the scenario `name`, current
 seeks and scenario changes, and every half-period (default: 5 seconds).
 
 Replies use `Stream`, echo `request_id`, and contain a chronological `stream`.
-Each event contains `id`, `time`, `event_type`, `node_from_id`, `node_to_id`,
-`lon_from`, `lat_from`, `lon_to`, and `lat_to`. A reply includes the latest event
-strictly before playback for each active agent, plus all events in
-`[playback, playback + period)`. The client buffers future events and only applies
-those with `time < playback`.
+Each event contains `id`, `time`, `event_type`, `position_x`, `position_y`,
+`position_z`, `direction_x`, `direction_y`, `direction_z`, and `speed`.
+Position is in ECEF metres at the event's original `time`; direction is an ECEF
+unit vector (zero when stationary), and speed is in metres per second.
+Arrival position components may be JSON `null`. The simulator forwards stored
+motion values without advancing them to the requested playback time. Node IDs
+and longitude/latitude endpoint fields are no longer sent.
+A reply includes the latest event strictly before playback for each active agent, plus all events in
+`[playback, playback + period)`. The client buffers future events and applies
+those with `time <= playback`, preserving source order at equal timestamps.
 
 Event type 4 is arrival. Completed agents are excluded from the baseline;
 arrivals in the requested window retire existing client agents without allocating

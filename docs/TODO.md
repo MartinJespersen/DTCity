@@ -5,9 +5,6 @@
 - [ ] [P2] Resolve duplicate scenario names in `simulator/scenarios.cpp`. Files such as `city.sqlite` and `city.db` both become `city`, and either selection opens the first matching file. Reject ambiguous names or assign unique identifiers, and add coverage for duplicate filename stems.
 
 # Refactor
-  - Agent memory especially for threading should be made safe (maybe the task system should be reworked);
-- Task System refactor
-  - The generic value should be wrapped in a unique ptr to allow so it will always be destroyed
 - Config should be moved to static array of struct or a static initialized global variable in separate file
 - ChunkList implementation having a max capacity? What happens when whole chunks are inserted?
 - Improve buffer loading; reconsider the use of BufferInfo and BufferType and buffer_load_sync

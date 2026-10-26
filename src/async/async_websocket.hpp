@@ -12,7 +12,7 @@ struct AsyncWebsocketSession
     Arena* arena;
 
     // error
-    AsyncError error;
+    AsyncGenericError error;
 
     // curl
     CurlContext* curl_ctx;
@@ -20,8 +20,6 @@ struct AsyncWebsocketSession
 
     // http
     HttpInfo* http_info;
-    U32 http_error_code;
-    String8 http_error_msg;
 
     // msgs
     OS_Handle msg_rw_mutex;
@@ -48,14 +46,14 @@ _async_websocket_connection_end(AsyncWebsocketSession* ws_session);
 struct WebsocketConnection
 {
   private:
-    AsyncWebsocketSession* ws_session;
+    AsyncWebsocketSession* ws_session = {};
 
   public:
-    AsyncError async_result;
+    AsyncGenericError async_result;
 
     WebsocketConnection() = default;
 
-    WebsocketConnection(AsyncError async_result, AsyncWebsocketSession* ws_session)
+    WebsocketConnection(AsyncGenericError async_result, AsyncWebsocketSession* ws_session)
     {
         this->async_result = async_result;
         this->ws_session = ws_session;
@@ -75,10 +73,10 @@ struct WebsocketConnection
 
     WebsocketConnection(WebsocketConnection&& other) noexcept
     {
-        this->async_result = other.async_result;
+        this->async_result = std::move(other.async_result);
         this->ws_session = other.ws_session;
 
-        other.async_result = async_no_error();
+        other.async_result = {};
         other.ws_session = 0;
     }
 
@@ -89,10 +87,10 @@ struct WebsocketConnection
         {
             _async_websocket_connection_end(this->ws_session);
 
-            this->async_result = other.async_result;
+            this->async_result = std::move(other.async_result);
             this->ws_session = other.ws_session;
 
-            other.async_result = async_no_error();
+            other.async_result = {};
             other.ws_session = 0;
         }
         return *this;
