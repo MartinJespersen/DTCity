@@ -21,6 +21,10 @@
       "version": "4.3.2#2"
     },
     {
+      "name": "mimalloc",
+      "version": "3.5.3"
+    },
+    {
       "name": "vulkan-loader",
       "version": "1.4.309.0#2"
     },

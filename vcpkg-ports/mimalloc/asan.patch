@@ -1,0 +1,44 @@
+--- a/src/alloc.c
++++ b/src/alloc.c
+@@ -138,7 +138,13 @@
+   mi_page_block_setup_padding(page,block,size);
+   #endif
+ 
+-  return block;  
++  #if MI_TRACK_ASAN && MI_PADDING
++  // The allocator temporarily unpoisons the rounded block while initializing it.
++  // Restore the red zone before returning the requested range to the caller.
++  mi_track_mem_noaccess((uint8_t*)block + size - MI_PADDING_SIZE,
++                        mi_page_block_size(page) - (size - MI_PADDING_SIZE));
++  #endif
++  return block;
+ }
+ 
+ // extra entries for improved efficiency in `alloc-aligned.c` (and in `page.c:mi_malloc_generic`.
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -368,13 +368,19 @@
+     CHECK_INCLUDE_FILES("sanitizer/asan_interface.h" MI_HAS_ASANH)
+     if (NOT MI_HAS_ASANH)
+-      set(MI_TRACK OFF)
+-      message(WARNING "Cannot find the 'sanitizer/asan_interface.h' -- install address sanitizer support first")
++      message(FATAL_ERROR "Cannot find the 'sanitizer/asan_interface.h' -- install address sanitizer support first")
+-      message(STATUS  "Compile **without** address sanitizer support (MI_TRACK=OFF)")
+     else()
+       message(STATUS "Compile with address sanitizer support (MI_TRACK=ASAN)")
+       list(APPEND mi_defines MI_TRACK_ASAN=1)
+-      list(APPEND mi_cflags -fsanitize=address)
+-      list(APPEND mi_libraries -fsanitize=address)
++      if(MSVC)
++        foreach(flags CMAKE_C_FLAGS_DEBUG CMAKE_CXX_FLAGS_DEBUG)
++          string(REPLACE "/RTC1" "" ${flags} "${${flags}}")
++        endforeach()
++        list(APPEND mi_cflags /fsanitize=address /Z7)
++        add_link_options(/INCREMENTAL:NO)
++      else()
++        list(APPEND mi_cflags -fsanitize=address)
++        list(APPEND mi_libraries -fsanitize=address)
++      endif()
+     endif()
+   endif()
+ elseif(MI_TRACK STREQUAL "ETW")

@@ -1,6 +1,5 @@
 
 # Simulator regressions
-
 - [ ] [P1] Preserve explicit protocol message IDs in `src/city/simulator_shared_interface.hpp`: MetadataRequest = 4, Stream = 3, and ServerUpdate = 6. The current implicit values (1, 2, and 3) prevent mixed client/server versions from communicating. If a protocol break is intended, add protocol version handling.
 - [ ] [P2] Supply playback bounds for each discovered scenario in `simulator/simulator.c` and `simulator/metadata.cpp`. Metadata currently assigns the UI database's time range to every scenario, so the client can exclude events from databases with different ranges. Add coverage with databases that have different time bounds; both sample databases currently share the same bounds.
 - [ ] [P2] Resolve duplicate scenario names in `simulator/scenarios.cpp`. Files such as `city.sqlite` and `city.db` both become `city`, and either selection opens the first matching file. Reject ambiguous names or assign unique identifiers, and add coverage for duplicate filename stems.
@@ -12,6 +11,7 @@
 - Config should be moved to static array of struct or a static initialized global variable in separate file
 - ChunkList implementation having a max capacity? What happens when whole chunks are inserted?
 - Improve buffer loading; reconsider the use of BufferInfo and BufferType and buffer_load_sync
+- Improve
 
 # Project TODO:
 - Make debug logging internal to layer.

@@ -1,9 +1,3 @@
-# Choose native simulator compilers before project() enables C and C++.
-# Cache defaults allow explicit compiler overrides from the command line.
-if(CMAKE_HOST_SYSTEM_NAME STREQUAL "Windows")
-  set(CMAKE_C_COMPILER cl CACHE STRING "Simulator C compiler")
-  set(CMAKE_CXX_COMPILER cl CACHE STRING "Simulator C++ compiler")
-elseif(CMAKE_HOST_SYSTEM_NAME STREQUAL "Linux")
-  set(CMAKE_C_COMPILER clang CACHE STRING "Simulator C compiler")
-  set(CMAKE_CXX_COMPILER clang++ CACHE STRING "Simulator C++ compiler")
-endif()
+# Install only the simulator's external dependency. Its other libraries are vendored.
+set(VCPKG_MANIFEST_DIR "${CMAKE_CURRENT_LIST_DIR}/../simulator" CACHE PATH "Simulator dependency manifest")
+include("${CMAKE_CURRENT_LIST_DIR}/CityToolchain.cmake")

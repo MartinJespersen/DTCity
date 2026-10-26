@@ -44,13 +44,6 @@ struct AssetEvent
     S32 handle_type;
 };
 
-/////////////////////////////////////
-struct AllocationEvent
-{
-    OS_Handle arena_block_handle;
-    U64 size;
-};
-
 // HTTP debugging /////////////////////
 struct DebugHttpEvent
 {
@@ -60,15 +53,8 @@ struct DebugHttpEvent
 ///////////////////////////////////////
 enum class DebugEventType : S32
 {
-    HandleNameSet,
-    ArenaCreate,
-    ArenaPageAllocation,
-    ArenaPageRelease,
-    ArenaRelease,
-    Cesium_TileLoad,
-    Cesium_TileUnload,
-    Asset,
-    Http
+    Asset = 7,
+    Http = 8
 
 };
 
@@ -81,25 +67,6 @@ struct DebugArenaMetrics
     U64 block_count;
 };
 
-// Records outlive the virtual memory they describe. Only the frame thread frees them.
-struct DebugArena
-{
-    DebugArena* next;
-    DebugArena* prev;
-    U64 arena_id;
-    U32 tid;
-    U32 source_line;
-    std::atomic<const char*> source_file; // Published once; compiler file literals have static lifetime.
-    std::atomic<U64> owner_id;
-    std::atomic<char> name[96];
-    std::atomic<U64> sequence;
-    std::atomic<U64> used;
-    std::atomic<U64> committed;
-    U64 reserved;
-    std::atomic<B32> released;
-    DebugArenaMetrics last_metrics; // Frame-thread fallback if a writer is publishing.
-};
-
 struct DebugArenaSnapshot
 {
     U64 arena_id;
@@ -110,24 +77,33 @@ struct DebugArenaSnapshot
     DebugArenaMetrics metrics;
 };
 
-struct HandleNameSetEvent
+struct DebugArenaUpdate
 {
-    OS_Handle handle;
-    const char* name;
+    DebugArenaSnapshot snapshot;
+    B32 released;
+};
+
+// Records outlive the virtual memory they describe. Only the frame thread frees them.
+struct DebugArena
+{
+    DebugArena* next;
+    DebugArena* prev;
+    U64 arena_id;
+    // The arena owner, pending handoff, and frame thread each own a different slot.
+    // As with Arena itself, callers must serialize writers when ownership changes threads.
+    DebugArenaUpdate updates[3];
+    U32 write_index;
+    U32 read_index;
+    std::atomic<U32> pending_index; // Low two bits: slot index. Bit 2: a completed update is available.
 };
 
 struct DebugEvent
 {
-    String8 debug_name; // should always be created from string literal from macro
-    String8 name;       // should always be created from string literal from macro
     U32 tid;
 
     DebugEventType type;
     union
     {
-        HandleNameSetEvent handle_name_set_event;
-        OS_Handle handle;
-        AllocationEvent alloc_event;
         AssetEvent asset_event;
         DebugHttpEvent http_event;
     };
@@ -135,15 +111,12 @@ struct DebugEvent
 
 struct DebugTable
 {
-    Arena* arena;
     Arena* frame_arena;
-    U64 frame_count;
     U64 arr_idx_cur;
     std::atomic<U64> arr_idx_and_event_idx; // msb 32 bit: event array index. lsb 32 bits: event idx
     // we switch between two buffers so that other threads can access the one not used by the reader
     DebugEvent events[2][16 * 65536];
 
-    U64 total_memory_use;
     ChunkList<DebugEvent> asset_events;
     ChunkList<DebugEvent> http_events;
 
@@ -151,6 +124,7 @@ struct DebugTable
     DebugArena* debug_arena_first;
     DebugArena* debug_arena_last;
     std::atomic<DebugArena*> debug_arena_pending;
+    Buffer<DebugArenaSnapshot> arena_snapshots; // Completed frame; storage belongs to frame_arena.
 };
 
 #define Debug_Name_(file, line, label) S(file ":" Stringify(line) "|" label)
@@ -194,7 +168,7 @@ debug_arena_set_owner(Arena* arena, Arena* block);
 void
 debug_arena_set_source(Arena* arena, const char* source_file, U32 source_line);
 
-// Frame thread only. The returned rows belong to the supplied arena; no live Arena pointers are read.
+// Frame thread only. Copy the last completed frame into the supplied arena.
 Buffer<DebugArenaSnapshot>
 debug_arena_snapshot(Arena* arena);
 
@@ -248,10 +222,18 @@ debug_arena_window();
 g_internal int
 _debug_arena_compare_id(const void* lhs, const void* rhs);
 
+#if !BUILD_TEST
 g_internal int
 _debug_arena_compare_committed(const void* lhs, const void* rhs);
+#endif
 
 g_internal void
 _debug_arena_collect();
+
+g_internal void
+_debug_arena_publish(DebugArena* record);
+
+g_internal Buffer<DebugArenaSnapshot>
+_debug_arena_aggregate(Arena* arena);
 
 #endif

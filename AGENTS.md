@@ -60,7 +60,7 @@ In the src directory all sub-directories are layers that are all responsible for
 - Never ask for read permission
 
 # Verification
-- make sure that resolve clangd suggestions.
+- make sure to resolve clangd suggestions.
 
 # My Setup
 - I use ubuntu 24.04 and Windows 11 in development.

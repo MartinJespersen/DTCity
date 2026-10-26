@@ -1,0 +1,20 @@
+--- a/src/page.c
++++ b/src/page.c
+@@ -280,7 +280,16 @@
+ 
+ #else
+ void _mi_page_update_stats(mi_page_t* page) {
+-  MI_UNUSED(page);
++  // Allocation increments these counters even when statistics are disabled.
++  // Reset them before the 16-bit allocation count can overflow.
++  const size_t used = mi_page_used(page);
++  #if MI_SIZE_SIZE >= 8
++  page->xused.used_alloc = (used << 32) | used;
++  #else
++  page->xused.used_alloc = used;
++  page->xlast_used = (uint16_t)used;
++  page->xlast_alloc = 0;
++  #endif
+ }
+ #endif
+ 

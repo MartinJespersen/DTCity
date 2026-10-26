@@ -57,6 +57,11 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND NOT ASAN_ENABLED)
   endforeach()
 endif()
 
+add_executable(mimalloc_counter_probe base/mimalloc_counter_probe.cpp)
+target_link_libraries(mimalloc_counter_probe PRIVATE dtcity_mimalloc)
+add_test(NAME mimalloc_counter COMMAND mimalloc_counter_probe)
+set_tests_properties(mimalloc_counter PROPERTIES TIMEOUT 30)
+
 if(ASAN_ENABLED)
   add_executable(mimalloc_asan_probe base/mimalloc_asan_probe.cpp)
   target_link_libraries(mimalloc_asan_probe PRIVATE dtcity_mimalloc)

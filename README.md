@@ -206,26 +206,30 @@ with fresh handle generations. See [time_sync.md](time_sync.md) for protocol det
 ### Mimalloc and AddressSanitizer
 
 The application, Simulator, and base-layer tests replace global C++ `new`/`delete`
-with mimalloc, including ASan builds. With `ASAN_ENABLED=ON`, CMake downloads a
-hash-pinned mimalloc 2.2.6 source archive and builds a separate static library with
-`MI_TRACK_ASAN=1` and padding enabled. Other configurations use an installed mimalloc
-package (such as vcpkg), or download and build the same pinned version as a static
-library if no package is available. This also supports simulator-only presets
-without a vcpkg toolchain. The fallback's first configure needs network access;
-an offline checkout can be provided with `FETCHCONTENT_SOURCE_DIR_DTCITY_MIMALLOC_RELEASE_SOURCE`.
-The first ASan configure needs network access (or a prepopulated FetchContent cache).
-For an offline source checkout, set `FETCHCONTENT_SOURCE_DIR_DTCITY_MIMALLOC_SOURCE`
-to an already-patched copy of that version.
+with mimalloc, including ASan builds. All use mimalloc 3.5.3 from the
+[`vcpkg-ports/mimalloc`](vcpkg-ports/mimalloc/README.md) overlay. Set `VCPKG_ROOT`
+before configuring. Simulator-only presets use the smaller manifest in
+`simulator/`; other presets use the root manifest. Detailed allocator statistics
+are disabled.
+
+With `ASAN_ENABLED=ON`, use `x64-windows-static-md-asan` for MSVC or
+`x64-linux-asan` for Clang on Linux. The host toolchains and the `debug-linux`
+preset select these variants. CMake rejects mismatched allocator and application
+ASan settings. Use a fresh build directory when changing the toolchain or triplet.
 
 The ASan dependency includes a small patch that restores poisoning of unused bytes
 at the end of rounded allocation blocks. Without it, the overflow probe misses a
-one-byte write past a 64-byte allocation. `cmake/MimallocAsanPatch.cmake` applies
-this patch only to the downloaded source. CRT `malloc`/`free` are not overridden.
+one-byte write past a 64-byte allocation. The overlay's `asan.patch` applies
+this correction and supplies MSVC-compatible ASan build flags. CRT `malloc`/`free` are not overridden.
 This integration does not provide all the diagnostics or quarantine behavior of
 ASan's own heap allocator; mimalloc reports poisoned-memory accesses through ASan.
 
-With `BUILD_TESTS=ON`, build `city_tests`, `utm_tests`, and `mimalloc_asan_probe`, then
-run `ctest --test-dir <build-directory>/tests --output-on-failure`. The ASan probes
+With `BUILD_TESTS=ON`, build `city_tests`, `arena_debug_tests`, `utm_tests`, and
+`mimalloc_counter_probe`. The counter probe checks sustained allocation with
+allocator statistics disabled.
+ASan configurations also provide `mimalloc_asan_probe`. Run
+`ctest --test-dir <build-directory>/tests -R "^(city_tests|arena_debug|utm_tests|mimalloc_counter|mimalloc_asan_.*)$" --output-on-failure`.
+The ASan probes
 check allocation ownership and poisoned boundaries, and run deliberate overflow
 and use-after-free accesses in separate processes, requiring an ASan error report.
 

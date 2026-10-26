@@ -3,9 +3,6 @@
 #ifndef Debug_SetName
 #define Debug_SetName(...)
 #endif
-#ifndef Debug_Allocation_Push
-#define Debug_Allocation_Push(...)
-#endif
 #ifndef Debug_Frame_End
 #define Debug_Frame_End(...)
 #endif

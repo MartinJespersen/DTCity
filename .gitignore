@@ -19,7 +19,6 @@ build
 out
 .cache
 .venv
-.zed/**
 .vscode
 .raddbg
 compile_commands.json

@@ -15,15 +15,14 @@
 DebugTable g_debug_table = {};
 
 DebugEvent*
-debug_event_record(DebugEventType event_type, String8 debug_name, String8 name)
+debug_event_record(DebugEventType event_type, String8, String8)
 {
+    // Keep the name parameters for existing callers; logs use only the event payload.
     Assert((g_debug_table.arr_idx_and_event_idx.load() & 0xFFFFFFFF) < ArrayCount(g_debug_table.events[0]));
     U64 arr_idx_and_event_idx = g_debug_table.arr_idx_and_event_idx.fetch_add(1);
     U64 arr_idx_cur = arr_idx_and_event_idx >> 32;
     U64 event_idx = arr_idx_and_event_idx & 0xFFFFFFFF;
     DebugEvent* event = &g_debug_table.events[arr_idx_cur][event_idx];
-    event->debug_name = debug_name;
-    event->name = name;
     event->type = event_type;
     event->tid = os_tid();
     return event;
@@ -44,8 +43,6 @@ debug_g_state_init()
 {
     g_debug_table.frame_arena = arena_alloc();
     Debug_SetName(g_debug_table.frame_arena, "debug frame arena");
-    g_debug_table.arena = arena_alloc();
-    Debug_SetName(g_debug_table.arena, "debug persistent arena");
     // setup debug path
     String8 debug_dir = S("debug");
     os_clear_directory(debug_dir);
@@ -71,12 +68,15 @@ debug_arena_create(Arena* arena)
     // Do not allocate tracking records from the arenas that they track.
     DebugArena* record = new (mi_new(sizeof(DebugArena))) DebugArena{};
     record->arena_id = IntFromPtr(arena);
-    record->owner_id.store(record->arena_id, std::memory_order_relaxed);
-    record->tid = os_tid();
-    record->reserved = arena->res;
-    record->last_metrics = {arena->pos, arena->cmt, arena->res, 1};
+    record->pending_index.store(1, std::memory_order_relaxed);
+    record->read_index = 2;
+    DebugArenaSnapshot* snapshot = &record->updates[record->write_index].snapshot;
+    snapshot->arena_id = record->arena_id;
+    snapshot->tid = os_tid();
+    snapshot->metrics.reserved = arena->res;
+    snapshot->metrics.block_count = 1;
+    MemoryCopy(snapshot->name, "<unnamed>", sizeof("<unnamed>"));
     arena->debug_record = record;
-    debug_arena_set_name(arena, "<unnamed>");
     debug_arena_update(arena);
 
     // Multi-producer publication. The frame thread alone owns the active list.
@@ -96,18 +96,19 @@ debug_arena_update(Arena* arena)
     U64 destructor_committed = arena->res - arena->debug_destructor_cmt_pos;
     U64 committed = arena->cmt + Min(arena->res - arena->cmt, destructor_committed);
 
-    // A single arena owner publishes; readers keep the last complete sample on contention.
-    record->sequence.fetch_add(1, std::memory_order_acq_rel);
-    record->used.store(arena->pos + destructor_used, std::memory_order_relaxed);
-    record->committed.store(committed, std::memory_order_relaxed);
-    record->sequence.fetch_add(1, std::memory_order_release);
+    DebugArenaSnapshot* snapshot = &record->updates[record->write_index].snapshot;
+    snapshot->metrics.used = arena->pos + destructor_used;
+    snapshot->metrics.committed = committed;
+    _debug_arena_publish(record);
 }
 
 void
 debug_arena_release(Arena* arena)
 {
     // No arena memory is read by the UI, including after this virtual mapping is released.
-    arena->debug_record->released.store(true, std::memory_order_release);
+    DebugArena* record = arena->debug_record;
+    record->updates[record->write_index].released = true;
+    _debug_arena_publish(record);
 }
 
 void
@@ -115,90 +116,40 @@ debug_arena_set_name(Arena* arena, const char* name)
 {
     // Copy names so temporary task-name strings can end with their owning arena.
     DebugArena* record = arena->debug_record;
+    DebugArenaSnapshot* snapshot = &record->updates[record->write_index].snapshot;
     U64 index = 0;
-    for (; index + 1 < ArrayCount(record->name) && name[index]; ++index)
+    for (; index + 1 < ArrayCount(snapshot->name) && name[index]; ++index)
     {
-        record->name[index].store(name[index], std::memory_order_relaxed);
+        snapshot->name[index] = name[index];
     }
-    record->name[index].store(0, std::memory_order_relaxed);
+    snapshot->name[index] = 0;
+    _debug_arena_publish(record);
 }
 
 void
 debug_arena_set_owner(Arena* arena, Arena* block)
 {
-    block->debug_record->owner_id.store(IntFromPtr(arena), std::memory_order_relaxed);
+    DebugArena* record = block->debug_record;
+    record->updates[record->write_index].snapshot.arena_id = IntFromPtr(arena);
+    _debug_arena_publish(record);
 }
 
 void
 debug_arena_set_source(Arena* arena, const char* source_file, U32 source_line)
 {
     DebugArena* record = arena->debug_record;
-    record->source_line = source_line;
-    record->source_file.store(source_file, std::memory_order_release);
+    DebugArenaSnapshot* snapshot = &record->updates[record->write_index].snapshot;
+    snapshot->source_line = source_line;
+    snapshot->source_file = source_file; // Compiler file literals have static lifetime.
+    _debug_arena_publish(record);
 }
 
 Buffer<DebugArenaSnapshot>
 debug_arena_snapshot(Arena* arena)
 {
-    _debug_arena_collect();
-    U64 block_count = 0;
-    for (DebugArena* record = g_debug_table.debug_arena_first; record; record = record->next) ++block_count;
-
-    Buffer<DebugArenaSnapshot> result = buffer_alloc<DebugArenaSnapshot>(arena, block_count);
-    U64 index = 0;
-    for (DebugArena* record = g_debug_table.debug_arena_first; record; record = record->next)
-    {
-        DebugArenaSnapshot* row = &result[index++];
-        row->arena_id = record->owner_id.load(std::memory_order_relaxed);
-        row->metrics = record->last_metrics;
-        U64 sequence = record->sequence.load(std::memory_order_acquire);
-        if (!(sequence & 1))
-        {
-            DebugArenaMetrics metrics = {record->used.load(std::memory_order_relaxed),
-                                         record->committed.load(std::memory_order_relaxed), record->reserved, 1};
-            std::atomic_thread_fence(std::memory_order_acquire);
-            if (sequence == record->sequence.load(std::memory_order_relaxed))
-            {
-                record->last_metrics = metrics;
-                row->metrics = metrics;
-            }
-        }
-        if (row->arena_id == record->arena_id)
-        {
-            row->tid = record->tid;
-            row->source_file = record->source_file.load(std::memory_order_acquire);
-            if (row->source_file) row->source_line = record->source_line;
-            for (U64 name_index = 0; name_index + 1 < ArrayCount(row->name); ++name_index)
-                row->name[name_index] = record->name[name_index].load(std::memory_order_relaxed);
-            row->name[ArrayCount(row->name) - 1] = 0;
-        }
-    }
-
-    // Sum active and cached chain blocks without counting the unused gaps in base_pos.
-    qsort(result.data, result.size, sizeof(DebugArenaSnapshot), _debug_arena_compare_id);
-    U64 arena_count = 0;
-    for (U64 block_index = 0; block_index < result.size; ++block_index)
-    {
-        DebugArenaSnapshot row = result[block_index];
-        if (arena_count && result[arena_count - 1].arena_id == row.arena_id)
-        {
-            DebugArenaSnapshot* owner = &result[arena_count - 1];
-            owner->metrics.used += row.metrics.used;
-            owner->metrics.committed += row.metrics.committed;
-            owner->metrics.reserved += row.metrics.reserved;
-            owner->metrics.block_count++;
-            if (row.name[0])
-            {
-                MemoryCopyArray(owner->name, row.name);
-                owner->tid = row.tid;
-                owner->source_file = row.source_file;
-                owner->source_line = row.source_line;
-            }
-        }
-        else
-            result[arena_count++] = row;
-    }
-    result.size = arena_count;
+    Buffer<DebugArenaSnapshot> completed = g_debug_table.arena_snapshots;
+    Buffer<DebugArenaSnapshot> result = buffer_alloc<DebugArenaSnapshot>(arena, completed.size);
+    if (completed.size) MemoryCopy(result.data, completed.data, completed.size * sizeof(DebugArenaSnapshot));
     return result;
 }
 
@@ -210,9 +161,7 @@ debug_event_frame_end()
     U32 arr_idx = arr_idx_and_event_idx_prev >> 32;
     U32 event_count = arr_idx_and_event_idx_prev & 0xFFFFFFFF;
 
-    g_debug_table.frame_count++;
-    _debug_arena_collect();
-    // init and resetting of debug arean
+    // Initialize and reset storage for the next completed frame.
     if (!g_debug_table.frame_arena)
     {
         debug_g_state_init();
@@ -274,6 +223,10 @@ debug_event_frame_end()
         String8 http_frame_log = str8_list_join(g_debug_table.frame_arena, &http_list, 0);
         debug_dump_str(http_frame_log, S("debug/http_logs.log"));
     }
+
+    // Consume only completed updates. Workers continue without a frame barrier.
+    _debug_arena_collect();
+    g_debug_table.arena_snapshots = _debug_arena_aggregate(g_debug_table.frame_arena);
 }
 
 void
@@ -412,6 +365,7 @@ _debug_arena_compare_id(const void* lhs, const void* rhs)
     return (a > b) - (a < b);
 }
 
+#if !BUILD_TEST
 g_internal int
 _debug_arena_compare_committed(const void* lhs, const void* rhs)
 {
@@ -419,6 +373,7 @@ _debug_arena_compare_committed(const void* lhs, const void* rhs)
     U64 b = ((const DebugArenaSnapshot*)rhs)->metrics.committed;
     return a == b ? _debug_arena_compare_id(lhs, rhs) : (a < b ? 1 : -1);
 }
+#endif
 
 g_internal void
 _debug_arena_collect()
@@ -432,13 +387,84 @@ _debug_arena_collect()
     for (DebugArena *record = g_debug_table.debug_arena_first, *next = 0; record; record = next)
     {
         next = record->next;
-        if (record->released.load(std::memory_order_acquire))
+        if (record->pending_index.load(std::memory_order_relaxed) & 4)
+        {
+            // Return the previous read slot before taking the latest completed one.
+            // A producer never writes the slot currently owned by this thread.
+            record->read_index = record->pending_index.exchange(record->read_index, std::memory_order_acq_rel) & 3;
+        }
+        if (record->updates[record->read_index].released)
         {
             DLLRemove(g_debug_table.debug_arena_first, g_debug_table.debug_arena_last, record);
             record->~DebugArena();
             mi_free(record);
         }
     }
+}
+
+g_internal void
+_debug_arena_publish(DebugArena* record)
+{
+    U32 write_index = record->write_index;
+    if (record->updates[write_index].released)
+    {
+        // This must be the writer's last access: the frame thread can now free the record.
+        record->pending_index.store(write_index | 4, std::memory_order_release);
+    }
+    else
+    {
+        U32 recycled_index = record->pending_index.exchange(write_index | 4, std::memory_order_acq_rel) & 3;
+        // The reader only reads the published slot. Keep the next writer slot up to date.
+        // Replacing a pending update coalesces changes without allocating more storage.
+        record->updates[recycled_index] = record->updates[write_index];
+        record->write_index = recycled_index;
+    }
+}
+
+g_internal Buffer<DebugArenaSnapshot>
+_debug_arena_aggregate(Arena* arena)
+{
+    U64 block_count = 0;
+    for (DebugArena* record = g_debug_table.debug_arena_first; record; record = record->next) ++block_count;
+
+    Buffer<DebugArenaSnapshot> result = buffer_alloc<DebugArenaSnapshot>(arena, block_count);
+    U64 index = 0;
+    for (DebugArena* record = g_debug_table.debug_arena_first; record; record = record->next)
+    {
+        const DebugArenaSnapshot& snapshot = record->updates[record->read_index].snapshot;
+        DebugArenaSnapshot* row = &result[index++];
+        row->arena_id = snapshot.arena_id;
+        row->metrics = snapshot.metrics;
+        if (row->arena_id == record->arena_id) *row = snapshot;
+    }
+
+    // Sum active and cached chain blocks without counting unused gaps in base_pos.
+    qsort(result.data, result.size, sizeof(DebugArenaSnapshot), _debug_arena_compare_id);
+    U64 arena_count = 0;
+    for (U64 block_index = 0; block_index < result.size; ++block_index)
+    {
+        DebugArenaSnapshot row = result[block_index];
+        if (arena_count && result[arena_count - 1].arena_id == row.arena_id)
+        {
+            DebugArenaSnapshot* owner = &result[arena_count - 1];
+            owner->metrics.used += row.metrics.used;
+            owner->metrics.committed += row.metrics.committed;
+            owner->metrics.reserved += row.metrics.reserved;
+            owner->metrics.block_count++;
+            // Only the root block carries creation metadata, including an empty name.
+            if (row.tid)
+            {
+                MemoryCopyArray(owner->name, row.name);
+                owner->tid = row.tid;
+                owner->source_file = row.source_file;
+                owner->source_line = row.source_line;
+            }
+        }
+        else
+            result[arena_count++] = row;
+    }
+    result.size = arena_count;
+    return result;
 }
 
 #endif
