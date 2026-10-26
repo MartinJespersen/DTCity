@@ -8,7 +8,7 @@ _hash_u64_from_str8(String8 str);
 B32
 cache_needs_update(String8 cache_data_file, String8 cache_meta_file, U32 ttl_sec = max_U32);
 
-void
+[[nodiscard]] Error
 cache_write(String8 cache_file, String8 content, String8 hash_content);
 
 Result<String8>

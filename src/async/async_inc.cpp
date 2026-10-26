@@ -11,5 +11,6 @@
 #include "mpmc_queue_templates.hpp"
 
 #include "thread_pool.cpp"
+#include "async_error.cpp"
 #include "async_http.cpp"
 #include "async_websocket.cpp"

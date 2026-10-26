@@ -6,7 +6,7 @@ namespace async
 
 g_internal size_t
 _libcurl_ws_write_callback(void* contents, size_t size, size_t nmemb, void* userp);
-g_internal AsyncError
+g_internal AsyncGenericError
 _async_websocket_configure(AsyncWebsocketSession* ws_session);
 g_internal void
 _async_websocket_send_clear(AsyncWebsocketSession* ws_session);
@@ -27,7 +27,7 @@ _ws_main(AsyncWebsocketSession* ws_session)
         CURLcode resume_result = curl_easy_pause(curl_ctx->session_handle, CURLPAUSE_CONT);
         if (resume_result != CURLE_OK)
         {
-            async_error_set(ws_session, async_curl_regular_error(resume_result));
+            ws_session->error = AsyncGenericError(resume_result);
             return;
         }
     }
@@ -36,7 +36,7 @@ _ws_main(AsyncWebsocketSession* ws_session)
 
     if (curl_code != CURLM_OK)
     {
-        async_error_set(ws_session, async_curl_regular_error(curl_code));
+        ws_session->error = AsyncGenericError(curl_code);
     }
     else if (!running)
     {
@@ -62,19 +62,17 @@ _ws_main(AsyncWebsocketSession* ws_session)
 
         if (result != CURLE_OK)
         {
-            S32 error_code = result ? result : http_code;
-            async_error_set(ws_session, async_curl_regular_error(error_code));
+            ws_session->error = AsyncGenericError(result);
         }
         else
         {
             if (http_code >= 400)
             {
-                ws_session->http_error_code = (U32)http_code;
-                async_error_set(ws_session, async_user_error(AsyncResult::HttpError));
+                ws_session->error = AsyncGenericError(AsyncResult::HttpError, (U32)http_code);
             }
             else
             {
-                async_error_set(ws_session, async_user_error(AsyncResult::WebsocketDisconnected));
+                ws_session->error = AsyncGenericError(AsyncResult::WebsocketDisconnected);
             }
         }
     }
@@ -85,6 +83,8 @@ async_websocket_start(String8 url)
     Arena* session_arena = arena_alloc();
     Debug_SetName(session_arena, "websocket session arena");
     AsyncWebsocketSession* ws_session = PushStruct(session_arena, AsyncWebsocketSession);
+    // source_location requires construction rather than zeroed storage.
+    std::construct_at(&ws_session->error);
     ws_session->arena = session_arena;
     ws_session->msg_rw_mutex = os_rw_mutex_alloc();
     ws_session->msg_read_arena = arena_alloc();
@@ -99,7 +99,7 @@ async_websocket_start(String8 url)
         B32 is_websocket = is_ws | is_wss;
         if (!is_websocket)
         {
-            AsyncError error = async_user_error(AsyncResult::Expecting_Websocket);
+            AsyncGenericError error = AsyncGenericError(AsyncResult::Expecting_Websocket);
             WebsocketConnection result = WebsocketConnection(error, ws_session);
             return result;
         }
@@ -125,6 +125,7 @@ _async_websocket_connection_end(AsyncWebsocketSession* ws_session)
     os_rw_mutex_release(ws_session->msg_rw_mutex);
 
     arena_release(ws_session->msg_read_arena);
+    std::destroy_at(&ws_session->error);
     arena_release(ws_session->arena);
 }
 
@@ -145,10 +146,10 @@ WebsocketConnection::try_send_resv(Arena* arena, String8List* msg_send_list, Str
     }
 
     _ws_main(ws_session);
-    AsyncError update_error = ws_session->error;
+    AsyncGenericError update_error = ws_session->error;
     if (update_error.has_error())
     {
-        DEBUG_LOG("error when updating websocket: %u (%s)", ws_session->error.curl_code, ws_session->curl_error);
+        DEBUG_LOG("error when updating websocket: %u (%s)", ws_session->error.error_code, ws_session->curl_error);
         _curl_reset(ws_session->curl_ctx);
         // Delivery is unknown after disconnect: do not replay possibly sent messages.
         _async_websocket_send_clear(ws_session);
@@ -244,7 +245,7 @@ _libcurl_ws_write_callback(void* contents, size_t size, size_t nmemb, void* user
             curl_ws_start_frame(ws_session->curl_ctx->session_handle, CURLWS_TEXT, (curl_off_t)payload->msg.size);
         if (result != CURLE_OK)
         {
-            async_error_set(ws_session, async_curl_regular_error(result));
+            ws_session->error = AsyncGenericError(result);
             return CURL_READFUNC_ABORT;
         }
         payload->frame_started = true;
@@ -264,28 +265,41 @@ _libcurl_ws_write_callback(void* contents, size_t size, size_t nmemb, void* user
     return copied;
 }
 
-g_internal AsyncError
+g_internal AsyncGenericError
 _async_websocket_configure(AsyncWebsocketSession* ws_session)
 {
     CurlContext* curl_ctx = ws_session->curl_ctx;
-    AsyncError error = async_http_configure(ws_session->arena, curl_ctx, ws_session->http_info);
+    AsyncGenericError error = async_http_configure(ws_session->arena, curl_ctx, ws_session->http_info);
     if (error.has_error())
     {
         return error;
     }
     ws_session->curl_error[0] = 0;
-    async_return_curl_error(CurlCodeType::Regular,
-                            curl_easy_setopt(curl_ctx->session_handle, CURLOPT_ERRORBUFFER, ws_session->curl_error));
-    async_return_curl_error(CurlCodeType::Regular, curl_easy_setopt(curl_ctx->session_handle, CURLOPT_WRITEFUNCTION,
-                                                                    _libcurl_ws_read_callback));
-    async_return_curl_error(CurlCodeType::Regular,
-                            curl_easy_setopt(curl_ctx->session_handle, CURLOPT_WRITEDATA, ws_session));
-    async_return_curl_error(CurlCodeType::Regular, curl_easy_setopt(curl_ctx->session_handle, CURLOPT_READFUNCTION,
-                                                                    _libcurl_ws_write_callback));
-    async_return_curl_error(CurlCodeType::Regular,
-                            curl_easy_setopt(curl_ctx->session_handle, CURLOPT_READDATA, ws_session));
-    async_return_curl_error(CurlCodeType::Regular, curl_easy_setopt(curl_ctx->session_handle, CURLOPT_UPLOAD, 1L));
-    return async_no_error();
+    if (AsyncGenericError error{curl_easy_setopt(curl_ctx->session_handle, CURLOPT_ERRORBUFFER, ws_session->curl_error)}; error.has_error())
+    {
+        return error;
+    }
+    if (AsyncGenericError error{curl_easy_setopt(curl_ctx->session_handle, CURLOPT_WRITEFUNCTION, _libcurl_ws_read_callback)}; error.has_error())
+    {
+        return error;
+    }
+    if (AsyncGenericError error{curl_easy_setopt(curl_ctx->session_handle, CURLOPT_WRITEDATA, ws_session)}; error.has_error())
+    {
+        return error;
+    }
+    if (AsyncGenericError error{curl_easy_setopt(curl_ctx->session_handle, CURLOPT_READFUNCTION, _libcurl_ws_write_callback)}; error.has_error())
+    {
+        return error;
+    }
+    if (AsyncGenericError error{curl_easy_setopt(curl_ctx->session_handle, CURLOPT_READDATA, ws_session)}; error.has_error())
+    {
+        return error;
+    }
+    if (AsyncGenericError error{curl_easy_setopt(curl_ctx->session_handle, CURLOPT_UPLOAD, 1L)}; error.has_error())
+    {
+        return error;
+    }
+    return {};
 }
 
 g_internal void

@@ -77,18 +77,49 @@ simulator_server_update_to_json(Arena* arena, const ServerUpdate& update, U64 re
 F64
 simulator_playback_advance(F64 playback, F64 delta_seconds, F64 timestamp_end)
 {
-    // Strictly earlier events require playback to pass the final timestamp too.
-    F64 playback_end = std::nextafter(timestamp_end, HUGE_VAL);
-    F64 advanced = Min(playback + delta_seconds, playback_end);
+    F64 advanced = Min(playback + delta_seconds, timestamp_end);
     return advanced;
 }
 
+g_internal simdjson::error_code
+simulator_events_from_json(Arena* arena, simdjson::ondemand::array& array, Buffer<AgentUpdate>* out_buffer)
+{
+    U64 element_count = 0;
+    JSON_TRY(array.count_elements().get(element_count));
+    Buffer<AgentUpdate> events = buffer_alloc<AgentUpdate>(arena, element_count);
+    U64 index = 0;
+    for (auto object : array)
+    {
+        MotionEventView view = {};
+        JSON_TRY(object.get<MotionEventView>(view));
+        AgentUpdate* event = &events[index++];
+        event->time = view.time;
+        event->event_type = view.event_type;
+        event->position = view.position;
+        event->direction = view.direction;
+        event->speed = view.speed;
+        String8 id_str = str8((U8*)view.id.data(), view.id.size());
+        event->original_id = push_str8_copy(arena, id_str);
+        U64 bicycle_suffix = str8_substr_find(id_str, S("_bicycle"), 0, MatchFlag_CaseInsensitive);
+        event->vehicle_type = bicycle_suffix < id_str.size ? AgentType::Bicycle : AgentType::Car;
+        B32 is_integer = try_s64_from_str8_c_rules(id_str, &event->id);
+        if (!is_integer)
+        {
+            String8 id_prefix = str8(id_str.str, bicycle_suffix);
+            is_integer = try_s64_from_str8_c_rules(id_prefix, &event->id);
+            if (!is_integer) return simdjson::NUMBER_ERROR;
+        }
+    }
+    *out_buffer = events;
+    return simdjson::SUCCESS;
+}
+
 g_internal Buffer<AgentUpdate>
-simulator_events_before_playback(Arena* arena, Buffer<AgentUpdate>& pending, F64 playback)
+simulator_events_ready(Arena* arena, Buffer<AgentUpdate>& pending, F64 playback)
 {
     // Server events are chronological; retain the future portion for later frames.
     U64 ready_count = 0;
-    while (ready_count < pending.size && pending.data[ready_count].time < playback)
+    while (ready_count < pending.size && pending.data[ready_count].time <= playback)
     {
         ++ready_count;
     }

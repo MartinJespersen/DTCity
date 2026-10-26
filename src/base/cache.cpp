@@ -81,7 +81,7 @@ cache_needs_update(String8 cache_data_file, String8 cache_meta_file, U32 ttl_sec
     return update_needed;
 }
 
-void
+Error
 cache_write(String8 cache_file, String8 content, String8 hash_content)
 {
     prof_scope_marker;
@@ -91,16 +91,18 @@ cache_write(String8 cache_file, String8 content, String8 hash_content)
     if (!cache_file_created)
     {
         ERROR_LOG("cache_write: Cache file dir could not be created\n");
+        return true;
     }
 
     // create name of meta file
     String8 cache_meta_file = str8_concat(scratch.arena, cache_file, S(".meta"));
 
     // ~mgj: write to cache file
-    U64 is_file_written = os_write_data_to_file_path(cache_file, content);
+    B32 is_file_written = os_write_data_to_file_path(cache_file, content);
     if (!is_file_written)
     {
-        ERROR_LOG("cache_write: Was not able to write OSM data to cache\n");
+        ERROR_LOG("cache_write: Was not able to write data to cache\n");
+        return true;
     }
 
     // ~mgj: write to cache meta file
@@ -114,8 +116,10 @@ cache_write(String8 cache_file, String8 content, String8 hash_content)
         if (!is_meta_written)
         {
             DEBUG_LOG("cache_write: Was not able to write meta data to cache\n");
+            return true;
         }
     }
+    return false;
 }
 
 Result<String8>

@@ -108,8 +108,8 @@ TEST_CASE("tile height results reject stale epochs agents requests and moved pos
     agent.handle = {1, 3};
     agent.height = 7;
     agent.height_request_id = 100;
-    agent.ecef_coord = {4000000, 3000000, 2000000};
-    city::AgentHeightRequest request = {100, 9, agent.handle, agent.ecef_coord, 200};
+    agent.ecef_coord_cur = {4000000, 3000000, 2000000};
+    city::AgentHeightRequest request = {100, 9, agent.handle, agent.ecef_coord_cur, 200};
     city::TileHeightResult result = {100, 180, true, {12, 3}};
     SUBCASE("complete current result")
     {
@@ -152,7 +152,7 @@ TEST_CASE("tile height results reject stale epochs agents requests and moved pos
     }
     SUBCASE("agent moved too far")
     {
-        agent.ecef_coord.x += 6;
+        agent.ecef_coord_cur.x += 6;
         CHECK_FALSE(city::agent_height_result_apply(&agent, request, result, 9));
         CHECK(agent.height == 7);
         CHECK(agent.height_request_id == 0);

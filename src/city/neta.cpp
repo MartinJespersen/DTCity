@@ -231,9 +231,13 @@ _netascore_download_file_complete(Arena* arena, async::ThreadPool* thread_pool, 
     {
         return async::UserFuncResult<NetaTaskState>::failure(arena, "Missing current NetAScore download file name");
     }
+    Error err = cache_write(task_state->cache_file_location, body, task_state->cache_bbox_str);
+    if (err)
+    {
+        return async::UserFuncResult<NetaTaskState>::failure(arena, "Could not cache netascore value");
+    }
+    // Keep the current download queued until caching succeeds, so retries can repeat it.
     SLLQueuePop(download_queue->first, download_queue->last);
-
-    cache_write(task_state->cache_file_location, body, task_state->cache_bbox_str);
     task_state->data_downloaded.store(true);
 
     return async::UserFuncResult<NetaTaskState>::success();
@@ -419,7 +423,8 @@ netascore_async_task_create(Arena* arena, NetaState* neta, Rng2F64 bbox)
     city::AsyncCityTask* neta_task = PushStruct(arena, city::AsyncCityTask);
     if (netascore_result.err)
     {
-        Arena* task_arena = arena_alloc();
+        Allocator task_allocator = Allocator::create();
+        Arena* task_arena = task_allocator.arena;
         Debug_SetName(task_arena, "neta HTTP task arena");
         NetaTaskState* task_state = PushStruct(task_arena, NetaTaskState);
         task_state->bbox_wgs84 = neta->task_state.bbox_wgs84;
@@ -436,7 +441,7 @@ netascore_async_task_create(Arena* arena, NetaState* neta, Rng2F64 bbox)
         async::AsyncHttpTaskStateConfig<NetaTaskState> config =
             async::AsyncHttpTaskStateConfig<NetaTaskState>(neta::netascore_job_create_complete, task_state, 5, 1);
         async::AsyncHttpTaskCreateResult<NetaTaskState> result =
-            async::async_http_task_run(task_arena, ctx->thread_pool, http_info, &config, "Neta Task");
+            async::async_http_task_run(std::move(task_allocator), ctx->thread_pool, http_info, &config, "Neta Task");
         AssertAlways(result.async_result.has_error() == false);
 
         neta_task->type = city::AsyncTaskType::Neta;

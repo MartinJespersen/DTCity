@@ -605,53 +605,6 @@ road_segment_from_road_nodes(RoadSegment* out_road_segment, osm::EcefLocation no
     out_road_segment->end.node = node_1;
 }
 
-// find the two nodes connecting two road segments
-// source: https://opensage.github.io/blog/roads-how-boring-part-5-connecting-the-road-segments
-g_internal void
-road_segments_coalesce(RoadSegment* in_out_road_segment_0, RoadSegment* in_out_road_segment_1, F32 road_width)
-{
-    // find a single node connecting two road segments for both the top and bottom of the road
-    // segments
-    Vec2F64 road0_top = in_out_road_segment_0->end.top;
-    Vec2F64 road1_top = in_out_road_segment_1->start.top;
-    Vec2F64 shared_center = in_out_road_segment_0->end.node.pos.xy;
-
-    Vec2F64 road0_top_dir_norm = normalize_2f64(sub_2f64(road0_top, shared_center));
-    Vec2F64 road1_top_dir_norm = normalize_2f64(sub_2f64(road1_top, shared_center));
-    // take average of the two directions and normalize it
-    Vec2F64 shared_top_normal = normalize_2f64(div_2f64(add_2f64(road0_top_dir_norm, road1_top_dir_norm), 2.0f));
-    F64 cos_angle = dot_2f64(shared_top_normal, road1_top_dir_norm);
-    F64 shared_top_len = (road_width / 2.0f) / cos_angle;
-
-    Vec2F64 shared_top_dir = scale_2f64(shared_top_normal, shared_top_len);
-    Vec2F64 shared_top = add_2f64(shared_center, shared_top_dir);
-    Vec2F64 shared_btm = sub_2f64(shared_center, shared_top_dir);
-
-    in_out_road_segment_0->end.btm = shared_btm;
-    in_out_road_segment_0->end.top = shared_top;
-
-    in_out_road_segment_1->start.btm = shared_btm;
-    in_out_road_segment_1->start.top = shared_top;
-}
-
-g_internal F32
-tag_value_get(Arena* arena, String8 key, F32 default_width, Buffer<osm::Tag> tags)
-{
-    F32 road_width = default_width; // Example value, adjust as needed
-    {
-        osm::TagResult result = osm::tag_find(arena, tags, key);
-        if (result.result == osm::TagResultEnum::ROAD_TAG_FOUND)
-        {
-            F32 float_result = {0};
-            if (F32FromStr8(result.value, &float_result))
-            {
-                road_width = float_result;
-            }
-        }
-    }
-    return road_width;
-}
-
 // BVH functions /////////////////////////////
 
 g_internal void
@@ -1076,467 +1029,6 @@ _agent_world_bounds_from_transform(Rng3F32 model_bounds, glm::mat4 model_transfo
     return world_bounds;
 }
 
-g_internal Buildings*
-buildings_create(String8 cache_path, String8 texture_path, Rng2F64 bbox)
-{
-    prof_scope_marker;
-
-    ScratchScope scratch = ScratchScope(0, 0);
-    Arena* arena = arena_alloc();
-    Debug_SetName(arena, "city buildings arena");
-    Buildings* buildings = PushStruct(arena, Buildings);
-    buildings->cache_file_name = push_str8_copy(arena, S("openapi_node_ways_buildings.json"));
-
-    {
-        HTTP_RequestParams params = {};
-        params.method = HTTP_Method_Post;
-        params.content_type = S("text/html");
-
-        String8 query = S(R"(data=
-        [out:json] [timeout:25];
-        (
-          way["building"](%f, %f, %f, %f);
-        );
-        out body;
-        >;
-        out skel qt;
-    )");
-
-        String8 cache_data_file = str8_path_from_str8_list(scratch.arena, {cache_path, buildings->cache_file_name});
-
-        String8 input_str = str8_from_bbox(scratch.arena, bbox);
-
-        Result<String8> cache_read_result = cache_read(scratch.arena, cache_data_file, input_str);
-        String8 http_data = cache_read_result.v;
-        if (cache_read_result.err)
-        {
-            // http_data = city_http_call_wrapper(scratch.arena, query_str, &params);
-            cache_write(cache_data_file, http_data, input_str);
-        }
-        osm::RoadNodeParseResult json_result = wrapper::node_buffer_from_simd_json(scratch.arena, http_data, 100);
-
-        B8 error = true;
-        while (error && json_result.error)
-        {
-            ERROR_LOG("BuildingsCreate: Failed to parse OSM node data from json file\n");
-            // http_data = city_http_call_wrapper(scratch.arena, query_str, &params);
-            if (http_data.size)
-            {
-                json_result = wrapper::node_buffer_from_simd_json(scratch.arena, http_data, 100);
-                if (json_result.error == false)
-                {
-                    cache_write(cache_data_file, http_data, input_str);
-                    error = false;
-                }
-            }
-        }
-
-        // osm::async_structure_create(json_result.road_nodes, http_data);
-    }
-
-    buildings->facade_texture_path = str8_path_from_str8_list(arena, {texture_path, S("brick_wall.ktx2")});
-    buildings->roof_texture_path = str8_path_from_str8_list(arena, {texture_path, S("concrete042A.ktx2")});
-
-    return buildings;
-}
-
-g_internal void
-building_destroy(Buildings* building)
-{
-    render::handle_destroy(building->roof_model_handles.vertex_buffer_render_handle);
-    render::handle_destroy(building->roof_model_handles.index_buffer_render_handle);
-    render::handle_destroy(building->roof_model_handles.texture_handle);
-    render::handle_destroy(building->facade_model_handles.texture_handle);
-}
-g_internal F64
-cross_2f64_z_component(Vec2F64 a, Vec2F64 b)
-{
-    return a.x * b.y - a.y * b.x;
-}
-g_internal B32
-AreTwoConnectedLineSegmentsCollinear(Vec2F64 prev, Vec2F64 cur, Vec2F64 next)
-{
-    Vec2F64 ba = sub_2f64(prev, cur);
-    Vec2F64 ac = sub_2f64(next, prev);
-
-    F64 cross_product_z = cross_2f64_z_component(ba, ac);
-    B32 is_collinear = false;
-    if (cross_product_z == 0)
-    {
-        is_collinear = true;
-    }
-    return is_collinear;
-}
-
-g_internal void
-buildings_buffers_create(Arena* arena, osm::Network* osm_network, F32 road_height, glm::dmat4& ecef_to_local,
-                         BuildingRenderInfo* out_render_info)
-{
-    prof_scope_marker;
-    ScratchScope scratch = ScratchScope(&arena, 1);
-    Buffer<osm::Way> ways = osm_network->ways_arr[enum_idx(osm::WayType::Building)];
-    F32 building_height = 3;
-
-    // ~mgj: Calculate vertex buffer size based on node count
-    U32 total_vertex_count = 0;
-    U32 total_index_count = 0;
-
-    for (U32 i = 0; i < ways.size; i++)
-    {
-        osm::Way* way = &ways.data[i];
-        // ~mgj: first and last node id should be the same
-        U32 way_facade_vertex_count = (way->node_count - 1) * 4;
-        total_vertex_count += way_facade_vertex_count + (way->node_count - 1) * 2;
-        // ~mgj: count of index for Polyhedron (without ground floor) that makes up the building
-        U64 sides_triangle_count = (way->node_count - 1) * 2;
-        U64 roof_triangle_count = way->node_count - 2;
-        U64 total_triangle_count = sides_triangle_count + roof_triangle_count;
-        total_index_count += total_triangle_count * 3;
-
-        Assert(way->node_ids[0] == way->node_ids[way->node_count - 1]);
-    }
-
-    Buffer<render::TileVertex> vertex_buffer = buffer_alloc<render::TileVertex>(scratch.arena, total_vertex_count);
-    Buffer<U32> index_buffer = buffer_alloc<U32>(scratch.arena, total_index_count);
-
-    U32 base_index_idx = 0;
-    U32 base_vertex_idx = 0;
-    {
-        prof_scope_marker_named("Facade Creation");
-
-        for (U32 way_idx = 0; way_idx < ways.size; way_idx++)
-        {
-            osm::Way* way = &ways.data[way_idx];
-
-            // ~mgj: Add Vertices and Indices for the sides of building
-            for (U32 node_idx = 0, vert_idx = base_vertex_idx, index_idx = base_index_idx;
-                 node_idx < way->node_count - 1; node_idx++, vert_idx += 4, index_idx += 6)
-            {
-                osm::EcefLocation node_loc = osm::location_get(osm_network, way->node_ids[node_idx]);
-                osm::EcefLocation next_node_loc = osm::location_get(osm_network, way->node_ids[node_idx + 1]);
-
-                glm::vec3 local_pos =
-                    glm::vec3(ecef_to_local * glm::dvec4(node_loc.pos.x, node_loc.pos.y, node_loc.pos.z, 1.0));
-                glm::vec3 local_next_pos = glm::vec3(
-                    ecef_to_local * glm::dvec4(next_node_loc.pos.x, next_node_loc.pos.y, next_node_loc.pos.z, 1.0));
-
-                F32 side_width = glm::length(local_next_pos - local_pos);
-
-                vertex_buffer.data[vert_idx] = {.pos = {local_pos.x, local_pos.y, local_pos.z + road_height},
-                                                .uv = {0.0f, 0.0f}};
-                vertex_buffer.data[vert_idx + 1] = {
-                    .pos = {local_pos.x, local_pos.y, local_pos.z + road_height + building_height},
-                    .uv = {0.0f, building_height}};
-                vertex_buffer.data[vert_idx + 2] = {
-                    .pos = {local_next_pos.x, local_next_pos.y, local_next_pos.z + road_height},
-                    .uv = {side_width, 0.0f}};
-                vertex_buffer.data[vert_idx + 3] = {
-                    .pos = {local_next_pos.x, local_next_pos.y, local_next_pos.z + road_height + building_height},
-                    .uv = {side_width, building_height}};
-
-                index_buffer.data[index_idx] = vert_idx;
-                index_buffer.data[index_idx + 1] = vert_idx + 1;
-                index_buffer.data[index_idx + 2] = vert_idx + 2;
-                index_buffer.data[index_idx + 3] = vert_idx + 1;
-                index_buffer.data[index_idx + 4] = vert_idx + 2;
-                index_buffer.data[index_idx + 5] = vert_idx + 3;
-            }
-
-            base_index_idx += (way->node_count - 1) * 6;
-            base_vertex_idx += (way->node_count - 1) * 4;
-        }
-    }
-
-    ///////////////////////////////////////////////////////////////////
-    // ~mgj: Create roof
-    U32 roof_base_index = base_index_idx;
-    {
-        prof_scope_marker_named("Roof Creation");
-        for (U32 way_idx = 0; way_idx < ways.size; way_idx++)
-        {
-            osm::Way* way = &ways.data[way_idx];
-            Buffer<osm::EcefLocation> buildings_utm_node_buffer =
-                buffer_alloc<osm::EcefLocation>(scratch.arena, way->node_count - 1);
-            for (U32 idx = 0; idx < way->node_count - 1; idx += 1)
-            {
-                buildings_utm_node_buffer.data[idx] = osm::location_get(osm_network, way->node_ids[idx]);
-            }
-
-            // ~mgj: ignore collinear line segments
-            Buffer<osm::EcefLocation> final_utm_node_buffer =
-                buffer_alloc<osm::EcefLocation>(scratch.arena, buildings_utm_node_buffer.size);
-            {
-                U32 cur_idx = 0;
-                for (U32 idx = 0; idx < buildings_utm_node_buffer.size; idx += 1)
-                {
-                    Vec3F64 prev_pos3 =
-                        buildings_utm_node_buffer
-                            .data[(buildings_utm_node_buffer.size + idx - 1) % buildings_utm_node_buffer.size]
-                            .pos;
-                    Vec3F64 cur_pos3 = buildings_utm_node_buffer.data[idx % buildings_utm_node_buffer.size].pos;
-                    Vec3F64 next_pos3 = buildings_utm_node_buffer.data[(idx + 1) % buildings_utm_node_buffer.size].pos;
-                    Vec2F64 prev_pos = vec_2f64(prev_pos3.x, prev_pos3.y);
-                    Vec2F64 cur_pos = vec_2f64(cur_pos3.x, cur_pos3.y);
-                    Vec2F64 next_pos = vec_2f64(next_pos3.x, next_pos3.y);
-
-                    B32 is_collinear = AreTwoConnectedLineSegmentsCollinear(prev_pos, cur_pos, next_pos);
-                    if (!is_collinear)
-                    {
-                        final_utm_node_buffer.data[cur_idx++] = buildings_utm_node_buffer.data[idx];
-                    }
-                }
-                final_utm_node_buffer.size = cur_idx;
-            }
-
-            // ~mgj: prepare for ear clipping algo
-            Buffer<Vec2F64> node_pos_buffer = buffer_alloc<Vec2F64>(scratch.arena, final_utm_node_buffer.size);
-            for (U32 idx = 0; idx < final_utm_node_buffer.size; idx += 1)
-            {
-                osm::EcefLocation node_utm = final_utm_node_buffer.data[idx];
-                node_pos_buffer.data[idx] = vec_2f64(node_utm.pos.x, node_utm.pos.y);
-            }
-
-            Buffer<U32> polygon_index_buffer = EarClipping(scratch.arena, node_pos_buffer);
-            if (polygon_index_buffer.size > 0)
-            {
-                // vertex buffer fill
-                for (U32 idx = 0; idx < final_utm_node_buffer.size; idx += 1)
-                {
-                    osm::EcefLocation node_utm = final_utm_node_buffer.data[idx];
-                    glm::vec3 local_pos =
-                        glm::vec3(ecef_to_local * glm::dvec4(node_utm.pos.x, node_utm.pos.y, node_utm.pos.z, 1.0));
-                    vertex_buffer.data[base_vertex_idx + idx] = {
-                        .pos = {local_pos.x, local_pos.y, local_pos.z + road_height + building_height},
-                        .uv = {local_pos.x, local_pos.y},
-                    };
-                }
-
-                // index buffer fill
-                for (U32 idx = 0; idx < polygon_index_buffer.size; idx += 1)
-                {
-                    index_buffer.data[base_index_idx + idx] = polygon_index_buffer.data[idx] + base_vertex_idx;
-                }
-
-                base_vertex_idx += final_utm_node_buffer.size;
-                base_index_idx += polygon_index_buffer.size;
-            }
-        }
-    }
-
-    {
-        prof_scope_marker_named("buildings_buffers_create_buffer_copy");
-        Buffer<render::TileVertex> vertex_buffer_final = buffer_alloc<render::TileVertex>(arena, base_vertex_idx);
-        Buffer<U32> index_buffer_final = buffer_alloc<U32>(arena, base_index_idx);
-        buffer_copy(vertex_buffer_final, vertex_buffer, base_vertex_idx);
-        buffer_copy(index_buffer_final, index_buffer, base_index_idx);
-        out_render_info->vertex_buffer = vertex_buffer_final;
-        out_render_info->index_buffer = index_buffer_final;
-    }
-
-    out_render_info->facade_index_offset = 0;
-    out_render_info->roof_index_offset = roof_base_index;
-    out_render_info->facade_index_count = roof_base_index;
-    out_render_info->roof_index_count = base_index_idx - roof_base_index;
-}
-
-g_internal void
-buildings_build(City* city, osm::Network* osm_network, render::SamplerInfo* sampler_info, glm::dmat4& ecef_to_local,
-                F32 road_height)
-{
-    Buildings* buildings = &city->buildings;
-
-    render::Handle facade_texture_handle = render::texture_load_async(sampler_info, buildings->facade_texture_path);
-    render::Handle roof_texture_handle = render::texture_load_async(sampler_info, buildings->roof_texture_path);
-
-    city::BuildingRenderInfo render_info;
-    city::buildings_buffers_create(city->arena, osm_network, road_height, ecef_to_local, &render_info);
-    render::BufferInfo vertex_buffer_info = render::BufferInfo(render_info.vertex_buffer, render::BufferType_Vertex);
-    render::BufferInfo index_buffer_info = render::BufferInfo(render_info.index_buffer, render::BufferType_Index);
-
-    render::Handle vertex_handle = render::buffer_load_async(&vertex_buffer_info);
-    render::Handle index_handle = render::buffer_load_async(&index_buffer_info);
-
-    // buildings->roof_model_handles = {.vertex_buffer_render_handle = vertex_handle,
-    //                                  .index_buffer_render_handle = index_handle,
-    //                                  .texture_handle = roof_texture_handle,
-    //                                  .index_offset = render_info.roof_index_offset,
-    //                                  .lod_fade = 1.0f};
-    // buildings->facade_model_handles = {.vertex_buffer_render_handle = vertex_handle,
-    //                                    .index_buffer_render_handle = index_handle,
-    //                                    .texture_handle = facade_texture_handle,
-    //                                    .index_offset = render_info.facade_index_offset,
-    //                                    .lod_fade = 1.0f};
-}
-
-g_internal Direction
-ClockWiseTest(Buffer<Vec2F64> node_buffer)
-{
-    F64 total = 0;
-    for (U32 idx = 0; idx < node_buffer.size; idx += 1)
-    {
-        Vec2F64 a = node_buffer.data[idx];
-        Vec2F64 b = node_buffer.data[(idx + 1) % node_buffer.size];
-
-        F64 cross_product_z = cross_2f64_z_component(a, b);
-        total += cross_product_z;
-    }
-    if (total > 0)
-    {
-        return Direction_CounterClockwise;
-    }
-    else if (total < 0)
-    {
-        return Direction_Clockwise;
-    }
-    DEBUG_LOG("ClockWiseTest: Lines are collinear\n");
-    return Direction_Undefined;
-}
-
-g_internal Buffer<U32>
-IndexBufferCreate(Arena* arena, U64 buffer_size, Direction direction)
-{
-    Buffer<U32> index_buffer = buffer_alloc<U32>(arena, buffer_size);
-    if (direction == Direction_Clockwise)
-    {
-        for (U32 i = 0; i < index_buffer.size; i++)
-        {
-            index_buffer.data[i] = i;
-        }
-    }
-    else if (direction == Direction_CounterClockwise)
-    {
-        for (U32 i = 0; i < index_buffer.size; i++)
-        {
-            index_buffer.data[i] = index_buffer.size - i - 1;
-        }
-    }
-    else if (direction == Direction_Undefined)
-    {
-        Assert(0);
-    }
-    return index_buffer;
-}
-
-// Shoelace Algorithm
-// source: https://artofproblemsolving.com/wiki/index.php/Shoelace_Theorem
-g_internal B32
-PointInTriangle(Vec2F64 p1, Vec2F64 p2, Vec2F64 p3, Vec2F64 point)
-{
-    F64 d1, d2, d3;
-    B32 has_neg, has_pos;
-
-    d1 = cross_2f64_z_component(sub_2f64(point, p1), sub_2f64(p2, p1));
-    d2 = cross_2f64_z_component(sub_2f64(point, p2), sub_2f64(p3, p2));
-    d3 = cross_2f64_z_component(sub_2f64(point, p3), sub_2f64(p1, p3));
-
-    has_neg = (d1 < 0) || (d2 < 0) || (d3 < 0);
-    has_pos = (d1 > 0) || (d2 > 0) || (d3 > 0);
-
-    return !(has_neg && has_pos);
-}
-
-g_internal void
-NodeBufferPrintDebug(Buffer<Vec2F64> node_buffer)
-{
-    DEBUG_LOG("Error in ear clipping algo. Expecting vertex_count-2 number of triangles\n"
-              "The following vertices are the problem: \n");
-    for (U32 pt_idx = 0; pt_idx < node_buffer.size; pt_idx++)
-    {
-        printf("%d, %f, %f\n", pt_idx, node_buffer.data[pt_idx].x, node_buffer.data[pt_idx].y);
-    }
-}
-
-g_internal Buffer<U32>
-EarClipping(Arena* arena, Buffer<Vec2F64> node_buffer)
-{
-    prof_scope_marker;
-    Assert(node_buffer.size >= 3);
-    ScratchScope scratch = ScratchScope(&arena, 1);
-
-    U32 total_triangle_count = (node_buffer.size - 2);
-    U32 total_index_count = total_triangle_count * 3;
-
-    Direction direction = ClockWiseTest(node_buffer);
-    if (direction == Direction_Undefined)
-    {
-        DEBUG_LOG("Cannot determine direction\n");
-        DEBUG_FUNC(NodeBufferPrintDebug(node_buffer));
-        return {0, 0};
-    }
-    Buffer<U32> index_buffer = IndexBufferCreate(scratch.arena, node_buffer.size, direction);
-    Buffer<U32> out_vertex_index_buffer = buffer_alloc<U32>(arena, total_index_count);
-    U32 cur_index_buffer_idx = 0;
-    U32 idx = 0;
-    for (; idx < index_buffer.size;)
-    {
-        if (index_buffer.size < 3)
-        {
-            break;
-        }
-
-        U32 ear_index_buffer_idx = idx % index_buffer.size;
-        U32 prev_index_buffer_idx = (index_buffer.size + idx - 1) % index_buffer.size;
-        U32 next_index_buffer_idx = (index_buffer.size + idx + 1) % index_buffer.size;
-
-        U32 ear_node_buffer_idx = index_buffer.data[ear_index_buffer_idx];
-        U32 prev_node_buffer_idx = index_buffer.data[prev_index_buffer_idx];
-        U32 next_node_buffer_idx = index_buffer.data[next_index_buffer_idx];
-
-        Vec2F64 ear = node_buffer.data[ear_node_buffer_idx];
-        Vec2F64 prev = node_buffer.data[prev_node_buffer_idx];
-        Vec2F64 next = node_buffer.data[next_node_buffer_idx];
-
-        Vec2F64 prev_to_ear = sub_2f64(ear, prev);
-        Vec2F64 ear_to_next = sub_2f64(next, ear);
-
-        F64 cross_product_z = cross_2f64_z_component(prev_to_ear, ear_to_next);
-
-        // negative cross product z component means that the triangle has clockwise orientation.
-        if (cross_product_z < 0)
-        {
-            B32 is_ear = true;
-            for (U32 test_i = 0; test_i < index_buffer.size - 3; test_i++)
-            {
-                U32 test_node_buffer_idx = index_buffer.data[(next_index_buffer_idx + test_i + 1) % index_buffer.size];
-                Vec2F64 test_point = node_buffer.data[test_node_buffer_idx];
-
-                if (PointInTriangle(prev, ear, next, test_point))
-                {
-                    is_ear = false;
-                    break;
-                }
-            }
-
-            if (is_ear)
-            {
-                // add ear to vertex buffer
-                out_vertex_index_buffer.data[cur_index_buffer_idx] = prev_node_buffer_idx;
-                out_vertex_index_buffer.data[cur_index_buffer_idx + 1] = ear_node_buffer_idx;
-                out_vertex_index_buffer.data[cur_index_buffer_idx + 2] = next_node_buffer_idx;
-                cur_index_buffer_idx += 3;
-
-                // remove ear from index buffer
-                BufferItemRemove(&index_buffer, ear_index_buffer_idx);
-                idx = 0;
-                continue;
-            }
-        }
-        else if (cross_product_z == 0)
-        {
-            DEBUG_LOG("EarClipping: Two line segments are collinear");
-        }
-        idx++;
-    }
-    if (cur_index_buffer_idx != out_vertex_index_buffer.size)
-    {
-        DEBUG_FUNC(NodeBufferPrintDebug(node_buffer));
-        out_vertex_index_buffer.size = cur_index_buffer_idx;
-    }
-
-    Assert(cur_index_buffer_idx == out_vertex_index_buffer.size);
-    return out_vertex_index_buffer;
-}
-
 g_internal render::SamplerInfo
 sampler_from_cgltf_sampler(gltfw_Sampler sampler)
 {
@@ -1655,14 +1147,6 @@ sampler_from_cgltf_sampler(gltfw_Sampler sampler)
     return sampler_info;
 }
 
-g_internal String8
-str8_from_bbox(Arena* arena, Rng2F64 bbox)
-{
-    String8 str = {.str = (U8*)&bbox, .size = sizeof(Rng2F64)};
-    String8 str_copy = push_str8_copy(arena, str);
-    return str_copy;
-}
-
 g_internal void
 road_create(City* city, Road* in_out_road, glm::dmat4& ecef_to_local, String8 area, String8 bbox_cache_str)
 {
@@ -1759,19 +1243,6 @@ edge_from_road_edge(osm::Network* network, osm::RoadEdge* road_edge, Map<osm::Wa
     return chosen_edge;
 }
 
-g_internal Buffer<render::TileVertex>
-vertex_3d_from_gltfw_vertex(Arena* arena, Buffer<gltfw_Vertex3D> in_vertex_buffer)
-{
-    Buffer<render::TileVertex> out_vertex_buffer = buffer_alloc<render::TileVertex>(arena, in_vertex_buffer.size);
-    for (U32 i = 0; i < in_vertex_buffer.size; i++)
-    {
-        out_vertex_buffer.data[i].pos =
-            glm::vec3(in_vertex_buffer.data[i].pos.x, in_vertex_buffer.data[i].pos.y, in_vertex_buffer.data[i].pos.z);
-        out_vertex_buffer.data[i].uv = glm::vec2(in_vertex_buffer.data[i].uv.x, in_vertex_buffer.data[i].uv.y);
-    }
-    return out_vertex_buffer;
-}
-
 g_internal void
 _city_tasks_collect(City* city, bool publish_agents)
 {
@@ -1783,37 +1254,43 @@ _city_tasks_collect(City* city, bool publish_agents)
         {
             case AsyncTaskType::Osm:
             {
-                async::AsyncTaskResult<osm::Network> task_result = async::async_task_is_done(task->osm);
-                task_done = task_result.done;
-                city->osm_task_done = task_result.success;
+                if (auto completed = async::async_task_take_completed(task->osm))
+                {
+                    task_done = true;
+                    city->osm_task_failed = completed->error;
+                    city->osm_task_done = !completed->error;
+                }
             };
             break;
             case AsyncTaskType::Neta:
             {
-                async::AsyncTaskResult<neta::NetaTaskState> task_result = async::async_task_is_done(task->neta);
-                task_done = task_result.done;
-                city->neta_task_done = task_result.success;
+                if (auto completed = async::async_task_take_completed(task->neta))
+                {
+                    task_done = true;
+                    city->neta_task_failed = completed->error;
+                    city->neta_task_done = !completed->error;
+                }
             }
             break;
             case AsyncTaskType::Road:
             {
-                async::AsyncTaskResult<RoadBuildTask> task_result = async::async_task_is_done(task->road);
-                task_done = task_result.done;
-                city->road_building_done = task_result.success;
+                city->road_building_done = false;
+                if (auto completed = async::async_task_take_completed(task->road))
+                {
+                    task_done = true;
+                    city->road_building_done = !completed->error;
+                }
             }
             break;
             case AsyncTaskType::CarSim:
             {
-                async::AsyncTaskResult<AgentSimThread> task_result = async::async_task_is_done(task->agent_sim_task);
-                task_done = task_result.done;
-                if (publish_agents)
+                if (publish_agents) city->cars_creation_done = false;
+                if (auto completed = async::async_task_take_completed(task->agent_sim_task))
                 {
-                    city->cars_creation_done = task_result.success;
-                }
-                if (task_result.done)
-                {
-                    AgentSimThread* agent_sim_thread = task_result.task->user_data;
-                    if (task_result.success && publish_agents)
+                    task_done = true;
+                    if (publish_agents) city->cars_creation_done = !completed->error;
+                    AgentSimThread* agent_sim_thread = completed->user_data;
+                    if (!completed->error && publish_agents)
                     {
                         Assert(!city->agent_system);
 

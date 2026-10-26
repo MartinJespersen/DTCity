@@ -5,6 +5,7 @@
 #include <vector>
 #include <glm/glm.hpp>
 #include "base/container.hpp"
+#include "simulator_shared_interface.hpp"
 #include "third_party/simdjson/simdjson.h"
 
 // Propagate the first parsing error from functions returning simdjson::error_code.
@@ -37,10 +38,9 @@ struct AgentUpdate
     AgentType vehicle_type;
     F64 time;
     S64 event_type;
-    S64 node_from_id;
-    S64 node_to_id;
-    glm::dvec2 from;
-    glm::dvec2 to;
+    glm::dvec3 position;
+    glm::dvec3 direction;
+    F64 speed;
 };
 
 struct Scenario
@@ -55,17 +55,14 @@ struct SimulationMetadata
     std::vector<Scenario> scenarios;
 };
 
-struct CoordinateView
+struct MotionEventView
 {
     std::string_view id;
     F64 time;
     U64 event_type;
-    U64 node_from_id;
-    U64 node_to_id;
-    F64 lon_from;
-    F64 lat_from;
-    F64 lon_to;
-    F64 lat_to;
+    glm::dvec3 position;
+    glm::dvec3 direction;
+    F64 speed;
 };
 
 // Metadata owns its scenario names. Output is replaced only on success.
@@ -75,8 +72,13 @@ simulator_metadata_from_json(simdjson::ondemand::object& object, SimulationMetad
 g_internal String8
 simulator_server_update_to_json(Arena* arena, const ServerUpdate& update, U64 request_id = 0);
 
+// Decode motion events into arena-owned updates. Output changes only on success.
+g_internal simdjson::error_code
+simulator_events_from_json(Arena* arena, simdjson::ondemand::array& array, Buffer<AgentUpdate>* out_buffer);
+
+// Consume all events at or before playback, preserving server order.
 g_internal Buffer<AgentUpdate>
-simulator_events_before_playback(Arena* arena, Buffer<AgentUpdate>& pending, F64 playback);
+simulator_events_ready(Arena* arena, Buffer<AgentUpdate>& pending, F64 playback);
 
 // Compact a chronological snapshot in place, keeping the last ready event per agent.
 g_internal Buffer<AgentUpdate>
@@ -93,19 +95,25 @@ _simulator_message_push(std::vector<std::string>* queue, String8List* parts, Str
 
 template <>
 simdjson_inline simdjson::error_code
-simdjson::ondemand::value::get(city::CoordinateView& out) noexcept
+simdjson::ondemand::value::get(city::MotionEventView& out) noexcept
 {
     simdjson::ondemand::object obj;
     JSON_TRY(get_object().get(obj));
     JSON_TRY(obj["id"].get_string().get(out.id));
     JSON_TRY(obj["time"].get_double().get(out.time));
     JSON_TRY(obj["event_type"].get_uint64().get(out.event_type));
-    JSON_TRY(obj["node_from_id"].get_uint64().get(out.node_from_id));
-    JSON_TRY(obj["node_to_id"].get_uint64().get(out.node_to_id));
-    JSON_TRY(obj["lon_from"].get_double().get(out.lon_from));
-    JSON_TRY(obj["lat_from"].get_double().get(out.lat_from));
-    JSON_TRY(obj["lon_to"].get_double().get(out.lon_to));
-    JSON_TRY(obj["lat_to"].get_double().get(out.lat_to));
+    // Removal needs identity and time, even when the importer could not locate the link.
+    out.position = {};
+    if (out.event_type != (U64)city::AgentEventType::Arrival)
+    {
+        JSON_TRY(obj["position_x"].get_double().get(out.position.x));
+        JSON_TRY(obj["position_y"].get_double().get(out.position.y));
+        JSON_TRY(obj["position_z"].get_double().get(out.position.z));
+    }
+    JSON_TRY(obj["direction_x"].get_double().get(out.direction.x));
+    JSON_TRY(obj["direction_y"].get_double().get(out.direction.y));
+    JSON_TRY(obj["direction_z"].get_double().get(out.direction.z));
+    JSON_TRY(obj["speed"].get_double().get(out.speed));
 
     return simdjson::SUCCESS;
 }

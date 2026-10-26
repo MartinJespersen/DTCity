@@ -16,6 +16,7 @@ build
 *.qmd
 *.tracy
 *.tar
+__pycache__
 out
 .cache
 .venv

@@ -64,7 +64,7 @@ Simulation::update(Arena* arena, const ServerUpdate& input, bool playback_change
                 push_str8_copy(event_allocator.arena, received.batch.data[index].original_id);
         }
     }
-    Buffer<AgentUpdate> ready = simulator_events_before_playback(arena, pending_events, input.playback);
+    Buffer<AgentUpdate> ready = simulator_events_ready(arena, pending_events, input.playback);
     if (snapshot_received)
     {
         // Apply current state without recreating trips that ended while the query ran.

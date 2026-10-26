@@ -21,9 +21,6 @@ using namespace simdjson;
 namespace city
 {
 
-g_internal simdjson::error_code
-_simulator_coordinates_from_json(Arena* arena, ondemand::array& array, Buffer<AgentUpdate>* out_buffer);
-
 SimulationClient::~SimulationClient()
 {
     disconnect();
@@ -37,8 +34,8 @@ SimulationClient::connect()
     async::WebsocketConnection ws_task_result = async::async_websocket_start(S("ws://127.0.0.1:8080/ws"));
     if (ws_task_result.has_error())
     {
-        return SimulationError(SimulationErrorType::Connection, ws_task_result.async_result.curl_code
-                                                                    ? (U64)ws_task_result.async_result.curl_code
+        return SimulationError(SimulationErrorType::Connection, ws_task_result.async_result.error_code
+                                                                    ? (U64)ws_task_result.async_result.error_code
                                                                     : (U64)ws_task_result.async_result.result);
     }
     connection = std::move(ws_task_result);
@@ -114,61 +111,6 @@ SimulationClient::update(Arena* arena)
     return update;
 }
 
-g_internal simdjson::error_code
-_simulator_coordinates_from_json(Arena* arena, ondemand::array& array, Buffer<AgentUpdate>* out_buffer)
-{
-    prof_scope_marker;
-
-    U64 element_count = 0;
-    error_code error = array.count_elements().get(element_count);
-    if (error)
-    {
-        return error;
-    }
-
-    Buffer<AgentUpdate> coord_buffer = buffer_alloc<AgentUpdate>(arena, element_count);
-    U64 idx = 0;
-    for (auto obj : array)
-    {
-        AgentUpdate* coord = &coord_buffer[idx];
-        CoordinateView coord_view = {};
-        error = obj.get<CoordinateView>(coord_view);
-        if (error)
-        {
-            return error;
-        }
-
-        coord->time = coord_view.time;
-        coord->event_type = coord_view.event_type;
-        coord->node_from_id = coord_view.node_from_id;
-        coord->node_to_id = coord_view.node_to_id;
-        coord->from = glm::dvec2(coord_view.lon_from, coord_view.lat_from);
-        coord->to = glm::dvec2(coord_view.lon_to, coord_view.lat_to);
-        String8 id_str = str8((U8*)coord_view.id.data(), coord_view.id.size());
-        coord->original_id = push_str8_copy(arena, id_str);
-        U64 needle_start = str8_substr_find(id_str, S("_bicycle"), 0, MatchFlag_CaseInsensitive);
-        coord->vehicle_type = AgentType::Car;
-        if (needle_start < id_str.size)
-        {
-            coord->vehicle_type = AgentType::Bicycle;
-        }
-        B32 is_integer = try_s64_from_str8_c_rules(id_str, &coord->id);
-        if (!is_integer)
-        {
-            String8 id_prefix_str = str8(id_str.str, needle_start);
-            is_integer = try_s64_from_str8_c_rules(id_prefix_str, &coord->id);
-            if (!is_integer)
-            {
-                return simdjson::NUMBER_ERROR;
-            }
-        }
-        idx++;
-    }
-
-    *out_buffer = coord_buffer;
-    return error;
-}
-
 SimulationError
 SimulationClient::_update(Arena* arena, StreamUpdate* out_stream_update)
 {
@@ -186,7 +128,7 @@ SimulationClient::_update(Arena* arena, StreamUpdate* out_stream_update)
     msg_send_queue.clear();
     if (connection.has_error())
     {
-        U64 error_code = connection.async_result.curl_code ? (U64)connection.async_result.curl_code
+        U64 error_code = connection.async_result.error_code ? (U64)connection.async_result.error_code
                                                            : (U64)connection.async_result.result;
         return SimulationError(SimulationErrorType::Connection, error_code);
     }
@@ -258,7 +200,7 @@ SimulationClient::_update(Arena* arena, StreamUpdate* out_stream_update)
                         return SimulationError(SimulationErrorType::Json, json_error);
                     }
                     Buffer<AgentUpdate> incoming = {};
-                    json_error = _simulator_coordinates_from_json(arena, array, &incoming);
+                    json_error = simulator_events_from_json(arena, array, &incoming);
                     if (json_error)
                     {
                         return SimulationError(SimulationErrorType::Json, json_error);

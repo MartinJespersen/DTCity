@@ -11,6 +11,7 @@
 #include "glm/gtc/matrix_transform.hpp"
 
 #include <meshoptimizer.h>
+#include <magic_enum/magic_enum.hpp>
 // cesium native libraries
 #include "cesium/cesium_native_headers.hpp"
 

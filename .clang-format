@@ -16,6 +16,7 @@ IndentCaseLabels: true
 
 # Other common settings (adjust as needed)
 AllowShortCaseLabelsOnASingleLine: true
+AllowShortIfStatementsOnASingleLine: AllIfsAndElse
 AllowShortFunctionsOnASingleLine: None
 KeepEmptyLinesAtTheStartOfBlocks: false
 MaxEmptyLinesToKeep: 1

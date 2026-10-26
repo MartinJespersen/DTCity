@@ -56,7 +56,33 @@ AgentSim::update_slot(const AgentUpdate& update)
         slot.active = true;
         slot.created = true;
     }
+    Agent* agent = slot.agent;
+    agent->vehicle_type = update.vehicle_type;
+    agent->ecef_coord_at_event = update.position;
+    agent->event_time = update.time;
+    agent->ecef_velocity = update.direction * update.speed;
+    // Keep the last heading when a zero-speed exit has no direction.
+    if (glm::dot(update.direction, update.direction) > 0)
+        agent->ecef_dir = update.direction;
+    else if (slot.created)
+        agent->ecef_dir = glm::dvec3(1, 0, 0);
+    agent->transform_dirty = true;
     return slot;
+}
+
+void
+AgentSim::update_positions(F64 playback_time)
+{
+    for (Agent& agent : this->agents_active)
+    {
+        F64 elapsed = playback_time - agent.event_time;
+        glm::dvec3 position = agent.ecef_coord_at_event + agent.ecef_velocity * elapsed;
+        if (position != agent.ecef_coord_cur)
+        {
+            agent.ecef_coord_cur = position;
+            agent.transform_dirty = true;
+        }
+    }
 }
 
 void

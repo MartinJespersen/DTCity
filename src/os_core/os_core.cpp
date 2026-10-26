@@ -87,9 +87,8 @@ os_write_data_to_file_path(String8 path, String8 data)
     OS_Handle file = os_file_open(OS_AccessFlag_Write, path);
     if (!OS_HandleMatch(file, OS_HandleIsZero()))
     {
-        good = 1;
-        os_file_write(file, r1u64(0, data.size), data.str);
-        os_file_close(file);
+        defer(os_file_close(file));
+        good = os_file_write(file, r1u64(0, data.size), data.str) == data.size;
     }
     return good;
 }

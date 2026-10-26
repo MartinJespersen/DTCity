@@ -3,6 +3,7 @@
 #include <curl/curl.h>
 #include "http/http.h"
 #include "async_task.hpp"
+#include "async_error.hpp"
 namespace async
 {
 typedef void* AsyncHandle;
@@ -95,65 +96,6 @@ struct KeyValue
     String8 v;
 };
 
-enum class AsyncResult : U32
-{
-    Success,
-    HandleInitError,
-    QueryError,
-    UrlError,
-    InvalidContentTypeError,
-    InvalidMethodTypeError,
-    FormDataError,
-    NoWorkError,
-    CurlError,
-    HttpError,
-    UserFunctionError,
-    TimeoutError,
-    Expecting_Websocket,
-    WebsocketDisconnected
-};
-
-enum class CurlCodeType : U32
-{
-    None,
-    Regular,
-    Url,
-    Multi
-};
-
-struct AsyncError
-{
-    AsyncResult result;
-    CurlCodeType curl_code_type;
-    U32 curl_code;
-    const char* file;
-    U32 line;
-    String8 error_str;
-
-    bool
-    has_error()
-    {
-        return result != AsyncResult::Success;
-    }
-};
-
-g_internal AsyncError
-async_error(AsyncResult result, CurlCodeType curl_code_type, U32 curl_code, const char* file, U32 line,
-            String8 error_msg)
-{
-    return {result, curl_code_type, curl_code, file, line, error_msg};
-}
-// clang-format off
-#define async_error(r, ct, c, m) async_error(r, ct, c, __FILE__, __LINE__, m)
-#define async_user_error(r) async_error(r,CurlCodeType::None, 0, {})
-#define async_user_error_with_msg(r, m) async_error(r,CurlCodeType::None, 0, m)
-#define async_no_error() async_user_error(AsyncResult::Success)
-#define async_curl_error(ct, c) async_error(AsyncResult::CurlError, ct, c, {})
-#define async_return_curl_error(ct, c) if (c != 0) return async_curl_error(ct, c)
-#define async_curl_regular_error(c) async_curl_error(CurlCodeType::Regular, c)
-#define async_error_set(o, e) ((o)->error = (e))
-// clang-format on
-
 struct CurlContext
 {
     Arena* arena;
@@ -162,6 +104,19 @@ struct CurlContext
     CURL* session_handle;
     curl_slist* headers;
     B32 added_to_multi;
+
+    AsyncGenericError
+    option_set(CURLoption option, curl_write_callback value,
+               std::source_location location = std::source_location::current());
+    AsyncGenericError
+    option_set(CURLoption option, void* value,
+               std::source_location location = std::source_location::current());
+    AsyncGenericError
+    option_set(CURLoption option, long value,
+               std::source_location location = std::source_location::current());
+    AsyncGenericError
+    option_set_offset(CURLoption option, curl_off_t value,
+               std::source_location location = std::source_location::current());
 };
 
 template <typename T>
@@ -190,9 +145,24 @@ struct AsyncHttpTaskState
     CurlContext* curl_ctx;
 
     // errors ////////////////////////
-    AsyncError error;
-    U32 http_error_code;
-    String8 http_error_msg;
+    AsyncGenericError error;
+
+    void
+    error_attach(const AsyncGenericError& new_error);
+
+    // Return true on failure and attach the error to this task.
+    Error
+    option_set(CURLoption option, curl_write_callback value,
+               std::source_location location = std::source_location::current());
+    Error
+    option_set(CURLoption option, void* value,
+               std::source_location location = std::source_location::current());
+    Error
+    option_set(CURLoption option, long value,
+               std::source_location location = std::source_location::current());
+    Error
+    option_set_offset(CURLoption option, curl_off_t value,
+               std::source_location location = std::source_location::current());
 };
 
 template <typename T>
@@ -215,7 +185,7 @@ struct AsyncHttpTaskStateConfig
 template <typename T>
 struct AsyncHttpTaskCreateResult
 {
-    AsyncError async_result;
+    AsyncGenericError async_result;
     AsyncTaskStatus<T>* task_state;
 };
 
@@ -229,7 +199,6 @@ struct MainThreadTaskState
 template <typename T>
 struct LibCurlCallbackData
 {
-    Arena* arena;
     AsyncHttpTaskState<T>* http_ctx;
 };
 
@@ -261,11 +230,6 @@ _async_http_task_continuation(AsyncHttpTaskState<T>* http_ctx, AsyncWorkFunc<T> 
                               S64 us_delay = 0);
 
 template <typename T>
-g_internal void
-_async_thread_pool_push(ThreadPool* thread_pool, AsyncTaskStatus<T>* task, AsyncWorkFunc<T> func, HttpInfo* http_info,
-                        S64 us_delay = 0);
-
-template <typename T>
 WorkerResult
 _main_thread_func(ThreadInfo thread_info, WorkerData data);
 
@@ -282,12 +246,12 @@ _curl_reset(CurlContext* curl_ctx);
 void
 _curl_context_cleanup(CurlContext* curl_ctx);
 
-AsyncError
+AsyncGenericError
 async_http_configure(Arena* arena, CurlContext* curl_ctx, HttpInfo* http_info);
 
 template <typename T>
 AsyncHttpTaskCreateResult<T>
-async_http_task_run(Arena* arena, ThreadPool* thread_pool, HttpInfo* http_info, AsyncHttpTaskStateConfig<T>* config,
+async_http_task_run(Allocator allocator, ThreadPool* thread_pool, HttpInfo* http_info, AsyncHttpTaskStateConfig<T>* config,
                     const char* task_name);
 
 template <typename T>
