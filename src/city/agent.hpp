@@ -37,6 +37,9 @@ struct Agent
 {
     ArrayResourcePoolHandle handle;
     WsId id;
+    S64 node_from_id;
+    S64 node_to_id;
+    B32 has_node_ids;
     glm::dvec2 cartographic_coords;
     glm::dvec3 ecef_coord_at_event;
     F64 event_time;

@@ -36,14 +36,14 @@ TEST_CASE("requested event windows rebuild seek state and preserve interval boun
     const char* fixture =
         "CREATE TABLE agent_events(agent_info_rowid INTEGER PRIMARY KEY, time REAL, event_type INTEGER, "
         "agent_id TEXT, position_x REAL, position_y REAL, position_z REAL, "
-        "direction_x REAL, direction_y REAL, direction_z REAL, speed REAL);"
+        "direction_x REAL, direction_y REAL, direction_z REAL, speed REAL, node_from INTEGER, node_to INTEGER);"
         "INSERT INTO agent_events VALUES"
-        "(1,8,1,'1',100,200,300,1,0,0,5),"
-        "(2,9,2,'1',105,200,300,0,0,0,0),"
-        "(3,10,3,'1',105,200,300,1,0,0,5),"
-        "(4,10,4,'1',NULL,NULL,NULL,0,0,0,0),"
-        "(5,11,1,'2',100,200,300,1,0,0,5),"
-        "(6,12,2,'2',105,200,300,0,0,0,0);";
+        "(1,8,1,'1',100,200,300,1,0,0,5,9007199254740993,-9),"
+        "(2,9,2,'1',105,200,300,0,0,0,0,9007199254740993,-9),"
+        "(3,10,3,'1',105,200,300,1,0,0,5,9007199254740993,-9),"
+        "(4,10,4,'1',NULL,NULL,NULL,0,0,0,0,NULL,NULL),"
+        "(5,11,1,'2',100,200,300,1,0,0,5,9007199254740993,-9),"
+        "(6,12,2,'2',105,200,300,0,0,0,0,9007199254740993,-9);";
     result = sqlite3_exec(db, fixture, NULL, NULL, NULL);
     REQUIRE(result == SQLITE_OK);
     city::ServerUpdate update = {.name = "1. Scenario", .playback = 10, .period = 2};
@@ -108,10 +108,10 @@ TEST_CASE("Seek baselines omit completed agents but retain arrivals in the futur
     const char* fixture =
         "CREATE TABLE agent_events(agent_info_rowid INTEGER PRIMARY KEY, time REAL, event_type INTEGER, "
         "agent_id TEXT, position_x REAL, position_y REAL, position_z REAL, "
-        "direction_x REAL, direction_y REAL, direction_z REAL, speed REAL);"
+        "direction_x REAL, direction_y REAL, direction_z REAL, speed REAL, node_from INTEGER, node_to INTEGER);"
         "INSERT INTO agent_events VALUES"
-        "(1,8,3,'1',100,200,300,1,0,0,5),(2,9,4,'1',NULL,NULL,NULL,0,0,0,0),"
-        "(3,9,3,'2',100,200,300,1,0,0,5),(4,11,4,'2',NULL,NULL,NULL,0,0,0,0);";
+        "(1,8,3,'1',100,200,300,1,0,0,5,9007199254740993,-9),(2,9,4,'1',NULL,NULL,NULL,0,0,0,0,NULL,NULL),"
+        "(3,9,3,'2',100,200,300,1,0,0,5,9007199254740993,-9),(4,11,4,'2',NULL,NULL,NULL,0,0,0,0,NULL,NULL);";
     result = sqlite3_exec(db, fixture, NULL, NULL, NULL);
     REQUIRE(result == SQLITE_OK);
     city::ServerUpdate request = {.name = "1. Scenario", .playback = 10, .period = 2};
@@ -148,11 +148,11 @@ TEST_CASE("Motion streams reconstruct seeks and advance agents between replies")
     const char* fixture =
         "CREATE TABLE agent_events(agent_info_rowid INTEGER PRIMARY KEY, time REAL, event_type INTEGER, "
         "agent_id TEXT, position_x REAL, position_y REAL, position_z REAL, "
-        "direction_x REAL, direction_y REAL, direction_z REAL, speed REAL);"
+        "direction_x REAL, direction_y REAL, direction_z REAL, speed REAL, node_from INTEGER, node_to INTEGER);"
         "INSERT INTO agent_events VALUES"
-        "(1,10,3,'7',4000000,3000000,2000000,1,0,0,5),"
-        "(2,20,2,'7',4000050,3000000,2000000,0,0,0,0),"
-        "(3,25,4,'7',NULL,NULL,NULL,0,0,0,0);";
+        "(1,10,3,'7',4000000,3000000,2000000,1,0,0,5,9007199254740993,-9),"
+        "(2,20,2,'7',4000050,3000000,2000000,0,0,0,0,-9,9007199254740993),"
+        "(3,25,4,'7',NULL,NULL,NULL,0,0,0,0,NULL,NULL);";
     result = sqlite3_exec(db, fixture, NULL, NULL, NULL);
     REQUIRE(result == SQLITE_OK);
     city::AgentSim simulation(8, 1);
@@ -195,6 +195,9 @@ TEST_CASE("Motion streams reconstruct seeks and advance agents between replies")
                 CHECK(agent->ecef_coord_cur.x == 4000000 + Min(playback - 10, 10) * 5);
                 CHECK(agent->ecef_coord_cur.y == 3000000);
                 CHECK(agent->ecef_coord_cur.z == 2000000);
+                CHECK(agent->has_node_ids);
+                CHECK(agent->node_from_id == (playback < 20 ? 9007199254740993LL : -9));
+                CHECK(agent->node_to_id == (playback < 20 ? -9 : 9007199254740993LL));
             }
             else
                 CHECK(simulation.agents_active.item_in_use_count == 0);
@@ -214,11 +217,11 @@ TEST_CASE("Stream sends event-time ECEF motion and preserves equal-time source o
     const char* fixture =
         "CREATE TABLE agent_events(agent_info_rowid INTEGER PRIMARY KEY, time REAL, event_type INTEGER, "
         "agent_id TEXT, position_x REAL, position_y REAL, position_z REAL, "
-        "direction_x REAL, direction_y REAL, direction_z REAL, speed REAL);"
+        "direction_x REAL, direction_y REAL, direction_z REAL, speed REAL, node_from INTEGER, node_to INTEGER);"
         "INSERT INTO agent_events VALUES"
-        "(30,10.25,1,'2_bicycle',4312000.125,-634321.25,4671000.5,0.36,-0.48,0.8,13.375),"
-        "(20,10.25,2,'1',4312001.125,-634320.25,4671001.5,0,0,0,0),"
-        "(10,10.25,1,'1',4312000.125,-634321.25,4671000.5,0.36,-0.48,0.8,13.375);";
+        "(30,10.25,1,'2_bicycle',4312000.125,-634321.25,4671000.5,0.36,-0.48,0.8,13.375,9007199254740993,-9),"
+        "(20,10.25,2,'1',4312001.125,-634320.25,4671001.5,0,0,0,0,9007199254740993,-9),"
+        "(10,10.25,1,'1',4312000.125,-634321.25,4671000.5,0.36,-0.48,0.8,13.375,9007199254740993,-9);";
     result = sqlite3_exec(db, fixture, NULL, NULL, NULL);
     REQUIRE(result == SQLITE_OK);
     city::ServerUpdate request = {.name = "motion", .playback = 10, .period = 1};
@@ -255,7 +258,10 @@ TEST_CASE("Stream sends event-time ECEF motion and preserves equal-time source o
                 REQUIRE(yyjson_is_num(value));
                 CHECK(yyjson_get_num(value) == doctest::Approx(expected[field]).epsilon(1e-12));
             }
-            for (const char* field : {"node_from_id", "node_to_id", "lon_from", "lat_from", "lon_to", "lat_to"})
+            CHECK(yyjson_is_int(yyjson_obj_get(event, "node_from_id")));
+            CHECK(yyjson_get_sint(yyjson_obj_get(event, "node_from_id")) == 9007199254740993LL);
+            CHECK(yyjson_get_sint(yyjson_obj_get(event, "node_to_id")) == -9);
+            for (const char* field : {"lon_from", "lat_from", "lon_to", "lat_to"})
             {
                 CHECK(yyjson_obj_get(event, field) == NULL);
             }
@@ -274,8 +280,8 @@ TEST_CASE("Stream rejects missing motion values except arrival positions")
     const char* fixture =
         "CREATE TABLE agent_events(agent_info_rowid INTEGER PRIMARY KEY, time REAL, event_type INTEGER, "
         "agent_id TEXT, position_x REAL, position_y REAL, position_z REAL, "
-        "direction_x REAL, direction_y REAL, direction_z REAL, speed REAL);"
-        "INSERT INTO agent_events VALUES(1,10,1,'1',100,200,300,1,0,0,5);";
+        "direction_x REAL, direction_y REAL, direction_z REAL, speed REAL, node_from INTEGER, node_to INTEGER);"
+        "INSERT INTO agent_events VALUES(1,10,1,'1',100,200,300,1,0,0,5,9007199254740993,-9);";
     result = sqlite3_exec(db, fixture, NULL, NULL, NULL);
     REQUIRE(result == SQLITE_OK);
     const char* invalid_updates[] = {
@@ -284,6 +290,10 @@ TEST_CASE("Stream rejects missing motion values except arrival positions")
         "UPDATE agent_events SET direction_y=0, speed=NULL",
         "UPDATE agent_events SET event_type=4, speed=NULL",
         "UPDATE agent_events SET speed=0, direction_z=NULL",
+        "UPDATE agent_events SET direction_z=0, node_from=NULL",
+        "UPDATE agent_events SET node_from='west'",
+        "UPDATE agent_events SET node_from=1.5",
+        "UPDATE agent_events SET event_type=1, node_from=NULL, node_to=NULL",
     };
     city::ServerUpdate request = {.name = "motion", .playback = 10, .period = 1};
     for (const char* sql : invalid_updates)

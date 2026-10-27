@@ -38,6 +38,9 @@ struct AgentUpdate
     AgentType vehicle_type;
     F64 time;
     S64 event_type;
+    S64 node_from_id;
+    S64 node_to_id;
+    B32 has_node_ids; // False for arrivals on unknown links; zero is a valid node ID.
     glm::dvec3 position;
     glm::dvec3 direction;
     F64 speed;
@@ -60,6 +63,9 @@ struct MotionEventView
     std::string_view id;
     F64 time;
     U64 event_type;
+    S64 node_from_id;
+    S64 node_to_id;
+    B32 has_node_ids;
     glm::dvec3 position;
     glm::dvec3 direction;
     F64 speed;
@@ -114,6 +120,28 @@ simdjson::ondemand::value::get(city::MotionEventView& out) noexcept
     JSON_TRY(obj["direction_y"].get_double().get(out.direction.y));
     JSON_TRY(obj["direction_z"].get_double().get(out.direction.z));
     JSON_TRY(obj["speed"].get_double().get(out.speed));
+
+    const char* node_fields[] = {"node_from_id", "node_to_id"};
+    S64* node_ids[] = {&out.node_from_id, &out.node_to_id};
+    out.has_node_ids = false;
+    for (U32 index = 0; index < ArrayCount(node_fields); ++index)
+    {
+        simdjson::ondemand::value node;
+        JSON_TRY(obj[node_fields[index]].get(node));
+        bool missing = false;
+        JSON_TRY(node.is_null().get(missing));
+        if (index == 0)
+            out.has_node_ids = !missing;
+        else if (out.has_node_ids != !missing)
+            return simdjson::INCORRECT_TYPE;
+        *node_ids[index] = 0;
+        if (missing)
+        {
+            if (out.event_type != (U64)city::AgentEventType::Arrival) return simdjson::INCORRECT_TYPE;
+        }
+        else
+            JSON_TRY(node.get_int64().get(*node_ids[index]));
+    }
 
     return simdjson::SUCCESS;
 }

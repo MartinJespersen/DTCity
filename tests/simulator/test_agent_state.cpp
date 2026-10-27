@@ -30,7 +30,7 @@ TEST_CASE("Agent arrivals do not allocate slots and completed trips reuse pool c
 TEST_CASE("Repeated agent updates keep one slot and reactivation invalidates old height handles")
 {
     city::AgentSim simulation(8, 1);
-    city::AgentUpdate update = {.id = 7, .event_type = 3};
+    city::AgentUpdate update = {.id = 7, .event_type = 3, .node_from_id = 10, .node_to_id = 20, .has_node_ids = true};
     city::AgentSlotUpdate slot = simulation.update_slot(update);
     REQUIRE(slot.active);
     ArrayResourcePoolHandle old_handle = slot.agent->handle;
@@ -40,6 +40,9 @@ TEST_CASE("Repeated agent updates keep one slot and reactivation invalidates old
     REQUIRE(slot.active);
     CHECK_FALSE(slot.created);
     CHECK(slot.agent->height == 50);
+    CHECK(slot.agent->has_node_ids);
+    CHECK(slot.agent->node_from_id == 10);
+    CHECK(slot.agent->node_to_id == 20);
     CHECK(simulation.agents_active.item_in_use_count == 1);
 
     update.event_type = (S64)city::AgentEventType::Arrival;
@@ -51,11 +54,14 @@ TEST_CASE("Repeated agent updates keep one slot and reactivation invalidates old
     CHECK_FALSE(slot.active);
     CHECK(simulation.agents_active.item_in_use_count == 0);
 
-    update.event_type = 3;
+    update = {.id = 7, .event_type = 3};
     slot = simulation.update_slot(update);
     REQUIRE(slot.active);
     CHECK(slot.created);
     CHECK(slot.agent->height == 0);
+    CHECK_FALSE(slot.agent->has_node_ids);
+    CHECK(slot.agent->node_from_id == 0);
+    CHECK(slot.agent->node_to_id == 0);
     CHECK(slot.agent->handle.idx == old_handle.idx);
     CHECK(slot.agent->handle.gen_id != old_handle.gen_id);
     CHECK(simulation.agents_active.item_in_use_count == 1);

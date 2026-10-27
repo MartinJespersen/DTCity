@@ -58,7 +58,7 @@ class ImportPlaybackSqliteTests(unittest.TestCase):
         self.write_events("city.day 1.xml", "bus-1", 10)
         self.write_events("town.XML", "car-2", 20)
         (self.events_directory / "notes.txt").write_text("ignored", encoding="utf-8")
-        with patch.object(importer, "load_link_positions", wraps=importer.load_link_positions) as load_network:
+        with patch.object(importer, "load_network_links", wraps=importer.load_network_links) as load_network:
             self.run_import(("--batch-size", "1"))
         load_network.assert_called_once()
         self.assertEqual({path.name for path in self.output_directory.iterdir()},
@@ -68,14 +68,15 @@ class ImportPlaybackSqliteTests(unittest.TestCase):
                 columns = [column[1] for column in connection.execute("PRAGMA table_info(agent_events)")]
                 self.assertEqual(columns, ["agent_info_rowid", "time", "event_type", "agent_id",
                                           "position_x", "position_y", "position_z",
-                                          "direction_x", "direction_y", "direction_z", "speed"])
+                                          "direction_x", "direction_y", "direction_z", "speed", "node_from", "node_to"])
                 rows = connection.execute("SELECT * FROM agent_events ORDER BY time").fetchall()
                 self.assertEqual([row[:4] for row in rows], [(1, time, 1, vehicle), (2, time + 1, 4, vehicle)])
                 start = importer.wgs84_to_ecef(16, 59)
                 end = importer.wgs84_to_ecef(17, 60)
                 self.assertEqual(rows[0][4:7], start)
                 self.assertEqual(rows[1][4:7], end)
-                self.assertEqual(rows[1][7:], (0, 0, 0, 0))
+                self.assertEqual(rows[1][7:11], (0, 0, 0, 0))
+                self.assertEqual([row[11:] for row in rows], [(1, 2), (1, 2)])
                 for axis in range(3):
                     self.assertAlmostEqual(rows[0][4 + axis] + rows[0][7 + axis] * rows[0][10], end[axis])
                 self.assertEqual(connection.execute("SELECT count(*) FROM debug_unmatched_entries").fetchone(), (0,))
@@ -200,6 +201,7 @@ class ImportPlaybackSqliteTests(unittest.TestCase):
                                        * rows[entry_time][10] * (exit_time - entry_time), rows[exit_time][4 + axis])
         self.assertEqual(rows[11][2], 4)
         self.assertEqual(rows[11][4:7], (None, None, None))
+        self.assertEqual(rows[11][11:], (1, 2))
 
     def test_unknown_links_do_not_hide_unmatched_entries_or_arrivals(self):
         (self.events_directory / "city.xml").write_text(
@@ -218,7 +220,7 @@ class ImportPlaybackSqliteTests(unittest.TestCase):
             ).fetchall()
             rows = connection.execute("SELECT * FROM agent_events").fetchall()
         self.assertEqual(debug_rows, [("unmatched", "unknown", "end_of_file"), (None, "road", "missing_vehicle")])
-        self.assertEqual(rows, [(4, 4, 4, "paired", None, None, None, 0, 0, 0, 0)])
+        self.assertEqual(rows, [(4, 4, 4, "paired", None, None, None, 0, 0, 0, 0, None, None)])
 
     def test_debugging_can_be_removed_without_changing_motion_rows(self):
         path = self.write_events("city.xml", "one", 1)
@@ -230,28 +232,66 @@ class ImportPlaybackSqliteTests(unittest.TestCase):
             expected = connection.execute("SELECT * FROM agent_events ORDER BY agent_info_rowid").fetchall()
         with closing(sqlite3.connect(":memory:")) as connection:
             importer.create_schema(connection)
-            importer.import_events(connection, path, importer.load_link_positions(self.network_path), 0, 50000)
+            importer.import_events(connection, path, importer.load_network_links(self.network_path), 0, 50000)
             self.assertEqual(connection.execute("SELECT * FROM agent_events ORDER BY agent_info_rowid").fetchall(), expected)
             self.assertEqual(connection.execute("SELECT name FROM sqlite_master WHERE type = 'table'").fetchall(),
                              [("agent_events",)])
 
-    def test_projected_network_crs_and_text_node_ids(self):
+    def test_projected_network_crs_and_node_ids(self):
         try:
             import pyproj
         except ImportError:
             self.skipTest("pyproj is needed for projected networks")
         self.network_path.write_text(
             '<network><attributes><attribute name="coordinateReferenceSystem">EPSG:3857</attribute></attributes>'
-            '<nodes><node id="west" x="0" y="0"/><node id="east" x="111.31949079327357" y="0"/></nodes>'
-            '<links><link id="road" from="west" to="east"/></links></network>', encoding="utf-8",
+            '<nodes><node id="0" x="0" y="0"/><node id="-2" x="111.31949079327357" y="0"/></nodes>'
+            '<links><link id="road" from="0" to="-2"/></links></network>', encoding="utf-8",
         )
-        endpoints = importer.load_link_positions(self.network_path)["road"]
-        for position, expected in zip(endpoints, (importer.wgs84_to_ecef(0, 0), importer.wgs84_to_ecef(0.001, 0))):
+        link = importer.load_network_links(self.network_path)["road"]
+        self.assertEqual((link.node_from, link.node_to), (0, -2))
+        for position, expected in zip((link.position_from, link.position_to),
+                                      (importer.wgs84_to_ecef(0, 0), importer.wgs84_to_ecef(0.001, 0))):
             for actual, coordinate in zip(position, expected):
                 self.assertAlmostEqual(actual, coordinate, places=6)
-        overridden = importer.load_link_positions(self.network_path, "EPSG:4326")["road"][1]
+        overridden = importer.load_network_links(self.network_path, "EPSG:4326")["road"].position_to
         for actual, coordinate in zip(overridden, importer.wgs84_to_ecef(111.31949079327357, 0)):
             self.assertAlmostEqual(actual, coordinate, places=6)
+
+    def test_node_ids_preserve_direction_and_signed_64_bit_precision(self):
+        self.network_path.write_text(
+            '<network><nodes><node id="-9223372036854775808" lon="16" lat="59"/>'
+            '<node id="9223372036854775807" lon="17" lat="60"/></nodes><links>'
+            '<link id="road" from="-9223372036854775808" to="9223372036854775807"/>'
+            '<link id="back" from="9223372036854775807" to="-9223372036854775808"/>'
+            '<link id="no-position" from="0" to="9007199254740993"/></links></network>', encoding="utf-8",
+        )
+        path = self.write_events("city.xml", "7", 1)
+        path.write_text(path.read_text(encoding="utf-8").replace("</events>", '''
+            <event time="3" type="entered link" vehicle="7" link="back"/>
+            <event time="4" type="left link" vehicle="7" link="back"/>
+            <event time="5" type="vehicle leaves traffic" vehicle="7" link="no-position" relativePosition="1"/>
+            </events>'''), encoding="utf-8")
+        self.run_import(("--batch-size", "1"))
+        with closing(sqlite3.connect(self.output_directory / "city.sqlite")) as connection:
+            rows = connection.execute("SELECT node_from, node_to FROM agent_events ORDER BY time").fetchall()
+        self.assertEqual(rows, [(-(2**63), 2**63 - 1)] * 2 + [(2**63 - 1, -(2**63))] * 2
+                         + [(0, 9007199254740993)])
+
+    def test_invalid_node_ids_are_rejected_before_replacing_databases(self):
+        self.write_events("city.xml", "7", 1)
+        self.run_import()
+        output_path = self.output_directory / "city.sqlite"
+        original = output_path.read_bytes()
+        for node_id, error in (("west", "must be an integer"), (str(2**63), "signed 64-bit range"),
+                               (str(-(2**63) - 1), "signed 64-bit range")):
+            with self.subTest(node_id=node_id):
+                self.network_path.write_text(
+                    f'<network><links><link id="road" from="{node_id}" to="1"/></links></network>',
+                    encoding="utf-8",
+                )
+                with self.assertRaisesRegex(ValueError, error):
+                    self.run_import()
+                self.assertEqual(output_path.read_bytes(), original)
 
     def test_defaults_use_simulator_folders(self):
         with patch.object(sys, "argv", [str(SCRIPT_PATH)]):

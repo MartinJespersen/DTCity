@@ -32,11 +32,15 @@ own read-only connection. The simulator frame loop queues the latest request
 and consumes completed replies without waiting for a query.
 
 Each stream event contains `id`, `time`, `event_type`, `position_x`, `position_y`,
-`position_z`, `direction_x`, `direction_y`, `direction_z`, and `speed`. Position
+`position_z`, `direction_x`, `direction_y`, `direction_z`, `speed`,
+`node_from_id`, and `node_to_id`. Position
 is WGS84 ECEF in metres at the original event timestamp. Direction is an ECEF
 unit vector, or zero when stationary. Speed is in metres per second. The server
-sends the stored values without extrapolating them to playback. Node IDs and
-longitude/latitude endpoint fields are no longer part of the stream.
+sends the stored values without extrapolating them to playback. Node IDs are
+signed 64-bit JSON integers copied from SQLite `node_from` and `node_to` columns.
+Both IDs may be `null` for arrivals on unknown links. Known links retain their
+IDs even without coordinates. Longitude/latitude endpoint fields are not sent.
+Reimport older databases to populate the node ID columns.
 Only arrival events may have JSON `null` position components. Direction and speed
 are always numeric. Events are ordered by `(time, agent_info_rowid)`, including
 within each equal-timestamp group; clients must preserve that order.
@@ -62,6 +66,9 @@ height and handle of agents that remain active.
 
 `simulator_events_from_json` decodes `MotionEventView` into arena-owned
 `AgentUpdate` values with double-precision position, direction, and speed.
+It also preserves signed node IDs without conversion through floating point.
+`AgentUpdate` and the active `Agent` expose `node_from_id`, `node_to_id`, and
+`has_node_ids`; a zero ID is valid, so use the flag to check availability.
 It reads the event type before position, so arrivals with null coordinates can
 remove agents. Active events require numeric position and motion fields.
 

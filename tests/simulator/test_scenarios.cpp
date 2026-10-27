@@ -24,10 +24,10 @@ TEST_CASE("Simulator discovers database filenames and selects the requested data
         const char* schema =
             "CREATE TABLE agent_events(agent_info_rowid INTEGER PRIMARY KEY, time REAL, event_type INTEGER, "
             "agent_id TEXT, position_x REAL, position_y REAL, position_z REAL, "
-            "direction_x REAL, direction_y REAL, direction_z REAL, speed REAL);";
+            "direction_x REAL, direction_y REAL, direction_z REAL, speed REAL, node_from INTEGER, node_to INTEGER);";
         result = sqlite3_exec(db, schema, NULL, NULL, NULL);
         REQUIRE(result == SQLITE_OK);
-        String8 insert = push_str8f(arena, "INSERT INTO agent_events VALUES (1,10,1,'%llu',100,200,300,1,0,0,5)", index);
+        String8 insert = push_str8f(arena, "INSERT INTO agent_events VALUES (1,10,1,'%llu',100,200,300,1,0,0,5,9007199254740993,-9)", index);
         result = sqlite3_exec(db, (char*)insert.str, NULL, NULL, NULL);
         REQUIRE(result == SQLITE_OK);
     }

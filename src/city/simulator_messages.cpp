@@ -95,6 +95,9 @@ simulator_events_from_json(Arena* arena, simdjson::ondemand::array& array, Buffe
         AgentUpdate* event = &events[index++];
         event->time = view.time;
         event->event_type = view.event_type;
+        event->node_from_id = view.node_from_id;
+        event->node_to_id = view.node_to_id;
+        event->has_node_ids = view.has_node_ids;
         event->position = view.position;
         event->direction = view.direction;
         event->speed = view.speed;
