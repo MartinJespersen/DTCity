@@ -198,7 +198,8 @@ The importer writes motion records to `agent_events`:
 | `position_x`, `position_y`, `position_z` | Position at `time`, in WGS84 ECEF metres |
 | `direction_x`, `direction_y`, `direction_z` | Unit direction in ECEF; zero when stationary |
 | `speed` | Speed in metres per second |
-| `node_from`, `node_to` | Signed 64-bit node IDs from the network link's `from` and `to` attributes; both `NULL` for an unknown link |
+| `node_from`, `node_to` | Signed 64-bit node IDs from the network link's `from` and `to` attributes; required |
+| `way_id` | Signed 64-bit OSM way ID from the link's `origid` attribute; required |
 
 The importer pairs entries with the next movement event for the same vehicle
 when that event exits the same link. It divides the straight-line ECEF distance
@@ -208,6 +209,10 @@ Network nodes are placed at zero WGS84 ellipsoid height; terrain height is not
 part of this import. Node IDs identify the link endpoints and are retained even
 when coordinates are missing. Network node IDs must be signed 64-bit integers;
 text IDs and out-of-range IDs cause an import error before databases are replaced.
+The nested link attribute `origid` supplies `way_id`, not the MATSim link's `id`.
+Multiple links may share one OSM way ID. Missing, malformed, or out-of-range
+network IDs cause an import error before databases are replaced. All three ID
+columns use `NOT NULL`. Movement events referencing unknown links fail import.
 The application selects the latest event with `time <= playback`,
 breaking ties by the greatest `agent_info_rowid`, then uses:
 
@@ -226,8 +231,7 @@ Entries without a matching exit are excluded from `agent_events` and saved in
 `debug_unmatched_entries`. This separate table contains the source filename,
 event number, original XML attributes as JSON, reason, and the following movement
 event when available. Reasons distinguish `end_of_file`, `event_limit`,
-`next_entry_before_exit`, `exit_link_mismatch` and `missing_vehicle`. Entries on
-unknown network links are still checked for matching exits. For example:
+`next_entry_before_exit`, `exit_link_mismatch` and `missing_vehicle`. For example:
 
 ```sql
 SELECT event_index, agent_id, link_id, reason, entry_attributes_json,
@@ -241,10 +245,18 @@ The temporary debug table is implemented entirely in the marked
 and the `on_unmatched_entry` argument in `main` to disable it; motion generation
 does not depend on the debug table.
 
-Reimport older databases to add `node_from` and `node_to` to the motion schema.
-Existing motion-only rows contain no link IDs from which to recover node IDs.
-The simulator reads this
-schema directly. The client calculates each agent's ECEF position on every frame
+For databases that already contain `edge_id`, rename the column before using the
+updated simulator (or reimport the database):
+
+```sql
+ALTER TABLE agent_events RENAME COLUMN edge_id TO way_id;
+```
+
+The simulator and city application must both use the updated `way_id` stream field.
+
+Reimport older databases to add `node_from`, `node_to`, and `way_id` to the motion schema.
+Existing motion rows contain no link IDs from which to recover the new identifiers.
+The simulator reads this schema directly. The client calculates each agent's ECEF position on every frame
 from its latest event position, direction, speed, and elapsed playback time.
 Terrain height and model orientation are applied at the current position.
 
@@ -259,15 +271,19 @@ seeks and scenario changes, and every half-period (default: 5 seconds).
 Replies use `Stream`, echo `request_id`, and contain a chronological `stream`.
 Each event contains `id`, `time`, `event_type`, `position_x`, `position_y`,
 `position_z`, `direction_x`, `direction_y`, `direction_z`, `speed`,
-`node_from_id`, and `node_to_id`.
+`node_from_id`, `node_to_id`, and `way_id`.
 Position is in ECEF metres at the event's original `time`; direction is an ECEF
 unit vector (zero when stationary), and speed is in metres per second.
 Arrival position components may be JSON `null`. The simulator forwards stored
 motion values without advancing them to the requested playback time. Node IDs
-are JSON integers; both are `null` for arrivals on unknown links. The city parser
-stores them in `AgentUpdate`, and `AgentSim::update_slot` copies them into `Agent`.
-Check `has_node_ids` before using them; zero is a valid ID. Position calculation
-continues to use ECEF motion. Longitude/latitude endpoint fields are not sent.
+are required signed 64-bit JSON integers on every event, including arrivals.
+The city parser stores them in `AgentUpdate`, and `AgentSim::update_slot` copies
+them into `Agent`. Zero is a valid ID. Position calculation continues to use ECEF
+motion. Longitude/latitude endpoint fields are not sent. The required `way_id`
+field matches `osm::Edge::way_id`. Missing or null IDs are rejected by both
+the simulator and client. The existing
+`osm::Edge::id` identifies an individual segment for rendering and picking;
+it is distinct because several segments can belong to the same way.
 A reply includes the latest event strictly before playback for each active agent, plus all events in
 `[playback, playback + period)`. The client buffers future events and applies
 those with `time <= playback`, preserving source order at equal timestamps.

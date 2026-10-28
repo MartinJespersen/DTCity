@@ -45,8 +45,8 @@ tile_load_create(async::ThreadPool* thread_pool, U32 tileset_capacity)
     TileLoadState* state = PushStruct(arena, TileLoadState);
     state->arena = arena;
     state->thread_pool = thread_pool;
-    state->tileset_pool = ArrayResourcePool<cesium::TilesetRenderer>::create(arena, tileset_capacity);
-    state->polygon_bvh_pool = ArrayResourcePool<RoadBvh>::create(arena, tileset_capacity);
+    state->tileset_pool = ResourcePool<cesium::TilesetRenderer>::create(arena, tileset_capacity);
+    state->polygon_bvh_pool = ResourcePool<RoadBvh>::create(arena, tileset_capacity);
     return state;
 }
 
@@ -91,13 +91,13 @@ tile_load_mesh_upload(Arena* arena, render::ThreadWorkerCmdCtx* thread_ctx,
     return entry;
 }
 
-g_internal ArrayResourcePoolHandle
+g_internal PoolHandle
 tile_load_streaming_begin(TileLoadState* state, String8 tileset_url, Rng2F64 bounds, S64 tileset_ion_asset_id,
                           U64 cache_byte_size)
 {
     Assert(state);
 
-    ArrayResourcePoolHandle tileset_handle = state->tileset_pool->handle_get();
+    PoolHandle tileset_handle = state->tileset_pool->handle_get();
     cesium::TilesetRenderer* tileset = {};
     B32 tileset_exists = state->tileset_pool->item_from_handle(tileset_handle, &tileset);
     Assert(tileset_exists);
@@ -109,7 +109,7 @@ tile_load_streaming_begin(TileLoadState* state, String8 tileset_url, Rng2F64 bou
 }
 
 g_internal B32
-tile_load_streaming_end(TileLoadState* state, ArrayResourcePoolHandle tileset_handle)
+tile_load_streaming_end(TileLoadState* state, PoolHandle tileset_handle)
 {
     Assert(state);
 
@@ -129,8 +129,8 @@ tile_load_streaming_end(TileLoadState* state, ArrayResourcePoolHandle tileset_ha
 
 // NOTE: To be called every frame on the render thread for an active city.
 g_internal void
-tile_load_update(TileLoadState* state, ArrayResourcePoolHandle tileset_handle, ArrayResourcePoolHandle bvh_handle,
-                 ArrayResourcePoolHandle camera_handle, B32 road_building_done, B32 road_overlay_changed,
+tile_load_update(TileLoadState* state, PoolHandle tileset_handle, PoolHandle bvh_handle,
+                 PoolHandle camera_handle, B32 road_building_done, B32 road_overlay_changed,
                  RoadOverlayOption road_overlay_option, F64 delta_time)
 {
     Assert(state);
@@ -184,7 +184,7 @@ tile_load_update(TileLoadState* state, ArrayResourcePoolHandle tileset_handle, A
 }
 
 void
-tile_load_debug_ui_draw(TileLoadState* state, ArrayResourcePoolHandle tileset_handle)
+tile_load_debug_ui_draw(TileLoadState* state, PoolHandle tileset_handle)
 {
     Assert(state);
 
@@ -200,7 +200,7 @@ tile_load_debug_ui_draw(TileLoadState* state, ArrayResourcePoolHandle tileset_ha
 
 g_internal void
 _tile_load_stale_meshes_schedule(TileLoadState* state, cesium::TilesetRenderer* tileset,
-                                 ArrayResourcePoolHandle tileset_handle, ArrayResourcePoolHandle bvh_handle,
+                                 PoolHandle tileset_handle, PoolHandle bvh_handle,
                                  U64 mesh_processor_generation)
 {
     RoadBvh* bvh = 0;
@@ -259,8 +259,8 @@ _tile_load_stale_meshes_schedule(TileLoadState* state, cesium::TilesetRenderer* 
 
 g_internal B32
 _tile_load_mesh_reprocess_task_start(TileLoadState* state, cesium::TileRenderResources* tile,
-                                     ArrayResourcePoolHandle tileset_handle, RoadBvh* bvh,
-                                     ArrayResourcePoolHandle bvh_handle, U64 mesh_processor_generation)
+                                     PoolHandle tileset_handle, RoadBvh* bvh,
+                                     PoolHandle bvh_handle, U64 mesh_processor_generation)
 {
     B32 task_started = false;
     if (bvh->deletion_requested == false && tile->tileset_handle == tileset_handle &&
@@ -441,7 +441,7 @@ _tile_load_mesh_reprocess_task(async::ThreadInfo info, async::AsyncTaskStatus<Ti
 
 g_internal void
 _tile_load_bvh_selection_update(TileLoadState* state, cesium::TilesetRenderer* tileset,
-                                 ArrayResourcePoolHandle tileset_handle)
+                                PoolHandle tileset_handle)
 {
     // Cache residency does not imply query membership. Mark the draw list once,
     // including fading tiles, then update only entries whose selection changed.

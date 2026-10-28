@@ -96,9 +96,9 @@ TEST_CASE("tile BVH rejects reused handles and retries a busy worker queue")
     defer(bvh.destroy());
     auto& backend = tile_bvh_test::backend;
     city::TileMeshBvhEntry empty = {};
-    ArrayResourcePoolHandle old = bvh.insert(empty);
+    PoolHandle old = bvh.insert(empty);
     bvh.remove(old);
-    ArrayResourcePoolHandle current = bvh.insert(empty);
+    PoolHandle current = bvh.insert(empty);
     CHECK(current.idx == old.idx);
     CHECK(current.gen_id != old.gen_id);
     empty.handle = old;
@@ -200,7 +200,7 @@ TEST_CASE("tile BVH registration handles survive growth and slot reuse")
     Allocator allocator = Allocator::create();
     city::TileBvh bvh(&allocator);
     defer(bvh.destroy());
-    ArrayResourcePoolHandle handles[96] = {};
+    PoolHandle handles[96] = {};
     for (U32 index = 0; index < ArrayCount(handles); ++index)
     {
         handles[index] = bvh.insert({});
@@ -213,7 +213,7 @@ TEST_CASE("tile BVH registration handles survive growth and slot reuse")
     entry.mesh.vertex_buffer_handle = {reinterpret_cast<void*>(121), 1, render::HandleType::Buffer};
     entry.mesh.index_buffer_handle = {reinterpret_cast<void*>(122), 1, render::HandleType::Buffer};
     entry.triangle_bvh_buffer = {reinterpret_cast<void*>(123), 1, render::HandleType::Buffer};
-    ArrayResourcePoolHandle reused = bvh.insert(entry);
+    PoolHandle reused = bvh.insert(entry);
     CHECK(reused.idx == handles[44].idx);
     CHECK(reused.gen_id != handles[44].gen_id);
     // Removing the stale generation must leave the new queryable mesh registered.

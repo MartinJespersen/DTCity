@@ -1785,6 +1785,40 @@ _os_lnx_crash_frame_symbolize(const char* module_path, U64 module_offset, U64 de
     }
 }
 
+void
+os_call_stack_print()
+{
+    char text[PATH_MAX + 256];
+    int text_size = 0;
+    const char heading[] = "\nCall stack:\n";
+    _os_lnx_crash_write(heading, sizeof(heading) - 1);
+    // Fixed buffers avoid arena allocation in the damaged process. Unwinding,
+    // dladdr, formatting, and spawning are best effort, not async-signal-safe.
+    void* frames[64];
+    int frame_count = backtrace(frames, ArrayCount(frames));
+    U64 started_us = os_now_microseconds();
+    U64 symbolizer_deadline_us = started_us + (U64)Million(3);
+    for (int frame_idx = 0; frame_idx < frame_count; ++frame_idx)
+    {
+        Dl_info module = {};
+        int module_found = dladdr(frames[frame_idx], &module);
+        const char* module_path = module_found && module.dli_fname ? module.dli_fname : "<unknown module>";
+        U64 module_offset = (U64)frames[frame_idx] - (U64)module.dli_fbase;
+        text_size = snprintf(text, sizeof(text), "%d. [%p] %s +0x%llx\n", frame_idx + 1, frames[frame_idx], module_path,
+                             (unsigned long long)module_offset);
+        if (text_size > 0)
+            _os_lnx_crash_write(text, Min((U64)text_size, sizeof(text) - 1));
+        U64 now_us = os_now_microseconds();
+        if (module_found && os_lnx_state.crash_symbolizer_path[0] && now_us < symbolizer_deadline_us)
+            _os_lnx_crash_frame_symbolize(module_path, module_offset, symbolizer_deadline_us);
+    }
+    if (!os_lnx_state.crash_symbolizer_path[0])
+    {
+        const char unavailable[] = "llvm-symbolizer unavailable; showing module addresses.\n";
+        _os_lnx_crash_write(unavailable, sizeof(unavailable) - 1);
+    }
+}
+
 lib_internal void
 _os_lnx_crash_signal_handler(int signal_number, siginfo_t* signal_info, void* context)
 {
@@ -1825,31 +1859,7 @@ _os_lnx_crash_signal_handler(int signal_number, siginfo_t* signal_info, void* co
                  signal_name, signal_number, fault_address, (unsigned long long)instruction_address);
     _os_lnx_crash_write(text, (U64)text_size);
 
-    // Fixed buffers avoid arena allocation in the damaged process. Unwinding,
-    // dladdr, formatting, and spawning are best effort, not async-signal-safe.
-    void* frames[64];
-    int frame_count = backtrace(frames, ArrayCount(frames));
-    U64 started_us = os_now_microseconds();
-    U64 symbolizer_deadline_us = started_us + (U64)Million(3);
-    for (int frame_idx = 0; frame_idx < frame_count; ++frame_idx)
-    {
-        Dl_info module = {};
-        int module_found = dladdr(frames[frame_idx], &module);
-        const char* module_path = module_found && module.dli_fname ? module.dli_fname : "<unknown module>";
-        U64 module_offset = (U64)frames[frame_idx] - (U64)module.dli_fbase;
-        text_size = snprintf(text, sizeof(text), "%d. [%p] %s +0x%llx\n", frame_idx + 1, frames[frame_idx], module_path,
-                             (unsigned long long)module_offset);
-        U64 write_size = Min((U64)text_size, sizeof(text) - 1);
-        _os_lnx_crash_write(text, write_size);
-        U64 now_us = os_now_microseconds();
-        if (module_found && os_lnx_state.crash_symbolizer_path[0] && now_us < symbolizer_deadline_us)
-            _os_lnx_crash_frame_symbolize(module_path, module_offset, symbolizer_deadline_us);
-    }
-    if (!os_lnx_state.crash_symbolizer_path[0])
-    {
-        const char unavailable[] = "llvm-symbolizer unavailable; showing module addresses.\n";
-        _os_lnx_crash_write(unavailable, sizeof(unavailable) - 1);
-    }
+    os_call_stack_print();
     const char version[] = "\nVersion: " BUILD_VERSION_STRING_LITERAL BUILD_GIT_HASH_STRING_LITERAL_APPEND "\n";
     _os_lnx_crash_write(version, sizeof(version) - 1);
     _os_lnx_crash_reraise(signal_number);

@@ -66,6 +66,7 @@ TEST_CASE("Failed destructor commitment leaves its storage unpublished")
     ArenaParams params = {.reserve_size = KB(64), .commit_size = KB(4)};
     {
         Allocator allocator(params);
+        CHECK((allocator.arena->flags & ArenaFlag_NoChain) == 0);
         U64 old_destructor_pos = allocator.arena->destructor_pos;
         g_arena_failure_state.fail_commit = true;
         CHECK_THROWS_AS(allocator.make<ArenaFailureTestObject>(), ArenaFailureTestAbort);
@@ -132,5 +133,13 @@ void
 os_abort(S32 exit_code)
 {
     CHECK(exit_code == 1);
+    CHECK(g_arena_failure_state.stack_reports == 1);
+    g_arena_failure_state.stack_reports = 0;
     throw ArenaFailureTestAbort{exit_code};
+}
+
+void
+os_call_stack_print()
+{
+    ++g_arena_failure_state.stack_reports;
 }

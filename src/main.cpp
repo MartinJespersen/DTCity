@@ -1,6 +1,5 @@
 #include "includes.hpp"
 
-
 static Context*
 ctx_create(io::IO* io_ctx)
 {
@@ -14,7 +13,11 @@ ctx_create(io::IO* io_ctx)
     Debug_SetName(ctx->arena_frame, "app frame arena");
     ctx->io = PushStruct(app_arena, io::IO);
 
-    ctx->camera_container = ArrayResourcePool<ui::Camera>::create(app_arena, 10);
+    ctx->camera_container = ResourcePool<ui::Camera>::create(app_arena, 10);
+    ctx->osm_network_pool = ResourcePool<osm::Network>::create(app_arena, 10);
+    ctx->neta_state_pool = ResourcePool<neta::NetaState>::create(app_arena, 10);
+    ctx->road_context = PushStruct(app_arena, city::RoadContext);
+    ctx->road_context->init(app_arena, 10);
     ctx->time = PushStruct(app_arena, dt_Time);
     ctx->cwd = os_current_path_get(scratch.arena);
 

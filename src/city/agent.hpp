@@ -35,11 +35,11 @@ struct AgentModelRenderInfo
 };
 struct Agent
 {
-    ArrayResourcePoolHandle handle;
+    PoolHandle handle;
     WsId id;
     S64 node_from_id;
     S64 node_to_id;
-    B32 has_node_ids;
+    S64 way_id; // OSM way ID from simulator origid, shared by segments of that way.
     glm::dvec2 cartographic_coords;
     glm::dvec3 ecef_coord_at_event;
     F64 event_time;
@@ -60,7 +60,7 @@ struct Agent
 };
 struct AgentMapItem
 {
-    ArrayResourcePoolHandle agent_handle;
+    PoolHandle agent_handle;
 };
 
 struct AgentConfig
@@ -97,7 +97,7 @@ struct AgentSim
 
     B32 height_updates_stop;
     Map<WsId, AgentMapItem> agent_map;
-    ArrayResourcePool<Agent> agents_active;
+    ResourcePool<Agent> agents_active;
 
     AgentSim(U32 hashmap_bucket_capacity, U32 max_agent_count);
     AgentSlotUpdate
@@ -118,7 +118,7 @@ struct AgentHeightRequest
 {
     U64 request_id;
     U64 epoch;
-    ArrayResourcePoolHandle agent_handle;
+    PoolHandle agent_handle;
     glm::dvec3 sampled_ecef;
     F64 origin_height;
 };
@@ -150,7 +150,7 @@ struct AgentSystem
            Buffer<AgentUpdate>& agent_updates, bool agent_reset, bool snapshot_received, F32 agent_scale_factor, glm::dmat4& ecef_to_local, F64 playback_time);
 
     void
-    agent_icon_add(Agent& agent, render::MeshHandle hover_icon_mesh_handle, F32 hover_icon_scale_factor);
+    agent_icon_add(Agent& agent, render::MeshHandle hover_icon_mesh_handle, F32 icon_scale_factor) noexcept;
     void
     agent_draw(Array<render::AgentModelInfo>& meshes, render::BufferInfo* instance_buffer_info);
     void

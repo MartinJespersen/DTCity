@@ -33,8 +33,6 @@ struct Destructor
 struct Allocator
 {
   private:
-    U64 destructor_cmt_pos = {};
-    U64 destructor_count = {};
     U64 base_pos = {};
 
   public:

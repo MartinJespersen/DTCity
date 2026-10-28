@@ -64,7 +64,7 @@ tile_mesh_bvh_build(Arena* arena, Buffer<const render::TileVertex> vertices, Buf
 
 TileMeshBvhEntry
 tile_mesh_bvh_entry_create(Buffer<const render::TileVertex> vertices, Buffer<const U32> indices,
-                          render::MeshHandle mesh, U64 mesh_revision)
+                           render::MeshHandle mesh, U64 mesh_revision)
 {
     Assert(indices.size % 3 == 0);
     Assert(indices.size / 3 <= max_U32);
@@ -122,7 +122,7 @@ TileBvh::destroy()
     this->dirty = true;
 }
 
-ArrayResourcePoolHandle
+PoolHandle
 TileBvh::insert(const TileMeshBvhEntry& entry)
 {
     U32 index = this->free_slot;
@@ -171,7 +171,7 @@ TileBvh::replace(const TileMeshBvhEntry& entry)
 }
 
 void
-TileBvh::remove(ArrayResourcePoolHandle handle)
+TileBvh::remove(PoolHandle handle)
 {
     if (handle.idx == 0 || handle.idx > this->slot_count)
         return;
@@ -190,12 +190,12 @@ TileBvh::remove(ArrayResourcePoolHandle handle)
 
 render::TileBvhHandle
 TileBvh::update(Buffer<const TileMeshBvhEntry> changed_entries,
-                Buffer<const ArrayResourcePoolHandle> removed_entries)
+                Buffer<const PoolHandle> removed_entries)
 {
     prof_scope_marker;
     for (const TileMeshBvhEntry& entry : changed_entries)
         this->replace(entry);
-    for (ArrayResourcePoolHandle handle : removed_entries)
+    for (PoolHandle handle : removed_entries)
         this->remove(handle);
 
     // Publish only complete versions. Keep the preceding version alive until then.

@@ -33,7 +33,7 @@ simulator_event_window_reply(Arena* arena, sqlite3* db, const city::ServerUpdate
             " ORDER BY time DESC, agent_info_rowid DESC LIMIT 1) WHERE event.event_type != ?3"
             " UNION ALL SELECT * FROM agent_events WHERE time >= ?1 AND time < ?2)"
             " SELECT agent_id, time, event_type, position_x, position_y, position_z,"
-            " direction_x, direction_y, direction_z, speed, node_from, node_to"
+            " direction_x, direction_y, direction_z, speed, node_from, node_to, way_id"
             " FROM selected ORDER BY time, agent_info_rowid";
         sqlite3_stmt* stmt = NULL;
         int result = sqlite3_prepare_v2(db, sql, -1, &stmt, NULL);
@@ -91,24 +91,13 @@ _simulator_event_append(yyjson_mut_doc* doc, yyjson_mut_val* snapshot_array, sql
             added = yyjson_mut_obj_add_real(doc, event, motion_fields[index], sqlite3_column_double(event_stmt, column));
         }
     }
-    // Keep node IDs as integers throughout the stream, including values above 2^53.
-    // Only arrivals on unknown links may omit both IDs.
-    const char* node_fields[] = {"node_from_id", "node_to_id"};
-    bool missing_nodes = sqlite3_column_type(event_stmt, 10) == SQLITE_NULL;
-    if (missing_nodes != (sqlite3_column_type(event_stmt, 11) == SQLITE_NULL)) return false;
-    for (U32 index = 0; added && index < ArrayCount(node_fields); ++index)
+    // IDs are required signed integers, including on arrival events.
+    const char* id_fields[] = {"node_from_id", "node_to_id", "way_id"};
+    for (U32 index = 0; added && index < ArrayCount(id_fields); ++index)
     {
         int column = 10 + (int)index;
-        if (missing_nodes)
-        {
-            if (event_type != (S64)city::AgentEventType::Arrival) return false;
-            added = yyjson_mut_obj_add_null(doc, event, node_fields[index]);
-        }
-        else
-        {
-            if (sqlite3_column_type(event_stmt, column) != SQLITE_INTEGER) return false;
-            added = yyjson_mut_obj_add_sint(doc, event, node_fields[index], sqlite3_column_int64(event_stmt, column));
-        }
+        if (sqlite3_column_type(event_stmt, column) != SQLITE_INTEGER) return false;
+        added = yyjson_mut_obj_add_sint(doc, event, id_fields[index], sqlite3_column_int64(event_stmt, column));
     }
     if (added)
     {

@@ -234,137 +234,36 @@ ArenaArray<T>::clear() noexcept
     this->size = 0;
     arena_clear(this->_arena);
 }
-/////////////////////////////////////////////////////////////////////////
-// Resource Pool
-template <typename T>
-ResourcePool<T>*
-resource_pool_init(U64 reserve_element_size)
-{
-    U64 element_byte_size = sizeof(ItemHeader<T>);
-    ResourcePool<T>* container = 0;
-    // array init
-    {
-        U64 reserve_arr_byte_size = element_byte_size * reserve_element_size;
-        ArenaParams arena_params = {};
-        arena_params.reserve_size = Max(reserve_arr_byte_size, KB(4));
-        arena_params.commit_size = KB(4);
-        arena_params.flags = ArenaFlag_NoChain;
-        Arena* arena = arena_alloc(&arena_params);
-        Debug_SetName(arena, "resource pool arena");
-        container = PushStruct(arena, ResourcePool<T>);
-        container->arena = arena;
-        container->items = (ItemHeader<T>*)((U8*)arena + arena_pos(arena));
-        // zero idx is nil
-        PushStruct(container->arena, ItemHeader<T>);
-        container->size += 1;
-    }
-
-    // free list init
-    {
-        U64 reserved_free_list_bytes = sizeof(*container->free_list) * reserve_element_size;
-        ArenaParams free_list_arena_params = {};
-        free_list_arena_params.reserve_size = Max(reserved_free_list_bytes, KB(4));
-        free_list_arena_params.commit_size = KB(4);
-        free_list_arena_params.flags = ArenaFlag_NoChain;
-        container->arena_free_list = arena_alloc(&free_list_arena_params);
-        Debug_SetName(container->arena_free_list, "resource pool free list arena");
-        container->free_list =
-            (ResourcePoolHandle*)((U8*)container->arena_free_list + arena_pos(container->arena_free_list));
-    }
-
-    return container;
-}
-
-template <typename T>
-void
-resource_pool_release(ResourcePool<T>* container)
-{
-    arena_release(container->arena_free_list);
-    arena_release(container->arena);
-}
-
-template <typename T>
-ItemHeader<T>*
-_resource_pool_item_from_idx(ResourcePool<T>* container, U32 idx)
-{
-    ItemHeader<T>* result = &container->items[0];
-    T empty = {};
-    Assert(MemoryMatchStruct(&result->data, &empty));
-    if (idx != 0 && idx < container->size)
-    {
-        result = &container->items[idx];
-    }
-    else
-    {
-        // TODO: create logging for idx OOB and gen_id too old
-    }
-    result->in_use = true;
-    return result;
-}
-
-template <typename T>
-T*
-resource_pool_item_from_idx(ResourcePool<T>* container, ResourcePoolHandle item_handle)
-{
-    ItemHeader<T>* result = &container->items[0];
-    if (item_handle.idx < container->size && container->items[item_handle.idx].in_use &&
-        container->items[item_handle.idx].gen_id == item_handle.gen_id)
-    {
-        result = &container->items[item_handle.idx];
-    }
-    return &result->data;
-}
-
-template <typename T>
-ResourcePoolHandle
-resource_pool_array_idx_get(ResourcePool<T>* container)
-{
-    U32 item_idx = 0;
-    if (container->free_list_size)
-    {
-        container->free_list_size -= 1;
-        item_idx = container->free_list[container->free_list_size].idx;
-    }
-    else
-    {
-        PushStruct(container->arena, ItemHeader<T>);
-        item_idx = container->size;
-        container->size += 1;
-    }
-
-    ItemHeader<T>* item = _resource_pool_item_from_idx(container, item_idx);
-
-    ResourcePoolHandle handle = {};
-    handle.idx = item_idx;
-    handle.gen_id = item->gen_id;
-    return handle;
-}
-
-template <typename T>
-void
-resource_pool_item_free(ResourcePool<T>* container, ResourcePoolHandle item_handle)
-{
-    ItemHeader<T>* item = _resource_pool_item_from_idx(container, item_handle.idx);
-    if (item_handle.idx > 0 && item->gen_id == item_handle.gen_id)
-    {
-        container->free_list[container->free_list_size] = item_handle;
-        container->free_list_size += 1;
-        item->in_use = false;
-        item->gen_id += 1;
-    }
-}
 
 //////////////////////////////////////////////////////////////
 // Array Resource Pool
 template <typename T>
-ArrayResourcePool<T>::ArrayResourcePool(Arena* arena, U32 capacity) noexcept
+ResourcePool<T>::ResourcePool(Arena* arena, U32 capacity) noexcept
 {
     this->init(arena, capacity);
 }
 
 template <typename T>
+ResourcePool<T>::~ResourcePool() noexcept
+{
+    this->invalidate_all();
+}
+
+template <typename T>
+template <typename... Args>
+PoolHandle
+ResourcePool<T>::emplace(Args&&... args) noexcept
+{
+    PoolHandle handle = this->handle_get();
+    ArrayItemHeader<T>* item = &this->items[handle.idx];
+    new (&item->data) T(std::forward<Args>(args)...);
+    item->constructed = true;
+    return handle;
+}
+
+template <typename T>
 void
-ArrayResourcePool<T>::init(Arena* arena, U32 capacity)
+ResourcePool<T>::init(Arena* arena, U32 capacity)
 {
     this->capacity = Max(capacity, 1);
     this->items = PushArray(arena, ArrayItemHeader<T>, this->capacity + 1);
@@ -373,17 +272,17 @@ ArrayResourcePool<T>::init(Arena* arena, U32 capacity)
 }
 
 template <typename T>
-ArrayResourcePool<T>*
-ArrayResourcePool<T>::create(Arena* arena, U32 capacity)
+ResourcePool<T>*
+ResourcePool<T>::create(Arena* arena, U32 capacity)
 {
-    ArrayResourcePool* pool = PushStruct(arena, ArrayResourcePool<T>);
-    pool->init(arena, capacity);
+    ResourcePool* pool = PushStruct(arena, ResourcePool<T>);
+    new (pool) ResourcePool<T>(arena, capacity);
     return pool;
 }
 
 template <typename T>
 bool
-ArrayResourcePool<T>::is_handle_valid(ArrayResourcePoolHandle item_handle)
+ResourcePool<T>::is_handle_valid(PoolHandle item_handle)
 {
     bool valid = false;
     if (item_handle.idx > 0 && item_handle.idx <= this->capacity && this->items[item_handle.idx].in_use &&
@@ -396,7 +295,7 @@ ArrayResourcePool<T>::is_handle_valid(ArrayResourcePoolHandle item_handle)
 
 template <typename T>
 bool
-ArrayResourcePool<T>::item_from_handle(ArrayResourcePoolHandle item_handle, T** out_value)
+ResourcePool<T>::item_from_handle(PoolHandle item_handle, T** out_value)
 {
     bool success = false;
     ArrayItemHeader<T>* result = &this->items[0];
@@ -410,17 +309,17 @@ ArrayResourcePool<T>::item_from_handle(ArrayResourcePoolHandle item_handle, T** 
 }
 
 template <typename T>
-ArrayResourcePoolHandle
-ArrayResourcePool<T>::item_new(T** out_item)
+PoolHandle
+ResourcePool<T>::item_new(T** out_item)
 {
-    ArrayResourcePoolHandle handle = this->handle_get();
+    PoolHandle handle = this->handle_get();
     *out_item = &this->items[handle.idx].data;
     return handle;
 }
 
 template <typename T>
-ArrayResourcePoolHandle
-ArrayResourcePool<T>::handle_get()
+PoolHandle
+ResourcePool<T>::handle_get()
 {
     AssertAlways(this->free_list != 0);
 
@@ -432,18 +331,23 @@ ArrayResourcePool<T>::handle_get()
     item->next = 0;
 
     this->item_in_use_count += 1;
-    ArrayResourcePoolHandle handle = {idx, this->items[idx].gen_id};
+    PoolHandle handle = {idx, this->items[idx].gen_id};
     return handle;
 }
 
 template <typename T>
 void
-ArrayResourcePool<T>::item_free(ArrayResourcePoolHandle item_handle)
+ResourcePool<T>::item_free(PoolHandle item_handle)
 {
     if (is_handle_valid(item_handle))
     {
         U32 item_idx = item_handle.idx;
         ArrayItemHeader<T>* item = &this->items[item_idx];
+        if (item->constructed)
+        {
+            item->data.~T();
+            item->constructed = false;
+        }
         item->next = this->free_list;
         item->in_use = false;
         item->gen_id += 1;
@@ -455,7 +359,7 @@ ArrayResourcePool<T>::item_free(ArrayResourcePoolHandle item_handle)
 
 template <typename T>
 void
-ArrayResourcePool<T>::reset_freelist()
+ResourcePool<T>::reset_freelist()
 {
     for (U32 i = 1; i < this->capacity; i++)
     {
@@ -467,14 +371,13 @@ ArrayResourcePool<T>::reset_freelist()
 
 template <typename T>
 void
-ArrayResourcePool<T>::invalidate_all()
+ResourcePool<T>::invalidate_all()
 {
     for (U32 i = 0; i <= this->capacity; i++)
     {
         if (this->items[i].in_use)
         {
-            this->items[i].in_use = false;
-            this->items[i].gen_id += 1;
+            this->item_free({i, this->items[i].gen_id});
         }
     }
     this->item_in_use_count = 0;
@@ -482,25 +385,25 @@ ArrayResourcePool<T>::invalidate_all()
 }
 
 template <typename T>
-ArrayResourcePoolIterator<T>
-ArrayResourcePool<T>::begin()
+PoolIterator<T>
+ResourcePool<T>::begin()
 {
-    ArrayResourcePoolIterator<T> iter = {this, 1};
+    PoolIterator<T> iter = {this, 1};
     iter.skip_unused();
     return iter;
 }
 
 template <typename T>
-ArrayResourcePoolIterator<T>
-ArrayResourcePool<T>::end()
+PoolIterator<T>
+ResourcePool<T>::end()
 {
-    ArrayResourcePoolIterator<T> iter = {this, this->capacity + 1};
+    PoolIterator<T> iter = {this, this->capacity + 1};
     return iter;
 }
 
 template <typename T>
 T&
-ArrayResourcePoolIterator<T>::operator*()
+PoolIterator<T>::operator*()
 {
     Assert(this->pool);
     Assert(this->idx > 0 && this->idx <= this->pool->capacity);
@@ -512,7 +415,7 @@ ArrayResourcePoolIterator<T>::operator*()
 
 template <typename T>
 T*
-ArrayResourcePoolIterator<T>::operator->()
+PoolIterator<T>::operator->()
 {
     Assert(this->pool);
     Assert(this->idx > 0 && this->idx <= this->pool->capacity);
@@ -523,8 +426,8 @@ ArrayResourcePoolIterator<T>::operator->()
 }
 
 template <typename T>
-ArrayResourcePoolIterator<T>&
-ArrayResourcePoolIterator<T>::operator++()
+PoolIterator<T>&
+PoolIterator<T>::operator++()
 {
     this->idx += 1;
     this->skip_unused();
@@ -533,7 +436,7 @@ ArrayResourcePoolIterator<T>::operator++()
 
 template <typename T>
 bool
-ArrayResourcePoolIterator<T>::operator!=(ArrayResourcePoolIterator<T> other)
+PoolIterator<T>::operator!=(PoolIterator<T> other)
 {
     bool result = this->pool != other.pool || this->idx != other.idx;
     return result;
@@ -541,7 +444,7 @@ ArrayResourcePoolIterator<T>::operator!=(ArrayResourcePoolIterator<T> other)
 
 template <typename T>
 bool
-ArrayResourcePoolIterator<T>::operator==(ArrayResourcePoolIterator<T> other)
+PoolIterator<T>::operator==(PoolIterator<T> other)
 {
     bool result = this->pool == other.pool && this->idx == other.idx;
     return result;
@@ -549,7 +452,7 @@ ArrayResourcePoolIterator<T>::operator==(ArrayResourcePoolIterator<T> other)
 
 template <typename T>
 void
-ArrayResourcePoolIterator<T>::skip_unused()
+PoolIterator<T>::skip_unused()
 {
     Assert(this->pool);
     while (this->idx <= this->pool->capacity)

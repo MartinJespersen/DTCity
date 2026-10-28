@@ -292,3 +292,130 @@ TEST_CASE("Allocator destroys owned arrays before releasing their element storag
     }
     CHECK(destroyed == 2);
 }
+
+TEST_CASE("Allocator chains preserve destructor order through clear reuse and move")
+{
+    for (ArenaFlags flags : {ArenaFlags(0), ArenaFlags(ArenaFlag_RetainCommitted)})
+    {
+        U32 log[12] = {};
+        U32 count = 0;
+        {
+            Allocator allocator({KB(4), KB(4), flags});
+            Arena* reused_block = 0;
+            for (U64 iteration = 0; iteration < 2; ++iteration)
+            {
+                for (U32 id = 1; id <= 3; ++id)
+                {
+                    auto* object = allocator.make<ChainedAllocatorTestObject>(id, log, &count);
+                    CHECK(object->id == id);
+                    // Raw arena clients must also respect destructor records.
+                    U8* bytes = PushArray(allocator.arena, U8, KB(4));
+                    bytes[KB(4) - 1] = 42;
+                }
+                REQUIRE(allocator.arena->current != allocator.arena);
+                if (flags && iteration) CHECK(allocator.arena->current == reused_block);
+                reused_block = allocator.arena->current;
+                arena_trim(allocator.arena, 0);
+                allocator.clear();
+                CHECK(allocator.arena->current == allocator.arena);
+                CHECK(allocator.arena->destructor_count == 0);
+                CHECK(count == (iteration + 1) * 3);
+                CHECK(log[iteration * 3] == 3);
+                CHECK(log[iteration * 3 + 1] == 2);
+                CHECK(log[iteration * 3 + 2] == 1);
+            }
+            allocator.make<ChainedAllocatorTestObject>(U32(4), log, &count);
+            PushArray(allocator.arena, U8, KB(16));
+            allocator.make<ChainedAllocatorTestObject>(U32(5), log, &count);
+            Allocator moved(std::move(allocator));
+            Allocator destination({KB(4), KB(4), flags});
+            destination = std::move(moved);
+        }
+        CHECK(count == 8);
+        CHECK(log[6] == 5);
+        CHECK(log[7] == 4);
+    }
+}
+
+TEST_CASE("Allocator reserves object and destructor together at a block boundary")
+{
+    U32 log[2] = {};
+    U32 count = 0;
+    Allocator allocator({KB(4), KB(4), 0});
+    Arena* root = allocator.arena;
+    arena_push(root, root->res - root->pos - sizeof(ChainedAllocatorTestObject), 1);
+    auto* object = allocator.make<ChainedAllocatorTestObject>(U32(1), log, &count);
+    REQUIRE(root->current != root);
+    CHECK(root->destructor_count == 0);
+    CHECK(root->current->destructor_count == 1);
+    CHECK(object->id == 1);
+    // Placement construction can register a destructor even when the current block is full.
+    arena_push(root, root->current->destructor_pos - root->current->pos, 1);
+    alignas(ChainedAllocatorTestObject) U8 storage[sizeof(ChainedAllocatorTestObject)];
+    allocator.make(reinterpret_cast<ChainedAllocatorTestObject*>(storage), U32(2), log, &count);
+    allocator.clear();
+    CHECK(count == 2);
+    CHECK(log[0] == 2);
+    CHECK(log[1] == 1);
+}
+
+TEST_CASE("Allocator keeps later blocks alive for an earlier owning destructor")
+{
+    U32 destroyed = 0;
+    {
+        Allocator allocator({KB(4), KB(4), 0});
+        auto* array = allocator.make<Array<ArrayMoveTestItem>>(U32(2048));
+        REQUIRE(allocator.arena->current != allocator.arena);
+        REQUIRE(allocator.arena->destructor_count == 1);
+        for (auto& item : *array) item.destruction_count = &destroyed;
+        arena_trim(allocator.arena, 0);
+    }
+    CHECK(destroyed == 2048);
+}
+
+TEST_CASE("Allocator retains an explicit no-chain configuration")
+{
+    Allocator allocator({KB(4), KB(4), ArenaFlag_NoChain});
+    CHECK((allocator.arena->flags & ArenaFlag_NoChain) != 0);
+    U32 count = 0;
+    allocator.make<AllocatorAwareTestObject>(U32(1), &count);
+    allocator.clear();
+    CHECK(count == 1);
+    CHECK(allocator.arena->current == allocator.arena);
+}
+
+ChainedAllocatorTestObject::ChainedAllocatorTestObject(U32 id, U32* log, U32* count) noexcept
+    : id(id), log(log), count(count)
+{
+}
+
+ChainedAllocatorTestObject::~ChainedAllocatorTestObject() noexcept
+{
+    this->log[(*this->count)++] = this->id;
+}
+
+TEST_CASE("Allocator oversized aligned objects retain their destructor records")
+{
+    U32 count = 0;
+    {
+        Allocator allocator({KB(4), KB(4), 0});
+        auto* object = allocator.make<OversizedAllocatorTestObject>(&count);
+        REQUIRE(allocator.arena->current != allocator.arena);
+        CHECK(IntFromPtr(object) % alignof(OversizedAllocatorTestObject) == 0);
+        CHECK(allocator.arena->current->destructor_count == 1);
+        CHECK(allocator.arena->current->pos <= allocator.arena->current->destructor_pos);
+        arena_trim(allocator.arena, 0);
+    }
+    CHECK(count == 1);
+}
+
+OversizedAllocatorTestObject::OversizedAllocatorTestObject(U32* count) noexcept : count(count)
+{
+    this->payload[sizeof(this->payload) - 1] = 42;
+}
+
+OversizedAllocatorTestObject::~OversizedAllocatorTestObject() noexcept
+{
+    CHECK(this->payload[sizeof(this->payload) - 1] == 42);
+    ++*this->count;
+}

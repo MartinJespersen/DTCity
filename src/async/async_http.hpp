@@ -116,7 +116,7 @@ struct CurlContext
                std::source_location location = std::source_location::current());
     AsyncGenericError
     option_set_offset(CURLoption option, curl_off_t value,
-               std::source_location location = std::source_location::current());
+                      std::source_location location = std::source_location::current());
 };
 
 template <typename T>
@@ -162,7 +162,7 @@ struct AsyncHttpTaskState
                std::source_location location = std::source_location::current());
     Error
     option_set_offset(CURLoption option, curl_off_t value,
-               std::source_location location = std::source_location::current());
+                      std::source_location location = std::source_location::current());
 };
 
 template <typename T>
@@ -203,8 +203,8 @@ struct LibCurlCallbackData
 };
 
 HttpInfo*
-http_info_create(Arena* arena, HTTP_Method http_method, String8 http_path, String8 content_type,
-                 std::initializer_list<String8> additional_headers, std::initializer_list<String8> params_list);
+http_info_create(Arena* arena, HTTP_Method http_method, String8 http_path, String8 content_type = {},
+                 std::initializer_list<String8> additional_headers = {}, std::initializer_list<String8> params_list = {});
 
 HttpInfo*
 http_info_create_get(Arena* arena, String8 http_path, std::initializer_list<String8> additional_headers = {},

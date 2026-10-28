@@ -19,6 +19,7 @@ struct Camera;
 namespace city
 {
 struct TileLoadState;
+class RoadContext;
 }
 namespace async
 {
@@ -27,6 +28,14 @@ struct ThreadPool;
 namespace vulkan
 {
 struct Context;
+}
+namespace neta
+{
+struct NetaState;
+}
+namespace osm
+{
+struct Network;
 }
 
 struct dt_Time
@@ -64,8 +73,11 @@ struct Context
 
     io::IO* io;
     dt_Time* time;
-    ArrayResourcePool<ui::Camera>* camera_container;
+    ResourcePool<ui::Camera>* camera_container;
+    ResourcePool<osm::Network>* osm_network_pool;
+    ResourcePool<neta::NetaState>* neta_state_pool;
     city::TileLoadState* tile_load_state;
+    city::RoadContext* road_context;
 
     async::ThreadPool* thread_pool;
 };

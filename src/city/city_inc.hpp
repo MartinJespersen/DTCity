@@ -11,5 +11,7 @@
 #include "agent.hpp"
 #include "simulator_shared_interface.hpp"
 #include "simulation.hpp"
+#include "road.hpp"
 #include "city/city.hpp"
 #include "tile_load.hpp"
+#include "entrypoint.hpp"

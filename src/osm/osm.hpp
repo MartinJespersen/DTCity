@@ -1,15 +1,19 @@
 #pragma once
 
 #include "base/base_inc.hpp"
+#include <memory>
 
 namespace async
 {
 struct ThreadPool;
 struct ThreadInfo;
-template <typename T> struct UserFuncResult;
-template <typename T> struct AsyncTaskContinuation;
-template <typename T> struct AsyncTaskStatus;
-}
+template <typename T>
+struct UserFuncResult;
+template <typename T>
+struct AsyncTaskContinuation;
+template <typename T>
+struct AsyncTaskStatus;
+} // namespace async
 
 namespace neta
 {
@@ -44,8 +48,8 @@ struct Tag
 
 enum class TagResultEnum : int
 {
-    ROAD_TAG_FOUND = 0,
-    ROAD_TAG_NOT_FOUND = 1,
+    Found = 0,
+    NotFound = 1,
 };
 
 struct TagResult
@@ -54,15 +58,15 @@ struct TagResult
     String8 value;
 };
 
-struct RoadNodeList
+struct WgsNodeList
 {
     WgsNode* first;
     WgsNode* last;
 };
 
-struct RoadNodeParseResult
+struct NodeParseResult
 {
-    Buffer<RoadNodeList> road_nodes;
+    Buffer<WgsNodeList> node_hashmap;
     B32 error;
 };
 
@@ -103,7 +107,7 @@ struct Node
     NodeId id;
 
     String8 utm_zone;  // TODO: If not used in future: Delete
-    WayList way_queue; // Linked list of RoadWays sharing this node
+    WayList way_queue; // Linked list of ways sharing this node
 };
 
 struct EcefLocation
@@ -119,10 +123,11 @@ struct WgsLocation
     F64 lon;
 };
 
-struct RoadEdge
+// Segment between consecutive nodes in an OSM way. Currently built for highways.
+struct Edge
 {
-    RoadEdge* prev;
-    RoadEdge* next;
+    Edge* prev;
+    Edge* next;
     S64 id;
     S64 node_id_from;
     S64 node_id_to;
@@ -131,8 +136,8 @@ struct RoadEdge
 
 struct EdgeStructure
 {
-    Buffer<RoadEdge> edges;
-    Map<EdgeId, RoadEdge*> edge_map;
+    Buffer<Edge> edges;
+    Map<EdgeId, Edge*> edge_map;
 };
 
 struct NodeList
@@ -159,34 +164,47 @@ read_only g_internal const char* g_waytype_osm_tag[] = {
 #undef X
 };
 
+struct NetworkCache
+{
+    String8 file_location;
+    String8 bbox_str;
+};
+
 struct Network
 {
-    Arena* arena;
-    String8 cache_file_location;
-    String8 bbox_cache_str;
+    Allocator allocator;
 
     Buffer<NodeList> node_hashmap; // key is the node id
     Map<NodeId, EcefLocation>* ecef_location_map;
     Map<NodeId, WgsLocation>* wgs_location_map;
 
     Buffer<WayList> way_hashmap;                    // view into way buffers
-    Buffer<Way> ways_arr[enum_idx(WayType::Count)]; // buffer storage
-    Buffer<NodeId> node_id_arr[enum_idx(WayType::Count)];
+    Buffer<Way> ways_arr[enum_idx(WayType::Count)] = {}; // buffer storage
+    Buffer<NodeId> node_id_arr[enum_idx(WayType::Count)] = {};
     EdgeStructure edge_structure;
+
+    Network(U64 node_hashmap_size, U64 way_hashmap_size) noexcept;
 };
 
-read_only g_internal Node g_road_node_utm = {nullptr, 0, {}, {}};
+// Owned by the task allocator; the result is transferred only after completion.
+struct NetworkLoadTask
+{
+    NetworkCache cache;
+    String8 request_body;
+    U64 node_hashmap_size;
+    U64 way_hashmap_size;
+    std::unique_ptr<Network> result;
+};
+
+async::AsyncTaskStatus<NetworkLoadTask>*
+network_load(async::ThreadPool* thread_pool, NetworkCache cache, String8 request_body,
+             U64 node_hashmap_size = 1000, U64 way_hashmap_size = 100);
+
 
 // Public
 EcefLocation
 ecef_location_create(U64 id, Vec3F64 pos);
 
-Network*
-osm_init(U64 node_hashmap_size, U64 way_hashmap_size, String8 cache_path, String8 area, String8 bbox_cache_str);
-void
-osm_release(Network* osm_network);
-g_internal void
-structure_cleanup(Network* network);
 TagResult
 tag_find(Arena* arena, Buffer<Tag> tags, String8 tag_to_find);
 WayNode*
@@ -195,22 +213,20 @@ EcefLocation
 location_get(Network* network, U64 node_id);
 WgsLocation
 wgs_location_get(Network* network, U64 node_id);
-g_internal Node*
-node_get(Network* network, U64 node_id);
-g_internal NodeId
-random_node_id_from_type_get(Network* network, WayType type);
 
-async::UserFuncResult<osm::Network>
-fetch_osm_data_and_parse(Arena* arena, async::ThreadPool* thread_pool, String8 response_body, osm::Network* osm_network);
-async::AsyncTaskContinuation<osm::Network>
-parse_osm_data(async::ThreadInfo thread_info, async::AsyncTaskStatus<osm::Network>* task);
+// Private task stages share task-owned inputs and publish only a complete result.
+g_internal async::AsyncTaskContinuation<NetworkLoadTask>
+_network_load_begin(async::ThreadInfo thread_info, async::AsyncTaskStatus<NetworkLoadTask>* task);
+g_internal async::UserFuncResult<NetworkLoadTask>
+_network_download_complete(Arena* arena, async::ThreadPool* thread_pool, String8 response_body, NetworkLoadTask* input);
 g_internal Error
-_parse_osm_data(osm::Network* osm_network);
-// Privates
+_network_parse(NetworkLoadTask* input, String8 file_content);
+g_internal Error
+_parse_osm_data(Network* network, String8 file_content);
 g_internal void
-_road_edge_structure_create(Network* network);
+_highway_edges_create(Network* network);
 g_internal WgsNode*
-_wgs_node_find(Buffer<RoadNodeList> node_hashmap, U64 node_id);
+_wgs_node_find(Buffer<WgsNodeList> node_hashmap, U64 node_id);
 g_internal B32
 _node_hashmap_insert(Network* network, U64 node_id, Way* way, Node** out);
 } // namespace osm

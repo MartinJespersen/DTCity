@@ -71,6 +71,8 @@ arena_alloc(ArenaParams* params)
     arena->cmt = commit_size;
     arena->res = reserve_size;
     arena->destructor_pos = 0;
+    arena->destructor_cmt_pos = reserve_size;
+    arena->destructor_count = 0;
     arena->free_size = 0;
     arena->free_last = 0;
 #if BUILD_DEBUG
@@ -93,7 +95,7 @@ arena_alloc()
 
 #if BUILD_DEBUG
 Arena*
-arena_alloc_debug(const char* source_file, U32 source_line, ArenaParams* params)
+arena_alloc_debug([[maybe_unused]] const char* source_file, [[maybe_unused]] U32 source_line, ArenaParams* params)
 {
     Arena* arena = arena_alloc(params);
     Debug_ArenaSource_Push(arena, source_file, source_line);
@@ -101,7 +103,7 @@ arena_alloc_debug(const char* source_file, U32 source_line, ArenaParams* params)
 }
 
 Arena*
-arena_alloc_debug(const char* source_file, U32 source_line)
+arena_alloc_debug([[maybe_unused]] const char* source_file, [[maybe_unused]] U32 source_line)
 {
     Arena* arena = arena_alloc();
     Debug_ArenaSource_Push(arena, source_file, source_line);
@@ -132,57 +134,10 @@ arena_release(Arena* arena)
 void*
 arena_push(Arena* arena, U64 size, U64 align)
 {
+    _arena_ensure_capacity(arena, size, align, 0);
     Arena* current = arena->current;
     U64 pos_pre = align_pow2(current->pos, align);
     U64 pos_pst = pos_pre + size;
-
-    // rjf: chain, if needed
-    if (current->res < pos_pst && !(arena->flags & ArenaFlag_NoChain))
-    {
-        Arena* new_block = 0;
-
-        Arena* prev_block;
-        for (new_block = arena->free_last, prev_block = 0; new_block != 0; prev_block = new_block, new_block = new_block->prev)
-        {
-            U64 block_start = align_pow2(ARENA_HEADER_SIZE, align);
-            if (new_block->res >= block_start + size)
-            {
-                if (prev_block)
-                {
-                    prev_block->prev = new_block->prev;
-                }
-                else
-                {
-                    arena->free_last = new_block->prev;
-                }
-                arena->free_size -= new_block->res;
-                break;
-            }
-        }
-
-        if (new_block == 0)
-        {
-            U64 res_size = current->res_size;
-            U64 cmt_size = current->cmt_size;
-            U64 block_start = align_pow2(ARENA_HEADER_SIZE, align);
-            if (size + block_start > res_size)
-            {
-                res_size = size + block_start;
-                cmt_size = res_size;
-            }
-            ArenaParams params = {.reserve_size = res_size, .commit_size = cmt_size, .flags = current->flags};
-            new_block = arena_alloc(&params);
-            Debug_SetName(new_block, "arena chain block");
-        }
-
-        new_block->base_pos = current->base_pos + current->res;
-        Debug_ArenaChain_Push(arena, new_block);
-        SLLStackPush_N(arena->current, new_block, prev);
-
-        current = new_block;
-        pos_pre = align_pow2(current->pos, align);
-        pos_pst = pos_pre + size;
-    }
 
     if (current->destructor_pos != 0)
     {
@@ -338,11 +293,67 @@ temp_end(Temp temp)
     arena_pop_to(temp.arena, temp.pos);
 }
 
-// Decommit only unused pages, rounded to this block's commit increment.
+// Select a block with room for both front allocations and optional tail records.
+lib_internal void
+_arena_ensure_capacity(Arena* arena, U64 size, U64 align, U64 tail_size)
+{
+    Arena* current = arena->current;
+    U64 pos_pre = align_pow2(current->pos, align);
+    U64 pos_pst = pos_pre + size + tail_size;
+    U64 limit = current->destructor_pos ? current->destructor_pos : current->res;
+
+    // rjf: chain, if needed
+    if (limit < pos_pst && !(arena->flags & ArenaFlag_NoChain))
+    {
+        Arena* new_block = 0;
+
+        Arena* prev_block;
+        for (new_block = arena->free_last, prev_block = 0; new_block != 0; prev_block = new_block, new_block = new_block->prev)
+        {
+            U64 block_start = align_pow2(ARENA_HEADER_SIZE, align);
+            if (new_block->res >= block_start + size + tail_size)
+            {
+                if (prev_block)
+                {
+                    prev_block->prev = new_block->prev;
+                }
+                else
+                {
+                    arena->free_last = new_block->prev;
+                }
+                arena->free_size -= new_block->res;
+                break;
+            }
+        }
+
+        if (new_block == 0)
+        {
+            U64 res_size = current->res_size;
+            U64 cmt_size = current->cmt_size;
+            U64 block_start = align_pow2(ARENA_HEADER_SIZE, align);
+            if (size + block_start + tail_size > res_size)
+            {
+                res_size = size + block_start + tail_size;
+                cmt_size = res_size;
+            }
+            ArenaParams params = {.reserve_size = res_size, .commit_size = cmt_size, .flags = current->flags};
+            new_block = arena_alloc(&params);
+            Debug_SetName(new_block, "arena chain block");
+        }
+
+        if (arena->destructor_pos != 0) new_block->destructor_pos = new_block->res;
+        new_block->base_pos = current->base_pos + current->res;
+        Debug_ArenaChain_Push(arena, new_block);
+        SLLStackPush_N(arena->current, new_block, prev);
+    }
+}
+
+// Keep blocks with live destructor records committed; front and tail pages can overlap.
+// Otherwise decommit unused pages, rounded to this block's commit increment.
 lib_internal void
 _arena_trim_block(Arena* block, U64 retained_size)
 {
-    if (!(block->flags & ArenaFlag_LargePages))
+    if (!(block->flags & ArenaFlag_LargePages) && block->destructor_count == 0)
     {
         U64 keep_pos = Max(block->pos, retained_size);
         keep_pos = Min(keep_pos, block->cmt);
@@ -366,7 +377,7 @@ _arena_trim_block(Arena* block, U64 retained_size)
 lib_internal void
 _arena_allocation_failure(const char* operation, U64 size)
 {
-    // Report without using scratch arenas: those allocations may also fail.
     ERROR_LOG("Fatal arena allocation failure: cannot %s %llu bytes.", operation, (unsigned long long)size);
+    os_call_stack_print();
     os_abort(1);
 }

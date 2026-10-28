@@ -40,7 +40,7 @@ AgentSim::update_slot(const AgentUpdate& update)
 
     if (!slot.active)
     {
-        ArrayResourcePoolHandle handle = this->agents_active.item_new(&slot.agent);
+        PoolHandle handle = this->agents_active.item_new(&slot.agent);
         *slot.agent = {};
         slot.agent->handle = handle;
         slot.agent->id = update.id;
@@ -60,7 +60,7 @@ AgentSim::update_slot(const AgentUpdate& update)
     agent->vehicle_type = update.vehicle_type;
     agent->node_from_id = update.node_from_id;
     agent->node_to_id = update.node_to_id;
-    agent->has_node_ids = update.has_node_ids;
+    agent->way_id = update.way_id;
     agent->ecef_coord_at_event = update.position;
     agent->event_time = update.time;
     agent->ecef_velocity = update.direction * update.speed;

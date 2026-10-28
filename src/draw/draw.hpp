@@ -30,22 +30,6 @@ struct Blend3DList
     Blend3DNode* last;
 };
 
-struct RoadIntersectionNode
-{
-    RoadIntersectionNode* next;
-    render::Handle vertex_buffer_handle;
-    render::Handle index_buffer_handle;
-    render::Handle road_segment_buffer_handle;
-    render::Handle road_segment_node_buffer_handle;
-    U32 overlay_option;
-};
-
-struct RoadIntersectionList
-{
-    RoadIntersectionNode* first;
-    RoadIntersectionNode* last;
-};
-
 struct PrimitiveInstanceNode
 {
     PrimitiveInstanceNode* next;
@@ -72,11 +56,10 @@ struct DrawFrame
 {
     U32 total_instance_buffer_byte_count;
     Blend3DList blend_3d_list;
-    RoadIntersectionList road_intersection_list;
     ChunkList<render::LineVertex>* line_vertex_chunk_list;
     PrimitiveInstanceList primitive_instance_list;
     ChunkList<render::AgentMeshInstanceBatch>* mesh_instance_batches;
-    ArrayResourcePoolHandle camera_resource_handle;
+    PoolHandle camera_resource_handle;
 };
 
 struct Draw
@@ -98,7 +81,7 @@ DrawFrame*
 draw_frame_get();
 
 void
-draw_camera_set(ArrayResourcePoolHandle camera_resource_handle);
+draw_camera_set(PoolHandle camera_resource_handle);
 void
 draw_line(render::Line& line);
 void

@@ -33,6 +33,8 @@ In the src directory all sub-directories are layers that are all responsible for
 - Use C++ classes to create interfaces holding state. 
 - C++ methods should not prefix the name of the class or namespace
 - Shader and C++ struct should be shareable to avoid code duplication.
+- Do not use exceptions and add noexcept to methods
+- C++ classes should be used for layers and should not be duplicated in list, containers or similar. For this a struct should be used.
 
 # Decision making
 - Always ask for me to elaborate if needed? E.g something is unclear or there are multiple ways to implement a feature.
@@ -65,7 +67,3 @@ In the src directory all sub-directories are layers that are all responsible for
 # My Setup
 - I use ubuntu 24.04 and Windows 11 in development.
 - I use the Zed editor: https://zed.dev/docs
-
-# Code Design Inspiration Repos
-- Odin Language: https://github.com/odin-lang/Odin
-- RAD debugger: https://github.com/EpicGamesExt/raddebugger

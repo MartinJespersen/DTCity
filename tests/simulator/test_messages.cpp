@@ -218,15 +218,15 @@ TEST_CASE("Motion parsing preserves precision and owns IDs after the JSON is rel
             {"id":"22180_bicycle","time":22765.125,"event_type":1,
              "position_x":4000000.125,"position_y":3000000.25,"position_z":2000000.5,
              "direction_x":0.6,"direction_y":0.8,"direction_z":0,"speed":12.5,
-             "node_from_id":-9223372036854775808,"node_to_id":9223372036854775807},
+             "node_from_id":-9223372036854775808,"node_to_id":9223372036854775807,"way_id":9007199254740993},
             {"id":"22180_bicycle","time":22765.125,"event_type":2,
              "position_x":4000010.125,"position_y":3000020.25,"position_z":2000030.5,
              "direction_x":0,"direction_y":0,"direction_z":0,"speed":0,
-             "node_from_id":0,"node_to_id":9007199254740993},
+             "node_from_id":0,"node_to_id":9007199254740993,"way_id":0},
             {"id":"22180_bicycle","time":22766,"event_type":4,
              "position_x":null,"position_y":null,"position_z":null,
              "direction_x":0,"direction_y":0,"direction_z":0,"speed":0,
-             "node_from_id":null,"node_to_id":null}
+             "node_from_id":0,"node_to_id":0,"way_id":0}
         ])"));
         simdjson::ondemand::parser parser;
         simdjson::ondemand::document doc;
@@ -250,14 +250,14 @@ TEST_CASE("Motion parsing preserves precision and owns IDs after the JSON is rel
     CHECK(events[0].direction.y == 0.8);
     CHECK(events[0].direction.z == 0);
     CHECK(events[0].speed == 12.5);
-    CHECK(events[0].has_node_ids);
     CHECK(events[0].node_from_id == INT64_MIN);
     CHECK(events[0].node_to_id == INT64_MAX);
+    CHECK(events[0].way_id == 9007199254740993LL);
     CHECK(events[1].event_type == 2);
     CHECK(events[2].event_type == (S64)city::AgentEventType::Arrival);
-    CHECK_FALSE(events[2].has_node_ids);
     CHECK(events[2].node_from_id == 0);
     CHECK(events[2].node_to_id == 0);
+    CHECK(events[2].way_id == 0);
     for (const city::AgentUpdate& event : events)
     {
         bool owned = str8_match(event.original_id, S("22180_bicycle"), 0);
@@ -276,9 +276,9 @@ TEST_CASE("Motion parsing preserves precision and owns IDs after the JSON is rel
     CHECK(slot.agent->ecef_coord_cur.x == 4000010.125);
     CHECK(slot.agent->ecef_coord_cur.y == 3000020.25);
     CHECK(slot.agent->ecef_coord_cur.z == 2000030.5);
-    CHECK(slot.agent->has_node_ids);
     CHECK(slot.agent->node_from_id == 0);
     CHECK(slot.agent->node_to_id == 9007199254740993LL);
+    CHECK(slot.agent->way_id == 0);
     ready = city::simulator_events_ready(scratch.arena, events, 22766);
     REQUIRE(ready.size == 1);
     simulation.update_slot(ready[0]);
@@ -290,9 +290,9 @@ TEST_CASE("Motion parsing rejects incomplete active events without replacing the
     ScratchScope scratch = ScratchScope(0, 0);
     const char* input = R"([{"id":"7","time":10,"event_type":1,
         "position_x":4000000,"position_y":3000000,"position_z":2000000,
-        "direction_x":1,"direction_y":0,"direction_z":0,"speed":5,"node_from_id":1,"node_to_id":2}])";
+        "direction_x":1,"direction_y":0,"direction_z":0,"speed":5,"node_from_id":1,"node_to_id":2,"way_id":1190023434}])";
     for (const char* field : {"position_x", "position_y", "position_z", "direction_x", "direction_y", "direction_z", "speed",
-                              "node_from_id", "node_to_id"})
+                              "node_from_id", "node_to_id", "way_id"})
     {
         for (bool null_value : {false, true})
         {
@@ -329,17 +329,16 @@ TEST_CASE("Motion parsing rejects incomplete active events without replacing the
     }
 }
 
-TEST_CASE("Arrival node IDs are either a signed integer pair or both null")
+TEST_CASE("Arrival node IDs are either a signed integer pair and reject missing IDs")
 {
     ScratchScope scratch = ScratchScope(0, 0);
     const char* node_fields = R"("node_from_id":0,"node_to_id":-9)";
     bool valid = true;
-    bool has_nodes = true;
     SUBCASE("Known link") {}
     SUBCASE("Unknown link")
     {
         node_fields = R"("node_from_id":null,"node_to_id":null)";
-        has_nodes = false;
+        valid = false;
     }
     SUBCASE("Missing field")
     {
@@ -373,7 +372,7 @@ TEST_CASE("Arrival node IDs are either a signed integer pair or both null")
     }
     std::string input = R"([{"id":"7","time":10,"event_type":4,
         "position_x":null,"position_y":null,"position_z":null,
-        "direction_x":0,"direction_y":0,"direction_z":0,"speed":0,)";
+        "direction_x":0,"direction_y":0,"direction_z":0,"speed":0,"way_id":1,)";
     input += node_fields;
     input += "}]";
     simdjson::padded_string json(input);
@@ -390,10 +389,81 @@ TEST_CASE("Arrival node IDs are either a signed integer pair or both null")
     if (valid)
     {
         REQUIRE(events.size == 1);
-        CHECK((bool)events[0].has_node_ids == has_nodes);
         CHECK(events[0].node_from_id == 0);
-        CHECK(events[0].node_to_id == (has_nodes ? -9 : 0));
+        CHECK(events[0].node_to_id == -9);
     }
     else
         CHECK(events.size == 0);
+}
+
+TEST_CASE("Stream way IDs accept signed integers and reject invalid fields")
+{
+    ScratchScope scratch = ScratchScope(0, 0);
+    const char* way_fields = R"("way_id":1190023434)";
+    bool valid = true;
+    SUBCASE("Known OSM way") {}
+    SUBCASE("Missing origid")
+    {
+        way_fields = R"("way_id":null)";
+        valid = false;
+    }
+    SUBCASE("Missing field")
+    {
+        way_fields = R"("other_id":1190023434)";
+        valid = false;
+    }
+    SUBCASE("String ID")
+    {
+        way_fields = R"("way_id":"1190023434")";
+        valid = false;
+    }
+    SUBCASE("Fractional ID")
+    {
+        way_fields = R"("way_id":1.5)";
+        valid = false;
+    }
+    SUBCASE("Boolean ID")
+    {
+        way_fields = R"("way_id":true)";
+        valid = false;
+    }
+    SUBCASE("Above signed range")
+    {
+        way_fields = R"("way_id":9223372036854775808)";
+        valid = false;
+    }
+    SUBCASE("Below signed range")
+    {
+        way_fields = R"("way_id":-9223372036854775809)";
+        valid = false;
+    }
+    std::string input = R"([{"id":"7","time":10,"event_type":1,
+        "position_x":4000000,"position_y":3000000,"position_z":2000000,
+        "direction_x":1,"direction_y":0,"direction_z":0,"speed":5,
+        "node_from_id":11049765816,"node_to_id":11049765817,)";
+    input += way_fields;
+    input += "}]";
+    simdjson::padded_string json(input);
+    simdjson::ondemand::parser parser;
+    simdjson::ondemand::document doc;
+    auto error = parser.iterate(json).get(doc);
+    REQUIRE(error == simdjson::SUCCESS);
+    simdjson::ondemand::array array;
+    error = doc.get_array().get(array);
+    REQUIRE(error == simdjson::SUCCESS);
+    city::AgentUpdate original = {.id = 99};
+    Buffer<city::AgentUpdate> events = {.data = &original, .size = 1};
+    error = city::simulator_events_from_json(scratch.arena, array, &events);
+    REQUIRE((error == simdjson::SUCCESS) == valid);
+    if (valid)
+    {
+        REQUIRE(events.size == 1);
+        CHECK(events[0].way_id == 1190023434);
+    }
+    else
+    {
+        CHECK(events.data == &original);
+        CHECK(events.size == 1);
+        CHECK(events[0].id == 99);
+    }
 }

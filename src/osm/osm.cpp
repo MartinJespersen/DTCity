@@ -2,7 +2,7 @@
 #include "base/base_random.hpp"
 #include "base/cache.hpp"
 #include "async/thread_pool.hpp"
-#include "async/async_task.hpp"
+#include "async/async_inc.hpp"
 #include "http/http.h"
 #include "async/async_http.hpp"
 #include "osm/osm.hpp"
@@ -17,181 +17,33 @@ ecef_location_create(U64 id, Vec3F64 pos)
     return loc;
 }
 
-Network*
-osm_init(U64 node_hashmap_size, U64 way_hashmap_size, String8 cache_path, String8 area, String8 bbox_cache_str)
+Network::Network(U64 node_hashmap_size, U64 way_hashmap_size) noexcept
+    // Allocator disables chaining. Reserve address space for city-sized networks;
+    // pages are committed only as parsing needs them.
+    : allocator(Allocator::create({.reserve_size = GB(4), .commit_size = arena_default_commit_size,
+                                   .flags = arena_default_flags})),
+      edge_structure{.edges = {}, .edge_map = Map<EdgeId, Edge*>(&this->allocator, 1024)}
 {
-    Arena* arena = arena_alloc();
-    Debug_SetName(arena, "OSM network arena");
-    Buffer<NodeList> node_hashmap = buffer_alloc<NodeList>(arena, node_hashmap_size);
-    Buffer<WayList> way_hashmap = buffer_alloc<WayList>(arena, way_hashmap_size);
-    Map<NodeId, EcefLocation>* ecef_location_map = Map<NodeId, EcefLocation>::create(arena, node_hashmap_size);
-    Map<NodeId, WgsLocation>* wgs_location_map = Map<NodeId, WgsLocation>::create(arena, node_hashmap_size);
-
-    Network* network = PushStruct(arena, Network);
-    network->cache_file_location = str8_path_from_str8_list(arena, {cache_path, area, S("osm_data.json")});
-    network->bbox_cache_str = push_str8_copy(arena, bbox_cache_str);
-    network->arena = arena;
-    network->node_hashmap = node_hashmap;
-    network->ecef_location_map = ecef_location_map;
-    network->wgs_location_map = wgs_location_map;
-    network->way_hashmap = way_hashmap;
-    return network;
+    Debug_SetName(this->allocator.arena, "OSM network arena");
+    this->node_hashmap = buffer_alloc<NodeList>(this->allocator.arena, node_hashmap_size);
+    this->way_hashmap = buffer_alloc<WayList>(this->allocator.arena, way_hashmap_size);
+    this->ecef_location_map = Map<NodeId, EcefLocation>::create(this->allocator.arena, node_hashmap_size);
+    this->wgs_location_map = Map<NodeId, WgsLocation>::create(this->allocator.arena, node_hashmap_size);
 }
 
-void
-osm_release(Network* osm_network)
+async::AsyncTaskStatus<NetworkLoadTask>*
+network_load(async::ThreadPool* thread_pool, NetworkCache cache, String8 request_body,
+             U64 node_hashmap_size, U64 way_hashmap_size)
 {
-    arena_release(osm_network->arena);
-}
-
-g_internal void
-structure_cleanup(Network* network)
-{
-    osm_release(network);
-}
-
-async::UserFuncResult<osm::Network>
-fetch_osm_data_and_parse(Arena* arena, async::ThreadPool* thread_pool, String8 response_body, osm::Network* osm_network)
-{
-    (void)thread_pool;
-    Error err = cache_write(osm_network->cache_file_location, response_body, osm_network->bbox_cache_str);
-    if (err)
-    {
-        return async::UserFuncResult<Network>::failure(arena, "Could not cache osm data");
-    }
-
-    async::AsyncTaskContinuation<osm::Network> task_continuation = {.func = parse_osm_data};
-    return async::UserFuncResult<osm::Network>::success(task_continuation);
-}
-
-async::AsyncTaskContinuation<osm::Network>
-parse_osm_data(async::ThreadInfo thread_info, async::AsyncTaskStatus<osm::Network>* task)
-{
-    (void)thread_info;
-    B32 error = _parse_osm_data(task->user_data);
-    task->error = error;
-    return {};
-}
-
-g_internal Error
-_parse_osm_data(osm::Network* osm_network)
-{
-    ScratchScope scratch = ScratchScope(0, 0);
-
-    String8 file_content = os_data_from_file_path(scratch.arena, osm_network->cache_file_location);
-    RoadNodeParseResult node_result = wrapper::node_buffer_from_simd_json(osm_network->arena, file_content, 1000);
-    if (node_result.error)
-    {
-        DEBUG_LOG("Error happend when parsing nodes from json");
-        return true;
-    }
-    WayParseResult osm_way_parse_result = wrapper::way_buffer_from_simd_json(osm_network->arena, file_content);
-    if (osm_way_parse_result.error)
-    {
-        DEBUG_LOG("Error happend when parsing ways from json");
-        return true;
-    }
-
-    Buffer<Way> ways = osm_way_parse_result.ways;
-    for (U32 way_type_idx = 0; way_type_idx < enum_idx(WayType::Count); ++way_type_idx)
-    {
-        ChunkList<Way>* way_chunk_list = chunk_list_create<Way>(scratch.arena, 1024);
-        ChunkList<NodeId>* node_id_chunk_list = chunk_list_create<NodeId>(scratch.arena, 1024);
-        for (U32 way_index = 0; way_index < ways.size; way_index++)
-        {
-            Way* way = &ways.data[way_index];
-            TagResult tag_result = tag_find(scratch.arena, way->tags, S(g_waytype_osm_tag[way_type_idx]));
-            if (enum_idx(tag_result.result))
-            {
-                continue;
-            }
-
-            chunk_list_insert(scratch.arena, way_chunk_list, *way);
-            for (U32 node_index = 0; node_index < way->node_count; node_index++)
-            {
-                U64 node_id = way->node_ids[node_index];
-                Node* node_utm;
-                B8 inserted = _node_hashmap_insert(osm_network, node_id, way, &node_utm);
-                if (inserted)
-                {
-                    WgsNode* node_coord = _wgs_node_find(node_result.road_nodes, node_id);
-
-                    // Cartographic to ECEF transformation
-                    CesiumGeospatial::Cartographic origin_cartographic(glm::radians(node_coord->lon), glm::radians(node_coord->lat), 0);
-                    glm::dvec3 coord_ecef = CesiumGeospatial::Ellipsoid::WGS84.cartographicToCartesian(origin_cartographic);
-                    EcefLocation loc = ecef_location_create(node_id, vec_3f64(coord_ecef.x, coord_ecef.y, coord_ecef.z));
-                    WgsLocation wgs_loc = {.id = node_id, .lat = node_coord->lat, .lon = node_coord->lon};
-
-                    osm_network->ecef_location_map->insert(osm_network->arena, node_id, loc);
-                    osm_network->wgs_location_map->insert(osm_network->arena, node_id, wgs_loc);
-
-                    chunk_list_insert(scratch.arena, node_id_chunk_list, node_id);
-                }
-            }
-        }
-
-        osm_network->node_id_arr[way_type_idx] = buffer_from_chunk_list(osm_network->arena, node_id_chunk_list);
-        osm_network->ways_arr[way_type_idx] = buffer_from_chunk_list(osm_network->arena, way_chunk_list);
-    }
-
-    _road_edge_structure_create(osm_network);
-    return false;
-}
-g_internal void
-_road_edge_structure_create(Network* network)
-{
-    prof_scope_marker;
-    Buffer<osm::Way> way_buf = network->ways_arr[enum_idx(osm::WayType::Highway)];
-
-    ChunkList<RoadEdge>* chunk_list = chunk_list_create<RoadEdge>(network->arena, 1024);
-    for (const osm::Way& way : way_buf)
-    {
-        RoadEdge* prev_edge = 0;
-        for (U32 node_idx = 1; node_idx < way.node_count; node_idx++)
-        {
-            U64 prev_node_id = way.node_ids[node_idx - 1];
-            U64 node_id = way.node_ids[node_idx];
-
-            RoadEdge* road_edge = chunk_list_get_next(network->arena, chunk_list);
-            road_edge->id = random_u64();
-            road_edge->way_id = way.id;
-            road_edge->node_id_from = prev_node_id;
-            road_edge->node_id_to = node_id;
-            road_edge->prev = prev_edge;
-
-            if (prev_edge)
-            {
-                prev_edge->next = road_edge;
-            }
-            prev_edge = road_edge;
-        }
-    }
-
-    Buffer<RoadEdge> road_edge_buf = buffer_from_chunk_list(network->arena, chunk_list);
-    Map<S64, RoadEdge*>* road_edge_map = &network->edge_structure.edge_map;
-    road_edge_map->init(network->arena, 1024);
-    for (RoadEdge* edge = road_edge_buf.begin(); edge < road_edge_buf.end(); edge++)
-    {
-        road_edge_map->insert(network->arena, edge->id, edge);
-    }
-
-    network->edge_structure.edges = road_edge_buf;
-}
-
-g_internal WgsNode*
-_wgs_node_find(Buffer<RoadNodeList> node_hashmap, U64 node_id)
-{
-    RoadNodeList* node_list = &node_hashmap.data[node_id % node_hashmap.size];
-
-    WgsNode* node = node_list->first;
-    for (; node; node = node->next)
-    {
-        if (node->id == node_id)
-        {
-            break;
-        }
-    }
-    return node;
+    Allocator allocator = Allocator::create();
+    Debug_SetName(allocator.arena, "OSM load task");
+    NetworkLoadTask* input = allocator.make<NetworkLoadTask>();
+    input->cache.file_location = push_str8_copy(allocator.arena, cache.file_location);
+    input->cache.bbox_str = push_str8_copy(allocator.arena, cache.bbox_str);
+    input->request_body = push_str8_copy(allocator.arena, request_body);
+    input->node_hashmap_size = node_hashmap_size;
+    input->way_hashmap_size = way_hashmap_size;
+    return async::async_task_run(std::move(allocator), thread_pool, _network_load_begin, input, "OSM load task");
 }
 
 WayNode*
@@ -215,12 +67,12 @@ TagResult
 tag_find(Arena* arena, Buffer<Tag> tags, String8 tag_to_find)
 {
     TagResult result = {};
-    result.result = TagResultEnum::ROAD_TAG_NOT_FOUND;
+    result.result = TagResultEnum::NotFound;
     for (U32 i = 0; i < tags.size; i++)
     {
         if (Str8Cmp(tags.data[i].key, tag_to_find))
         {
-            result.result = TagResultEnum::ROAD_TAG_FOUND;
+            result.result = TagResultEnum::Found;
             result.value = push_str8_copy(arena, tags.data[i].value);
             break;
         }
@@ -254,21 +106,60 @@ wgs_location_get(Network* network, NodeId node_id)
     return {};
 }
 
-g_internal Node*
-node_get(Network* network, NodeId node_id)
+g_internal void
+_highway_edges_create(Network* network)
 {
-    Buffer<NodeList> utm_node_hashmap = network->node_hashmap;
-    U32 slot_index = node_id % utm_node_hashmap.size;
-    NodeList* slot = &utm_node_hashmap.data[slot_index];
-    for (Node* node = slot->first; node; node = node->next)
+    prof_scope_marker;
+    Buffer<osm::Way> way_buf = network->ways_arr[enum_idx(osm::WayType::Highway)];
+
+    ChunkList<Edge>* chunk_list = chunk_list_create<Edge>(network->allocator.arena, 1024);
+    for (const osm::Way& way : way_buf)
+    {
+        Edge* prev_edge = 0;
+        for (U32 node_idx = 1; node_idx < way.node_count; node_idx++)
+        {
+            U64 prev_node_id = way.node_ids[node_idx - 1];
+            U64 node_id = way.node_ids[node_idx];
+
+            Edge* osm_edge = chunk_list_get_next(network->allocator.arena, chunk_list);
+            osm_edge->id = random_u64();
+            osm_edge->way_id = way.id;
+            osm_edge->node_id_from = prev_node_id;
+            osm_edge->node_id_to = node_id;
+            osm_edge->prev = prev_edge;
+
+            if (prev_edge)
+            {
+                prev_edge->next = osm_edge;
+            }
+            prev_edge = osm_edge;
+        }
+    }
+
+    Buffer<Edge> edge_buffer = buffer_from_chunk_list(network->allocator.arena, chunk_list);
+    Map<S64, Edge*>* edge_map = &network->edge_structure.edge_map;
+    for (Edge* edge = edge_buffer.begin(); edge < edge_buffer.end(); edge++)
+    {
+        edge_map->insert(network->allocator.arena, edge->id, edge);
+    }
+
+    network->edge_structure.edges = edge_buffer;
+}
+
+g_internal WgsNode*
+_wgs_node_find(Buffer<WgsNodeList> node_hashmap, U64 node_id)
+{
+    WgsNodeList* node_list = &node_hashmap.data[node_id % node_hashmap.size];
+
+    WgsNode* node = node_list->first;
+    for (; node; node = node->next)
     {
         if (node->id == node_id)
         {
-            return node;
+            break;
         }
     }
-    Assert(0 && "Node not found in hash map");
-    return &g_road_node_utm;
+    return node;
 }
 
 g_internal B32
@@ -288,17 +179,17 @@ _node_hashmap_insert(Network* network, NodeId node_id, Way* way, Node** out)
     }
     if (!node)
     {
-        node = PushStruct(network->arena, Node);
+        node = PushStruct(network->allocator.arena, Node);
         node->id = node_id;
         SLLQueuePush(slot->first, slot->last, node);
         Assert(slot->last->next == 0);
         node_inserted = 1;
     }
 
-    WayNode* way_node = PushStruct(network->arena, WayNode);
+    WayNode* way_node = PushStruct(network->allocator.arena, WayNode);
     way_node->way = *way;
 
-    // ~mgj: every node should be quickly able to look up the roadways it is part of
+    // ~mgj: Each node links to the ways that contain it.
     SLLQueuePush(node->way_queue.first, node->way_queue.last, way_node);
 
     // ~mgj: Ways are put into its hashmap for quick lookup (relevant for pixel picking operations)
@@ -311,14 +202,122 @@ _node_hashmap_insert(Network* network, NodeId node_id, Way* way, Node** out)
     return node_inserted;
 }
 
-g_internal NodeId
-random_node_id_from_type_get(Network* network, WayType type)
+g_internal Error
+_parse_osm_data(osm::Network* osm_network, String8 file_content)
 {
-    Buffer<NodeId> node_ids = network->node_id_arr[enum_idx(type)];
-    Assert(node_ids.size);
-    NodeId node_id = node_ids.data[random_u64() % node_ids.size];
+    Arena* arena = osm_network->allocator.arena;
+    ScratchScope scratch = ScratchScope(&arena, 1);
+    NodeParseResult node_result = wrapper::node_buffer_from_simd_json(osm_network->allocator.arena, file_content, 1000);
+    if (node_result.error)
+    {
+        DEBUG_LOG("Error happend when parsing nodes from json");
+        return true;
+    }
+    WayParseResult osm_way_parse_result = wrapper::way_buffer_from_simd_json(osm_network->allocator.arena, file_content);
+    if (osm_way_parse_result.error)
+    {
+        DEBUG_LOG("Error happend when parsing ways from json");
+        return true;
+    }
 
-    return node_id;
+    Buffer<Way> ways = osm_way_parse_result.ways;
+    for (U32 way_type_idx = 0; way_type_idx < enum_idx(WayType::Count); ++way_type_idx)
+    {
+        ChunkList<Way>* way_chunk_list = chunk_list_create<Way>(scratch.arena, 1024);
+        ChunkList<NodeId>* node_id_chunk_list = chunk_list_create<NodeId>(scratch.arena, 1024);
+        for (U32 way_index = 0; way_index < ways.size; way_index++)
+        {
+            Way* way = &ways.data[way_index];
+            TagResult tag_result = tag_find(scratch.arena, way->tags, S(g_waytype_osm_tag[way_type_idx]));
+            if (enum_idx(tag_result.result))
+            {
+                continue;
+            }
+
+            chunk_list_insert(scratch.arena, way_chunk_list, *way);
+            for (U32 node_index = 0; node_index < way->node_count; node_index++)
+            {
+                U64 node_id = way->node_ids[node_index];
+                Node* node;
+                B8 inserted = _node_hashmap_insert(osm_network, node_id, way, &node);
+                if (inserted)
+                {
+                    WgsNode* node_coord = _wgs_node_find(node_result.node_hashmap, node_id);
+
+                    // Cartographic to ECEF transformation
+                    CesiumGeospatial::Cartographic origin_cartographic(glm::radians(node_coord->lon), glm::radians(node_coord->lat), 0);
+                    glm::dvec3 coord_ecef = CesiumGeospatial::Ellipsoid::WGS84.cartographicToCartesian(origin_cartographic);
+                    EcefLocation loc = ecef_location_create(node_id, vec_3f64(coord_ecef.x, coord_ecef.y, coord_ecef.z));
+                    WgsLocation wgs_loc = {.id = node_id, .lat = node_coord->lat, .lon = node_coord->lon};
+
+                    osm_network->ecef_location_map->insert(osm_network->allocator.arena, node_id, loc);
+                    osm_network->wgs_location_map->insert(osm_network->allocator.arena, node_id, wgs_loc);
+
+                    chunk_list_insert(scratch.arena, node_id_chunk_list, node_id);
+                }
+            }
+        }
+
+        osm_network->node_id_arr[way_type_idx] = buffer_from_chunk_list(osm_network->allocator.arena, node_id_chunk_list);
+        osm_network->ways_arr[way_type_idx] = buffer_from_chunk_list(osm_network->allocator.arena, way_chunk_list);
+    }
+
+    _highway_edges_create(osm_network);
+    return false;
+}
+g_internal Error
+_network_parse(NetworkLoadTask* input, String8 file_content)
+{
+    auto network = std::make_unique<Network>(input->node_hashmap_size, input->way_hashmap_size);
+    Error error = _parse_osm_data(network.get(), file_content);
+    if (!error)
+        input->result = std::move(network);
+    return error;
+}
+
+g_internal async::UserFuncResult<NetworkLoadTask>
+_network_download_complete(Arena* arena, async::ThreadPool* thread_pool, String8 response_body, NetworkLoadTask* input)
+{
+    (void)thread_pool;
+    if (cache_write(input->cache.file_location, response_body, input->cache.bbox_str))
+        return async::UserFuncResult<NetworkLoadTask>::failure(arena, "Could not cache OSM data");
+    if (_network_parse(input, response_body))
+        return async::UserFuncResult<NetworkLoadTask>::failure(arena, "Could not parse OSM data");
+    return async::UserFuncResult<NetworkLoadTask>::success();
+}
+
+g_internal async::AsyncTaskContinuation<NetworkLoadTask>
+_network_load_begin(async::ThreadInfo thread_info, async::AsyncTaskStatus<NetworkLoadTask>* task)
+{
+    (void)thread_info;
+    NetworkLoadTask* input = task->user_data;
+    Arena* arena = task->allocator.arena;
+    ScratchScope scratch = ScratchScope(&arena, 1);
+    Result<String8> cached = cache_read(scratch.arena, input->cache.file_location, input->cache.bbox_str);
+    if (!cached.err)
+    {
+        task->error = _network_parse(input, cached.v);
+        return {};
+    }
+
+    // Attach HTTP to this same task so completion and cleanup retain one owner.
+    async::HttpInfo* info = async::http_info_create(arena, HTTP_Method_Post,
+                                                    S("http://overpass-api.de/api/interpreter"), S("application/x-www-form-urlencoded"),
+                                                    {S("User-Agent: DTCity/0.1"), S("Accept: application/json")});
+    info->body = input->request_body;
+    auto* http = task->allocator.make<async::AsyncHttpTaskState<NetworkLoadTask>>();
+    http->curl_ctx = async::_curl_ctx_create(arena);
+    http->thread_pool = task->thread_pool;
+    http->first_func = http->next_func = _network_download_complete;
+    http->first_http_info = http->next_http_info = info;
+    http->max_http_retries = 3;
+    http->max_task_retries = 1;
+    http->timeout_us = 300'000'000;
+    http->task_start_us = os_now_microseconds();
+    task->http_ext = http;
+    task->ext_type = async::ExtensionType::Http;
+    if (task->http_reconfigure(info)) return {};
+    return {.func = async::_http_main<NetworkLoadTask>};
 }
 
 } // namespace osm

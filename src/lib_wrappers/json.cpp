@@ -5,7 +5,7 @@
 namespace wrapper
 {
 
-osm::RoadNodeParseResult
+osm::NodeParseResult
 node_buffer_from_simd_json(Arena* arena, String8 json, U64 node_hashmap_size)
 {
     prof_scope_marker;
@@ -16,13 +16,13 @@ node_buffer_from_simd_json(Arena* arena, String8 json, U64 node_hashmap_size)
     U32 error_num = 0;
     bool error_ret = false;
 
-    Buffer<osm::RoadNodeList> nodes = {};
+    Buffer<osm::WgsNodeList> nodes = {};
     if (error)
     {
         goto early_ret;
     }
 
-    nodes = buffer_alloc<osm::RoadNodeList>(arena, node_hashmap_size);
+    nodes = buffer_alloc<osm::WgsNodeList>(arena, node_hashmap_size);
     {
         simdjson::ondemand::array elements;
         error = doc["elements"].get(elements);
@@ -68,7 +68,7 @@ early_ret:
         DEBUG_LOG("Error in node buffer parsing\n");
         error_ret = true;
     }
-    osm::RoadNodeParseResult res = {nodes, error_ret};
+    osm::NodeParseResult res = {nodes, error_ret};
     return res;
 }
 

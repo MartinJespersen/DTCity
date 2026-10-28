@@ -70,7 +70,7 @@ struct TileRenderResources
     TileRenderResources* render_next;
     TileRenderResources* gpu_work_done_next;
     Arena* arena;
-    ArrayResourcePoolHandle tileset_handle;
+    PoolHandle tileset_handle;
     // Set on the owner thread after initial GPU upload completion.
     city::TileBvh* tile_bvh;
     // Owner-thread marker for membership in the current tile draw list.
@@ -136,7 +136,7 @@ struct TilesetRenderer
 
 // Lifecycle
 void
-tileset_renderer_create(TilesetRenderer* tileset, ArrayResourcePoolHandle tileset_handle, async::ThreadPool* threads,
+tileset_renderer_create(TilesetRenderer* tileset, PoolHandle tileset_handle, async::ThreadPool* threads,
                         String8 url, F64 origin_longitude, F64 origin_latitude, F64 origin_height,
                         S64 tileset_ion_asset_id, U64 cache_byte_size);
 // Poll on the render thread until true; keep the renderer alive between calls.
@@ -150,7 +150,7 @@ tileset_tile_mesh_processor_enabled_set(TilesetRenderer* renderer, B32 enabled);
 void
 tileset_pump_async(TilesetRenderer* renderer);
 void
-tileset_update_view(TilesetRenderer* renderer, ArrayResourcePoolHandle camera_handle, F64 delta_time);
+tileset_update_view(TilesetRenderer* renderer, PoolHandle camera_handle, F64 delta_time);
 
 void
 tileset_render_resources_release(TileRenderResources* list);
@@ -177,7 +177,7 @@ _tileset_renderer_initialize(TilesetRenderer* tileset, async::ThreadPool* thread
                              F64 origin_latitude, F64 origin_height);
 
 g_internal Cesium3DTilesSelection::TilesetExternals
-_tileset_externals_create(TilesetRenderer* tileset, ArrayResourcePoolHandle tileset_handle);
+_tileset_externals_create(TilesetRenderer* tileset, PoolHandle tileset_handle);
 
 g_internal Cesium3DTilesSelection::TilesetOptions
 _tileset_options_create(U64 cache_byte_size);

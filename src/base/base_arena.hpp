@@ -50,6 +50,8 @@ struct Arena
     U64 cmt;
     U64 res;
     U64 destructor_pos;
+    U64 destructor_cmt_pos;
+    U64 destructor_count;
     U64 free_size;
     Arena* free_last;
 #if BUILD_DEBUG
@@ -146,6 +148,9 @@ using ArenaUniquePtr = std::unique_ptr<T, ArenaRelease<T>>;
 // Expand at the caller, before either allocation overload enters the base layer.
 #define arena_alloc(...) arena_alloc_debug(__FILE__, __LINE__ __VA_OPT__(,) __VA_ARGS__)
 #endif
+
+lib_internal void
+_arena_ensure_capacity(Arena* arena, U64 size, U64 align, U64 tail_size);
 
 lib_internal void
 _arena_trim_block(Arena* block, U64 retained_size);

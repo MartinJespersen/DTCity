@@ -40,7 +40,7 @@ struct AgentUpdate
     S64 event_type;
     S64 node_from_id;
     S64 node_to_id;
-    B32 has_node_ids; // False for arrivals on unknown links; zero is a valid node ID.
+    S64 way_id; // Simulator origid: matches osm::Edge::way_id, not its segment id.
     glm::dvec3 position;
     glm::dvec3 direction;
     F64 speed;
@@ -65,7 +65,7 @@ struct MotionEventView
     U64 event_type;
     S64 node_from_id;
     S64 node_to_id;
-    B32 has_node_ids;
+    S64 way_id;
     glm::dvec3 position;
     glm::dvec3 direction;
     F64 speed;
@@ -108,7 +108,7 @@ simdjson::ondemand::value::get(city::MotionEventView& out) noexcept
     JSON_TRY(obj["id"].get_string().get(out.id));
     JSON_TRY(obj["time"].get_double().get(out.time));
     JSON_TRY(obj["event_type"].get_uint64().get(out.event_type));
-    // Removal needs identity and time, even when the importer could not locate the link.
+    // Arrivals can omit coordinates, but all events require node and way IDs.
     out.position = {};
     if (out.event_type != (U64)city::AgentEventType::Arrival)
     {
@@ -121,27 +121,9 @@ simdjson::ondemand::value::get(city::MotionEventView& out) noexcept
     JSON_TRY(obj["direction_z"].get_double().get(out.direction.z));
     JSON_TRY(obj["speed"].get_double().get(out.speed));
 
-    const char* node_fields[] = {"node_from_id", "node_to_id"};
-    S64* node_ids[] = {&out.node_from_id, &out.node_to_id};
-    out.has_node_ids = false;
-    for (U32 index = 0; index < ArrayCount(node_fields); ++index)
-    {
-        simdjson::ondemand::value node;
-        JSON_TRY(obj[node_fields[index]].get(node));
-        bool missing = false;
-        JSON_TRY(node.is_null().get(missing));
-        if (index == 0)
-            out.has_node_ids = !missing;
-        else if (out.has_node_ids != !missing)
-            return simdjson::INCORRECT_TYPE;
-        *node_ids[index] = 0;
-        if (missing)
-        {
-            if (out.event_type != (U64)city::AgentEventType::Arrival) return simdjson::INCORRECT_TYPE;
-        }
-        else
-            JSON_TRY(node.get_int64().get(*node_ids[index]));
-    }
+    JSON_TRY(obj["node_from_id"].get_int64().get(out.node_from_id));
+    JSON_TRY(obj["node_to_id"].get_int64().get(out.node_to_id));
+    JSON_TRY(obj["way_id"].get_int64().get(out.way_id));
 
     return simdjson::SUCCESS;
 }

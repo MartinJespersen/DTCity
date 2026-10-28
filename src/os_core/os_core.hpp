@@ -227,6 +227,9 @@ os_set_thread_name(String8 string);
 
 void
 os_abort(S32 exit_code);
+// Best-effort diagnostic to stderr; does not use application arenas.
+void
+os_call_stack_print();
 
 ////////////////////////////////
 //~ rjf: @os_hooks File System (Implemented Per-OS)

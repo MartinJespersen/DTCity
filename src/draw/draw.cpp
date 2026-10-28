@@ -58,7 +58,7 @@ draw_frame_get()
 }
 
 void
-draw_camera_set(ArrayResourcePoolHandle camera_resource_handle)
+draw_camera_set(PoolHandle camera_resource_handle)
 {
     Context* ctx = dt_ctx_get();
     DrawFrame* frame = draw_frame_get();

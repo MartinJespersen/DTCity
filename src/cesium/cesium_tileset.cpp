@@ -377,7 +377,7 @@ class DTCityPrepareRendererResources : public Cesium3DTilesSelection::IPrepareRe
 {
   public:
     DTCityPrepareRendererResources(glm::dmat4 ecef_to_local_transform, TilesetRenderer* tile_set_renderer,
-                                   ArrayResourcePoolHandle tileset_handle)
+                                   PoolHandle tileset_handle)
         : ecef_to_local_transform(ecef_to_local_transform), tile_set_renderer(tile_set_renderer),
           tileset_handle(tileset_handle)
     {
@@ -615,7 +615,7 @@ class DTCityPrepareRendererResources : public Cesium3DTilesSelection::IPrepareRe
   private:
     glm::dmat4 ecef_to_local_transform;
     TilesetRenderer* tile_set_renderer;
-    ArrayResourcePoolHandle tileset_handle;
+    PoolHandle tileset_handle;
 };
 
 //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -1102,7 +1102,7 @@ _tileset_renderer_initialize(TilesetRenderer* tileset, async::ThreadPool* thread
 }
 
 g_internal Cesium3DTilesSelection::TilesetExternals
-_tileset_externals_create(TilesetRenderer* tileset, ArrayResourcePoolHandle tileset_handle)
+_tileset_externals_create(TilesetRenderer* tileset, PoolHandle tileset_handle)
 {
     std::shared_ptr<CesiumAsync::IAssetAccessor> asset_accessor = std::make_shared<CesiumCurl::CurlAssetAccessor>();
     std::shared_ptr<CesiumAsync::ITaskProcessor> task_processor_ref(tileset->task_processor,
@@ -1230,7 +1230,7 @@ _height_offset_sample_async(TilesetRenderer* renderer, CesiumGeospatial::Cartogr
 }
 
 void
-tileset_renderer_create(TilesetRenderer* tileset, ArrayResourcePoolHandle tileset_handle, async::ThreadPool* threads,
+tileset_renderer_create(TilesetRenderer* tileset, PoolHandle tileset_handle, async::ThreadPool* threads,
                         String8 url, F64 origin_longitude, F64 origin_latitude, F64 origin_height,
                         S64 tileset_ion_asset_id, U64 cache_byte_size)
 {
@@ -1467,7 +1467,7 @@ _tileset_renderer_tile_to_show_push(TilesetRenderer* renderer, const Cesium3DTil
 }
 
 void
-tileset_update_view(TilesetRenderer* renderer, ArrayResourcePoolHandle camera_handle, F64 delta_time)
+tileset_update_view(TilesetRenderer* renderer, PoolHandle camera_handle, F64 delta_time)
 {
     prof_scope_marker;
     if (!renderer)

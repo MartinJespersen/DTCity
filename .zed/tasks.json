@@ -21,7 +21,7 @@
   },
   {
     "label": "Debug Build (No ASan)",
-    "command": "cmake --preset debug-no-asan && cmake --build --preset debug-no-asan",
+    "command": "cmake --build --preset debug-no-asan",
     "cwd": "$ZED_WORKTREE_ROOT",
   },
   {

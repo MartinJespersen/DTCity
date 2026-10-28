@@ -28,6 +28,7 @@
 #include "base/test_layer_linkage.cpp"
 #include "base/test_arena.cpp"
 #include "base/test_container.cpp"
+#include "base/test_pool_lifetime.cpp"
 #include "base/test_math.cpp"
 #include "base/test_mutex.cpp"
 #include "base/test_strings.cpp"

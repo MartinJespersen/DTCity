@@ -22,7 +22,7 @@ namespace city
 struct TileMeshBvhEntry
 {
     // Assigned by the owner when registering the prepared entry with a TileBvh.
-    ArrayResourcePoolHandle handle;
+    PoolHandle handle;
     U64 mesh_revision;
     U32 triangle_count;
     // Registered meshes can remain cached while absent from the query hierarchy.
@@ -58,7 +58,7 @@ tile_mesh_bvh_build(Arena* arena, Buffer<const render::TileVertex> vertices, Buf
 // retain GPU resources, or register the entry. Mesh handles are owned by the tile batch.
 TileMeshBvhEntry
 tile_mesh_bvh_entry_create(Buffer<const render::TileVertex> vertices, Buffer<const U32> indices,
-                          render::MeshHandle mesh, U64 mesh_revision);
+                           render::MeshHandle mesh, U64 mesh_revision);
 
 // The caller maps request IDs back to agents.
 // Rays use city-local coordinates and normalized directions. For height queries,
@@ -79,7 +79,7 @@ struct TileHeightResult
     B32 hit;
     // Stable registry identity of the closest mesh; zero on a miss. The entry may
     // have been removed since submission, so this handle must not be dereferenced blindly.
-    ArrayResourcePoolHandle entry_handle;
+    PoolHandle entry_handle;
 };
 
 struct TileHeightRay
@@ -129,12 +129,12 @@ class TileBvh
     // Queue owner-thread changes. Copies/retains input buffers until removed or replaced.
     // Only entries with query_enabled != 0 are included in the outer BVH.
     // Only update() starts hierarchy work; these methods do not rebuild the tree.
-    ArrayResourcePoolHandle
+    PoolHandle
     insert(const TileMeshBvhEntry& entry);
     void
     replace(const TileMeshBvhEntry& entry);
     void
-    remove(ArrayResourcePoolHandle handle);
+    remove(PoolHandle handle);
 
     // Copies changes and retains their mesh resources. Input spans are borrowed for this call.
     // Replace existing entries by handle. Use insert() to register new entries.
@@ -148,7 +148,7 @@ class TileBvh
     // The returned handle is borrowed until the next update/destroy; submit retains it.
     render::TileBvhHandle
     update(Buffer<const TileMeshBvhEntry> changed_entries,
-           Buffer<const ArrayResourcePoolHandle> removed_entries);
+           Buffer<const PoolHandle> removed_entries);
 
   private:
     void

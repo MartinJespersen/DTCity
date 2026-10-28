@@ -288,7 +288,7 @@ AgentSystem::update(ui::Camera* camera,
 }
 
 void
-AgentSystem::agent_icon_add(Agent& agent, render::MeshHandle hover_icon_mesh_handle, F32 hover_icon_scale_factor)
+AgentSystem::agent_icon_add(Agent& agent, render::MeshHandle hover_icon_mesh_handle, F32 icon_scale_factor) noexcept
 {
     glm::vec3 agent_location = glm::vec3(agent.model_matrix.w_basis);
     F32 agent_height = agent.world_bounds.max.z - agent.world_bounds.min.z;
@@ -302,7 +302,7 @@ AgentSystem::agent_icon_add(Agent& agent, render::MeshHandle hover_icon_mesh_han
         .color = glm::vec3(agent_hover_icon_color),
     };
     draw::draw_line(hover_icon_connector);
-    draw::primitive_draw(hover_icon_location, hover_icon_scale_factor, hover_icon_mesh_handle);
+    draw::primitive_draw(hover_icon_location, icon_scale_factor, hover_icon_mesh_handle);
 }
 
 void

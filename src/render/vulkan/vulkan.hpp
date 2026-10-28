@@ -51,27 +51,10 @@ struct Blend3DList
     Blend3DNode* last;
 };
 
-struct RoadIntersectionNode
-{
-    RoadIntersectionNode* next;
-    BufferHandle vertex_buffer;
-    BufferHandle index_buffer;
-    BufferHandle road_segment_buffer;
-    BufferHandle road_segment_node_buffer;
-    U32 overlay_option_idx;
-};
-
-struct RoadIntersectionList
-{
-    RoadIntersectionNode* first;
-    RoadIntersectionNode* last;
-};
-
 struct RenderFrame
 {
     TilePipelineList model_3D_list;
     Blend3DList blend_3d_list;
-    RoadIntersectionList road_intersection_list;
 };
 
 struct MappedHandle

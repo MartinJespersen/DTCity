@@ -8,6 +8,7 @@ struct ArenaFailureTestState
     B32 fail_reserve;
     B32 fail_commit;
     U64 mappings;
+    U64 stack_reports;
 };
 
 struct ArenaFailureTestAbort

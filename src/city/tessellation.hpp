@@ -53,32 +53,6 @@ enum Bounds : U32
     Bounds_Count
 };
 
-struct RoadSegmentNodeStorageBuffer
-{
-    F32 min_x;
-    F32 min_y;
-    F32 max_x;
-    F32 max_y;
-    U32 split_axis;
-    F32 split_value;
-    U32 is_leaf;
-    union
-    {
-        struct
-        {
-            U32 child_0_idx;
-            U32 child_1_idx;
-        };
-        struct
-        {
-            U32 start_idx;
-            U32 end_idx;
-        };
-    };
-    U32 _pad;
-};
-static_assert(sizeof(RoadSegmentNodeStorageBuffer) == 40, "RoadSegmentNodeStorageBuffer must match std430 RoadSegmentNode size");
-
 struct BoundingBox
 {
     Vec2F32 center;
@@ -88,12 +62,8 @@ struct BoundingBox
 struct RoadSegmentNode
 {
     RoadSegmentNode* next;
-    RoadSegmentNode* parent;
-    U32 final_idx;
     Rng2F32 bounds;
     RoadSegmentNode* children[2];
-    U32 split_axis;
-    F32 split_value;
 
     // buffer range
     U32 start_idx;
@@ -105,12 +75,8 @@ struct RoadBvhContext
     RoadSegmentNode* stack;
     RoadSegmentNode* root;
 
-    U32 road_segment_node_count;
-
     Buffer<RoadSegmentCorners> road_segment_buffer;
     Buffer<BoundingBox> bb_buffer;
-
-    U32 leaf_bb_max;
 };
 
 struct RoadBvh
@@ -121,15 +87,8 @@ struct RoadBvh
 
     RoadSegmentNode* root;
     Buffer<RoadSegmentCorners> road_segment_buffer_sorted;
-    Buffer<RoadSegmentNodeStorageBuffer> node_buffer;
 };
 
-struct RoadBuildResult
-{
-    render::Handle vertex_buffer_handle;
-    render::Handle index_buffer_handle;
-    Buffer<RoadSegmentCorners> road_segment_buffer;
-};
 struct TileVertexFace
 {
     render::TileVertex v[3];
@@ -159,5 +118,4 @@ _render_mesh_from_2d_mesh(Arena* arena, geometry::PolygonMesh2d& triangulated_po
 
 g_internal void
 _mesh_append(Arena* arena, ChunkList<render::TileVertex>* vertices_chunk_list, ChunkList<U32>* indices_chunk_list, render::TileMesh& mesh, U32 road_idx);
-
 } // namespace city

@@ -39,7 +39,7 @@ struct TileLoadTaskState
     TileLoadState* state;
     cesium::TileRenderResources* tile;
     RoadBvh* bvh;
-    ArrayResourcePoolHandle bvh_handle;
+    PoolHandle bvh_handle;
     U64 mesh_processor_generation;
     B32 gpu_upload_submitted;
 };
@@ -62,8 +62,8 @@ struct TileLoadState
     Arena* arena;
     async::ThreadPool* thread_pool;
 
-    ArrayResourcePool<cesium::TilesetRenderer>* tileset_pool;
-    ArrayResourcePool<RoadBvh>* polygon_bvh_pool;
+    ResourcePool<cesium::TilesetRenderer>* tileset_pool;
+    ResourcePool<RoadBvh>* polygon_bvh_pool;
 
     cesium::TileRenderResources* tile_first;
     cesium::TileRenderResources* tile_last;
@@ -86,26 +86,26 @@ tile_load_destroy(TileLoadState* state);
 TileMeshBvhEntry
 tile_load_mesh_upload(Arena* arena, render::ThreadWorkerCmdCtx* thread_ctx,
                       Buffer<const render::TileVertex> vertices, Buffer<const U32> indices, U64 mesh_revision);
-g_internal ArrayResourcePoolHandle
+g_internal PoolHandle
 tile_load_streaming_begin(TileLoadState* state, String8 tileset_url, Rng2F64 bounds, S64 tileset_ion_asset_id,
                           U64 cache_byte_size);
 g_internal B32
-tile_load_streaming_end(TileLoadState* state, ArrayResourcePoolHandle tileset_handle);
+tile_load_streaming_end(TileLoadState* state, PoolHandle tileset_handle);
 g_internal void
-tile_load_update(TileLoadState* state, ArrayResourcePoolHandle tileset_handle, ArrayResourcePoolHandle bvh_handle,
-                 ArrayResourcePoolHandle camera_handle, B32 road_building_done, B32 road_overlay_changed,
+tile_load_update(TileLoadState* state, PoolHandle tileset_handle, PoolHandle bvh_handle,
+                 PoolHandle camera_handle, B32 road_building_done, B32 road_overlay_changed,
                  RoadOverlayOption road_overlay_option, F64 delta_time);
 void
-tile_load_debug_ui_draw(TileLoadState* state, ArrayResourcePoolHandle tileset_handle);
+tile_load_debug_ui_draw(TileLoadState* state, PoolHandle tileset_handle);
 
 g_internal void
 _tile_load_stale_meshes_schedule(TileLoadState* state, cesium::TilesetRenderer* tileset,
-                                 ArrayResourcePoolHandle tileset_handle, ArrayResourcePoolHandle bvh_handle,
+                                 PoolHandle tileset_handle, PoolHandle bvh_handle,
                                  U64 mesh_processor_generation);
 g_internal B32
 _tile_load_mesh_reprocess_task_start(TileLoadState* state, cesium::TileRenderResources* tile,
-                                     ArrayResourcePoolHandle tileset_handle, RoadBvh* bvh,
-                                     ArrayResourcePoolHandle bvh_handle, U64 mesh_processor_generation);
+                                     PoolHandle tileset_handle, RoadBvh* bvh,
+                                     PoolHandle bvh_handle, U64 mesh_processor_generation);
 g_internal void
 _tile_load_task_completions_update(TileLoadState* state);
 g_internal B32
@@ -119,5 +119,5 @@ g_internal void
 _tile_load_deallocated_tiles_release(TileLoadState* state);
 g_internal void
 _tile_load_bvh_selection_update(TileLoadState* state, cesium::TilesetRenderer* tileset,
-                                 ArrayResourcePoolHandle tileset_handle);
+                                PoolHandle tileset_handle);
 } // namespace city

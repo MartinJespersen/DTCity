@@ -30,20 +30,27 @@ TEST_CASE("Agent arrivals do not allocate slots and completed trips reuse pool c
 TEST_CASE("Repeated agent updates keep one slot and reactivation invalidates old height handles")
 {
     city::AgentSim simulation(8, 1);
-    city::AgentUpdate update = {.id = 7, .event_type = 3, .node_from_id = 10, .node_to_id = 20, .has_node_ids = true};
+    city::AgentUpdate update = {.id = 7, .event_type = 3, .node_from_id = 10, .node_to_id = 20,
+                                .way_id = 1190023434};
     city::AgentSlotUpdate slot = simulation.update_slot(update);
     REQUIRE(slot.active);
-    ArrayResourcePoolHandle old_handle = slot.agent->handle;
+    PoolHandle old_handle = slot.agent->handle;
     slot.agent->height = 50;
     update.event_type = 1;
     slot = simulation.update_slot(update);
     REQUIRE(slot.active);
     CHECK_FALSE(slot.created);
     CHECK(slot.agent->height == 50);
-    CHECK(slot.agent->has_node_ids);
     CHECK(slot.agent->node_from_id == 10);
     CHECK(slot.agent->node_to_id == 20);
+    CHECK(slot.agent->way_id == 1190023434);
     CHECK(simulation.agents_active.item_in_use_count == 1);
+
+    // A zero way ID must replace the previous way's identity.
+    update.way_id = 0;
+    slot = simulation.update_slot(update);
+    REQUIRE(slot.active);
+    CHECK(slot.agent->way_id == 0);
 
     update.event_type = (S64)city::AgentEventType::Arrival;
     slot = simulation.update_slot(update);
@@ -59,9 +66,9 @@ TEST_CASE("Repeated agent updates keep one slot and reactivation invalidates old
     REQUIRE(slot.active);
     CHECK(slot.created);
     CHECK(slot.agent->height == 0);
-    CHECK_FALSE(slot.agent->has_node_ids);
     CHECK(slot.agent->node_from_id == 0);
     CHECK(slot.agent->node_to_id == 0);
+    CHECK(slot.agent->way_id == 0);
     CHECK(slot.agent->handle.idx == old_handle.idx);
     CHECK(slot.agent->handle.gen_id != old_handle.gen_id);
     CHECK(simulation.agents_active.item_in_use_count == 1);
@@ -73,7 +80,7 @@ TEST_CASE("Full snapshots retire absent agents before allocating replacements")
     city::AgentUpdate first = {.id = 1, .event_type = 3};
     city::AgentSlotUpdate slot = simulation.update_slot(first);
     REQUIRE(slot.active);
-    ArrayResourcePoolHandle old_handle = slot.agent->handle;
+    PoolHandle old_handle = slot.agent->handle;
     slot.agent->height = 50;
 
     // Polling skipped the first agent's arrival and now contains another active agent.
@@ -113,7 +120,7 @@ TEST_CASE("Delayed full snapshots do not recreate completed trips in a full pool
         {.id = 3, .time = 108, .event_type = 3},
         {.id = 2, .time = 110, .event_type = (S64)city::AgentEventType::Arrival},
     };
-    ArrayResourcePoolHandle handles[2] = {};
+    PoolHandle handles[2] = {};
     for (U64 index = 0; index < 2; ++index)
     {
         city::AgentSlotUpdate slot = simulation.update_slot(events[index + 2]);

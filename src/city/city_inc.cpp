@@ -31,4 +31,5 @@
 #include "tile_load.cpp"
 #include "tile_bvh.cpp"
 #include "tile_height.cpp"
+#include "road.cpp"
 #include "city/city.cpp"

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "neta.hpp"
+#include "road.hpp"
 #include "tessellation.hpp"
 #include "agent.hpp"
 #include "tile_bvh.hpp"
@@ -10,58 +11,10 @@
 struct gltfw_Sampler;
 struct gltfw_Vertex3D;
 
-#include "generated/colormaps.h"
-
 namespace city
 {
 
-// /////////////////////////////////
 static_assert(sizeof(RoadSegmentCorners) == 64, "size of road segment might not match shader size");
-
-struct Road
-{
-    Arena* arena;
-
-    // Input
-    Rng2F64 bbox;
-    String8 netascore_file_path;
-
-    /////////////////////////////
-    // raw data OpenAPI data
-    F32 road_height;
-    F32 default_road_width;
-    glm::dmat4 ecef_to_local;
-    Map<osm::EdgeId, RoadInfo>* road_info_map;
-
-    ArrayResourcePoolHandle bvh_handle; // NOTE: cannot be replaced at the moment
-
-    ////////////////////////////////
-    // Graphics API
-
-    render::Handle vertex_buffer_handle;
-    render::Handle index_buffer_handle;
-    render::Handle texture_handle;
-    render::Handle colormap_handle;
-    U32 current_handle_idx;
-    bool new_vertex_handle_loading;
-    RoadOverlayOption overlay_option_cur;
-    render::Handle segment_buffer_handle;
-    render::Handle segment_node_buffer_handle;
-    /////////////////////////
-};
-
-struct RoadCrossSection
-{
-    Vec2F64 top;
-    Vec2F64 btm;
-    osm::EcefLocation node;
-};
-
-struct RoadSegment
-{
-    RoadCrossSection start;
-    RoadCrossSection end;
-};
 
 enum class AsyncTaskType : U32
 {
@@ -70,14 +23,6 @@ enum class AsyncTaskType : U32
     Osm,
     Road,
     CarSim,
-    Cached,
-};
-
-struct RoadBuildTask
-{
-    Road* road;
-    osm::Network* network;
-    RoadBvh* bvh;
 };
 
 struct AsyncCityTask
@@ -88,11 +33,10 @@ struct AsyncCityTask
     AsyncTaskType type;
     union
     {
-        async::AsyncTaskStatus<neta::NetaTaskState>* neta;
-        async::AsyncTaskStatus<osm::Network>* osm;
+        async::AsyncTaskStatus<neta::NetaLoadTask>* neta;
+        async::AsyncTaskStatus<osm::NetworkLoadTask>* osm;
         async::AsyncTaskStatus<RoadBuildTask>* road;
         async::AsyncTaskStatus<city::AgentSimThread>* agent_sim_task;
-        AsyncTaskType cached_type;
     };
 };
 
@@ -142,7 +86,6 @@ struct City
     String8 tileset_url;
     Rng2F64 bbox;
     String8 cache_path;
-    osm::Network* osm_network;
     bool neta_task_done;
     bool neta_task_failed;
     bool osm_task_done;
@@ -154,12 +97,16 @@ struct City
 
     bool no_gui_focus;
 
-    Road road;
+    PoolHandle road;
+    RoadBuildInput road_input;
     AgentSystem* agent_system;
     F32 all_agent_scale_factor;
-    ArrayResourcePoolHandle tileset_handle;
-    neta::NetaState* neta_state;
-    ArrayResourcePoolHandle camera_handle;
+    PoolHandle neta_state;
+
+    // handles
+    PoolHandle osm_network;
+    PoolHandle camera_handle;
+    PoolHandle tileset_handle;
 
     // async
     AsyncCityTaskList task_list;
@@ -167,29 +114,15 @@ struct City
 
 // global
 
-g_internal void
-road_destroy(Road* road);
-g_internal city::RoadBuildResult
-road_segment_build(Arena* arena, osm::Network* network, Buffer<osm::RoadEdge> edge_buffer, F32 default_road_width,
-                   F32 road_height, glm::dmat4& ecef_to_local, Map<osm::EdgeId, RoadInfo>* road_info_map);
-
 g_internal AsyncCityTask*
-_cache_and_parse_osm_json(async::ThreadPool* thread_pool, Road* road, osm::Network* osm_network);
-g_internal void
-quad_to_buffer_add(RoadSegmentCorners* road_segment, Buffer<render::Vertex3DBlend> buffer, Buffer<U32> indices,
-                   U64 edge_id, F32 road_height, U32* cur_vertex_idx, U32* cur_index_idx);
+_cache_and_parse_osm_json(Arena* arena, async::ThreadPool* thread_pool, osm::NetworkCache cache, Rng2F64 bbox);
 
 g_internal render::SamplerInfo
 sampler_from_cgltf_sampler(gltfw_Sampler sampler);
-g_internal async::AsyncTaskContinuation<RoadBuildTask>
-road_build(async::ThreadInfo info, async::AsyncTaskStatus<RoadBuildTask>* status);
+
 g_internal async::AsyncTaskContinuation<AgentSimThread>
 agent_sim_build(async::ThreadInfo info, async::AsyncTaskStatus<AgentSimThread>* status);
-g_internal void
-road_create(City* city, Road* in_out_road, glm::dmat4& ecef_to_local, String8 area, String8 bbox_cache_str);
-g_internal Map<osm::EdgeId, RoadInfo>*
-road_info_from_edge_id(Arena* arena, osm::Network* network, Buffer<osm::RoadEdge> road_edge_buf,
-                       Map<S64, neta::EdgeList>* neta_edge_map);
+
 void
 city_build(City* city, Rng2F64 bbox, String8 tileset_url, String8 area);
 void
@@ -204,46 +137,6 @@ city_init(City* city, String8 cache_path);
 void
 city_release(City* city);
 
-g_internal neta::Edge*
-edge_from_road_edge(osm::Network* network, osm::RoadEdge* road_edge, Map<S64, neta::EdgeList>* edge_list_map);
-
-g_internal void
-road_segment_from_road_nodes(RoadSegment* out_road_segment, osm::EcefLocation node_0, osm::EcefLocation node_1,
-                             F32 road_width);
-
-// BVH functions /////////////////////////////
-g_internal void
-quick_select(Buffer<BoundingBox> center_buffer, U32 split_axis, U32 start_idx, U32 end_idx, U32 k);
-g_internal Rng2F32
-bounds_union(Rng2F32 a, Rng2F32 b);
-g_internal Rng2F32
-bounds_union(Rng2F32 rng, Vec2F32 vec);
-g_internal Rng2F32
-bounds_union(Buffer<BoundingBox> center_buffer, U32 start_idx, U32 end_idx);
-g_internal Axis2
-split_axis_find(Buffer<BoundingBox> bb_buffer, U32 start_idx, U32 end_idx);
-g_internal void
-bvh_create(RoadBvh* bvh, Buffer<RoadSegmentCorners> road_segment_buffer, U32 leaf_bb_max);
-////////////////////////////////////
-
-g_internal Vec3F64
-height_dim_add(Vec2F64 pos, F64 height);
-g_internal F64
-cross_2f64_z_component(Vec2F64 a, Vec2F64 b);
-
-enum Direction
-{
-    Direction_Undefined,
-    Direction_Clockwise,
-    Direction_CounterClockwise
-};
-
-g_internal Direction
-ClockWiseTest(Buffer<Vec2F64> node_buffer);
-g_internal Buffer<U32>
-IndexBufferCreate(Arena* arena, U64 buffer_size, Direction direction);
-g_internal B32
-PointInTriangle(Vec2F64 p1, Vec2F64 p2, Vec2F64 p3, Vec2F64 point);
 
 // coordinates from str list
 
@@ -252,5 +145,5 @@ _agent_world_bounds_from_transform(Rng3F32 model_bounds, glm::mat4 model_transfo
 
 // helpers
 g_internal void
-_city_tasks_collect(City* city, bool publish_agents);
+_city_tasks_collect(City* city, bool publish_results);
 } // namespace city

@@ -28,6 +28,7 @@ class NetworkLink:
     node_to: int
     position_from: tuple | None
     position_to: tuple | None
+    way_id: int
 
 
 @dataclass(frozen=True)
@@ -118,33 +119,40 @@ def wgs84_to_ecef(longitude, latitude):
             radius * (1 - eccentricity_squared) * sin_latitude)
 
 
-def parse_node_id(value):
+def parse_network_id(value, description):
     try:
-        node_id = int(value)
+        identifier = int(value)
     except ValueError as exc:
-        raise ValueError(f"Network node ID must be an integer: {value!r}") from exc
-    if not -(2**63) <= node_id < 2**63:
-        raise ValueError(f"Network node ID exceeds the signed 64-bit range: {value!r}")
-    return node_id
+        raise ValueError(f"Network {description} must be an integer: {value!r}") from exc
+    if not -(2**63) <= identifier < 2**63:
+        raise ValueError(f"Network {description} exceeds the signed 64-bit range: {value!r}")
+    return identifier
 
 
 def load_network_links(network_path, source_crs=None):
-    """Resolve link node IDs and ECEF endpoints; IDs do not require coordinates."""
+    """Resolve node IDs, OSM way IDs (origid), and ECEF endpoints."""
     link_nodes = {}
     node_coordinates = {}
     projected_coordinates = {}
     network_crs = None
+    link_way_id = None
     # Remove completed elements from their parents to bound XML parsing memory.
     parents = []
     with open(network_path, "rb") as source:
         for event, element in ET.iterparse(source, events=("start", "end")):
             if event == "start":
                 parents.append(element)
+                if element.tag == "link":
+                    link_way_id = None
                 continue
             if (element.tag == "attribute"
                     and element.get("name") == "coordinateReferenceSystem"
                     and len(parents) == 3 and parents[0].tag == "network"):
                 network_crs = (element.text or "").strip() or None
+            elif (element.tag == "attribute" and element.get("name") == "origid"
+                  and len(parents) >= 3 and parents[-2].tag == "attributes" and parents[-3].tag == "link"):
+                # Capture the value before the bounded-memory parser removes the child.
+                link_way_id = parse_network_id((element.text or "").strip(), "link origid")
             elif element.tag == "node":
                 node_id = element.get("id")
                 if node_id:
@@ -156,8 +164,11 @@ def load_network_links(network_path, source_crs=None):
                 link_id = element.get("id")
                 node_from = element.get("from")
                 node_to = element.get("to")
-                if link_id and node_from and node_to:
-                    link_nodes[link_id] = (node_from, node_to)
+                if not link_id or not node_from or not node_to:
+                    raise ValueError(f"Network link {link_id!r} requires id, from, and to attributes")
+                if link_way_id is None:
+                    raise ValueError(f"Network link {link_id!r} requires an origid attribute")
+                link_nodes[link_id] = (node_from, node_to, link_way_id)
             parents.pop()
             if parents:
                 parents[-1].remove(element)
@@ -174,9 +185,9 @@ def load_network_links(network_path, source_crs=None):
             node_coordinates[node_id] = transformer.transform(x, y, errcheck=True)
     node_positions = {node_id: wgs84_to_ecef(*coordinates)
                       for node_id, coordinates in node_coordinates.items()}
-    return {link_id: NetworkLink(parse_node_id(node_from), parse_node_id(node_to),
-                                node_positions.get(node_from), node_positions.get(node_to))
-            for link_id, (node_from, node_to) in link_nodes.items()}
+    return {link_id: NetworkLink(parse_network_id(node_from, "node ID"), parse_network_id(node_to, "node ID"),
+                                node_positions.get(node_from), node_positions.get(node_to), way_id)
+            for link_id, (node_from, node_to, way_id) in link_nodes.items()}
 
 
 def calculate_motion(position_from, position_to, time_from, time_to):
@@ -207,8 +218,9 @@ def create_schema(connection):
           direction_y REAL NOT NULL,
           direction_z REAL NOT NULL,
           speed REAL NOT NULL,
-          node_from INTEGER,
-          node_to INTEGER
+          node_from INTEGER NOT NULL,
+          node_to INTEGER NOT NULL,
+          way_id INTEGER NOT NULL
         );
         CREATE INDEX agent_events_time ON agent_events(time);
         CREATE INDEX agent_events_agent_time ON agent_events(agent_id, time);
@@ -221,8 +233,8 @@ def flush_events(connection, event_rows):
         """
         INSERT INTO agent_events (
           agent_info_rowid, time, event_type, agent_id, position_x, position_y, position_z,
-          direction_x, direction_y, direction_z, speed, node_from, node_to
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          direction_x, direction_y, direction_z, speed, node_from, node_to, way_id
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
         event_rows,
     )
@@ -264,16 +276,18 @@ def import_events(connection, events_path, network_links, limit_events, batch_si
                         raise ValueError(f"Invalid relativePosition in event {event_count}")
                     position = None
                     link = network_links.get(link_id)
-                    node_ids = (link.node_from, link.node_to) if link is not None else (None, None)
-                    if (link is not None and link.position_from is not None and link.position_to is not None
+                    if link is None:
+                        raise ValueError(f"Event {event_count} references unknown network link {link_id!r}")
+                    node_ids = (link.node_from, link.node_to)
+                    way_id = link.way_id
+                    if (link.position_from is not None and link.position_to is not None
                             and relative_position is not None):
                         position = tuple(start + relative_position * (end - start)
                                          for start, end in zip(link.position_from, link.position_to))
                     current = MovementEvent(event_count, time, event_type, agent_id, link_id,
                                             position, dict(element.attrib))
 
-                    # Match by vehicle and link before considering geometry. A missing
-                    # network link must not hide an unmatched entry from diagnostics.
+                    # Match by vehicle and link before considering geometry.
                     is_entry = event_type in (EVENT_TYPE_IDS["entered link"], EVENT_TYPE_IDS["vehicle enters traffic"])
                     entry = pending_entries.pop(agent_id, None)
                     if entry is not None:
@@ -281,7 +295,7 @@ def import_events(connection, events_path, network_links, limit_events, batch_si
                             if entry.position is not None and position is not None:
                                 direction, speed = calculate_motion(entry.position, position, entry.time, time)
                                 event_rows.append((entry.index, entry.time, entry.event_type, entry.agent_id,
-                                                   *entry.position, *direction, speed, *node_ids))
+                                                   *entry.position, *direction, speed, *node_ids, way_id))
                                 imported_count += 1
                             else:
                                 skipped_count += 1
@@ -299,10 +313,10 @@ def import_events(connection, events_path, network_links, limit_events, batch_si
                             on_unmatched_entry(current, "missing_vehicle", None)
                     elif agent_id and (position is not None or event_type == EVENT_TYPE_IDS["vehicle leaves traffic"]):
                         # Exits stop extrapolation. Arrivals still remove an agent when
-                        # their link cannot be located; only those rows may lack a position.
+                        # their position is unavailable; only those rows may lack a position.
                         exit_position = position if position is not None else (None, None, None)
                         event_rows.append((current.index, time, event_type, agent_id,
-                                           *exit_position, 0.0, 0.0, 0.0, 0.0, *node_ids))
+                                           *exit_position, 0.0, 0.0, 0.0, 0.0, *node_ids, way_id))
                         imported_count += 1
                     else:
                         skipped_count += 1

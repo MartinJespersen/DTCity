@@ -5,7 +5,6 @@
 #include <mimalloc.h>
 #include "base_core.hpp"
 
-
 ///////////////////////////////////////////////////////////////////////
 // Heap-backed contiguous array. Growth invalidates pointers and iterators.
 template <typename T>
@@ -100,64 +99,15 @@ struct ArenaArray
     clear() noexcept;
 };
 
-/////////////////////////////////////////////////////////////////////////
-// Resource Pool /////////////////////////////////////////////////////////
-struct ResourcePoolHandle
-{
-    U32 idx;
-    U32 gen_id;
-};
+// Resource Pool
 
-template <typename T>
-struct ItemHeader
-{
-    U32 gen_id;
-    bool in_use;
-    T data;
-};
-
-template <typename T>
-struct ResourcePool
-{
-    Arena* arena; // should only contain data from array after init has been called
-    ItemHeader<T>* items;
-    U32 size;
-
-    Arena* arena_free_list;
-    ResourcePoolHandle* free_list;
-    U32 free_list_size;
-};
-
-template <typename T>
-ResourcePool<T>*
-resource_pool_init(U64 reserve_element_size);
-
-template <typename T>
-void
-resource_pool_release(ResourcePool<T>* container);
-
-template <typename T>
-T*
-resource_pool_item_from_idx(ResourcePool<T>* container, ResourcePoolHandle item_handle);
-
-template <typename T>
-ResourcePoolHandle
-resource_pool_array_idx_get(ResourcePool<T>* container);
-
-template <typename T>
-void
-resource_pool_item_free(ResourcePool<T>* container, ResourcePoolHandle item_handle);
-
-/////////////////////////////////////////////////////////////////////////
-// Array Resource Pool /////////////////////////////////////////////////////////
-
-struct ArrayResourcePoolHandle
+struct PoolHandle
 {
     U32 idx;
     U32 gen_id;
 
     bool
-    operator==(ArrayResourcePoolHandle& other)
+    operator==(PoolHandle& other)
     {
         return idx == other.idx && gen_id == other.gen_id;
     }
@@ -169,16 +119,17 @@ struct ArrayItemHeader
     U32 next;
     U32 gen_id;
     bool in_use;
+    bool constructed; // emplace owns this object; raw slots retain caller-managed lifetime.
     T data;
 };
 
 template <typename T>
-struct ArrayResourcePool;
+struct ResourcePool;
 
 template <typename T>
-struct ArrayResourcePoolIterator
+struct PoolIterator
 {
-    ArrayResourcePool<T>* pool;
+    ResourcePool<T>* pool;
     U32 idx;
 
     T&
@@ -187,55 +138,62 @@ struct ArrayResourcePoolIterator
     T*
     operator->();
 
-    ArrayResourcePoolIterator<T>&
+    PoolIterator<T>&
     operator++();
 
     bool
-    operator!=(ArrayResourcePoolIterator<T> other);
+    operator!=(PoolIterator<T> other);
 
     bool
-    operator==(ArrayResourcePoolIterator<T> other);
+    operator==(PoolIterator<T> other);
 
     void
     skip_unused();
 };
 
 template <typename T>
-struct ArrayResourcePool
+struct ResourcePool
 {
     ArrayItemHeader<T>* items;
     U32 capacity;
     U32 free_list;
     U32 item_in_use_count;
 
-    ArrayResourcePool(Arena* arena, U32 capacity) noexcept;
-    static ArrayResourcePool<T>*
+    ResourcePool(Arena* arena, U32 capacity) noexcept;
+    ~ResourcePool() noexcept;
+    ResourcePool(const ResourcePool&) = delete;
+    ResourcePool& operator=(const ResourcePool&) = delete;
+
+    template <typename... Args>
+    PoolHandle
+    emplace(Args&&... args) noexcept;
+    static ResourcePool<T>*
     create(Arena* arena, U32 capacity);
 
     void
     init(Arena* arena, U32 capacity);
-    ArrayResourcePoolHandle
+    PoolHandle
     item_new(T** out_item);
 
     bool
-    item_from_handle(ArrayResourcePoolHandle item_handle, T** out_value);
+    item_from_handle(PoolHandle item_handle, T** out_value);
 
-    ArrayResourcePoolHandle
+    PoolHandle
     handle_get();
 
     void
     invalidate_all();
 
     bool
-    is_handle_valid(ArrayResourcePoolHandle item_handle);
+    is_handle_valid(PoolHandle item_handle);
 
     void
-    item_free(ArrayResourcePoolHandle item_handle);
+    item_free(PoolHandle item_handle);
 
-    ArrayResourcePoolIterator<T>
+    PoolIterator<T>
     begin();
 
-    ArrayResourcePoolIterator<T>
+    PoolIterator<T>
     end();
 
   private:

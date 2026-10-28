@@ -91,7 +91,7 @@ async_websocket_start(String8 url)
     Debug_SetName(ws_session->msg_read_arena, "websocket message arena");
 
     ws_session->curl_ctx = _curl_ctx_create(session_arena);
-    ws_session->http_info = async::http_info_create(session_arena, HTTP_Method_None, url, {}, {}, {});
+    ws_session->http_info = async::http_info_create(session_arena, HTTP_Method_None, url);
     // websocket extension
     {
         B32 is_ws = str8_match(ws_session->http_info->http_path, S("ws://"), MatchFlag_RightSideSloppy);
@@ -269,8 +269,8 @@ g_internal AsyncGenericError
 _async_websocket_configure(AsyncWebsocketSession* ws_session)
 {
     CurlContext* curl_ctx = ws_session->curl_ctx;
-    AsyncGenericError error = async_http_configure(ws_session->arena, curl_ctx, ws_session->http_info);
-    if (error.has_error())
+
+    if (AsyncGenericError error = async_http_configure(ws_session->arena, curl_ctx, ws_session->http_info); error.has_error())
     {
         return error;
     }

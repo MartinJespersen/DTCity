@@ -1617,6 +1617,65 @@ os_graphical_message(B32 error, String8 title, String8 message)
 //~ rjf: @os_hooks Entry Points (Implemented Per-OS)
 
 #include <dbghelp.h>
+
+lib_internal SRWLOCK _os_w32_symbol_lock = SRWLOCK_INIT;
+
+void
+os_call_stack_print()
+{
+    void* frames[64] = {};
+    USHORT count = CaptureStackBackTrace(1, ArrayCount(frames), frames, nullptr);
+    HANDLE output = GetStdHandle(STD_ERROR_HANDLE);
+    DWORD written = 0;
+    const char heading[] = "\nCall stack (addresses):\n";
+    WriteFile(output, heading, sizeof(heading) - 1, &written, nullptr);
+    char text[2048];
+    // Emit addresses before loading symbols, which can require OS/CRT memory.
+    for (USHORT i = 0; i < count; ++i)
+    {
+        int size = snprintf(text, sizeof(text), "%u. [%p]\n", i + 1, frames[i]);
+        if (size > 0) WriteFile(output, text, (DWORD)Min((size_t)size, sizeof(text) - 1), &written, nullptr);
+    }
+
+    if (!TryAcquireSRWLockExclusive(&_os_w32_symbol_lock)) return;
+    defer(ReleaseSRWLockExclusive(&_os_w32_symbol_lock));
+    HMODULE library = LoadLibraryW(L"dbghelp.dll");
+    if (!library) return;
+    defer(FreeLibrary(library));
+    auto initialize = (decltype(&SymInitialize))GetProcAddress(library, "SymInitialize");
+    auto cleanup = (decltype(&SymCleanup))GetProcAddress(library, "SymCleanup");
+    auto from_address = (decltype(&SymFromAddr))GetProcAddress(library, "SymFromAddr");
+    auto from_line = (decltype(&SymGetLineFromAddr64))GetProcAddress(library, "SymGetLineFromAddr64");
+    auto get_options = (decltype(&SymGetOptions))GetProcAddress(library, "SymGetOptions");
+    auto set_options = (decltype(&SymSetOptions))GetProcAddress(library, "SymSetOptions");
+    if (!initialize || !cleanup || !from_address) return;
+    HANDLE process = GetCurrentProcess();
+    // Do not take ownership of a symbol session initialized elsewhere.
+    if (!initialize(process, nullptr, TRUE)) return;
+    defer(cleanup(process));
+    DWORD options = get_options ? get_options() : 0;
+    if (get_options && set_options) set_options(options | SYMOPT_LOAD_LINES | SYMOPT_UNDNAME | SYMOPT_FAIL_CRITICAL_ERRORS);
+    defer(if (get_options && set_options) set_options(options));
+    const char symbols_heading[] = "Call stack (symbols, where available):\n";
+    WriteFile(output, symbols_heading, sizeof(symbols_heading) - 1, &written, nullptr);
+    for (USHORT i = 0; i < count; ++i)
+    {
+        alignas(SYMBOL_INFO) char storage[sizeof(SYMBOL_INFO) + MAX_SYM_NAME] = {};
+        SYMBOL_INFO* symbol = (SYMBOL_INFO*)storage;
+        symbol->SizeOfStruct = sizeof(SYMBOL_INFO);
+        symbol->MaxNameLen = MAX_SYM_NAME;
+        DWORD64 displacement = 0;
+        if (!from_address(process, (DWORD64)frames[i], &displacement, symbol)) continue;
+        IMAGEHLP_LINE64 line = {};
+        line.SizeOfStruct = sizeof(line);
+        DWORD line_displacement = 0;
+        bool has_line = from_line && from_line(process, (DWORD64)frames[i], &line_displacement, &line);
+        int size = snprintf(text, sizeof(text), "%u. [%p] %s +0x%llx %s:%lu\n", i + 1, frames[i],
+            symbol->Name, (unsigned long long)displacement, has_line ? line.FileName : "<unknown>",
+            has_line ? line.LineNumber : 0);
+        if (size > 0) WriteFile(output, text, (DWORD)Min((size_t)size, sizeof(text) - 1), &written, nullptr);
+    }
+}
 #undef OS_WINDOWS // shlwapi uses its own OS_WINDOWS include inside
 #include <shlwapi.h>
 
@@ -1658,8 +1717,9 @@ win32_exception_filter(EXCEPTION_POINTERS* exception_ptrs)
 
     // load dbghelp dynamically just in case if it is missing
     HMODULE dbghelp = LoadLibraryA("dbghelp.dll");
-    if (dbghelp)
+    if (dbghelp && TryAcquireSRWLockExclusive(&_os_w32_symbol_lock))
     {
+        defer(ReleaseSRWLockExclusive(&_os_w32_symbol_lock));
         DWORD(WINAPI * dbg_SymSetOptions)(DWORD SymOptions);
         BOOL(WINAPI * dbg_SymInitializeW)(HANDLE hProcess, PCWSTR UserSearchPath, BOOL fInvadeProcess);
         BOOL(WINAPI * dbg_StackWalk64)(DWORD MachineType, HANDLE hProcess, HANDLE hThread, LPSTACKFRAME64 StackFrame, PVOID ContextRecord, PREAD_PROCESS_MEMORY_ROUTINE64 ReadMemoryRoutine,

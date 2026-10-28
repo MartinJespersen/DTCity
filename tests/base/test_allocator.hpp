@@ -36,3 +36,22 @@ struct ArrayMoveTestItem
     U32 value = 37;
     ~ArrayMoveTestItem();
 };
+
+struct ChainedAllocatorTestObject
+{
+    U32 id;
+    U32* log;
+    U32* count;
+
+    ChainedAllocatorTestObject(U32 id, U32* log, U32* count) noexcept;
+    ~ChainedAllocatorTestObject() noexcept;
+};
+
+struct alignas(64) OversizedAllocatorTestObject
+{
+    U8 payload[KB(8)];
+    U32* count;
+
+    explicit OversizedAllocatorTestObject(U32* count) noexcept;
+    ~OversizedAllocatorTestObject() noexcept;
+};
