@@ -136,8 +136,7 @@ city_build(City* city, Rng2F64 bbox, String8 tileset_url, String8 area)
         CesiumGeospatial::LocalDirection::Up);
     glm::dmat4 ecef_to_local = local_coord.getEcefToLocalTransformation();
 
-    city->road_input = {.bbox = bbox, .ecef_to_local = ecef_to_local,
-                        .default_road_width = 2.0f};
+    city->road_input = {.bbox = bbox, .ecef_to_local = ecef_to_local, .default_road_width = 2.0f};
 
     // Both load tasks own copies of their request inputs and publish results on completion.
     neta::NetaCache neta_cache = {
@@ -191,7 +190,6 @@ _cache_and_parse_osm_json(Arena* arena, async::ThreadPool* thread_pool, osm::Net
     osm_task->osm = osm::network_load(thread_pool, cache, body);
     return osm_task;
 }
-
 
 void
 city_update(City* city, async::ThreadPool* thread_pool, RoadOverlayOption neta_overlay_option, Vec2U32 framebuffer_dim,
@@ -285,29 +283,6 @@ city_update(City* city, async::ThreadPool* thread_pool, RoadOverlayOption neta_o
                         {
                             ImGui::Text("%s: %lf", city::road_overlay_option_strs[i], chosen_edge->options[i]);
                         }
-                    }
-                    ImVec2 window_size = ImGui::GetWindowSize();
-                    ImVec2 window_pos = ImVec2((F32)framebuffer_dim.x - window_size.x, 0);
-                    ImGui::SetWindowPos(window_pos, ImGuiCond_Always);
-
-                    ImGui::End();
-                }
-                osm::WayNode* way_node = osm::way_find(osm_network, hovered_object_id);
-                if (way_node)
-                {
-                    osm::Way* way = &way_node->way;
-                    bool open = true;
-                    ImGuiWindowFlags object_info_flags = ImGuiWindowFlags_AlwaysAutoResize |
-                                                         ImGuiWindowFlags_NoMouseInputs |
-                                                         ImGuiWindowFlags_NoFocusOnAppearing;
-
-                    ImGui::PushFont(nullptr, 22.0f);
-                    ImGui::Begin("Road Info", &open, object_info_flags);
-                    ImGui::PopFont();
-                    for (U32 tag_idx = 0; tag_idx < way->tags.size; tag_idx += 1)
-                    {
-                        osm::Tag* tag = &way->tags.data[tag_idx];
-                        ImGui::Text("%s: %s", (char*)tag->key.str, (char*)tag->value.str);
                     }
                     ImVec2 window_size = ImGui::GetWindowSize();
                     ImVec2 window_pos = ImVec2((F32)framebuffer_dim.x - window_size.x, 0);
@@ -651,7 +626,7 @@ _city_tasks_collect(City* city, bool publish_results)
                     {
                         Context* ctx = dt_ctx_get();
                         city->road = ctx->road_context->publish(completed->user_data,
-                            ctx->tile_load_state->polygon_bvh_pool);
+                                                                ctx->tile_load_state->polygon_bvh_pool);
                     }
                 }
             }
