@@ -308,6 +308,7 @@ city_update(City* city, async::ThreadPool* thread_pool, RoadOverlayOption neta_o
         // always drawn tiles
         for (cesium::TileRenderResources* tile = tileset->tile_to_show_first; tile; tile = tile->render_next)
         {
+            prof_scope_marker_named("tile draw scope");
             for (cesium::TileDrawBatch* batch = tile->batch_first; batch; batch = batch->next)
             {
                 B32 is_map_tile = has_flag(batch->render_data.pipeline_bits, render::TilePipelineBits::IsMapTile);
@@ -671,6 +672,7 @@ _city_tasks_collect(City* city, bool publish_results)
 g_internal void
 _city_tile_batch_draw(City* city, cesium::TileDrawBatch* batch, RoadOverlayOption overlay_option)
 {
+    prof_frame_marker;
     for (U32 part = 0; part < ArrayCount(batch->mesh_bvh_entries); ++part)
     {
         TileMeshBvhEntry& entry = batch->mesh_bvh_entries[part];

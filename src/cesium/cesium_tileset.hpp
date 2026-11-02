@@ -84,6 +84,25 @@ struct TileRenderResources
 
     TileRasterOverlayAttachment* raster_overlay_first;
     TileLoadCompletion* load_completion;
+
+    // Owner-thread references keep the last displayed geometry and imagery resident.
+    TileRenderResources* retained_next;
+    const Cesium3DTilesSelection::Tile* retained_tile;
+    const CesiumRasterOverlays::RasterOverlayTile* retained_raster_tile;
+    const CesiumRasterOverlays::RasterOverlayTile* applied_raster_tile;
+    U64 draw_selection_frame;
+};
+
+struct TileDrawSelection
+{
+    TileDrawSelection* next;
+    const Cesium3DTilesSelection::Tile* tile;
+    TileRenderResources* render_data;
+    F32 lod_visibility;
+    B32 is_fading_out;
+    B32 ready;
+    B32 fallback;
+    B32 excluded;
 };
 
 struct TileLoadCompletion
@@ -130,6 +149,8 @@ struct TilesetRenderer
     U64 tile_draw_batch_id_counter;
 
     RasterRenderResource* active_raster_resource_first;
+    TileRenderResources* retained_tile_first;
+    U64 draw_selection_frame;
 };
 
 // Lifecycle
@@ -152,6 +173,21 @@ tileset_update_view(TilesetRenderer* renderer, PoolHandle camera_handle, F64 del
 
 void
 tileset_render_resources_release(TileRenderResources* list);
+
+void
+tile_draw_selection_push(Arena* arena, TileDrawSelection** first, TileDrawSelection** last,
+                          const Cesium3DTilesSelection::Tile& tile, B32 is_fading_out,
+                          B32 raster_overlay_enabled);
+
+void
+tile_draw_selection_resolve(Arena* arena, TileDrawSelection** first, TileDrawSelection** last,
+                             TileRenderResources* retained_first, B32 raster_overlay_enabled);
+
+void
+tile_draw_selection_commit(TilesetRenderer* renderer, TileDrawSelection* selection);
+
+void
+tileset_renderer_retained_tiles_prune(TilesetRenderer* renderer, U64 draw_frame);
 
 // Private functions
 g_internal TileRenderResources*
@@ -176,10 +212,6 @@ _tileset_externals_create(TilesetRenderer* tileset, PoolHandle tileset_handle);
 
 g_internal Cesium3DTilesSelection::TilesetOptions
 _tileset_options_create(U64 cache_byte_size);
-
-g_internal void
-_tileset_renderer_tile_to_show_push(TilesetRenderer* renderer, const Cesium3DTilesSelection::Tile& tile,
-                                    B32 is_fading_out);
 
 g_internal void
 _tileset_renderer_raster_resource_track(TilesetRenderer* renderer, RasterRenderResource* resource);

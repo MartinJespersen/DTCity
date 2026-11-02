@@ -133,6 +133,7 @@ tile_load_update(TileLoadState* state, PoolHandle tileset_handle, PoolHandle bvh
                  PoolHandle camera_handle, B32 road_building_done, B32 road_overlay_changed,
                  RoadOverlayOption road_overlay_option, F64 delta_time)
 {
+    prof_frame_marker;
     Assert(state);
 
     for (cesium::TilesetRenderer& registered_tileset : *state->tileset_pool)

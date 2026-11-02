@@ -245,56 +245,6 @@ _tile_raster_attachment_find(TileRenderResources* render_data_list,
     return nullptr;
 }
 
-g_internal TileRasterOverlayAttachment*
-_tile_active_raster_attachment_get(TileRenderResources* render_data_list)
-{
-    if (!render_data_list)
-    {
-        return nullptr;
-    }
-
-    TileRasterOverlayAttachment* result = nullptr;
-
-    for (TileRasterOverlayAttachment* attachment = render_data_list->raster_overlay_first; attachment;
-         attachment = attachment->next)
-    {
-        if (attachment->overlay_texture_coordinate_id == 0 &&
-            render::is_handle_zero(attachment->texture_handle) == false)
-        {
-            result = attachment;
-            break;
-        }
-    }
-
-    return result;
-}
-
-g_internal void
-_tile_render_data_overlay_apply(TileRenderResources* render_data_list)
-{
-    TileRasterOverlayAttachment* attachment = _tile_active_raster_attachment_get(render_data_list);
-
-    for (TileDrawBatch* render_data = render_data_list ? render_data_list->batch_first : nullptr; render_data;
-         render_data = render_data->next)
-    {
-        render_data->render_data.overlay_texture_handle = {};
-        render_data->render_data.overlay_translation = {};
-        render_data->render_data.overlay_scale = {1.0f, 1.0f};
-        render_data->render_data.overlay_texture_coordinate_id = -1;
-
-        if (attachment)
-        {
-            render_data->render_data.overlay_texture_handle = attachment->texture_handle;
-            render_data->render_data.overlay_translation.x = (F32)attachment->translation.x;
-            // Cesium overlay V is south-to-north. Uploaded raster rows are north-to-south.
-            render_data->render_data.overlay_translation.y = (F32)(1.0 - attachment->translation.y);
-            render_data->render_data.overlay_scale.x = (F32)attachment->scale.x;
-            render_data->render_data.overlay_scale.y = (F32)(-attachment->scale.y);
-            render_data->render_data.overlay_texture_coordinate_id = attachment->overlay_texture_coordinate_id;
-        }
-    }
-}
-
 g_internal std::string
 _std_string_from_str8(String8 string)
 {
@@ -1263,6 +1213,7 @@ tileset_tile_mesh_processor_enabled_set(TilesetRenderer* renderer, B32 enabled)
 void
 tileset_render_resources_release(TileRenderResources* list)
 {
+    Assert(!list->retained_tile && !list->retained_raster_tile);
     for (TileDrawBatch* render_data = list->batch_first; render_data; render_data = render_data->next)
     {
         for (city::TileMeshBvhEntry& entry : render_data->mesh_bvh_entries)
@@ -1331,6 +1282,10 @@ tileset_renderer_destroy(TilesetRenderer* renderer)
 {
     Assert(renderer);
     renderer->destruction_requested = true;
+    tileset_renderer_retained_tiles_prune(renderer, 0);
+    renderer->tile_to_show_first = nullptr;
+    renderer->tile_to_show_last = nullptr;
+    renderer->tiles_to_show_count = 0;
 
     // Poll once per frame. The render loop must keep advancing GPU uploads,
     // worker completions and UI while Cesium drains its outstanding loads.
@@ -1374,53 +1329,6 @@ tileset_pump_async(TilesetRenderer* renderer)
     renderer->async_system.dispatchMainThreadTasks();
 }
 
-g_internal void
-_tileset_renderer_tile_to_show_push(TilesetRenderer* renderer, const Cesium3DTilesSelection::Tile& tile,
-                                    B32 is_fading_out)
-{
-    if (tile.getState() != Cesium3DTilesSelection::TileLoadState::Done)
-    {
-        return;
-    }
-
-    const Cesium3DTilesSelection::TileContent& content = tile.getContent();
-    const Cesium3DTilesSelection::TileRenderContent* render_content = content.getRenderContent();
-    if (!render_content)
-    {
-        return;
-    }
-
-    void* renderer_resources = render_content->getRenderResources();
-    if (!renderer_resources)
-    {
-        return;
-    }
-
-    TileRenderResources* render_data = static_cast<TileRenderResources*>(renderer_resources);
-    if (!render_data)
-    {
-        return;
-    }
-
-    F32 lod_fade = render_content->getLodTransitionFadePercentage();
-    lod_fade = glm::clamp(lod_fade, 0.0f, 1.0f);
-    F32 lod_visibility = is_fading_out ? 1.0f - lod_fade : lod_fade;
-    if (lod_visibility <= 0.0f)
-    {
-        return;
-    }
-
-    prof_scope_marker_named("tileset_update_view:schedule_loaded_tiles");
-    _tile_render_data_overlay_apply(render_data);
-    for (TileDrawBatch* render_data_node = render_data->batch_first; render_data_node;
-         render_data_node = render_data_node->next)
-    {
-        render_data_node->render_data.lod_fade = lod_visibility;
-    }
-    SLLQueuePush_N(renderer->tile_to_show_first, renderer->tile_to_show_last, render_data, render_next);
-    renderer->tiles_to_show_count++;
-}
-
 void
 tileset_update_view(TilesetRenderer* renderer, PoolHandle camera_handle, F64 delta_time)
 {
@@ -1435,6 +1343,7 @@ tileset_update_view(TilesetRenderer* renderer, PoolHandle camera_handle, F64 del
     if (!camera_found)
         return;
     Vec2U32 viewport_size = camera->cur_framebuffer_extent;
+    ScratchScope scratch = ScratchScope(&renderer->allocator.arena, 1);
 
     // Get camera position in ECEF
     glm::dmat4 local_to_ecef = renderer->local_to_ecef;
@@ -1466,6 +1375,7 @@ tileset_update_view(TilesetRenderer* renderer, PoolHandle camera_handle, F64 del
     renderer->tile_to_show_first = {};
     renderer->tile_to_show_last = {};
     renderer->tiles_to_show_count = 0;
+    renderer->draw_selection_frame++;
     // Update the tileset view
     std::vector<Cesium3DTilesSelection::ViewState> views = {view_state};
     {
@@ -1481,6 +1391,9 @@ tileset_update_view(TilesetRenderer* renderer, PoolHandle camera_handle, F64 del
                 renderer->tilesets.data[i]->loadTiles();
             }
 
+            B32 raster_overlay_enabled = renderer->tilesets.data[i]->getOverlays().size() != 0;
+            TileDrawSelection* selection_first = nullptr;
+            TileDrawSelection* selection_last = nullptr;
             for (const Cesium3DTilesSelection::Tile* tile : result.tilesToRenderThisFrame)
             {
                 prof_scope_marker_named("Tile to Short");
@@ -1493,15 +1406,19 @@ tileset_update_view(TilesetRenderer* renderer, PoolHandle camera_handle, F64 del
                 {
                     continue;
                 }
-                _tileset_renderer_tile_to_show_push(renderer, *tile, false);
+                tile_draw_selection_push(scratch.arena, &selection_first, &selection_last, *tile, false,
+                                         raster_overlay_enabled);
             }
 
-            for (const Cesium3DTilesSelection::Tile::ConstPointer& tile : result.tilesFadingOut)
-            {
-                _tileset_renderer_tile_to_show_push(renderer, *tile, true);
-            }
+            tile_draw_selection_resolve(scratch.arena, &selection_first, &selection_last,
+                                        renderer->retained_tile_first, raster_overlay_enabled);
+            for (TileDrawSelection* selection = selection_first; selection; selection = selection->next)
+                tile_draw_selection_commit(renderer, selection);
         }
     }
+    tileset_renderer_retained_tiles_prune(renderer, renderer->draw_selection_frame);
 }
 
 } // namespace cesium
+
+#include "cesium_tile_overlay.cpp"

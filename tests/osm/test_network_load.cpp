@@ -16,6 +16,7 @@
 #include "../base/test_pool_lifetime.cpp"
 #include "../city/test_neta_load.cpp"
 #include "../city/test_road.cpp"
+#include "../cesium/test_raster_overlay.cpp"
 
 TEST_CASE("Network parse result survives transfer into a pool and task destruction")
 {
