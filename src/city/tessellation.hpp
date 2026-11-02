@@ -23,7 +23,8 @@ enum RoadSegmentCornerCoord
     X(Bikeability_ft, "Bikeability_ft") \
     X(Bikeability_tf, "Bikeability_tf") \
     X(Walkability_tf, "Walkability_tf") \
-    X(Walkability_ft, "Walkability_ft")
+    X(Walkability_ft, "Walkability_ft") \
+    X(AgentCount, "Agent count")
 
 enum RoadOverlayOption : U32
 {
@@ -39,7 +40,8 @@ read_only g_internal const char* road_overlay_option_strs[] = {
 #undef X
 };
 
-static_assert(RoadOverlayOption_Count == shader::road_option_count);
+static_assert(RoadOverlayOption_AgentCount == shader::road_option_count);
+static_assert(RoadOverlayOption_AgentCount == shader::road_overlay_agent_count);
 static_assert(RoadSegmentCornerCoord_Count == shader::road_corner_count);
 
 using RoadInfo = shader::RoadInfo;
@@ -94,12 +96,13 @@ struct TileVertexFace
     render::TileVertex v[3];
 };
 
-g_internal render::TileMesh
+g_internal render::TileMeshParts
 _tessellate_tile_face_for_roads(Arena* arena, city::RoadSegmentNode* root, Buffer<city::RoadSegmentCorners> road_buffer,
                                 Buffer<city::RoadSegmentNode*> node_stack, TileVertexFace& face);
 
 g_internal bool
-tesselate_roads(Arena* arena, Buffer<render::TileVertex> vertices, Buffer<U32> indices, RoadBvh& bvh_result, render::TileMesh* out_mesh);
+tesselate_roads(Arena* arena, Buffer<render::TileVertex> vertices, Buffer<U32> indices, RoadBvh& bvh_result,
+                render::TileMeshParts* out_mesh);
 
 g_internal geometry::Quad2d
 _to_glm_quad(city::RoadSegmentCorners* road);

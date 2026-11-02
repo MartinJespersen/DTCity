@@ -11,8 +11,49 @@ namespace city
 AgentSim::AgentSim(U32 hashmap_bucket_capacity, U32 max_agent_count)
     : allocator(Allocator::create()), height_updates_stop(false),
       agent_map(&this->allocator, hashmap_bucket_capacity),
+      agent_count_by_way(&this->allocator, hashmap_bucket_capacity),
       agents_active(this->allocator.arena, max_agent_count)
 {
+}
+
+AgentSim::~AgentSim() noexcept
+{
+    if (this->height_sampler)
+        this->height_sampler->destroy();
+}
+
+AgentSystem::AgentSystem(Arena* arena, U32 simulation_capacity) noexcept
+    : simulations(arena, simulation_capacity)
+{
+}
+
+PoolHandle
+AgentSystem::simulation_create(U32 bucket_capacity, U32 agent_capacity) noexcept
+{
+    PoolHandle handle = this->simulations.emplace(bucket_capacity, agent_capacity);
+    if (!this->simulations.is_handle_valid(this->selected_simulation))
+        this->selected_simulation = handle;
+    return handle;
+}
+
+bool
+AgentSystem::simulation_select(PoolHandle handle) noexcept
+{
+    AgentSim* simulation = {};
+    if (!this->simulations.item_from_handle(handle, &simulation))
+        return false;
+    this->selected_simulation = handle;
+    for (Agent& agent : simulation->agents_active)
+        agent.transform_dirty = true;
+    return true;
+}
+
+void
+AgentSystem::simulation_remove(PoolHandle handle) noexcept
+{
+    this->simulations.item_free(handle);
+    if (handle == this->selected_simulation)
+        this->selected_simulation = {};
 }
 
 AgentSlotUpdate
@@ -32,6 +73,7 @@ AgentSim::update_slot(const AgentUpdate& update)
     {
         if (slot.active)
         {
+            this->way_count_change(slot.agent->way_id, -1);
             this->agents_active.item_free(map_item->agent_handle);
             map_item->agent_handle = {};
         }
@@ -57,6 +99,11 @@ AgentSim::update_slot(const AgentUpdate& update)
         slot.created = true;
     }
     Agent* agent = slot.agent;
+    if (slot.created || agent->way_id != update.way_id)
+    {
+        if (!slot.created) this->way_count_change(agent->way_id, -1);
+        this->way_count_change(update.way_id, 1);
+    }
     agent->vehicle_type = update.vehicle_type;
     agent->node_from_id = update.node_from_id;
     agent->node_to_id = update.node_to_id;
@@ -118,10 +165,35 @@ AgentSim::reconcile_snapshot(Buffer<AgentUpdate> updates)
             AgentMapItem* map_item = {};
             MapResult mapped = this->agent_map.get(agent.id, &map_item);
             Assert(mapped == MapResult::Success);
+            this->way_count_change(agent.way_id, -1);
             this->agents_active.item_free(agent.handle);
             map_item->agent_handle = {};
         }
     }
+}
+
+void
+AgentSim::reset() noexcept
+{
+    ++this->height_epoch;
+    this->agents_active.invalidate_all();
+    this->agent_map.clear();
+    this->agent_count_by_way.clear();
+}
+
+void
+AgentSim::way_count_change(osm::WayId way_id, S32 delta) noexcept
+{
+    U32* count = {};
+    if (this->agent_count_by_way.get(way_id, &count) == MapResult::NotFound)
+    {
+        Assert(delta > 0);
+        count = this->agent_count_by_way.insert(this->allocator.arena, way_id, 0);
+    }
+    Assert(delta == 1 || (delta == -1 && *count > 0));
+    // Keep zero-count entries so repeated trips reuse their storage.
+    if (delta > 0) ++*count;
+    else --*count;
 }
 
 } // namespace city

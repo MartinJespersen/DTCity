@@ -271,7 +271,7 @@ _tile_load_mesh_reprocess_task_start(TileLoadState* state, cesium::TileRenderRes
         Allocator task_allocator = Allocator::create();
         Arena* task_arena = task_allocator.arena;
         Debug_SetName(task_arena, "Tile Load Task arena");
-        TileLoadTaskState* tile_task_state = PushStruct(task_arena, TileLoadTaskState);
+        auto tile_task_state = std::make_unique<TileLoadTaskState>();
         tile_task_state->state = state;
         tile_task_state->tile = tile;
         tile_task_state->bvh = bvh;
@@ -279,7 +279,7 @@ _tile_load_mesh_reprocess_task_start(TileLoadState* state, cesium::TileRenderRes
         tile_task_state->mesh_processor_generation = mesh_processor_generation;
 
         async::AsyncTaskStatus<TileLoadTaskState>* tile_load_task =
-            async::async_task_run(std::move(task_allocator), state->thread_pool, _tile_load_mesh_reprocess_task, tile_task_state,
+            async::async_task_run(std::move(task_allocator), state->thread_pool, _tile_load_mesh_reprocess_task, std::move(tile_task_state),
                                   "Tile Mesh Reprocess Task");
         TileLoadTaskStateNode* node = state->task_free_list;
         if (node)
@@ -309,7 +309,7 @@ _tile_load_task_completions_update(TileLoadState* state)
         if (auto completed = async::async_task_take_completed(node->task_state))
         {
             Assert(!completed->error);
-            TileLoadTaskState* task_state = completed->user_data;
+            TileLoadTaskState* task_state = completed->user_data.get();
             if (task_state->gpu_upload_submitted == false)
             {
                 task_state->tile->tile_mesh_processor_generation = task_state->mesh_processor_generation;
@@ -340,19 +340,21 @@ _tile_load_task_completions_update(TileLoadState* state)
         {
             if (batch->has_load_replacement.load())
             {
-                render::handle_destroy_deferred(batch->render_data.vertex_buffer_render_handle);
-                render::handle_destroy_deferred(batch->render_data.index_buffer_render_handle);
-                render::handle_destroy_deferred(batch->mesh_bvh_entry.triangle_bvh_buffer);
-                batch->render_data.vertex_buffer_render_handle = batch->mesh_bvh_entry_load_temp.mesh.vertex_buffer_handle;
-                batch->render_data.index_buffer_render_handle = batch->mesh_bvh_entry_load_temp.mesh.index_buffer_handle;
-                batch->render_data.index_count = batch->mesh_bvh_entry_load_temp.triangle_count * 3;
-                // Publish metadata with the matching GPU mesh and preserve owner registration.
-                batch->mesh_bvh_entry_load_temp.handle = batch->mesh_bvh_entry.handle;
-                batch->mesh_bvh_entry_load_temp.query_enabled = batch->mesh_bvh_entry.query_enabled;
-                batch->mesh_bvh_entry = batch->mesh_bvh_entry_load_temp;
-                if (tile->tile_bvh)
-                    tile->tile_bvh->replace(batch->mesh_bvh_entry);
-                batch->mesh_bvh_entry_load_temp = {};
+                // Publish both parts together, after all mesh uploads have completed.
+                for (U32 part = 0; part < ArrayCount(batch->mesh_bvh_entries); ++part)
+                {
+                    TileMeshBvhEntry& entry = batch->mesh_bvh_entries[part];
+                    TileMeshBvhEntry& replacement = batch->mesh_bvh_entries_load_temp[part];
+                    render::handle_destroy_deferred(entry.mesh.vertex_buffer_handle);
+                    render::handle_destroy_deferred(entry.mesh.index_buffer_handle);
+                    render::handle_destroy_deferred(entry.triangle_bvh_buffer);
+                    replacement.handle = entry.handle;
+                    replacement.query_enabled = entry.query_enabled;
+                    entry = replacement;
+                    if (tile->tile_bvh)
+                        tile->tile_bvh->replace(entry);
+                    replacement = {};
+                }
                 batch->has_load_replacement.store(false);
             }
         }
@@ -380,7 +382,7 @@ _tile_load_deallocated_tiles_release(TileLoadState* state)
 
 g_internal B32
 _tile_load_road_mesh_process(Arena* arena, Buffer<render::TileVertex> vertices, Buffer<U32> indices, void* user_data,
-                             render::TileMesh* out_mesh)
+                             render::TileMeshParts* out_mesh)
 {
     RoadBvh* bvh = (RoadBvh*)user_data;
     B32 result = city::tesselate_roads(arena, vertices, indices, *bvh, out_mesh);
@@ -398,18 +400,20 @@ g_internal async::AsyncTaskContinuation<TileLoadTaskState>
 _tile_load_mesh_reprocess_task(async::ThreadInfo info, async::AsyncTaskStatus<TileLoadTaskState>* status)
 {
     (void)info;
-    ScratchScope scratch = ScratchScope(0, 0);
+    ScratchScope scratch = ScratchScope(&status->allocator.arena, 1);
     render::ThreadWorkerCmdCtx* thread_ctx = nullptr;
 
     cesium::TileRenderResources* tile = status->user_data->tile;
     RoadBvh* bvh = status->user_data->bvh;
     for (cesium::TileDrawBatch* batch = tile->batch_first; batch; batch = batch->next)
     {
-        render::TileMesh mesh = {};
+        render::TileMeshParts meshes = {};
         B32 has_road_classification =
-            city::tesselate_roads(scratch.arena, batch->vertex_buffer_orig, batch->index_buffer_orig, *bvh, &mesh);
+            city::tesselate_roads(scratch.arena, batch->vertex_buffer_orig, batch->index_buffer_orig, *bvh, &meshes);
 
-        if (has_road_classification)
+        // A road can disappear after the road network changes. Restore the full
+        // surface and retire the old road mesh in that case as well.
+        if (has_road_classification || batch->mesh_bvh_entries[enum_idx(render::TileMeshKind::Road)].triangle_count)
         {
             if (!thread_ctx)
             {
@@ -423,10 +427,14 @@ _tile_load_mesh_reprocess_task(async::ThreadInfo info, async::AsyncTaskStatus<Ti
                 status->user_data->gpu_upload_submitted = true;
             }
 
-            batch->mesh_bvh_entry_load_temp = tile_load_mesh_upload(
-                scratch.arena, thread_ctx,
-                {mesh.vertices.data, mesh.vertices.size}, {mesh.indices.data, mesh.indices.size},
-                status->user_data->mesh_processor_generation);
+            for (U32 part = 0; part < ArrayCount(meshes.meshes); ++part)
+            {
+                render::TileMesh& mesh = meshes.meshes[part];
+                batch->mesh_bvh_entries_load_temp[part] = tile_load_mesh_upload(
+                    scratch.arena, thread_ctx,
+                    {mesh.vertices.data, mesh.vertices.size}, {mesh.indices.data, mesh.indices.size},
+                    status->user_data->mesh_processor_generation);
+            }
             batch->has_load_replacement.store(true);
         }
     }
@@ -456,11 +464,13 @@ _tile_load_bvh_selection_update(TileLoadState* state, cesium::TilesetRenderer* t
         B32 query_enabled = tile->bvh_draw_frame == draw_frame && !tile->to_be_dealloced.load();
         for (cesium::TileDrawBatch* batch = tile->batch_first; batch; batch = batch->next)
         {
-            TileMeshBvhEntry& entry = batch->mesh_bvh_entry;
-            if (entry.query_enabled != query_enabled)
+            for (TileMeshBvhEntry& entry : batch->mesh_bvh_entries)
             {
-                entry.query_enabled = query_enabled;
-                tile->tile_bvh->replace(entry);
+                if (entry.query_enabled != query_enabled)
+                {
+                    entry.query_enabled = query_enabled;
+                    tile->tile_bvh->replace(entry);
+                }
             }
         }
     }

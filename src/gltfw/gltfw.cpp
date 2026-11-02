@@ -163,8 +163,8 @@ gltfw_gltf_read(Arena* arena, String8 gltf_path, String8 root_node_name)
         {
             buffer_node->index_buffer.data[i] = buffer_node->index_buffer.data[i] + cur_vertex_buffer_idx;
         }
-        BufferCopy(vertex_buffer, buffer_node->vertex_buffer, cur_vertex_buffer_idx, 0, buffer_node->vertex_buffer.size);
-        BufferCopy(index_buffer, buffer_node->index_buffer, cur_index_buffer_idx, 0, buffer_node->index_buffer.size);
+        buffer_copy(vertex_buffer, buffer_node->vertex_buffer, cur_vertex_buffer_idx, 0, buffer_node->vertex_buffer.size);
+        buffer_copy(index_buffer, buffer_node->index_buffer, cur_index_buffer_idx, 0, buffer_node->index_buffer.size);
 
         cur_vertex_buffer_idx += buffer_node->vertex_buffer.size;
         cur_index_buffer_idx += buffer_node->index_buffer.size;

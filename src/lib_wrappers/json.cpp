@@ -129,11 +129,11 @@ way_buffer_from_simd_json(Arena* arena, String8 json)
             if (error) { goto early_ret; }
             way->node_count = nodes_array.size();
 
-            way->node_ids = PushArray(arena, U64, way->node_count);
+            way->node_ids = PushArray(arena, osm::NodeId, way->node_count);
             U32 node_index = 0;
             for (auto node_id : nodes_array)
             {
-                error = node_id.get_uint64().get(way->node_ids[node_index]);
+                error = node_id.get_int64().get(way->node_ids[node_index]);
                 if (error) { goto early_ret; }
                 node_index++;
             }

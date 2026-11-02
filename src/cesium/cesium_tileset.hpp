@@ -12,7 +12,7 @@ namespace cesium
 struct TilesetRenderer;
 
 typedef B32 (*TileMeshProcessFunc)(Arena* arena, Buffer<render::TileVertex> vertices, Buffer<U32> indices,
-                                   void* user_data, render::TileMesh* out_mesh);
+                                   void* user_data, render::TileMeshParts* out_mesh);
 
 struct TileMeshProcessor
 {
@@ -53,12 +53,12 @@ struct TileDrawBatch
     Buffer<U32> index_buffer_orig;
 
     // Written to the load thread only
-    city::TileMeshBvhEntry mesh_bvh_entry_load_temp;
+    city::TileMeshBvhEntry mesh_bvh_entries_load_temp[enum_idx(render::TileMeshKind::Count)];
     std::atomic<B32> has_load_replacement;
 
-    render::TilePipelineData render_data;
+    render::TilePipelineData render_data; // Shared material, overlay, and draw state for both parts.
     // Prepared with the mesh on the worker and published by GPU completion.
-    city::TileMeshBvhEntry mesh_bvh_entry;
+    city::TileMeshBvhEntry mesh_bvh_entries[enum_idx(render::TileMeshKind::Count)];
 };
 
 struct TileLoadCompletion;
@@ -120,8 +120,6 @@ struct TilesetRenderer
 
     // Reserved for terrain/custom height alignment; sampling is disabled with one tileset.
     F64 height_offset;
-    // set by tileset_renderer_destroy to end the recurring height_offset sampling loop
-    B32 height_sample_stop;
     // Main-thread teardown state: stop view updates while outstanding loads drain.
     B32 destruction_requested;
 
@@ -164,9 +162,6 @@ _tile_render_data_from_gltf(const CesiumGltf::Model& model, const glm::dmat4& ec
 
 g_internal RasterRenderResource*
 _render_raster_tile_record(render::ThreadWorkerCmdCtx* thread_input, RasterTileInfo* tile_info);
-
-g_internal F64
-_sample_height_from_result(const Cesium3DTilesSelection::SampleHeightResult& result, const char* label);
 
 g_internal Rng3F32
 _tile_local_bounds_get(const Cesium3DTilesSelection::Tile& tile, const CesiumGeospatial::Ellipsoid& ellipsoid,

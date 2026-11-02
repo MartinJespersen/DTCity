@@ -45,7 +45,7 @@ def main():
             if source.suffix not in ('.vert', '.frag', '.comp', '.mesh', '.task'):
                 continue
             text = source.read_text()
-            if 'shader_shared.h' not in text and '"includes.glsl"' not in text:
+            if 'shader_shared.h' not in text:
                 continue
             binary = temp / (source.name + '.spv')
             command = [args.glslang, '-V', '-I' + str(shader_dir), str(source), '-o', str(binary)]
@@ -93,11 +93,15 @@ def main():
             shader_count += 1
 
         # Individual stage compilation cannot detect mismatched graphics interfaces.
-        model_dir = shader_dir / 'model_instance'
-        for stages in [('model.vert', 'model.frag'),
-                       ('mesh_instance.task', 'mesh_instance.mesh', 'model.frag')]:
+        graphics_stages = [
+            ('model_instance', ('model.vert', 'model.frag')),
+            ('model_instance', ('mesh_instance.task', 'mesh_instance.mesh', 'model.frag')),
+            ('tile', ('tile.vert', 'tile.frag')),
+            ('tile', ('road_tile.vert', 'road_tile.frag')),
+        ]
+        for directory_name, stages in graphics_stages:
             subprocess.run([args.glslang, '-V', '--target-env', 'vulkan1.2', '-l',
-                            *[str(model_dir / stage) for stage in stages],
+                            *[str(shader_dir / directory_name / stage) for stage in stages],
                             '-o', str(temp / 'model_linked.spv')], check=True)
 
         assert shared_types == {name for name, _ in offsets}, 'Missing shader layout coverage'

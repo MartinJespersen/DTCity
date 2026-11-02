@@ -431,8 +431,14 @@ class DTCityPrepareRendererResources : public Cesium3DTilesSelection::IPrepareRe
                 {
                     data->render_data.pipeline_bits |= render::TilePipelineBits::IsMapTile;
                 }
-                render::handle_list_push(thread_ctx, data->render_data.vertex_buffer_render_handle);
-                render::handle_list_push(thread_ctx, data->render_data.index_buffer_render_handle);
+                for (city::TileMeshBvhEntry& entry : data->mesh_bvh_entries)
+                {
+                    if (entry.triangle_count)
+                    {
+                        render::handle_list_push(thread_ctx, entry.mesh.vertex_buffer_handle);
+                        render::handle_list_push(thread_ctx, entry.mesh.index_buffer_handle);
+                    }
+                }
                 render::Handle null_texture_handle = render::texture_zero_handle_get();
                 if (data->render_data.texture_handle.u64 != null_texture_handle.u64 ||
                     data->render_data.texture_handle.gen_id != null_texture_handle.gen_id ||
@@ -476,7 +482,8 @@ class DTCityPrepareRendererResources : public Cesium3DTilesSelection::IPrepareRe
             // Register cached metadata now. query_enabled remains false until
             // tile_load_update finds this mesh in the current draw list.
             for (TileDrawBatch* batch = tile_render_resources->batch_first; batch; batch = batch->next)
-                batch->mesh_bvh_entry.handle = tile_render_resources->tile_bvh->insert(batch->mesh_bvh_entry);
+                for (city::TileMeshBvhEntry& entry : batch->mesh_bvh_entries)
+                    entry.handle = tile_render_resources->tile_bvh->insert(entry);
         }
 
         return tile_render_resources;
@@ -990,31 +997,31 @@ _tile_render_data_from_gltf(const CesiumGltf::Model& model, const glm::dmat4& ec
         batch->vertex_buffer_orig = vertices;
         batch->index_buffer_orig = indices;
 
-        Buffer<render::TileVertex> upload_vertices = vertices;
-        Buffer<U32> upload_indices = indices;
+        render::TileMeshParts upload_meshes = {};
+        upload_meshes.meshes[enum_idx(render::TileMeshKind::Surface)] = {.vertices = vertices, .indices = indices};
         if (mesh_processor.func)
         {
-            render::TileMesh processed_mesh = {};
+            render::TileMeshParts processed_mesh = {};
             B32 mesh_replaced =
                 mesh_processor.func(scratch.arena, vertices, indices, mesh_processor.user_data, &processed_mesh);
             if (mesh_replaced)
             {
-                upload_vertices = processed_mesh.vertices;
-                upload_indices = processed_mesh.indices;
+                upload_meshes = processed_mesh;
             }
         }
 
         // Empty materials have no queryable or drawable mesh and need no GPU buffers.
-        if (upload_indices.size == 0)
+        if (indices.size == 0)
             continue;
         SLLQueuePush(tile_render_data_list->batch_first, tile_render_data_list->batch_last, batch);
-        batch->mesh_bvh_entry = city::tile_load_mesh_upload(
-            scratch.arena, thread_input,
-            {upload_vertices.data, upload_vertices.size}, {upload_indices.data, upload_indices.size},
-            mesh_processor_generation);
-        batch->render_data.index_count = (U32)upload_indices.size;
-        batch->render_data.vertex_buffer_render_handle = batch->mesh_bvh_entry.mesh.vertex_buffer_handle;
-        batch->render_data.index_buffer_render_handle = batch->mesh_bvh_entry.mesh.index_buffer_handle;
+        for (U32 part = 0; part < ArrayCount(upload_meshes.meshes); ++part)
+        {
+            render::TileMesh& mesh = upload_meshes.meshes[part];
+            batch->mesh_bvh_entries[part] = city::tile_load_mesh_upload(
+                scratch.arena, thread_input,
+                {mesh.vertices.data, mesh.vertices.size}, {mesh.indices.data, mesh.indices.size},
+                mesh_processor_generation);
+        }
 
         // Texture Loading
         S32 tex_idx = -1;
@@ -1156,22 +1163,6 @@ _tileset_options_create(U64 cache_byte_size)
     return result;
 }
 
-g_internal F64
-_sample_height_from_result(const Cesium3DTilesSelection::SampleHeightResult& result, const char* label)
-{
-    F64 sampled_height = 0.0;
-    if (result.positions.size() > 0)
-    {
-        sampled_height = result.positions[0].height;
-    }
-
-    for (const std::string& warning : result.warnings)
-    {
-        DEBUG_LOG("Tileset height sample [%s] warning: %s\n", label, warning.c_str());
-    }
-    return sampled_height;
-}
-
 g_internal Rng3F32
 _tile_local_bounds_get(const Cesium3DTilesSelection::Tile& tile, const CesiumGeospatial::Ellipsoid& ellipsoid,
                        const glm::dmat4& ecef_to_local)
@@ -1190,43 +1181,6 @@ _tile_local_bounds_get(const Cesium3DTilesSelection::Tile& tile, const CesiumGeo
     result.y1 = (F32)tile_aabb_local.maximumY;
     result.z1 = (F32)tile_aabb_local.maximumZ;
     return result;
-}
-
-// samples the custom-geometry and terrain surface heights at the city center and
-// writes their delta into renderer->height_offset. both queries are driven to
-// completion by the per-frame tileset_update_view; the continuation reschedules
-// itself so height_offset keeps refining as more detailed tiles stream in.
-// tileset_renderer_destroy sets height_sample_stop to end the loop.
-g_internal void
-_height_offset_sample_async(TilesetRenderer* renderer, CesiumGeospatial::Cartographic center_position)
-{
-    std::vector<CesiumAsync::Future<Cesium3DTilesSelection::SampleHeightResult>> height_futures;
-    for (U64 i = 0; i < renderer->tilesets.size; ++i)
-    {
-        height_futures.emplace_back(renderer->tilesets.data[i]->sampleHeightMostDetailed({center_position}));
-    }
-
-    renderer->async_system.all(std::move(height_futures))
-        .thenInMainThread(
-            [renderer, center_position](std::vector<Cesium3DTilesSelection::SampleHeightResult>&& results)
-            {
-                F64 terrain_height = _sample_height_from_result(results[0], "terrain");
-                F64 geometry_height = _sample_height_from_result(results[1], "geometry");
-
-                B32 geometry_ok = results[0].sampleSuccess.size() > 0 && results[0].sampleSuccess[0];
-                B32 terrain_ok = results[1].sampleSuccess.size() > 0 && results[1].sampleSuccess[0];
-                if (geometry_ok && terrain_ok)
-                {
-                    renderer->height_offset = geometry_height - terrain_height;
-                }
-
-                if (!renderer->height_sample_stop)
-                {
-                    _height_offset_sample_async(renderer, center_position);
-                }
-            })
-        .catchInMainThread([](std::exception&& e)
-                           { DEBUG_LOG("Height offset sampling failed: %s\n", e.what()); });
 }
 
 void
@@ -1311,11 +1265,14 @@ tileset_render_resources_release(TileRenderResources* list)
 {
     for (TileDrawBatch* render_data = list->batch_first; render_data; render_data = render_data->next)
     {
-        if (list->tile_bvh)
-            list->tile_bvh->remove(render_data->mesh_bvh_entry.handle);
-        render::handle_destroy_deferred(render_data->render_data.vertex_buffer_render_handle);
-        render::handle_destroy_deferred(render_data->render_data.index_buffer_render_handle);
-        render::handle_destroy_deferred(render_data->mesh_bvh_entry.triangle_bvh_buffer);
+        for (city::TileMeshBvhEntry& entry : render_data->mesh_bvh_entries)
+        {
+            if (list->tile_bvh)
+                list->tile_bvh->remove(entry.handle);
+            render::handle_destroy_deferred(entry.mesh.vertex_buffer_handle);
+            render::handle_destroy_deferred(entry.mesh.index_buffer_handle);
+            render::handle_destroy_deferred(entry.triangle_bvh_buffer);
+        }
         render::Handle null_texture_handle = render::texture_zero_handle_get();
         if (render_data->render_data.texture_handle.u64 != null_texture_handle.u64 ||
             render_data->render_data.texture_handle.gen_id != null_texture_handle.gen_id ||
@@ -1373,8 +1330,6 @@ B32
 tileset_renderer_destroy(TilesetRenderer* renderer)
 {
     Assert(renderer);
-    // stop the recurring height sampler before tearing down the tilesets
-    renderer->height_sample_stop = true;
     renderer->destruction_requested = true;
 
     // Poll once per frame. The render loop must keep advancing GPU uploads,

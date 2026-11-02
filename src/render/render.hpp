@@ -2,6 +2,7 @@
 
 #include <glm/glm.hpp>
 #include "base/base_inc.hpp"
+#include "shaders/shader_shared.h"
 
 namespace async
 {
@@ -202,10 +203,6 @@ struct BufferInfo
     template <typename T>
     BufferInfo(Arena* arena, T* buffer, U32 buffer_type);
 
-    template <typename T>
-    static BufferInfo
-    empty_buffer_info(Arena* arena, BufferType buffer_type);
-
     BufferInfo
     copy_to_arena(Arena* arena);
 };
@@ -276,11 +273,19 @@ struct TileVertex
     U32 road_segment_idx;
 };
 
+enum class TileMeshKind : U32
+{
+    Surface,
+    Road,
+    Count
+};
+
 struct TilePipelineData
 {
     Handle vertex_buffer_render_handle;
     Handle index_buffer_render_handle;
     Handle road_segment_buffer_handle;
+    MappedHandle<shader::WayAgentCount> way_agent_count_buffer;
     Handle texture_handle;
     Handle overlay_texture_handle;
     Handle colormap_handle;
@@ -299,7 +304,9 @@ struct TilePipelineData
     TilePipelineBits pipeline_bits;
     DepthCompare depth_test_compare;
 
+    F32 agent_count_reference;
     U32 overlay_option_idx;
+    TileMeshKind mesh_kind;
 };
 
 struct TilePipelineDataNode
@@ -327,6 +334,13 @@ struct TileMesh
 {
     Buffer<TileVertex> vertices;
     Buffer<U32> indices;
+};
+
+// A partition of the original tile: every triangle belongs to exactly one part.
+struct TileMeshParts
+{
+    // Disjoint triangle sets. Together they cover the original tile surface.
+    TileMesh meshes[enum_idx(TileMeshKind::Count)];
 };
 
 struct PrimitiveVertex
@@ -530,11 +544,20 @@ MappedHandle<T>
 mapped_buffer_create(Arena* arena, render::ThreadWorkerCmdCtx* thread_ctx, BufferType buffer_type, String8 debug_name);
 
 template <typename T>
+MappedHandle<T>
+mapped_buffer_create(Arena* arena, render::ThreadWorkerCmdCtx* thread_ctx, BufferType buffer_type,
+                     String8 debug_name, U64 element_count);
+
+template <typename T>
 void
 mapped_buffer_destroy(MappedHandle<T> mapped_handle);
 template <typename T>
 void
 mapped_buffer_add(MappedHandle<T> mut_handle, T* data);
+
+template <typename T>
+void
+mapped_buffer_add(MappedHandle<T> mut_handle, Buffer<T> data);
 
 template <typename T>
 bool

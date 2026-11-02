@@ -53,6 +53,8 @@ city_init(City* city, String8 cache_path)
     city->arena = arena;
     city->tile_bvh = city->allocator->make<TileBvh>();
     city->all_agent_scale_factor = 1.0f;
+    city->agent_system = new AgentSystem(arena, 16);
+    city->agent_system->simulation_create(100, 10000);
 }
 
 void
@@ -90,9 +92,10 @@ city_area_streaming_begin(City* city, const AreaConfig* area_config)
     B32 tileset_exists = ctx->tile_load_state->tileset_pool->item_from_handle(tileset_handle, &tileset);
     if (tileset_exists)
         tileset->tile_bvh = city->tile_bvh;
-    if (city->cars_creation_done && tileset_exists)
+    if (tileset_exists)
     {
-        city->agent_system->_agent_height_updates_start(tileset);
+        for (AgentSim& simulation : city->agent_system->simulations)
+            city->agent_system->height_updates_start(simulation);
     }
 }
 
@@ -102,10 +105,8 @@ city_area_streaming_end(City* city)
     Assert(city);
 
     Context* ctx = dt_ctx_get();
-    if (city->cars_creation_done)
-    {
-        city->agent_system->_agent_height_updates_stop();
-    }
+    for (AgentSim& simulation : city->agent_system->simulations)
+        city->agent_system->height_updates_stop(simulation);
     B32 destroyed = tile_load_streaming_end(ctx->tile_load_state, city->tileset_handle);
     return destroyed;
 }
@@ -271,6 +272,17 @@ city_update(City* city, async::ThreadPool* thread_pool, RoadOverlayOption neta_o
                     ImGui::Begin("Road Info", &open, object_info_flags);
                     ImGui::PopFont();
 
+                    U32 agent_count = 0;
+                    AgentSim* simulation = {};
+                    if (city->agent_system->simulations.item_from_handle(city->agent_system->selected_simulation, &simulation))
+                    {
+                        U32* way_count = {};
+                        if (simulation->agent_count_by_way.get(way->id, &way_count) == MapResult::Success)
+                            agent_count = *way_count;
+                    }
+                    ImGui::Text("OSM way ID: %lld", (long long)way->id);
+                    ImGui::Text("Agent count: %u", agent_count);
+
                     for (osm::Tag& tag : way->tags)
                     {
                         ImGui::Text("%s: %s", (char*)tag.key.str, (char*)tag.value.str);
@@ -306,7 +318,7 @@ city_update(City* city, async::ThreadPool* thread_pool, RoadOverlayOption neta_o
                         batch->render_data.height_offset = -tileset->height_offset;
                     }
 
-                    ctx->road_context->pipeline_add(city->road, &batch->render_data, neta_overlay_option);
+                    _city_tile_batch_draw(city, batch, neta_overlay_option);
                 }
             }
         }
@@ -325,7 +337,7 @@ city_update(City* city, async::ThreadPool* thread_pool, RoadOverlayOption neta_o
                     {
                         batch->render_data.pipeline_bits |= render::TilePipelineBits::ColorDisable;
                         batch->render_data.depth_test_compare = render::DepthCompare::Always;
-                        ctx->road_context->pipeline_add(city->road, &batch->render_data, neta_overlay_option);
+                        _city_tile_batch_draw(city, batch, neta_overlay_option);
                     }
                 }
             }
@@ -340,7 +352,7 @@ city_update(City* city, async::ThreadPool* thread_pool, RoadOverlayOption neta_o
                     {
                         batch->render_data.pipeline_bits &= (~render::TilePipelineBits::ColorDisable);
                         batch->render_data.depth_test_compare = render::DepthCompare::LessOrEqual;
-                        ctx->road_context->pipeline_add(city->road, &batch->render_data, neta_overlay_option);
+                        _city_tile_batch_draw(city, batch, neta_overlay_option);
                     }
                 }
             }
@@ -349,21 +361,19 @@ city_update(City* city, async::ThreadPool* thread_pool, RoadOverlayOption neta_o
         if (city->agent_creation_started == false && city->osm_task_done)
         {
             Debug_SetName(tileset->allocator.arena, "Cesium Tileset Allocator arena");
-            AgentSimThread* agent_sim_thread = new AgentSimThread{};
-            AgentSimConfig* agent_sim_config = &agent_sim_thread->config;
-            agent_sim_config->asset_dir = push_str8_copy(city->arena, ctx->data_subdirs.data[dt_DataDirType::Assets]);
-            agent_sim_config->texture_dir =
+            auto model_load_task = std::make_unique<AgentModelLoadTask>();
+            AgentRenderResources* render_resources = &model_load_task->config;
+            render_resources->asset_dir = push_str8_copy(city->arena, ctx->data_subdirs.data[dt_DataDirType::Assets]);
+            render_resources->texture_dir =
                 push_str8_copy(city->arena, ctx->data_subdirs.data[dt_DataDirType::Texture]);
-            agent_sim_config->agent_map_bucket_count = 100;
-            agent_sim_config->max_agent_count = 10000;
-            agent_sim_config->agent_config[enum_class_s32(AgentType::Car)] = {
+            render_resources->agent_config[enum_class_s32(AgentType::Car)] = {
                 .asset_file_name = S("car.glb"), .model_forward_dir = glm::vec3(0.0, 0.0, 1.0)};
-            agent_sim_config->agent_config[enum_class_s32(AgentType::Bicycle)] = {.asset_file_name = S("bike.glb"),
+            render_resources->agent_config[enum_class_s32(AgentType::Bicycle)] = {.asset_file_name = S("bike.glb"),
                                                                                   .model_forward_dir =
                                                                                       glm::vec3(-1.0, 0.0, 0.0),
                                                                                   .model_to_world_scale = 1.0};
-            async::AsyncTaskStatus<AgentSimThread>* agent_task_state =
-                async::async_task_run(ctx->thread_pool, agent_sim_build, agent_sim_thread, "Car Sim Task");
+            async::AsyncTaskStatus<AgentModelLoadTask>* agent_task_state =
+                async::async_task_run(ctx->thread_pool, agent_models_load_task, std::move(model_load_task), "Agent Model Load");
 
             AsyncCityTask* car_sim_task_list_elem = PushStruct(city->arena, AsyncCityTask);
             car_sim_task_list_elem->type = AsyncTaskType::CarSim;
@@ -424,11 +434,11 @@ city_release(City* city)
     city->arena = {};
 }
 
-g_internal async::AsyncTaskContinuation<AgentSimThread>
-agent_sim_build(async::ThreadInfo info, async::AsyncTaskStatus<AgentSimThread>* status)
+g_internal async::AsyncTaskContinuation<AgentModelLoadTask>
+agent_models_load_task(async::ThreadInfo info, async::AsyncTaskStatus<AgentModelLoadTask>* status)
 {
     (void)info;
-    city::agents_create(status->user_data);
+    city::agent_models_load(status->user_data.get());
     return {};
 }
 g_internal Rng3F32
@@ -625,7 +635,7 @@ _city_tasks_collect(City* city, bool publish_results)
                     if (!completed->error && publish_results)
                     {
                         Context* ctx = dt_ctx_get();
-                        city->road = ctx->road_context->publish(completed->user_data,
+                        city->road = ctx->road_context->publish(completed->user_data.get(),
                                                                 ctx->tile_load_state->polygon_bvh_pool);
                     }
                 }
@@ -633,24 +643,18 @@ _city_tasks_collect(City* city, bool publish_results)
             break;
             case AsyncTaskType::CarSim:
             {
-                if (publish_results) city->cars_creation_done = false;
                 if (auto completed = async::async_task_take_completed(task->agent_sim_task))
                 {
                     task_done = true;
-                    if (publish_results) city->cars_creation_done = !completed->error;
-                    AgentSimThread* agent_sim_thread = completed->user_data;
+                    AgentModelLoadTask* model_load_task = completed->user_data.get();
                     if (!completed->error && publish_results)
                     {
-                        Assert(!city->agent_system);
-
-                        city->agent_system = new AgentSystem{};
-                        city->agent_system->agent_sim_config =
-                            std::make_unique<AgentSimConfig>(std::move(agent_sim_thread->config));
-                        city->agent_system->agent_sim =
-                            std::make_unique<AgentSim>(city->agent_system->agent_sim_config->agent_map_bucket_count,
-                                                       city->agent_system->agent_sim_config->max_agent_count);
+                        city->agent_system->render_resources =
+                            std::make_unique<AgentRenderResources>(std::move(model_load_task->config));
+                        for (AgentSim& simulation : city->agent_system->simulations)
+                            for (Agent& agent : simulation.agents_active)
+                                agent.transform_dirty = true;
                     }
-                    delete agent_sim_thread;
                 }
             }
             break;
@@ -661,6 +665,27 @@ _city_tasks_collect(City* city, bool publish_results)
             DLLRemove(city->task_list.first, city->task_list.last, task);
         }
         task = next_task;
+    }
+}
+
+g_internal void
+_city_tile_batch_draw(City* city, cesium::TileDrawBatch* batch, RoadOverlayOption overlay_option)
+{
+    for (U32 part = 0; part < ArrayCount(batch->mesh_bvh_entries); ++part)
+    {
+        TileMeshBvhEntry& entry = batch->mesh_bvh_entries[part];
+        if (entry.triangle_count == 0)
+            continue;
+
+        render::TilePipelineData pipeline = batch->render_data;
+        pipeline.mesh_kind = (render::TileMeshKind)part;
+        pipeline.vertex_buffer_render_handle = entry.mesh.vertex_buffer_handle;
+        pipeline.index_buffer_render_handle = entry.mesh.index_buffer_handle;
+        pipeline.index_count = entry.triangle_count * 3;
+        if (pipeline.mesh_kind == render::TileMeshKind::Road)
+            dt_ctx_get()->road_context->pipeline_add(city->road, &pipeline, overlay_option);
+        else
+            render::tile_pipeline_add(&pipeline);
     }
 }
 

@@ -146,6 +146,7 @@ endif()
 # OSM parsing uses the application's Cesium dependencies.
 if(BUILD_CITY)
   find_package(cesium-native CONFIG REQUIRED)
+  include("${CMAKE_SOURCE_DIR}/cmake/ClangImportedTargets.cmake")
   add_executable(network_load_tests osm/test_network_load.cpp ../src/third_party/simdjson/simdjson.cpp)
   target_include_directories(network_load_tests PRIVATE ${CMAKE_SOURCE_DIR}/src
     ${CMAKE_SOURCE_DIR}/src/third_party ${CMAKE_SOURCE_DIR}/src/third_party/imgui)

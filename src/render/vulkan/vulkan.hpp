@@ -16,6 +16,7 @@ using TilePipelinePushConstants = shader::TilePipelinePushConstants;
 struct TilePipelineNode
 {
     TilePipelineNode* next;
+    render::TileMeshKind mesh_kind;
     render::DepthCompare depth_compare;
     render::TilePipelineBits pipeline_bits;
     BufferAllocation index_alloc;
@@ -23,6 +24,7 @@ struct TilePipelineNode
     U32 index_count;
     BufferAllocation vertex_alloc;
     BufferAllocation road_segment_alloc;
+    BufferAllocation way_agent_count_alloc;
     TilePipelinePushConstants push_constants;
 };
 
@@ -149,7 +151,8 @@ struct Context
 
     RenderFrame* render_frame;
 
-    Pipeline model_3D_pipeline;
+    Pipeline tile_pipeline;
+    Pipeline road_tile_pipeline;
     Pipeline blend_3d_pipeline;
     Pipeline primitive_pipeline;
     Pipeline model_instance_pipeline;

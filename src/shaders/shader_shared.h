@@ -73,6 +73,7 @@ using mat4 = glm::mat<4, 4, float, glm::packed_highp>;
 
 const uint road_corner_count = 4;
 const uint road_option_count = 5;
+const uint road_overlay_agent_count = 5;
 const uint frustum_plane_count = 6;
 
 // Shared by the tile hierarchy and per-mesh triangle trees. Node zero is the root.
@@ -175,7 +176,7 @@ struct SHADER_ROOT TilePipelinePushConstants
     float lod_fade;
     uint road_test_enabled;
     uint overlay_option_idx;
-    uint _padding_tail;
+    float agent_count_reference;
 };
 
 // Explicit tail padding also gives GLSL arrays the same stride as C++ arrays.
@@ -238,13 +239,18 @@ struct RoadInfo
     float options[road_option_count];
 };
 
+struct WayAgentCount
+{
+    uint agent_count;
+};
+
 struct SHADER_ROOT RoadSegmentCorners
 {
     SHADER_EDGE_ID edge_id;
     SHADER_ALIGN(8)
     SHADER_ROAD_POINT corners[road_corner_count];
     RoadInfo road_info;
-    uint _padding;
+    uint way_index; // Index zero is the empty count slot, independent of OSM way ID zero.
 };
 
 #ifdef __cplusplus
@@ -270,6 +276,7 @@ static_assert(sizeof(TilePipelinePushConstants) == 64);
 static_assert(offsetof(TilePipelinePushConstants, colormap_address) == 16);
 static_assert(offsetof(TilePipelinePushConstants, colormap_len) == 24);
 static_assert(offsetof(TilePipelinePushConstants, overlay_option_idx) == 56);
+static_assert(offsetof(TilePipelinePushConstants, agent_count_reference) == 60);
 static_assert(sizeof(Blend3dPushConstants) == 16);
 static_assert(sizeof(RoadIntersectionPushConstants) == 16);
 static_assert(sizeof(PrimitivePushConstants) == 16);
@@ -281,9 +288,12 @@ static_assert(alignof(Bounds) == 8);
 static_assert(alignof(Frustum) == 16);
 static_assert(alignof(RoadInfo) == 4);
 static_assert(sizeof(RoadInfo) == 20);
+static_assert(sizeof(WayAgentCount) == 4);
+static_assert(alignof(WayAgentCount) == 4);
 static_assert(sizeof(RoadSegmentCorners) == 64);
 static_assert(offsetof(RoadSegmentCorners, corners) == 8);
 static_assert(offsetof(RoadSegmentCorners, road_info) == 40);
+static_assert(offsetof(RoadSegmentCorners, way_index) == 60);
 } // namespace shader
 #endif
 

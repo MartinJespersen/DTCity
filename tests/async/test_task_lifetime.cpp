@@ -1,5 +1,47 @@
 #include "../test_inc.hpp"
 #include "async/async_task_templates.hpp"
+#include "test_task_lifetime.hpp"
+
+TaskPayloadLifetimeProbe::~TaskPayloadLifetimeProbe() noexcept
+{
+    CHECK(*this->allocator_destruction_count == 0);
+    ++*this->destruction_count;
+}
+
+TEST_CASE("task payload ownership lasts through completion and can be transferred")
+{
+    U32 destroyed = 0;
+    U32 arena_destroyed = 0;
+    auto payload = std::make_unique<TaskPayloadLifetimeProbe>();
+    payload->destruction_count = &destroyed;
+    payload->allocator_destruction_count = &arena_destroyed;
+    auto* task = async::_async_task_status_create<TaskPayloadLifetimeProbe>(
+        Allocator::create(), nullptr, S("owned payload"), std::move(payload));
+    task->allocator.make<ArenaAwareTestObject>(U32{1}, &arena_destroyed);
+    CHECK_FALSE(payload);
+    CHECK_FALSE(async::async_task_take_completed(task));
+    CHECK(destroyed == 0);
+    SUBCASE("successful task") {}
+    SUBCASE("failed task") { task->add_error(); }
+    SUBCASE("rejected scheduling")
+    {
+        async::ThreadPool stopped = {};
+        async::async_task_run(task, &stopped,
+            +[](async::ThreadInfo, async::AsyncTaskStatus<TaskPayloadLifetimeProbe>*)
+                -> async::AsyncTaskContinuation<TaskPayloadLifetimeProbe> { return {}; }, 0);
+        CHECK(task->error);
+    }
+    task->done.store(true, std::memory_order_release);
+    {
+        auto completed = async::async_task_take_completed(task);
+        REQUIRE(completed);
+        CHECK(destroyed == 0);
+        auto moved = std::move(completed);
+        REQUIRE(moved->user_data);
+    }
+    CHECK(destroyed == 1);
+    CHECK(arena_destroyed == 1);
+}
 
 TEST_CASE("async task result owns allocator objects until consumption")
 {

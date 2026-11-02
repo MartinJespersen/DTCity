@@ -19,11 +19,11 @@ neta_load(async::ThreadPool* thread_pool, NetaCache cache, Rng2F64 bbox)
 {
     Allocator allocator = Allocator::create();
     Debug_SetName(allocator.arena, "Neta load task");
-    auto* input = allocator.make<NetaLoadTask>();
+    auto input = std::make_unique<NetaLoadTask>();
     input->cache.file_location = push_str8_copy(allocator.arena, cache.file_location);
     input->cache.bbox_str = push_str8_copy(allocator.arena, cache.bbox_str);
     input->bbox_wgs84 = bbox;
-    return async::async_task_run(std::move(allocator), thread_pool, _neta_load_begin, input, "Neta load task");
+    return async::async_task_run(std::move(allocator), thread_pool, _neta_load_begin, std::move(input), "Neta load task");
 }
 
 static Result<Buffer<Edge>>
@@ -393,7 +393,7 @@ g_internal async::AsyncTaskContinuation<NetaLoadTask>
 _neta_load_begin(async::ThreadInfo thread_info, async::AsyncTaskStatus<NetaLoadTask>* task)
 {
     (void)thread_info;
-    NetaLoadTask* input = task->user_data;
+    NetaLoadTask* input = task->user_data.get();
     Arena* arena = task->allocator.arena;
     ScratchScope scratch = ScratchScope(&arena, 1);
     Result<String8> cached = cache_read(scratch.arena, input->cache.file_location, input->cache.bbox_str);

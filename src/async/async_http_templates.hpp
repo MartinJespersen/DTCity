@@ -77,7 +77,7 @@ AsyncTaskStatus<T>::http_reconfigure(HttpInfo* http_info)
 
 template <typename T>
 size_t
-_libcurl_callback(void* contents, size_t size, size_t nmemb, void* userp)
+_libcurl_callback(char* contents, size_t size, size_t nmemb, void* userp)
 {
     size_t total_size = size * nmemb;
     LibCurlCallbackData<T>* callback_data = (LibCurlCallbackData<T>*)userp;
@@ -200,7 +200,7 @@ _http_main(ThreadInfo thread_info, AsyncTaskStatus<T>* task_status)
                 // call user function
                 AssertAlways(next_func != 0);
                 user_result =
-                    next_func(task_status->allocator.arena, thread_info.thread_pool, final_str_buffer, task_status->user_data);
+                    next_func(task_status->allocator.arena, thread_info.thread_pool, final_str_buffer, task_status->user_data.get());
                 next_func = user_result.next_func ? user_result.next_func : next_func;
             }
         }
@@ -302,6 +302,8 @@ async_http_task_run(Allocator allocator, ThreadPool* thread_pool, HttpInfo* http
                     const char* task_name)
 {
     AsyncHttpTaskCreateResult<T> result = {};
+    // Own the payload even if HTTP setup fails, while allocator is still alive.
+    auto user_data = std::move(config->user_data);
     Arena* arena = allocator.arena;
     AsyncHttpTaskState<T>* http_ctx = allocator.make<AsyncHttpTaskState<T>>();
     http_ctx->curl_ctx = _curl_ctx_create(arena);
@@ -339,7 +341,7 @@ async_http_task_run(Allocator allocator, ThreadPool* thread_pool, HttpInfo* http
     }
 
     ExtensionType extension_type = ExtensionType::Http;
-    result.task_state = async::async_task_with_ext_run(std::move(allocator), http_ctx->thread_pool, _http_main, config->user_data,
+    result.task_state = async::async_task_with_ext_run(std::move(allocator), http_ctx->thread_pool, _http_main, std::move(user_data),
                                                        task_name, 0, extension_type, http_ctx);
 
     return result;

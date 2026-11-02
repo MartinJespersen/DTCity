@@ -169,15 +169,15 @@ template <typename T>
 struct AsyncHttpTaskStateConfig
 {
     AsyncWorkFunc<T> first_func;
-    T* user_data;
+    std::unique_ptr<T> user_data;
     U32 max_http_retries;
     U32 max_task_retries;
     U32 timeout_sec;
 
-    AsyncHttpTaskStateConfig(AsyncWorkFunc<T> first_func, T* user_data, U32 max_http_retries, U32 max_task_retries,
+    AsyncHttpTaskStateConfig(AsyncWorkFunc<T> first_func, std::unique_ptr<T> user_data, U32 max_http_retries, U32 max_task_retries,
                              U32 timeout_sec = 0)
-        : first_func(first_func), max_http_retries(max_http_retries), max_task_retries(max_task_retries),
-          timeout_sec(timeout_sec), user_data(user_data)
+        : first_func(first_func), user_data(std::move(user_data)), max_http_retries(max_http_retries),
+          max_task_retries(max_task_retries), timeout_sec(timeout_sec)
     {
     }
 };
@@ -218,7 +218,7 @@ async_http_global_init();
 
 template <typename T>
 size_t
-_libcurl_callback(void* contents, size_t size, size_t nmemb, void* userp);
+_libcurl_callback(char* contents, size_t size, size_t nmemb, void* userp);
 
 template <typename T>
 AsyncTaskContinuation<T>

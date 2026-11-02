@@ -7,6 +7,7 @@
 #include "base/base_core.hpp"
 #include "base/base_container.hpp"
 #include "base/container.hpp"
+#include "osm/osm.hpp"
 #include <memory>
 #include <glm/ext/vector_double3.hpp>
 
@@ -74,12 +75,10 @@ struct AgentConfig
     Rng3F32 model_bounds;
 };
 
-struct AgentSimConfig
+struct AgentRenderResources
 {
     String8 asset_dir;
     String8 texture_dir;
-    U32 agent_map_bucket_count;
-    U32 max_agent_count;
     AgentConfig agent_config[(S32)AgentType::Count];
     AgentModelRenderInfo models[(S32)AgentType::Count];
 };
@@ -91,29 +90,6 @@ struct AgentSlotUpdate
     bool created;
 };
 
-struct AgentSim
-{
-    Allocator allocator;
-
-    B32 height_updates_stop;
-    Map<WsId, AgentMapItem> agent_map;
-    ResourcePool<Agent> agents_active;
-
-    AgentSim(U32 hashmap_bucket_capacity, U32 max_agent_count);
-    AgentSlotUpdate
-    update_slot(const AgentUpdate& update);
-    void
-    update_positions(F64 playback_time);
-    void
-    reconcile_snapshot(Buffer<AgentUpdate> updates);
-};
-
-struct AgentSimThread
-{
-    AgentSimConfig config; // input
-    ~AgentSimThread();
-};
-
 struct AgentHeightRequest
 {
     U64 request_id;
@@ -121,6 +97,42 @@ struct AgentHeightRequest
     PoolHandle agent_handle;
     glm::dvec3 sampled_ecef;
     F64 origin_height;
+};
+
+struct AgentSim
+{
+    Allocator allocator;
+
+    B32 height_updates_stop;
+    Map<WsId, AgentMapItem> agent_map;
+    Map<osm::WayId, U32> agent_count_by_way;
+    ResourcePool<Agent> agents_active;
+
+    TileHeightSampler* height_sampler = {};
+    Array<AgentHeightRequest> height_requests = {};
+    U64 height_request_sequence = {};
+    U64 height_epoch = {};
+
+    AgentSim(U32 hashmap_bucket_capacity, U32 max_agent_count);
+    ~AgentSim() noexcept;
+    AgentSlotUpdate
+    update_slot(const AgentUpdate& update);
+    void
+    update_positions(F64 playback_time);
+    void
+    reconcile_snapshot(Buffer<AgentUpdate> updates);
+    void
+    reset() noexcept;
+
+  private:
+    void
+    way_count_change(osm::WayId way_id, S32 delta) noexcept;
+};
+
+struct AgentModelLoadTask
+{
+    AgentRenderResources config; // input
+    ~AgentModelLoadTask();
 };
 
 // Applies only a matching generation/request/epoch. Completed misses and samples
@@ -132,39 +144,40 @@ agent_height_result_apply(Agent* agent, const AgentHeightRequest& request,
 g_internal glm::dmat3
 _gltf_rotation_to_world(glm::dvec3 world_dir, glm::dvec3 model_dir);
 
-struct AgentSystem
+class AgentSystem
 {
-    std::unique_ptr<AgentSimConfig> agent_sim_config; // lifetime = city lifetime
-    std::unique_ptr<AgentSim> agent_sim;              // agent sim data should be able to reset it therefore has its own allocator
-    TileHeightSampler* height_sampler = {};
-    Array<AgentHeightRequest> height_requests = {};
-    U64 height_request_sequence = {};
-    U64 height_epoch = {};
-    ~AgentSystem();
+  public:
+    ResourcePool<AgentSim> simulations;
+    PoolHandle selected_simulation = {};
+    std::unique_ptr<AgentRenderResources> render_resources;
 
+    AgentSystem(Arena* arena, U32 simulation_capacity) noexcept;
+    ~AgentSystem();
+    PoolHandle simulation_create(U32 bucket_capacity, U32 agent_capacity) noexcept;
+    bool simulation_select(PoolHandle handle) noexcept;
+    void simulation_remove(PoolHandle handle) noexcept;
+    void destroy();
     void
-    destroy();
-    void
-    update(ui::Camera* camera,
+    update(AgentSim& simulation, ui::Camera* camera,
            render::MeshHandle& hover_icon_mesh_handle, cesium::TilesetRenderer* tileset,
            Buffer<AgentUpdate>& agent_updates, bool agent_reset, bool snapshot_received, F32 agent_scale_factor, glm::dmat4& ecef_to_local, F64 playback_time);
 
     void
+    height_updates_start(AgentSim& simulation);
+    void
+    height_updates_stop(AgentSim& simulation);
+  private:
+    void
     agent_icon_add(Agent& agent, render::MeshHandle hover_icon_mesh_handle, F32 icon_scale_factor) noexcept;
     void
     agent_draw(Array<render::AgentModelInfo>& meshes, render::BufferInfo* instance_buffer_info);
-    void
-    _agent_height_updates_start(cesium::TilesetRenderer* renderer);
-    void
-    _agent_height_updates_stop();
-    void
-    _agent_height_update_async(cesium::TilesetRenderer* renderer);
+    void height_update_async(AgentSim& simulation, cesium::TilesetRenderer* renderer);
 };
 
 AgentModelRenderInfo
 agent_model_render_info_create(render::ThreadWorkerCmdCtx* t_ctx, gltfw_Result& glb_result, Vec3F32& model_pivot);
 g_internal void
-agents_create(AgentSimThread* agent_sim);
+agent_models_load(AgentModelLoadTask* task);
 g_internal void
-_agent_models_release(AgentSimConfig* config);
+_agent_models_release(AgentRenderResources* config);
 } // namespace city

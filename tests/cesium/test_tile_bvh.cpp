@@ -14,6 +14,70 @@
 #include "render/tile_bvh.hpp"
 #include <glm/ext/matrix_float4x4.hpp>
 
+TEST_CASE("tile BVH keeps registrations when surface and road parts become empty")
+{
+    Allocator allocator = Allocator::create();
+    city::TileBvh bvh(&allocator);
+    defer(bvh.destroy());
+    auto& backend = tile_bvh_test::backend;
+    city::TileMeshBvhEntry entries[enum_idx(render::TileMeshKind::Count)] = {};
+    PoolHandle handles[enum_idx(render::TileMeshKind::Count)] = {};
+    for (U32 part = 0; part < ArrayCount(entries); ++part)
+    {
+        entries[part].query_enabled = true;
+        handles[part] = bvh.insert(entries[part]);
+        entries[part].handle = handles[part];
+        REQUIRE(handles[part].idx != 0);
+    }
+    CHECK(handles[0].idx != handles[1].idx);
+
+    // Full surface -> split surface and road -> full road -> full surface.
+    U32 counts[][enum_idx(render::TileMeshKind::Count)] = {{2, 0}, {3, 2}, {0, 2}, {2, 0}};
+    for (U32 revision = 0; revision < ArrayCount(counts); ++revision)
+    {
+        U32 expected_parts = 0;
+        for (U32 part = 0; part < ArrayCount(entries); ++part)
+        {
+            city::TileMeshBvhEntry& entry = entries[part];
+            entry.mesh_revision = revision + 1;
+            entry.triangle_count = counts[revision][part];
+            entry.bounds = {.min = {0, 0, 0}, .max = {10, 10, 1}};
+            U64 buffer_id = 211 + part * 3;
+            entry.mesh.vertex_buffer_handle = {};
+            entry.mesh.index_buffer_handle = {};
+            entry.triangle_bvh_buffer = {};
+            if (entry.triangle_count)
+            {
+                entry.mesh.vertex_buffer_handle = {reinterpret_cast<void*>(buffer_id), 1, render::HandleType::Buffer};
+                entry.mesh.index_buffer_handle = {reinterpret_cast<void*>(buffer_id + 1), 1, render::HandleType::Buffer};
+                entry.triangle_bvh_buffer = {reinterpret_cast<void*>(buffer_id + 2), 1, render::HandleType::Buffer};
+                ++expected_parts;
+            }
+        }
+        bvh.update({entries, ArrayCount(entries)}, {});
+        U32 pending = backend.created;
+        REQUIRE(backend.resources[pending].view.entry_count == expected_parts);
+        for (const render::TileBvhGpuEntry& packed : backend.resources[pending].entries)
+        {
+            U32 part = packed.entry_handle_idx == handles[0].idx ? 0 : 1;
+            CHECK(packed.entry_handle_idx == handles[part].idx);
+            CHECK(packed.entry_handle_gen_id == handles[part].gen_id);
+            CHECK(entries[part].triangle_count > 0);
+        }
+        backend.resources[pending].ready = true;
+        CHECK(bvh.update({}, {}).idx == pending);
+        for (U32 part = 0; part < ArrayCount(entries); ++part)
+            for (U32 buffer = 211 + part * 3; buffer < 214 + part * 3; ++buffer)
+                CHECK(backend.buffer_references[buffer] == (entries[part].triangle_count ? 2 : 0));
+    }
+    bvh.update({}, {handles, ArrayCount(handles)});
+    U32 pending = backend.created;
+    CHECK(backend.resources[pending].view.entry_count == 0);
+    CHECK(bvh.update({}, {}).idx == pending);
+    for (U32 buffer = 211; buffer < 217; ++buffer)
+        CHECK(backend.buffer_references[buffer] == 0);
+}
+
 TEST_CASE("tile BVH queues changes and publishes only completed versions")
 {
     Allocator allocator = Allocator::create();

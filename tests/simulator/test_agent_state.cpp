@@ -1,5 +1,119 @@
 #include "../test_inc.hpp"
 
+TEST_CASE("Simulations in a pool own independent agents counts and reset epochs")
+{
+    Allocator allocator = Allocator::create();
+    ResourcePool<city::AgentSim> simulations(allocator.arena, 2);
+    PoolHandle first_handle = simulations.emplace(8, 4);
+    PoolHandle second_handle = simulations.emplace(8, 4);
+    city::AgentSim* first = {};
+    city::AgentSim* second = {};
+    REQUIRE(simulations.item_from_handle(first_handle, &first));
+    REQUIRE(simulations.item_from_handle(second_handle, &second));
+    city::AgentUpdate update = {.id = 1, .event_type = 3, .way_id = 123};
+    first->update_slot(update);
+    update.way_id = 456;
+    second->update_slot(update);
+    CHECK(*first->agent_count_by_way.get(123) == 1);
+    CHECK(first->agent_count_by_way.get(456) == nullptr);
+    CHECK(*second->agent_count_by_way.get(456) == 1);
+    city::AgentSim* original = first;
+    first->reset();
+    REQUIRE(simulations.item_from_handle(first_handle, &first));
+    CHECK(first == original);
+    CHECK(first->height_epoch == 1);
+    CHECK(second->height_epoch == 0);
+    CHECK(first->agents_active.item_in_use_count == 0);
+    CHECK(second->agents_active.item_in_use_count == 1);
+    CHECK(*second->agent_count_by_way.get(456) == 1);
+    simulations.item_free(first_handle);
+    PoolHandle replacement = simulations.emplace(8, 4);
+    CHECK(replacement.idx == first_handle.idx);
+    CHECK(replacement.gen_id != first_handle.gen_id);
+    CHECK_FALSE(simulations.item_from_handle(first_handle, &first));
+    REQUIRE(simulations.item_from_handle(replacement, &first));
+    CHECK(first->agent_count_by_way.get(123) == nullptr);
+    CHECK(*second->agent_count_by_way.get(456) == 1);
+}
+
+TEST_CASE("Way agent counts follow membership rather than repeated motion events")
+{
+    city::AgentSim simulation(8, 4);
+    city::AgentUpdate first = {.id = 1, .event_type = 3, .node_from_id = 10, .node_to_id = 20, .way_id = 123};
+    city::AgentUpdate second = {.id = 2, .event_type = 3, .node_from_id = 20, .node_to_id = 30, .way_id = 123};
+    simulation.update_slot(first);
+    simulation.update_slot(second);
+    REQUIRE(simulation.agent_count_by_way.get(123));
+    CHECK(*simulation.agent_count_by_way.get(123) == 2);
+
+    // Updates and different segments on the same way cannot count an agent twice.
+    first.node_from_id = 30;
+    first.node_to_id = 20;
+    simulation.update_slot(first);
+    simulation.update_slot(first);
+    CHECK(*simulation.agent_count_by_way.get(123) == 2);
+
+    // Zero and signed way IDs are valid keys, independent of the GPU empty slot.
+    first.way_id = 0;
+    simulation.update_slot(first);
+    CHECK(*simulation.agent_count_by_way.get(123) == 1);
+    REQUIRE(simulation.agent_count_by_way.get(0));
+    CHECK(*simulation.agent_count_by_way.get(0) == 1);
+    second.way_id = -7;
+    simulation.update_slot(second);
+    CHECK(*simulation.agent_count_by_way.get(123) == 0);
+    REQUIRE(simulation.agent_count_by_way.get(-7));
+    CHECK(*simulation.agent_count_by_way.get(-7) == 1);
+
+    // Retirement uses the stored membership, even if the arrival names another way.
+    first.event_type = (S64)city::AgentEventType::Arrival;
+    first.way_id = 999;
+    simulation.update_slot(first);
+    simulation.update_slot(first);
+    CHECK(*simulation.agent_count_by_way.get(0) == 0);
+    CHECK(simulation.agent_count_by_way.get(999) == nullptr);
+    CHECK(*simulation.agent_count_by_way.get(-7) == 1);
+    first.event_type = 3;
+    first.way_id = 123;
+    simulation.update_slot(first);
+    CHECK(*simulation.agent_count_by_way.get(123) == 1);
+}
+
+TEST_CASE("Snapshots and resets clear way counts without rebuilding the road network")
+{
+    city::AgentSim simulation(8, 4);
+    city::AgentUpdate events[] = {
+        {.id = 1, .event_type = 3, .way_id = 123},
+        {.id = 2, .event_type = 3, .way_id = 123},
+        {.id = 3, .event_type = 3, .way_id = 456},
+    };
+    for (auto event : events) simulation.update_slot(event);
+    city::AgentUpdate snapshot[] = {
+        {.id = 2, .event_type = 1, .way_id = 456},
+        {.id = 3, .event_type = (S64)city::AgentEventType::Arrival, .way_id = 456},
+        {.id = 4, .event_type = 3, .way_id = 456},
+    };
+    Buffer<city::AgentUpdate> updates = {.data = snapshot, .size = ArrayCount(snapshot)};
+    simulation.reconcile_snapshot(updates);
+    for (auto event : updates) simulation.update_slot(event);
+    CHECK(*simulation.agent_count_by_way.get(123) == 0);
+    CHECK(*simulation.agent_count_by_way.get(456) == 2);
+    simulation.reconcile_snapshot(updates);
+    for (auto event : updates) simulation.update_slot(event);
+    CHECK(*simulation.agent_count_by_way.get(456) == 2);
+    simulation.reconcile_snapshot({});
+    CHECK(*simulation.agent_count_by_way.get(456) == 0);
+
+    simulation.update_slot(events[0]);
+    simulation.reset();
+    CHECK(simulation.agents_active.item_in_use_count == 0);
+    CHECK(simulation.agent_count_by_way.get(123) == nullptr);
+    CHECK(simulation.agent_count_by_way.get(456) == nullptr);
+    simulation.update_slot(events[0]);
+    simulation.update_slot(events[0]);
+    CHECK(*simulation.agent_count_by_way.get(123) == 1);
+}
+
 TEST_CASE("Agent arrivals do not allocate slots and completed trips reuse pool capacity")
 {
     city::AgentSim simulation(256, 2);

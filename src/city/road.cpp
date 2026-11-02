@@ -6,8 +6,7 @@
 namespace city
 {
 Road::Road() noexcept
-    : allocator(Allocator::create({.reserve_size = GB(4), .commit_size = arena_default_commit_size,
-                                   .flags = arena_default_flags}))
+    : allocator(Allocator::create({.reserve_size = GB(4), .commit_size = arena_default_commit_size, .flags = arena_default_flags}))
 {
     Debug_SetName(this->allocator.arena, "city road data");
     this->pending_bvh.arena = arena_alloc();
@@ -16,6 +15,8 @@ Road::Road() noexcept
 
 Road::Road(Road&& other) noexcept
     : allocator(std::move(other.allocator)), road_info_map(other.road_info_map),
+      way_ids(std::exchange(other.way_ids, {})),
+      way_agent_count_buffer(std::exchange(other.way_agent_count_buffer, {})),
       pending_bvh(std::exchange(other.pending_bvh, {})), bvh_handle(std::exchange(other.bvh_handle, {})),
       overlay_option_cur(other.overlay_option_cur), ready(other.ready),
       colormap_handle(std::exchange(other.colormap_handle, {})),
@@ -29,11 +30,14 @@ Road::~Road() noexcept
     if (this->pending_bvh.arena) arena_release(this->pending_bvh.arena);
     render::handle_destroy_deferred(this->colormap_handle);
     render::handle_destroy_deferred(this->segment_buffer_handle);
+    for (auto frame : this->way_agent_count_buffer.buffer)
+        render::handle_destroy_deferred(frame.handle);
 }
 
 void
 RoadContext::init(Arena* arena, U32 capacity) noexcept
 {
+    this->agent_count_reference = 50.0f;
     this->roads = ResourcePool<Road>::create(arena, capacity);
 }
 
@@ -42,10 +46,10 @@ RoadContext::create(async::ThreadPool* thread_pool, const RoadBuildInput& input)
 {
     Allocator allocator = Allocator::create();
     Debug_SetName(allocator.arena, "road build task");
-    RoadBuildTask* task = allocator.make<RoadBuildTask>();
+    auto task = std::make_unique<RoadBuildTask>();
     task->input = input;
     task->input.netascore_file_path = push_str8_copy(allocator.arena, input.netascore_file_path);
-    return async::async_task_run(std::move(allocator), thread_pool, _road_build, task, "Road build task");
+    return async::async_task_run(std::move(allocator), thread_pool, _road_build, std::move(task), "Road build task");
 }
 
 PoolHandle
@@ -70,6 +74,7 @@ RoadContext::get(PoolHandle handle, Road** out_road) noexcept
 void
 RoadContext::pipeline_add(PoolHandle handle, render::TilePipelineData* pipeline, RoadOverlayOption overlay) noexcept
 {
+    pipeline->mesh_kind = render::TileMeshKind::Road;
     Road* road = {};
     bool available = this->roads->item_from_handle(handle, &road) && road->ready;
     pipeline->pipeline_bits &= ~render::TilePipelineBits::ColormapEnable;
@@ -77,8 +82,10 @@ RoadContext::pipeline_add(PoolHandle handle, render::TilePipelineData* pipeline,
         pipeline->pipeline_bits |= render::TilePipelineBits::ColormapEnable;
     pipeline->colormap_handle = available ? road->colormap_handle : render::Handle{};
     pipeline->road_segment_buffer_handle = available ? road->segment_buffer_handle : render::Handle{};
+    pipeline->way_agent_count_buffer = available ? road->way_agent_count_buffer : render::MappedHandle<shader::WayAgentCount>{};
     pipeline->road_test_enabled = available && overlay != RoadOverlayOption_None;
     pipeline->overlay_option_idx = overlay;
+    pipeline->agent_count_reference = this->agent_count_reference > 0 ? this->agent_count_reference : 50.0f;
     render::tile_pipeline_add(pipeline);
 }
 
@@ -93,9 +100,29 @@ RoadContext::update(PoolHandle handle, RoadOverlayOption overlay) noexcept
     {
         // CPU completion does not imply that the submitted GPU uploads have completed.
         road->ready = render::is_resource_loaded(road->colormap_handle) &&
-            render::is_resource_loaded(road->segment_buffer_handle);
+                      render::is_resource_loaded(road->segment_buffer_handle);
+        for (auto frame : road->way_agent_count_buffer.buffer)
+            road->ready &= render::is_resource_loaded(frame.handle);
     }
     return road->ready;
+}
+
+void
+RoadContext::agent_counts_update(PoolHandle handle, Map<osm::WayId, U32>* counts_by_way) noexcept
+{
+    Road* road = {};
+    if (!this->roads->item_from_handle(handle, &road) || !road->ready) return;
+    ScratchScope scratch = ScratchScope(&road->allocator.arena, 1);
+    Buffer<shader::WayAgentCount> counts = buffer_alloc<shader::WayAgentCount>(scratch.arena, road->way_ids.size);
+    // Fill every slot on every frame, including zeros after a reset or area switch.
+    // mapped_buffer_add owns a copy until the render layer can update this frame's buffer.
+    for (U64 index = 1; counts_by_way && index < road->way_ids.size; ++index)
+    {
+        U32* count = {};
+        if (counts_by_way->get(road->way_ids[index], &count) == MapResult::Success)
+            counts[index].agent_count = *count;
+    }
+    render::mapped_buffer_add(road->way_agent_count_buffer, counts);
 }
 
 void
@@ -120,7 +147,7 @@ g_internal async::AsyncTaskContinuation<RoadBuildTask>
 _road_build(async::ThreadInfo info, async::AsyncTaskStatus<RoadBuildTask>* status)
 {
     (void)info;
-    RoadBuildTask* task = status->user_data;
+    RoadBuildTask* task = status->user_data.get();
     auto road = std::make_unique<Road>();
     Arena* arena = road->allocator.arena;
     ScratchScope scratch = ScratchScope(&arena, 1);
@@ -134,12 +161,13 @@ g_internal void
 _road_build_cpu(Arena* arena, Road* road, const RoadBuildInput& input)
 {
     // Intermediate Neta geometry lives only for this worker step.
-    Map<S64, neta::EdgeList>* neta_edges =
+    Map<osm::WayId, neta::EdgeList>* neta_edges =
         neta::osm_way_to_edges_map_create(arena, input.network, input.netascore_file_path, input.bbox);
     road->road_info_map = _road_info_map_create(road->allocator.arena, input.network,
-        input.network->edge_structure.edges, neta_edges);
+                                                input.network->edge_structure.edges, neta_edges);
     Buffer<RoadSegmentCorners> corners = _road_corners_build(arena, input.network, input.network->edge_structure.edges,
-        input.default_road_width, input.ecef_to_local, road->road_info_map);
+                                                             input.default_road_width, input.ecef_to_local, road->road_info_map);
+    road->way_ids = _road_way_indices_build(road->allocator.arena, input.network->edge_structure.edges, corners);
     _road_bvh_create(&road->pending_bvh, corners, 10);
 }
 
@@ -151,16 +179,43 @@ _road_upload(Road* road)
     render::thread_cmd_buffer_record(thread);
     defer(render::thread_cmd_buffer_end(thread));
     // All staging copies finish before the worker scratch scope ends.
-    render::BufferInfo colormap_info(Buffer<U8>((U8*)g_colormap_inferno, sizeof(g_colormap_inferno)),
-                                      render::BufferType_StorageBuffer);
+    render::BufferInfo colormap_info(Buffer<U8>((U8*)g_red_yellow_green_colormap, sizeof(g_red_yellow_green_colormap)),
+                                     render::BufferType_StorageBuffer);
     render::BufferInfo segment_info(road->pending_bvh.road_segment_buffer_sorted, render::BufferType_StorageBuffer);
     road->colormap_handle = render::buffer_load_sync(thread, &colormap_info, S("road colormap"));
     road->segment_buffer_handle = render::buffer_load_sync(thread, &segment_info, S("road segments"));
+    road->way_agent_count_buffer = render::mapped_buffer_create<shader::WayAgentCount>(road->allocator.arena, thread,
+                                                                                       render::BufferType_StorageBuffer, S("way agent counts"), road->way_ids.size);
+}
+
+g_internal Buffer<osm::WayId>
+_road_way_indices_build(Arena* arena, Buffer<osm::Edge> edges, Buffer<RoadSegmentCorners> segments) noexcept
+{
+    Assert(edges.size == segments.size && edges.size < U32(-1));
+    ScratchScope scratch = ScratchScope(&arena, 1);
+    Map<osm::WayId, U32>* indices = Map<osm::WayId, U32>::create(scratch.arena, 1024);
+    ChunkList<osm::WayId>* way_ids = chunk_list_create<osm::WayId>(scratch.arena, 7);
+    osm::WayId empty_way = 0;
+    chunk_list_insert(scratch.arena, way_ids, empty_way);
+    U32 next_index = 1;
+    for (U64 index = 0; index < edges.size; ++index)
+    {
+        osm::WayId way_id = edges[index].way_id;
+        U32* way_index = {};
+        if (indices->get(way_id, &way_index) == MapResult::NotFound)
+        {
+            way_index = indices->insert(scratch.arena, way_id, next_index++);
+            chunk_list_insert(scratch.arena, way_ids, way_id);
+        }
+        // BVH sorting copies this index together with the segment's geometry.
+        segments[index].way_index = *way_index;
+    }
+    return buffer_from_chunk_list<osm::WayId>(arena, way_ids);
 }
 
 g_internal void
 _road_segment_from_nodes(RoadSegment* out_road_segment, osm::EcefLocation node_0, osm::EcefLocation node_1,
-                        F32 road_width)
+                         F32 road_width)
 {
     Vec2F64 road_0_pos = node_0.pos.xy;
     Vec2F64 road_1_pos = node_1.pos.xy;
@@ -389,7 +444,7 @@ _road_assert_non_intersecting_edges(glm::vec2* vertices, U32 count)
 
 g_internal Buffer<RoadSegmentCorners>
 _road_corners_build(Arena* arena, osm::Network* network, Buffer<osm::Edge> edge_buffer, F32 default_road_width,
-                   const glm::dmat4& ecef_to_local, Map<osm::EdgeId, RoadInfo>* road_info_map)
+                    const glm::dmat4& ecef_to_local, Map<osm::EdgeId, RoadInfo>* road_info_map)
 {
     prof_scope_marker;
 
@@ -437,7 +492,6 @@ _road_corners_build(Arena* arena, osm::Network* network, Buffer<osm::Edge> edge_
         {
             road_segment_corners->road_info = *road_info;
         }
-
     }
 
     return corner_buffer;
@@ -445,7 +499,7 @@ _road_corners_build(Arena* arena, osm::Network* network, Buffer<osm::Edge> edge_
 
 g_internal Map<osm::EdgeId, RoadInfo>*
 _road_info_map_create(Arena* arena, osm::Network* network, Buffer<osm::Edge> edge_buffer,
-                       Map<S64, neta::EdgeList>* neta_edge_map)
+                      Map<osm::WayId, neta::EdgeList>* neta_edge_map)
 {
     prof_scope_marker;
     Map<osm::EdgeId, RoadInfo>* road_info_map = Map<osm::EdgeId, RoadInfo>::create(arena, 1024);
@@ -470,15 +524,15 @@ _road_info_map_create(Arena* arena, osm::Network* network, Buffer<osm::Edge> edg
 g_internal neta::Edge*
 _netascore_edge_from_osm_edge(osm::Network* network, osm::Edge* osm_edge, Map<osm::WayId, neta::EdgeList>* edge_list_map)
 {
-    S64 from_id = osm_edge->node_id_from;
-    S64 to_id = osm_edge->node_id_to;
+    osm::NodeId from_id = osm_edge->node_id_from;
+    osm::NodeId to_id = osm_edge->node_id_to;
 
     osm::WgsLocation from_node_loc = osm::wgs_location_get(network, from_id);
     osm::WgsLocation to_node_loc = osm::wgs_location_get(network, to_id);
     Vec2F64 from_node_coord = vec_2f64(from_node_loc.lon, from_node_loc.lat);
     Vec2F64 to_node_coord = vec_2f64(to_node_loc.lon, to_node_loc.lat);
 
-    S64 way_id = osm_edge->way_id;
+    osm::WayId way_id = osm_edge->way_id;
     neta::EdgeList* edge_list = edge_list_map->get(way_id);
 
     neta::Edge* chosen_edge = {};

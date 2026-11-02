@@ -1,4 +1,207 @@
 #include "../test_inc.hpp"
+#include "city/tessellation.hpp"
+
+TEST_CASE("tile tessellation preserves shared surface vertices without road classification")
+{
+    Arena* arena = arena_alloc();
+    defer(arena_release(arena));
+    render::TileVertex vertices[] = {
+        {.pos = {0, 0, 0}}, {.pos = {10, 0, 0}}, {.pos = {10, 10, 0}}, {.pos = {0, 10, 0}},
+    };
+    U32 indices[] = {0, 1, 2, 0, 2, 3};
+    city::RoadBvh bvh = {};
+    city::RoadSegmentNode root = {};
+    city::RoadSegmentCorners roads[101] = {};
+    U32 index_count = ArrayCount(indices);
+
+    SUBCASE("no road network") {}
+    SUBCASE("empty tile") { index_count = 0; }
+    SUBCASE("road outside the tile")
+    {
+        root.bounds = {.min = {20, 20}, .max = {30, 30}};
+        root.end_idx = 1;
+        roads[0].corners[0] = {20, 20};
+        roads[0].corners[1] = {30, 20};
+        roads[0].corners[2] = {30, 30};
+        roads[0].corners[3] = {20, 30};
+        bvh.root = &root;
+        bvh.road_segment_buffer_sorted = {roads, 1};
+    }
+    SUBCASE("candidate limit leaves dense faces intact")
+    {
+        root.bounds = {.min = {-1, -1}, .max = {11, 11}};
+        root.end_idx = ArrayCount(roads);
+        for (city::RoadSegmentCorners& road : roads)
+        {
+            road.corners[0] = {-1, -1};
+            road.corners[1] = {11, -1};
+            road.corners[2] = {11, 11};
+            road.corners[3] = {-1, 11};
+        }
+        bvh.root = &root;
+        bvh.road_segment_buffer_sorted = {roads, ArrayCount(roads)};
+    }
+
+    render::TileMeshParts parts = {};
+    CHECK_FALSE(city::tesselate_roads(arena, {vertices, ArrayCount(vertices)}, {indices, index_count}, bvh, &parts));
+    render::TileMesh& surface = parts.meshes[enum_idx(render::TileMeshKind::Surface)];
+    render::TileMesh& road = parts.meshes[enum_idx(render::TileMeshKind::Road)];
+    REQUIRE(surface.indices.size == index_count);
+    CHECK(surface.vertices.size == (index_count ? ArrayCount(vertices) : 0));
+    CHECK(road.indices.size == 0);
+    CHECK(road.vertices.size == 0);
+    for (U32 index = 0; index < index_count; ++index)
+    {
+        REQUIRE(surface.indices.data[index] < surface.vertices.size);
+        const render::TileVertex& vertex = surface.vertices.data[surface.indices.data[index]];
+        CHECK(vertex.pos == vertices[indices[index]].pos);
+        CHECK(vertex.road_segment_idx == 0);
+    }
+}
+
+TEST_CASE("tile tessellation separates road regions and preserves winding and vertex attributes")
+{
+    Arena* arena = arena_alloc();
+    defer(arena_release(arena));
+    render::TileVertex vertices[] = {
+        {.pos = {0, 0, 0}, .uv = {0, 0}, .overlay_uv = {1, 2}},
+        {.pos = {10, 0, 10}, .uv = {1, 0}, .overlay_uv = {3, 2}},
+        {.pos = {0, 10, 20}, .uv = {0, 1}, .overlay_uv = {1, 5}},
+    };
+    U32 indices[] = {0, 1, 2};
+    city::RoadSegmentCorners roads[2] = {};
+    roads[0].corners[0] = {2, -1};
+    roads[0].corners[1] = {4, -1};
+    roads[0].corners[2] = {4, 11};
+    roads[0].corners[3] = {2, 11};
+    city::RoadSegmentNode root = {.bounds = {.min = {-1, -1}, .max = {11, 11}}, .end_idx = 1};
+    F64 expected_road_area = 14.0;
+    F64 winding = 1.0;
+
+    SUBCASE("partial road") {}
+    SUBCASE("clockwise source triangle")
+    {
+        indices[1] = 2;
+        indices[2] = 1;
+        winding = -1.0;
+    }
+    SUBCASE("clockwise road corners")
+    {
+        Vec2F32 corner = roads[0].corners[1];
+        roads[0].corners[1] = roads[0].corners[3];
+        roads[0].corners[3] = corner;
+    }
+    SUBCASE("whole face is road")
+    {
+        roads[0].corners[0] = {-1, -1};
+        roads[0].corners[1] = {11, -1};
+        roads[0].corners[2] = {11, 11};
+        roads[0].corners[3] = {-1, 11};
+        expected_road_area = 50.0;
+    }
+    SUBCASE("two roads retain separate segment indices")
+    {
+        roads[1] = roads[0];
+        for (Vec2F32& corner : roads[1].corners)
+            corner.x += 4;
+        root.end_idx = 2;
+        expected_road_area = 20.0;
+    }
+
+    city::RoadBvh bvh = {.root = &root, .road_segment_buffer_sorted = {roads, root.end_idx}};
+    render::TileMeshParts parts = {};
+    REQUIRE(city::tesselate_roads(arena, {vertices, ArrayCount(vertices)}, {indices, ArrayCount(indices)}, bvh, &parts));
+    F64 areas[enum_idx(render::TileMeshKind::Count)] = {};
+    B32 found_road[2] = {};
+    for (U32 part = 0; part < ArrayCount(parts.meshes); ++part)
+    {
+        render::TileMesh& mesh = parts.meshes[part];
+        REQUIRE(mesh.indices.size % 3 == 0);
+        for (U32 index : mesh.indices)
+            REQUIRE(index < mesh.vertices.size);
+        for (U32 index = 0; index < mesh.indices.size; index += 3)
+        {
+            const render::TileVertex& a = mesh.vertices.data[mesh.indices.data[index]];
+            const render::TileVertex& b = mesh.vertices.data[mesh.indices.data[index + 1]];
+            const render::TileVertex& c = mesh.vertices.data[mesh.indices.data[index + 2]];
+            glm::dvec2 ab = glm::dvec2(b.pos) - glm::dvec2(a.pos);
+            glm::dvec2 ac = glm::dvec2(c.pos) - glm::dvec2(a.pos);
+            F64 twice_area = ab.x * ac.y - ab.y * ac.x;
+            CHECK(twice_area * winding > 0);
+            areas[part] += glm::abs(twice_area) * 0.5;
+            CHECK(a.road_segment_idx == b.road_segment_idx);
+            CHECK(a.road_segment_idx == c.road_segment_idx);
+        }
+        for (const render::TileVertex& vertex : mesh.vertices)
+        {
+            CHECK(vertex.pos.z == doctest::Approx(vertex.pos.x + 2 * vertex.pos.y));
+            CHECK(vertex.uv.x == doctest::Approx(vertex.pos.x * 0.1f));
+            CHECK(vertex.uv.y == doctest::Approx(vertex.pos.y * 0.1f));
+            CHECK(vertex.overlay_uv.x == doctest::Approx(1 + vertex.pos.x * 0.2f));
+            CHECK(vertex.overlay_uv.y == doctest::Approx(2 + vertex.pos.y * 0.3f));
+            if (part == enum_idx(render::TileMeshKind::Surface))
+                CHECK(vertex.road_segment_idx == 0);
+            else
+            {
+                REQUIRE(vertex.road_segment_idx >= 1);
+                REQUIRE(vertex.road_segment_idx <= root.end_idx);
+                found_road[vertex.road_segment_idx - 1] = true;
+                if (expected_road_area != 50.0)
+                {
+                    F32 road_min_x = vertex.road_segment_idx == 1 ? 2.0f : 6.0f;
+                    CHECK(vertex.pos.x >= road_min_x - 0.0001f);
+                    CHECK(vertex.pos.x <= road_min_x + 2.0001f);
+                }
+            }
+        }
+    }
+    CHECK(areas[enum_idx(render::TileMeshKind::Road)] == doctest::Approx(expected_road_area));
+    CHECK(areas[enum_idx(render::TileMeshKind::Surface)] == doctest::Approx(50.0 - expected_road_area));
+    CHECK(found_road[0]);
+    CHECK(found_road[1] == (root.end_idx == 2));
+}
+
+TEST_CASE("tile tessellation offsets each mesh across split and unchanged faces")
+{
+    Arena* arena = arena_alloc();
+    defer(arena_release(arena));
+    render::TileVertex vertices[] = {
+        {.pos = {0, 0, 0}}, {.pos = {10, 0, 0}}, {.pos = {10, 10, 0}}, {.pos = {0, 10, 0}},
+        {.pos = {20, 0, 0}}, {.pos = {30, 0, 0}}, {.pos = {30, 10, 0}}, {.pos = {20, 10, 0}},
+    };
+    U32 indices[] = {4, 5, 6, 0, 1, 2, 0, 2, 3, 4, 6, 7};
+    city::RoadSegmentCorners road = {};
+    road.corners[0] = {2, -1};
+    road.corners[1] = {4, -1};
+    road.corners[2] = {4, 11};
+    road.corners[3] = {2, 11};
+    city::RoadSegmentNode root = {.bounds = {.min = {2, -1}, .max = {4, 11}}, .end_idx = 1};
+    city::RoadBvh bvh = {.root = &root, .road_segment_buffer_sorted = {&road, 1}};
+    render::TileMeshParts parts = {};
+    REQUIRE(city::tesselate_roads(arena, {vertices, ArrayCount(vertices)}, {indices, ArrayCount(indices)}, bvh, &parts));
+    for (U32 part = 0; part < ArrayCount(parts.meshes); ++part)
+    {
+        render::TileMesh& mesh = parts.meshes[part];
+        F64 area = 0;
+        U32 unchanged_vertices = 0;
+        for (U32 index : mesh.indices)
+            REQUIRE(index < mesh.vertices.size);
+        for (const render::TileVertex& vertex : mesh.vertices)
+        {
+            CHECK(vertex.road_segment_idx == (part == enum_idx(render::TileMeshKind::Road) ? 1 : 0));
+            unchanged_vertices += vertex.pos.x >= 20;
+        }
+        for (U32 index = 0; index < mesh.indices.size; index += 3)
+        {
+            glm::dvec2 a = mesh.vertices.data[mesh.indices.data[index]].pos;
+            glm::dvec2 b = mesh.vertices.data[mesh.indices.data[index + 1]].pos;
+            glm::dvec2 c = mesh.vertices.data[mesh.indices.data[index + 2]].pos;
+            area += ((b.x - a.x) * (c.y - a.y) - (b.y - a.y) * (c.x - a.x)) * 0.5;
+        }
+        CHECK(area == doctest::Approx(part == enum_idx(render::TileMeshKind::Road) ? 20.0 : 180.0));
+        CHECK(unchanged_vertices == (part == enum_idx(render::TileMeshKind::Road) ? 0 : 4));
+    }
+}
 
 TEST_CASE("segment-plane intersection remains on plane for large coordinates")
 {

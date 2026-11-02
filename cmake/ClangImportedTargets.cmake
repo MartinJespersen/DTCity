@@ -1,0 +1,22 @@
+# Imported targets have directory scope. Apply this after dependency discovery in
+# both the application and test directories when using Clang's GNU-style driver.
+if(CMAKE_CXX_COMPILER_ID MATCHES "Clang" AND CMAKE_CXX_COMPILER_FRONTEND_VARIANT STREQUAL "GNU")
+  if(TARGET Async++)
+    get_target_property(ASYNC_COMPILE_OPTIONS Async++ INTERFACE_COMPILE_OPTIONS)
+    if(ASYNC_COMPILE_OPTIONS)
+      list(REMOVE_ITEM ASYNC_COMPILE_OPTIONS "/Zc:__cplusplus")
+      set_target_properties(Async++ PROPERTIES INTERFACE_COMPILE_OPTIONS "${ASYNC_COMPILE_OPTIONS}")
+    endif()
+  endif()
+
+  get_property(IMPORTED_TARGETS DIRECTORY PROPERTY IMPORTED_TARGETS)
+  foreach(IMPORTED_TARGET IN LISTS IMPORTED_TARGETS)
+    if(IMPORTED_TARGET MATCHES "^absl::")
+      get_target_property(IMPORTED_LINK_LIBRARIES ${IMPORTED_TARGET} INTERFACE_LINK_LIBRARIES)
+      if(IMPORTED_LINK_LIBRARIES)
+        list(REMOVE_ITEM IMPORTED_LINK_LIBRARIES "-ignore:4221" "$<LINK_ONLY:-ignore:4221>")
+        set_target_properties(${IMPORTED_TARGET} PROPERTIES INTERFACE_LINK_LIBRARIES "${IMPORTED_LINK_LIBRARIES}")
+      endif()
+    endif()
+  endforeach()
+endif()

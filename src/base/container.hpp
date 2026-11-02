@@ -120,7 +120,7 @@ void
 buffer_copy(Buffer<T> dst, Buffer<T> src, U64 element_count_to_copy);
 template <typename T>
 void
-BufferCopy(Buffer<T> dst, Buffer<T> src, U64 dst_offset, U64 src_offset, U64 size);
+buffer_copy(Buffer<T> dst, Buffer<T> src, U64 dst_offset, U64 src_offset, U64 size);
 template <typename T>
 void
 BufferItemRemove(Buffer<T>* in_out_buffer, U32 index);

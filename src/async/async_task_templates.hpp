@@ -53,13 +53,13 @@ _worker_task_func(ThreadInfo thread_info, WorkerData data)
 
 template <typename T>
 AsyncTaskStatus<T>*
-_async_task_status_create(Allocator allocator, ThreadPool* thread_pool, String8 name, T* data)
+_async_task_status_create(Allocator allocator, ThreadPool* thread_pool, String8 name, std::unique_ptr<T> data)
 {
     AsyncTaskStatus<T>* task_status = new AsyncTaskStatus<T>{std::move(allocator)};
 
     task_status->thread_pool = thread_pool;
     task_status->task_name = push_str8_copy(task_status->allocator.arena, name);
-    task_status->user_data = data;
+    task_status->user_data = std::move(data);
     return task_status;
 }
 
@@ -121,28 +121,28 @@ async_task_take_completed(AsyncTaskStatus<T>* task)
 
 template <typename T>
 AsyncTaskStatus<T>*
-async_task_run(ThreadPool* thread_pool, WorkerTaskFunc<T> func, T* data, const char* task_name, S64 us_delay)
+async_task_run(ThreadPool* thread_pool, WorkerTaskFunc<T> func, std::unique_ptr<T> data, const char* task_name, S64 us_delay)
 {
     Allocator allocator = Allocator::create();
     Debug_SetName(allocator.arena, task_name);
-    return async_task_run(std::move(allocator), thread_pool, func, data, task_name, us_delay);
+    return async_task_run(std::move(allocator), thread_pool, func, std::move(data), task_name, us_delay);
 }
 
 template <typename T>
 AsyncTaskStatus<T>*
-async_task_run(Allocator allocator, ThreadPool* thread_pool, WorkerTaskFunc<T> func, T* data, const char* task_name, S64 us_delay)
+async_task_run(Allocator allocator, ThreadPool* thread_pool, WorkerTaskFunc<T> func, std::unique_ptr<T> data, const char* task_name, S64 us_delay)
 {
     String8 task_name_str8 = str8_c_string(task_name);
-    AsyncTaskStatus<T>* task_status = _async_task_status_create<T>(std::move(allocator), thread_pool, task_name_str8, data);
+    AsyncTaskStatus<T>* task_status = _async_task_status_create<T>(std::move(allocator), thread_pool, task_name_str8, std::move(data));
     return async_task_run(task_status, thread_pool, func, us_delay);
 }
 
 template <typename T>
 AsyncTaskStatus<T>*
-async_task_with_ext_run(Allocator allocator, ThreadPool* thread_pool, WorkerTaskFunc<T> func, T* data, const char* task_name, S64 us_delay, ExtensionType ext_type, void* ext)
+async_task_with_ext_run(Allocator allocator, ThreadPool* thread_pool, WorkerTaskFunc<T> func, std::unique_ptr<T> data, const char* task_name, S64 us_delay, ExtensionType ext_type, void* ext)
 {
     String8 task_name_str8 = str8_c_string(task_name);
-    AsyncTaskStatus<T>* task_status = _async_task_status_create<T>(std::move(allocator), thread_pool, task_name_str8, data);
+    AsyncTaskStatus<T>* task_status = _async_task_status_create<T>(std::move(allocator), thread_pool, task_name_str8, std::move(data));
     task_status->ext_type = ext_type;
 
     if (has_flag(ext_type, ExtensionType::Http) || (ext != 0))

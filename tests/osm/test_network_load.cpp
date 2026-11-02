@@ -137,12 +137,12 @@ TEST_CASE("Cache misses configure HTTP and downloaded results have one owner")
     SUBCASE("Malformed download") { malformed = true; }
     auto task = std::unique_ptr<async::AsyncTaskStatus<osm::NetworkLoadTask>>(
         async::_async_task_status_create<osm::NetworkLoadTask>(Allocator::create(), nullptr, S("download test"), nullptr));
-    auto* input = task->allocator.make<osm::NetworkLoadTask>();
+    task->user_data = std::make_unique<osm::NetworkLoadTask>();
+    auto* input = task->user_data.get();
     input->cache = {.file_location = file, .bbox_str = S("bbox")};
     input->request_body = S("request");
     input->node_hashmap_size = 8;
     input->way_hashmap_size = 8;
-    task->user_data = input;
     auto next = osm::_network_load_begin({}, task.get());
     REQUIRE(task->ext_type == async::ExtensionType::Http);
     defer(async::_curl_context_cleanup(task->http_ext->curl_ctx));

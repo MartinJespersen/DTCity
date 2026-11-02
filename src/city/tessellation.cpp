@@ -1,20 +1,5 @@
-#include "core_inc.hpp"
-#include "base/base_container.hpp"
-#include "base/base_container_templates.hpp"
-#include "base/cache.hpp"
-#include "base/base_lists.hpp"
-#include "base/base_lists_templates.hpp"
-#include "utility/utility_inc.hpp"
-#include "async/async_inc.hpp"
-#include "render/render_inc.hpp"
-#include "draw/draw.hpp"
-#include "misc/misc_inc.hpp"
-#include "lib_wrappers/lib_wrappers_inc.hpp"
-#include "gltfw/gltfw.hpp"
-#include "osm/osm.hpp"
-#include "cesium/cesium_tileset.hpp"
-#include "city/city_inc.hpp"
-#include "entrypoint.hpp"
+#include "base/base_inc.hpp"
+#include "tessellation.hpp"
 
 namespace city
 {
@@ -122,7 +107,7 @@ _assign_vertex_values(glm::vec2 v, TileVertexFace& face, geometry::Triangle2d& p
     out_vertex->pos = interpolated_pos;
     out_vertex->overlay_uv = interpolated_overlay_uv;
     out_vertex->uv = interpolated_uv;
-    // TODO: the below fields should also change: eg. object_id could be known, road_segment_idx is no longer needed.
+    // The classified road index is assigned when the triangle is appended.
     out_vertex->road_segment_idx = 0;
 }
 
@@ -162,7 +147,7 @@ _mesh_append(Arena* arena, ChunkList<render::TileVertex>* vertices_chunk_list, C
     }
 }
 
-g_internal render::TileMesh
+g_internal render::TileMeshParts
 _tessellate_tile_face_for_roads(Arena* arena, city::RoadSegmentNode* root, Buffer<city::RoadSegmentCorners> road_buffer,
                                 Buffer<city::RoadSegmentNode*> node_stack, TileVertexFace& face)
 {
@@ -170,9 +155,13 @@ _tessellate_tile_face_for_roads(Arena* arena, city::RoadSegmentNode* root, Buffe
     ScratchScope scratch = ScratchScope(&arena, 1);
     constexpr U64 vertex_chunk_capacity = 256;
     constexpr U64 index_chunk_capacity = 512;
-    ChunkList<render::TileVertex>* vertices_chunk_list =
-        chunk_list_create<render::TileVertex>(scratch.arena, vertex_chunk_capacity);
-    ChunkList<U32>* indices_chunk_list = chunk_list_create<U32>(scratch.arena, index_chunk_capacity);
+    ChunkList<render::TileVertex>* vertex_lists[enum_idx(render::TileMeshKind::Count)] = {};
+    ChunkList<U32>* index_lists[enum_idx(render::TileMeshKind::Count)] = {};
+    for (U32 part = 0; part < ArrayCount(vertex_lists); ++part)
+    {
+        vertex_lists[part] = chunk_list_create<render::TileVertex>(scratch.arena, vertex_chunk_capacity);
+        index_lists[part] = chunk_list_create<U32>(scratch.arena, index_chunk_capacity);
+    }
 
     geometry::Triangle2d projected_tri = {};
     projected_tri.v[0] = glm::vec2(face.v[0].pos.x, face.v[0].pos.y);
@@ -276,9 +265,19 @@ _tessellate_tile_face_for_roads(Arena* arena, city::RoadSegmentNode* root, Buffe
         return {};
     }
 
-    U32 triangle_indices[] = {0, 1, 2};
+    // Polygon triangulation can change winding. Keep the source face's front
+    // side in both meshes so back-face culling does not remove a split region.
+    glm::dvec2 source_ab = glm::dvec2(projected_tri.v[1]) - glm::dvec2(projected_tri.v[0]);
+    glm::dvec2 source_ac = glm::dvec2(projected_tri.v[2]) - glm::dvec2(projected_tri.v[0]);
+    F64 source_twice_area = source_ab.x * source_ac.y - source_ab.y * source_ac.x;
     for (geometry::ClassifiedTriangle2d& classified_triangle : partition)
     {
+        geometry::Triangle2d& triangle = classified_triangle.triangle;
+        glm::dvec2 ab = glm::dvec2(triangle.v[1]) - glm::dvec2(triangle.v[0]);
+        glm::dvec2 ac = glm::dvec2(triangle.v[2]) - glm::dvec2(triangle.v[0]);
+        F64 twice_area = ab.x * ac.y - ab.y * ac.x;
+        B32 reverse_winding = (source_twice_area < 0) != (twice_area < 0);
+        U32 triangle_indices[] = {0, reverse_winding ? 2u : 1u, reverse_winding ? 1u : 2u};
         geometry::PolygonMesh2d triangle_mesh_2d = {
             .vertices = {.data = classified_triangle.triangle.v, .size = ArrayCount(classified_triangle.triangle.v)},
             .indices = {.data = triangle_indices, .size = ArrayCount(triangle_indices)},
@@ -293,23 +292,34 @@ _tessellate_tile_face_for_roads(Arena* arena, city::RoadSegmentNode* root, Buffe
             Assert(candidate_idx < road_index_buffer.size);
             encoded_road_idx = road_index_buffer.data[candidate_idx] + 1;
         }
-        _mesh_append(scratch.arena, vertices_chunk_list, indices_chunk_list, triangle_mesh, encoded_road_idx);
+        U32 part = enum_idx(encoded_road_idx ? render::TileMeshKind::Road : render::TileMeshKind::Surface);
+        _mesh_append(scratch.arena, vertex_lists[part], index_lists[part], triangle_mesh, encoded_road_idx);
     }
 
-    Buffer<render::TileVertex> vertices = buffer_from_chunk_list(arena, vertices_chunk_list);
-    Buffer<U32> indices = buffer_from_chunk_list(arena, indices_chunk_list);
-    render::TileMesh mesh = {.vertices = vertices, .indices = indices};
-    return mesh;
+    render::TileMeshParts result = {};
+    for (U32 part = 0; part < ArrayCount(result.meshes); ++part)
+    {
+        result.meshes[part].vertices = buffer_from_chunk_list(arena, vertex_lists[part]);
+        result.meshes[part].indices = buffer_from_chunk_list(arena, index_lists[part]);
+    }
+    return result;
 }
 
 g_internal bool
 tesselate_roads(Arena* arena, Buffer<render::TileVertex> vertices, Buffer<U32> indices, RoadBvh& bvh_result,
-                render::TileMesh* out_mesh)
+                render::TileMeshParts* out_mesh)
 {
+    Assert(indices.size % 3 == 0);
     ScratchScope scratch = ScratchScope(&arena, 1);
 
-    ChunkList<U32>* indices_chunk_list = chunk_list_create<U32>(scratch.arena, 1000);
-    ChunkList<render::TileVertex>* vertices_chunk_list = chunk_list_create<render::TileVertex>(scratch.arena, 1000);
+    ChunkList<U32>* index_lists[enum_idx(render::TileMeshKind::Count)] = {};
+    ChunkList<render::TileVertex>* vertex_lists[enum_idx(render::TileMeshKind::Count)] = {};
+    for (U32 part = 0; part < ArrayCount(vertex_lists); ++part)
+    {
+        index_lists[part] = chunk_list_create<U32>(scratch.arena, 1000);
+        vertex_lists[part] = chunk_list_create<render::TileVertex>(scratch.arena, 1000);
+    }
+    constexpr U32 surface_part = enum_idx(render::TileMeshKind::Surface);
     U32* original_vertex_to_output_idx = PushArray(scratch.arena, U32, vertices.size);
     B32* original_vertex_is_added = PushArray(scratch.arena, B32, vertices.size);
     bool has_road_classification = false;
@@ -327,21 +337,22 @@ tesselate_roads(Arena* arena, Buffer<render::TileVertex> vertices, Buffer<U32> i
         face_vertices.v[1] = vertices.data[indices.data[i + 1]];
         face_vertices.v[2] = vertices.data[indices.data[i + 2]];
 
-        render::TileMesh tessellated_mesh = _tessellate_tile_face_for_roads(
+        render::TileMeshParts tessellated_mesh = _tessellate_tile_face_for_roads(
             scratch.arena, bvh_result.root, bvh_result.road_segment_buffer_sorted, node_stack, face_vertices);
-        if (tessellated_mesh.indices.size)
+        if (tessellated_mesh.meshes[enum_idx(render::TileMeshKind::Road)].indices.size)
         {
             has_road_classification = true;
-            U32 idx_offset = vertices_chunk_list->total_count;
-
-            for (U32 tessellated_index_idx = 0; tessellated_index_idx < tessellated_mesh.indices.size;
-                 ++tessellated_index_idx)
+            for (U32 part = 0; part < ArrayCount(tessellated_mesh.meshes); ++part)
             {
-                U32 index = tessellated_mesh.indices.data[tessellated_index_idx] + idx_offset;
-                chunk_list_insert(scratch.arena, indices_chunk_list, index);
+                render::TileMesh& mesh = tessellated_mesh.meshes[part];
+                U32 idx_offset = vertex_lists[part]->total_count;
+                for (U32 mesh_index : mesh.indices)
+                {
+                    U32 index = mesh_index + idx_offset;
+                    chunk_list_insert(scratch.arena, index_lists[part], index);
+                }
+                chunk_list_from_buffer_append(scratch.arena, vertex_lists[part], mesh.vertices);
             }
-
-            chunk_list_from_buffer_append(scratch.arena, vertices_chunk_list, tessellated_mesh.vertices);
         }
         else
         {
@@ -352,24 +363,27 @@ tesselate_roads(Arena* arena, Buffer<render::TileVertex> vertices, Buffer<U32> i
                 U32 original_vertex_idx = indices.data[i + face_vertex_idx];
                 if (!original_vertex_is_added[original_vertex_idx])
                 {
-                    U32 output_vertex_idx = (U32)vertices_chunk_list->total_count;
+                    U32 output_vertex_idx = (U32)vertex_lists[surface_part]->total_count;
                     original_vertex_to_output_idx[original_vertex_idx] = output_vertex_idx;
                     original_vertex_is_added[original_vertex_idx] = true;
 
-                    render::TileVertex* new_vertex = chunk_list_get_next(scratch.arena, vertices_chunk_list);
+                    render::TileVertex* new_vertex = chunk_list_get_next(scratch.arena, vertex_lists[surface_part]);
                     *new_vertex = *tv;
+                    new_vertex->road_segment_idx = 0;
                 }
 
                 U32 index = original_vertex_to_output_idx[original_vertex_idx];
-                chunk_list_insert(scratch.arena, indices_chunk_list, index);
+                chunk_list_insert(scratch.arena, index_lists[surface_part], index);
             }
         }
     }
 
-    render::TileMesh mesh = {};
-    mesh.indices = buffer_from_chunk_list(arena, indices_chunk_list);
-    mesh.vertices = buffer_from_chunk_list(arena, vertices_chunk_list);
-    *out_mesh = mesh;
+    *out_mesh = {};
+    for (U32 part = 0; part < ArrayCount(out_mesh->meshes); ++part)
+    {
+        out_mesh->meshes[part].indices = buffer_from_chunk_list(arena, index_lists[part]);
+        out_mesh->meshes[part].vertices = buffer_from_chunk_list(arena, vertex_lists[part]);
+    }
     return has_road_classification;
 }
 

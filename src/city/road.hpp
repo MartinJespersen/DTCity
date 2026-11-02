@@ -35,6 +35,9 @@ struct Road
 {
     Allocator allocator;
     Map<osm::EdgeId, RoadInfo>* road_info_map = {};
+    // Slot zero is empty; real ways (including OSM ID zero) use indices >= 1.
+    Buffer<osm::WayId> way_ids = {};
+    render::MappedHandle<shader::WayAgentCount> way_agent_count_buffer = {};
     // Private until publication; the tile loader then owns the BVH arena lifetime.
     RoadBvh pending_bvh = {};
     PoolHandle bvh_handle = {};
@@ -59,16 +62,29 @@ class RoadContext
     ResourcePool<Road>* roads = {};
 
   public:
-    void init(Arena* arena, U32 capacity) noexcept;
-    async::AsyncTaskStatus<RoadBuildTask>* create(async::ThreadPool* thread_pool, const RoadBuildInput& input) noexcept;
-    PoolHandle publish(RoadBuildTask* task, ResourcePool<RoadBvh>* bvh_pool) noexcept;
-    bool get(PoolHandle handle, Road** out_road) noexcept;
-    void pipeline_add(PoolHandle handle, render::TilePipelineData* pipeline, RoadOverlayOption overlay) noexcept;
-    bool update(PoolHandle handle, RoadOverlayOption overlay) noexcept;
-    void release(PoolHandle handle, ResourcePool<RoadBvh>* bvh_pool) noexcept;
+    F32 agent_count_reference = 50.0f;
+
+    void
+    init(Arena* arena, U32 capacity) noexcept;
+    async::AsyncTaskStatus<RoadBuildTask>*
+    create(async::ThreadPool* thread_pool, const RoadBuildInput& input) noexcept;
+    PoolHandle
+    publish(RoadBuildTask* task, ResourcePool<RoadBvh>* bvh_pool) noexcept;
+    bool
+    get(PoolHandle handle, Road** out_road) noexcept;
+    void
+    pipeline_add(PoolHandle handle, render::TilePipelineData* pipeline, RoadOverlayOption overlay) noexcept;
+    bool
+    update(PoolHandle handle, RoadOverlayOption overlay) noexcept;
+    void
+    agent_counts_update(PoolHandle handle, Map<osm::WayId, U32>* counts_by_way) noexcept;
+    void
+    release(PoolHandle handle, ResourcePool<RoadBvh>* bvh_pool) noexcept;
 };
 
 // Private geometry and task stages.
+g_internal Buffer<osm::WayId>
+_road_way_indices_build(Arena* arena, Buffer<osm::Edge> edges, Buffer<RoadSegmentCorners> segments) noexcept;
 g_internal async::AsyncTaskContinuation<RoadBuildTask>
 _road_build(async::ThreadInfo info, async::AsyncTaskStatus<RoadBuildTask>* status);
 g_internal void
@@ -79,15 +95,15 @@ g_internal void
 _road_assert_non_intersecting_edges(glm::vec2* vertices, U32 count);
 g_internal Buffer<RoadSegmentCorners>
 _road_corners_build(Arena* arena, osm::Network* network, Buffer<osm::Edge> edge_buffer, F32 default_road_width,
-                   const glm::dmat4& ecef_to_local, Map<osm::EdgeId, RoadInfo>* road_info_map);
+                    const glm::dmat4& ecef_to_local, Map<osm::EdgeId, RoadInfo>* road_info_map);
 g_internal Map<osm::EdgeId, RoadInfo>*
 _road_info_map_create(Arena* arena, osm::Network* network, Buffer<osm::Edge> edge_buffer,
-                       Map<S64, neta::EdgeList>* neta_edge_map);
+                      Map<osm::WayId, neta::EdgeList>* neta_edge_map);
 g_internal neta::Edge*
 _netascore_edge_from_osm_edge(osm::Network* network, osm::Edge* osm_edge, Map<S64, neta::EdgeList>* edge_list_map);
 g_internal void
 _road_segment_from_nodes(RoadSegment* out_road_segment, osm::EcefLocation node_0, osm::EcefLocation node_1,
-                        F32 road_width);
+                         F32 road_width);
 g_internal void
 _road_quick_select(Buffer<BoundingBox> center_buffer, U32 split_axis, U32 start_idx, U32 end_idx, U32 k);
 g_internal Rng2F32

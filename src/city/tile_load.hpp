@@ -110,7 +110,7 @@ g_internal void
 _tile_load_task_completions_update(TileLoadState* state);
 g_internal B32
 _tile_load_road_mesh_process(Arena* arena, Buffer<render::TileVertex> vertices, Buffer<U32> indices, void* user_data,
-                             render::TileMesh* out_mesh);
+                             render::TileMeshParts* out_mesh);
 g_internal async::AsyncTaskContinuation<TileLoadTaskState>
 _tile_load_mesh_reprocess_task(async::ThreadInfo info, async::AsyncTaskStatus<TileLoadTaskState>* status);
 g_internal void

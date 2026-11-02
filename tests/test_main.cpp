@@ -4,6 +4,7 @@
 // user source
 #include "base/base_inc.cpp"
 #include "misc/geometry.cpp"
+#include "city/tessellation.cpp"
 #include "../simulator/resource_paths.cpp"
 #include "../simulator/scenarios.cpp"
 #include "../simulator/event_snapshot.cpp"

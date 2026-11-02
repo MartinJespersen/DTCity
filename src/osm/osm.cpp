@@ -13,7 +13,7 @@ namespace osm
 EcefLocation
 ecef_location_create(U64 id, Vec3F64 pos)
 {
-    EcefLocation loc = {.id = id, .pos = pos};
+    EcefLocation loc = {.id = (NodeId)id, .pos = pos};
     return loc;
 }
 
@@ -37,13 +37,13 @@ network_load(async::ThreadPool* thread_pool, NetworkCache cache, String8 request
 {
     Allocator allocator = Allocator::create();
     Debug_SetName(allocator.arena, "OSM load task");
-    NetworkLoadTask* input = allocator.make<NetworkLoadTask>();
+    auto input = std::make_unique<NetworkLoadTask>();
     input->cache.file_location = push_str8_copy(allocator.arena, cache.file_location);
     input->cache.bbox_str = push_str8_copy(allocator.arena, cache.bbox_str);
     input->request_body = push_str8_copy(allocator.arena, request_body);
     input->node_hashmap_size = node_hashmap_size;
     input->way_hashmap_size = way_hashmap_size;
-    return async::async_task_run(std::move(allocator), thread_pool, _network_load_begin, input, "OSM load task");
+    return async::async_task_run(std::move(allocator), thread_pool, _network_load_begin, std::move(input), "OSM load task");
 }
 
 WayNode*
@@ -81,7 +81,7 @@ tag_find(Arena* arena, Buffer<Tag> tags, String8 tag_to_find)
 }
 
 EcefLocation
-location_get(Network* network, NodeId node_id)
+location_get(Network* network, U64 node_id)
 {
     prof_scope_marker;
     EcefLocation* loc = network->ecef_location_map->get(node_id);
@@ -94,7 +94,7 @@ location_get(Network* network, NodeId node_id)
 }
 
 WgsLocation
-wgs_location_get(Network* network, NodeId node_id)
+wgs_location_get(Network* network, U64 node_id)
 {
     prof_scope_marker;
     WgsLocation* loc = network->wgs_location_map->get(node_id);
@@ -163,7 +163,7 @@ _wgs_node_find(Buffer<WgsNodeList> node_hashmap, U64 node_id)
 }
 
 g_internal B32
-_node_hashmap_insert(Network* network, NodeId node_id, Way* way, Node** out)
+_node_hashmap_insert(Network* network, U64 node_id, Way* way, Node** out)
 {
     // ~mgj: Insert Node into hash if not already inserted
     U64 node_slot = node_id % network->node_hashmap.size;
@@ -237,7 +237,7 @@ _parse_osm_data(osm::Network* osm_network, String8 file_content)
             chunk_list_insert(scratch.arena, way_chunk_list, *way);
             for (U32 node_index = 0; node_index < way->node_count; node_index++)
             {
-                U64 node_id = way->node_ids[node_index];
+                NodeId node_id = way->node_ids[node_index];
                 Node* node;
                 B8 inserted = _node_hashmap_insert(osm_network, node_id, way, &node);
                 if (inserted)
@@ -290,7 +290,7 @@ g_internal async::AsyncTaskContinuation<NetworkLoadTask>
 _network_load_begin(async::ThreadInfo thread_info, async::AsyncTaskStatus<NetworkLoadTask>* task)
 {
     (void)thread_info;
-    NetworkLoadTask* input = task->user_data;
+    NetworkLoadTask* input = task->user_data.get();
     Arena* arena = task->allocator.arena;
     ScratchScope scratch = ScratchScope(&arena, 1);
     Result<String8> cached = cache_read(scratch.arena, input->cache.file_location, input->cache.bbox_str);

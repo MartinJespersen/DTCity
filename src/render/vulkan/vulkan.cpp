@@ -45,6 +45,7 @@ camera_descriptor_set_layout_create(Context* vk_ctx)
     VkDescriptorSetLayoutBinding bindings[] = {
         {0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1, VK_SHADER_STAGE_VERTEX_BIT, NULL},
         {1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_VERTEX_BIT, NULL},
+        {2, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_VERTEX_BIT, NULL},
     };
 
     VkDescriptorSetLayoutCreateInfo layout_info{};
@@ -298,7 +299,19 @@ command_buffer_record(U32 image_index, U32 current_frame, Vec2S64 mouse_cursor_p
 
             debug_label.pLabelName = "Tile Rendering";
             CMD_BEGIN_DEBUG_UTILS_LABEL_EXT(current_cmd_buf, &debug_label);
-            tile_rendering(camera_handle_void);
+            // Keep submission order, including the custom-tile depth and color
+            // passes. Consecutive draws of the same kind share a pipeline bind.
+            for (TilePipelineNode* first = vk_ctx->render_frame->model_3D_list.first; first;)
+            {
+                TilePipelineNode* end = first->next;
+                while (end && end->mesh_kind == first->mesh_kind)
+                    end = end->next;
+                if (first->mesh_kind == render::TileMeshKind::Road)
+                    road_tile_rendering(camera_handle_void, first, end);
+                else
+                    tile_rendering(camera_handle_void, first, end);
+                first = end;
+            }
             CMD_END_DEBUG_UTILS_LABEL_EXT(current_cmd_buf);
 
             blend_3d_rendering();
@@ -461,6 +474,7 @@ mapped_buffers_update()
             vulkan::asset_manager_buffer_item_get(frame_handle->handle);
         vulkan::BufferHandle* mapped_buffer = &mapped_buffer_handle->item;
 
+        Assert(m_handle_transfer->v.source.size <= mapped_buffer->buffer_alloc.size);
         MemoryCopy(frame_handle->data, m_handle_transfer->v.source.str, m_handle_transfer->v.source.size);
 
         vulkan::AssetManager* asset_manager = vulkan::asset_manager_get();

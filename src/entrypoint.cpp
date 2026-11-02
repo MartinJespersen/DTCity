@@ -147,9 +147,10 @@ imgui_debug_window(city::City* city, async::ThreadPool* thread_pool)
     }
     ImGui::Text("Deletetion Queue Free List: %d active", asset_manager->deletion_queue_free_list_count);
     ImGui::Text("ThreadPool pending tasks: %u", thread_pool->pending_task_count.load());
-    if (city->agent_system && city->agent_system->agent_sim)
+    city::AgentSim* simulation = {};
+    if (city->agent_system->simulations.item_from_handle(city->agent_system->selected_simulation, &simulation))
     {
-        ImGui::Text("Agents active: %d", city->agent_system->agent_sim->agents_active.item_in_use_count);
+        ImGui::Text("Agents active: %d", simulation->agents_active.item_in_use_count);
     }
     city::tile_load_debug_ui_draw(ctx->tile_load_state, city->tileset_handle);
 
@@ -310,6 +311,7 @@ dt_main_loop(void* ptr)
     F64 fetch_period_seconds = 0.5;
     bool playback_running = true;
     bool agent_snapshot_needed = true;
+    PoolHandle updated_simulation = {};
     while (ctx->running)
     {
         dt_time_update(ctx->io, ctx->time);
@@ -421,8 +423,13 @@ dt_main_loop(void* ptr)
             ImGui::RadioButton(city::road_overlay_option_strs[i], (int*)&neta_overlay_option, (int)i);
         }
 
+        if (neta_overlay_option == city::RoadOverlayOption_AgentCount)
         {
-            prof_scope_marker_named("Scroll Agent Time");
+            ImGui::SliderFloat("Agents at maximum color", &ctx->road_context->agent_count_reference,
+                               1.0f, 500.0f, "%.0f", ImGuiSliderFlags_Logarithmic);
+        }
+
+        {
             ImGui::SeparatorText("Agent Size");
             city::City* selected_city = &city_buf[area_option];
             ImGui::SliderFloat("Scale", &selected_city->all_agent_scale_factor, 0.01f, 100.0f, "%.3f");
@@ -476,25 +483,32 @@ dt_main_loop(void* ptr)
             city::city_update(area, ctx->thread_pool, neta_overlay_option, framebuffer_dim, area_config);
 
             cesium::TilesetRenderer* tileset = {};
-            bool agents_ready = area->cars_creation_done && !area_switch_pending;
-            if (agents_ready)
+            city::AgentSim* simulation = {};
+            bool simulation_selected = area->agent_system->simulations.item_from_handle(
+                area->agent_system->selected_simulation, &simulation);
+            bool simulation_active = simulation_selected && !area_switch_pending;
+            if (updated_simulation != area->agent_system->selected_simulation)
+                agent_snapshot_needed = true;
+            updated_simulation = area->agent_system->selected_simulation;
+            if (ctx->tile_load_state->tileset_pool->item_from_handle(area->tileset_handle, &tileset))
             {
-                B32 tileset_found =
-                    ctx->tile_load_state->tileset_pool->item_from_handle(area->tileset_handle, &tileset);
-                agents_ready = tileset_found && !tileset->destruction_requested;
+                if (tileset->destruction_requested) tileset = {};
             }
+            else tileset = {};
 
-            // Pump the connection every frame, including while OSM, models, or a
-            // replacement area load. Rebuild agent state once rendering is ready.
+            // Simulation updates do not depend on model or GPU upload readiness.
             city::Simulation::Update updates = simulator.update(
-                ctx->arena_frame, server_update, playback_changed || (agents_ready && agent_snapshot_needed));
-            agent_snapshot_needed = !agents_ready;
-            if (agents_ready)
+                ctx->arena_frame, server_update, playback_changed || (simulation_active && agent_snapshot_needed));
+            agent_snapshot_needed = !simulation_active;
+            if (simulation_active)
             {
-                area->agent_system->update(camera, agent_hover_icon_mesh_handle, tileset,
+                glm::dmat4 ecef_to_local = tileset ? tileset->ecef_to_local : glm::dmat4(1.0);
+                area->agent_system->update(*simulation, camera, agent_hover_icon_mesh_handle, tileset,
                                            updates.updates, updates.agents_clear, updates.snapshot_received,
-                                           area->all_agent_scale_factor, tileset->ecef_to_local, playback_time);
+                                           area->all_agent_scale_factor, ecef_to_local, playback_time);
             }
+            ctx->road_context->agent_counts_update(area->road,
+                                                   simulation_selected ? &simulation->agent_count_by_way : nullptr);
 
             // Build every ImGui window before render_frame ends the ImGui frame.
             imgui_debug_window(area, ctx->thread_pool);

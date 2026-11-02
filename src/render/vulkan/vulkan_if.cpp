@@ -195,7 +195,8 @@ render_ctx_create(String8 shader_path, io::IO* io_ctx, async::ThreadPool* thread
 
     vk_ctx->render_frame_arena = arena_alloc();
     Debug_SetName(vk_ctx->render_frame_arena, "vulkan render frame arena");
-    vk_ctx->model_3D_pipeline = vulkan::tile_pipeline_create(vk_ctx, shader_path);
+    vk_ctx->tile_pipeline = vulkan::tile_pipeline_create(vk_ctx, shader_path);
+    vk_ctx->road_tile_pipeline = vulkan::road_tile_pipeline_create(vk_ctx, shader_path);
     vulkan::_tile_height_pipeline_initialize(shader_path);
     vk_ctx->blend_3d_pipeline = vulkan::blend_3d_pipeline_create(shader_path);
     vk_ctx->primitive_pipeline = vulkan::primitive_pipeline_create(shader_path);
@@ -261,7 +262,8 @@ render_ctx_destroy()
 
     vkDestroyDescriptorPool(vk_ctx->device, vk_ctx->descriptor_pool, 0);
 
-    vulkan::pipeline_destroy(&vk_ctx->model_3D_pipeline);
+    vulkan::pipeline_destroy(&vk_ctx->tile_pipeline);
+    vulkan::pipeline_destroy(&vk_ctx->road_tile_pipeline);
     vulkan::pipeline_destroy(&vk_ctx->blend_3d_pipeline);
     vulkan::pipeline_destroy(&vk_ctx->primitive_pipeline);
     vkDestroyPipeline(vk_ctx->device, vk_ctx->model_lod_compute_pipeline, nullptr);
@@ -729,6 +731,13 @@ tile_pipeline_add(render::TilePipelineData* pipeline_input)
     B32 index_loaded = render::is_resource_loaded(pipeline_input->index_buffer_render_handle, &asset_index_buffer);
     B32 road_segment_loaded =
         render::is_resource_loaded(pipeline_input->road_segment_buffer_handle, &asset_road_segment_buffer);
+    render::AssetItem<vulkan::BufferHandle>* asset_way_agent_counts = {};
+    B32 way_agent_counts_loaded = false;
+    if (pipeline_input->way_agent_count_buffer.buffer.size)
+    {
+        render::Handle count_handle = pipeline_input->way_agent_count_buffer.buffer[vk_ctx->current_frame].handle;
+        way_agent_counts_loaded = render::is_resource_loaded(count_handle, &asset_way_agent_counts);
+    }
     B32 dummy_storage_buffer_loaded =
         render::is_resource_loaded(vk_ctx->dummy_storage_buffer_handle, &asset_dummy_storage_buffer);
     AssertAlways(dummy_storage_buffer_loaded);
@@ -764,11 +773,17 @@ tile_pipeline_add(render::TilePipelineData* pipeline_input)
         push_constants.lod_fade = pipeline_input->lod_fade;
         push_constants.road_test_enabled = pipeline_input->road_test_enabled && road_segment_loaded;
         push_constants.overlay_option_idx = pipeline_input->overlay_option_idx;
+        push_constants.agent_count_reference = pipeline_input->agent_count_reference;
+        if (pipeline_input->overlay_option_idx == shader::road_overlay_agent_count && !way_agent_counts_loaded)
+            push_constants.road_test_enabled = false;
 
         vulkan::TilePipelineNode* node = PushStruct(vk_ctx->render_frame_arena, vulkan::TilePipelineNode);
+        node->mesh_kind = pipeline_input->mesh_kind;
         node->vertex_alloc = asset_vertex_buffer->item.buffer_alloc;
         node->index_alloc = asset_index_buffer->item.buffer_alloc;
         node->road_segment_alloc = asset_dummy_storage_buffer->item.buffer_alloc;
+        node->way_agent_count_alloc = way_agent_counts_loaded ? asset_way_agent_counts->item.buffer_alloc
+                                                            : asset_dummy_storage_buffer->item.buffer_alloc;
         if (road_segment_loaded)
         {
             node->road_segment_alloc = asset_road_segment_buffer->item.buffer_alloc;

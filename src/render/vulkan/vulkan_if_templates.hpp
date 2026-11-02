@@ -13,8 +13,15 @@ template <typename T>
 void
 mapped_buffer_add(MappedHandle<T> mut_handle, T* data)
 {
+    mapped_buffer_add(mut_handle, Buffer<T>{.data = data, .size = 1});
+}
+
+template <typename T>
+void
+mapped_buffer_add(MappedHandle<T> mut_handle, Buffer<T> data)
+{
     vulkan::Context* vk_ctx = vulkan::ctx_get();
-    String8 buffer = str8((U8*)data, sizeof(T));
+    String8 buffer = str8((U8*)data.data, data.size * sizeof(T));
     String8 source = push_str8_copy(vk_ctx->render_frame_arena, buffer);
     LinkedListNode<vulkan::MappedHandleTransfer>* mut_handle_node =
         PushStruct(vk_ctx->render_frame_arena, LinkedListNode<vulkan::MappedHandleTransfer>);
@@ -28,6 +35,15 @@ template <typename T>
 MappedHandle<T>
 mapped_buffer_create(Arena* arena, render::ThreadWorkerCmdCtx* thread_ctx, BufferType buffer_type, String8 debug_name)
 {
+    return mapped_buffer_create<T>(arena, thread_ctx, buffer_type, debug_name, 1);
+}
+
+template <typename T>
+MappedHandle<T>
+mapped_buffer_create(Arena* arena, render::ThreadWorkerCmdCtx* thread_ctx, BufferType buffer_type,
+                     String8 debug_name, U64 element_count)
+{
+    Assert(element_count > 0 && element_count <= U32(-1));
     ScratchScope scratch = ScratchScope(&arena, 1);
     Buffer<MappedHandleFrame<T>> handle_buffer =
         buffer_alloc<MappedHandleFrame<T>>(arena, render::MAX_FRAMES_IN_FLIGHT);
@@ -40,7 +56,8 @@ mapped_buffer_create(Arena* arena, render::ThreadWorkerCmdCtx* thread_ctx, Buffe
         vma_info.flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT | VMA_ALLOCATION_CREATE_MAPPED_BIT;
         vma_info.requiredFlags = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT;
 
-        BufferInfo buffer_info = BufferInfo::empty_buffer_info<T>(arena, buffer_type);
+        // Allocation only: mapped writes are queued after the frame becomes reusable.
+        BufferInfo buffer_info(Buffer<T>{.data = {}, .size = element_count}, buffer_type);
         content->handle = vulkan::asset_manager_buffer_allocation_create(thread_ctx, &buffer_info, vma_info);
         render::AssetItem<vulkan::BufferHandle>* asset_item_buffer =
             vulkan::asset_manager_buffer_item_get(content->handle);

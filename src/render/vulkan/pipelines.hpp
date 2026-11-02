@@ -7,6 +7,7 @@
 namespace vulkan
 {
 struct Context;
+struct TilePipelineNode;
 
 enum WriteType
 {
@@ -40,7 +41,13 @@ blend_3d_rendering();
 g_internal Pipeline
 tile_pipeline_create(Context* vk_ctx, String8 shader_path);
 g_internal void
-tile_rendering(render::MappedHandle<void> mapped_camera_handle);
+tile_rendering(render::MappedHandle<void> mapped_camera_handle, TilePipelineNode* first, TilePipelineNode* end);
+
+// tessellated road rendering
+g_internal Pipeline
+road_tile_pipeline_create(Context* vk_ctx, String8 shader_path);
+g_internal void
+road_tile_rendering(render::MappedHandle<void> mapped_camera_handle, TilePipelineNode* first, TilePipelineNode* end);
 
 // Primitive rendering
 g_internal Pipeline
@@ -67,5 +74,15 @@ lines_render(Buffer<render::LineVertex> line_vertices, render::MappedHandle<void
 g_internal Buffer<ModelIndirectBatch>
 _vulkan_model_compute_prepare(Buffer<render::AgentMeshInstanceBatch> mesh_batches,
                               render::MappedHandle<void> camera_handle);
+
+// Common Vulkan setup for the two tile pipelines. Draw ranges exclude end.
+g_internal Pipeline
+_vulkan_tile_pipeline_create(Context* vk_ctx, String8 shader_path, const char* vert_file, const char* frag_file,
+                              Buffer<VkVertexInputAttributeDescription> attributes);
+g_internal void
+_vulkan_tile_render_begin(Context* vk_ctx, VkCommandBuffer cmd_buffer, Pipeline* pipeline,
+                           render::MappedHandle<void> mapped_camera_handle);
+g_internal void
+_vulkan_tile_draw(VkCommandBuffer cmd_buffer, Pipeline* pipeline, TilePipelineNode* node);
 
 } // namespace vulkan

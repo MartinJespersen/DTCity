@@ -101,21 +101,21 @@ agent_model_render_info_create(render::ThreadWorkerCmdCtx* t_ctx, gltfw_Result& 
 
 // IMPORTANT: Runs on worker thread
 g_internal void
-agents_create(AgentSimThread* agent_sim_thread)
+agent_models_load(AgentModelLoadTask* model_load_task)
 {
     prof_scope_marker;
     ScratchScope scratch = ScratchScope(0, 0);
-    AgentSimConfig& agent_sim_config = agent_sim_thread->config;
+    AgentRenderResources& render_resources = model_load_task->config;
 
     render::ThreadWorkerCmdCtx* thread_ctx = render::thread_ctx_create();
     render::thread_cmd_buffer_record(thread_ctx);
     defer(render::thread_cmd_buffer_end(thread_ctx));
 
-    for (U32 agent_cfg_idx = 0; agent_cfg_idx < ArrayCount(agent_sim_config.agent_config); ++agent_cfg_idx)
+    for (U32 agent_cfg_idx = 0; agent_cfg_idx < ArrayCount(render_resources.agent_config); ++agent_cfg_idx)
     {
-        AgentConfig* agent_config = &agent_sim_config.agent_config[agent_cfg_idx];
+        AgentConfig* agent_config = &render_resources.agent_config[agent_cfg_idx];
         String8 glb_path =
-            str8_path_from_str8_list(scratch.arena, {agent_sim_config.asset_dir, agent_sim_config.agent_config[agent_cfg_idx].asset_file_name});
+            str8_path_from_str8_list(scratch.arena, {render_resources.asset_dir, render_resources.agent_config[agent_cfg_idx].asset_file_name});
         gltfw_Result glb_result = gltfw_glb_read(scratch.arena, glb_path);
 
         // calculate model bounds
@@ -150,11 +150,11 @@ agents_create(AgentSimThread* agent_sim_thread)
         }
         agent_config->model_bounds = sub_rng3f32(model_bounds, model_pivot);
 
-        agent_sim_config.models[agent_cfg_idx] = agent_model_render_info_create(thread_ctx, glb_result, model_pivot);
+        render_resources.models[agent_cfg_idx] = agent_model_render_info_create(thread_ctx, glb_result, model_pivot);
     }
 }
 
-AgentSimThread::~AgentSimThread()
+AgentModelLoadTask::~AgentModelLoadTask()
 {
     // Moved model arrays are empty after successful publication.
     _agent_models_release(&config);
@@ -168,52 +168,43 @@ AgentSystem::~AgentSystem()
 void
 AgentSystem::destroy()
 {
-    if (this->height_sampler)
-    {
-        this->height_sampler->destroy();
-        this->height_sampler = {};
-    }
-    this->height_requests = {};
-    if (agent_sim_config)
-    {
-        AgentSimConfig* config = agent_sim_config.get();
-        _agent_models_release(config);
-    }
-    agent_sim.reset();
-    agent_sim_config.reset();
+    this->simulations.invalidate_all();
+    this->selected_simulation = {};
+    if (this->render_resources)
+        _agent_models_release(this->render_resources.get());
+    this->render_resources.reset();
 }
 
 void
-AgentSystem::update(ui::Camera* camera,
+AgentSystem::update(AgentSim& simulation, ui::Camera* camera,
                     render::MeshHandle& hover_icon_mesh_handle, cesium::TilesetRenderer* tileset,
                     Buffer<AgentUpdate>& agent_updates, bool agent_reset, bool snapshot_received,
                     F32 agent_scale_factor, glm::dmat4& ecef_to_local, F64 playback_time)
 {
     prof_scope_marker;
-    ScratchScope scratch = ScratchScope(0, 0);
+    ScratchScope scratch = ScratchScope(&simulation.allocator.arena, 1);
 
     if (agent_reset)
     {
-        this->agent_sim->agents_active.invalidate_all();
-        this->agent_sim->agent_map.clear();
+        simulation.reset();
     }
     if (snapshot_received)
     {
-        this->agent_sim->reconcile_snapshot(agent_updates);
+        simulation.reconcile_snapshot(agent_updates);
     }
     bool agents_created = false;
     for (U32 agent_idx = 0; agent_idx < agent_updates.size; agent_idx++)
     {
-        AgentSlotUpdate slot = this->agent_sim->update_slot(agent_updates[agent_idx]);
+        AgentSlotUpdate slot = simulation.update_slot(agent_updates[agent_idx]);
         agents_created |= slot.created;
     }
     if (agents_created)
-        this->_agent_height_updates_start(tileset);
+        this->height_updates_start(simulation);
 
     // Evaluate from the event's original position each frame, including frames
     // without a new stream reply. Playback time also handles pause and speed changes.
-    this->agent_sim->update_positions(playback_time);
-    for (Agent& agent : this->agent_sim->agents_active)
+    simulation.update_positions(playback_time);
+    for (Agent& agent : simulation.agents_active)
     {
         if (!agent.transform_dirty)
             continue;
@@ -223,14 +214,17 @@ AgentSystem::update(ui::Camera* camera,
                                                 glm::degrees(cartographic->latitude));
     }
 
-    this->_agent_height_update_async(tileset);
+    if (tileset)
+        this->height_update_async(simulation, tileset);
+    if (!tileset || !this->render_resources)
+        return;
     // Height results can arrive on frames without simulator movement updates.
     // Recalculate positions and bounds only after movement or a changed height.
-    for (Agent& agent : this->agent_sim->agents_active)
+    for (Agent& agent : simulation.agents_active)
     {
         if (!agent.transform_dirty)
             continue;
-        AgentConfig& config = this->agent_sim_config->agent_config[enum_idx(agent.vehicle_type)];
+        AgentConfig& config = this->render_resources->agent_config[enum_idx(agent.vehicle_type)];
         glm::dvec3 local_world_dir = glm::dvec3(ecef_to_local * glm::dvec4(agent.ecef_dir, 0.0));
         glm::dmat3 model_to_world_rotation =
             _gltf_rotation_to_world(local_world_dir, glm::dvec3(config.model_forward_dir));
@@ -250,14 +244,14 @@ AgentSystem::update(ui::Camera* camera,
 
     // rendering
     {
-        AgentModelRenderInfo* models = this->agent_sim_config->models;
+        AgentModelRenderInfo* models = this->render_resources->models;
 
-        ChunkList<render::Transform>* transform_lists[ArrayCount(this->agent_sim_config->agent_config)];
+        ChunkList<render::Transform>* transform_lists[ArrayCount(this->render_resources->agent_config)];
         for (U32 agent_cfg_idx = 0; agent_cfg_idx < ArrayCount(transform_lists); ++agent_cfg_idx)
         {
             transform_lists[agent_cfg_idx] = chunk_list_create<render::Transform>(scratch.arena, 100);
         }
-        for (Agent& active_agent : this->agent_sim->agents_active)
+        for (Agent& active_agent : simulation.agents_active)
         {
             B32 visible = ui::frustum_check_from_bounding_box(&camera->frustum_planes, active_agent.world_bounds);
             this->agent_icon_add(active_agent, hover_icon_mesh_handle,
@@ -273,7 +267,7 @@ AgentSystem::update(ui::Camera* camera,
         }
 
         // Submit each model once after gathering all visible agent transforms.
-        for (U32 agent_cfg_idx = 0; agent_cfg_idx < ArrayCount(this->agent_sim_config->agent_config); ++agent_cfg_idx)
+        for (U32 agent_cfg_idx = 0; agent_cfg_idx < ArrayCount(this->render_resources->agent_config); ++agent_cfg_idx)
         {
             AgentModelRenderInfo* model_render_info = &models[agent_cfg_idx];
 
@@ -316,6 +310,10 @@ AgentSystem::agent_draw(Array<render::AgentModelInfo>& meshes, render::BufferInf
     Buffer<render::Transform> frame_transforms = buffer_arena_copy(frame_arena, transforms);
     for (render::AgentModelInfo& mesh : meshes)
     {
+        if (!render::is_resource_loaded(mesh.lod_geometry.vertex_buffer_handle) ||
+            !render::is_resource_loaded(mesh.lod_geometry.lod_buffer_handle) ||
+            !render::is_resource_loaded(mesh.texture_h))
+            continue;
         render::AgentMeshInstanceBatch batch = {};
         batch.agent_model_info = mesh;
         batch.transforms = frame_transforms;
@@ -326,45 +324,44 @@ AgentSystem::agent_draw(Array<render::AgentModelInfo>& meshes, render::BufferInf
 }
 
 void
-AgentSystem::_agent_height_updates_start(cesium::TilesetRenderer* renderer)
+AgentSystem::height_updates_start(AgentSim& simulation)
 {
-    (void)renderer;
-    this->agent_sim->height_updates_stop = false;
+    simulation.height_updates_stop = false;
 }
 
 void
-AgentSystem::_agent_height_updates_stop()
+AgentSystem::height_updates_stop(AgentSim& simulation)
 {
-    if (!this->agent_sim->height_updates_stop)
+    if (!simulation.height_updates_stop)
     {
-        ++this->height_epoch;
-        for (Agent& agent : this->agent_sim->agents_active)
+        ++simulation.height_epoch;
+        for (Agent& agent : simulation.agents_active)
             agent.height_request_id = 0;
     }
-    this->agent_sim->height_updates_stop = true;
+    simulation.height_updates_stop = true;
 }
 
 void
-AgentSystem::_agent_height_update_async(cesium::TilesetRenderer* renderer)
+AgentSystem::height_update_async(AgentSim& simulation, cesium::TilesetRenderer* renderer)
 {
-    if (this->agent_sim->height_updates_stop || renderer->destruction_requested)
+    if (simulation.height_updates_stop || renderer->destruction_requested)
         return;
-    Allocator* allocator = &this->agent_sim->allocator;
+    Allocator* allocator = &simulation.allocator;
     Arena* arena = allocator->arena;
     ScratchScope scratch = ScratchScope(&arena, 1);
-    U32 capacity = this->agent_sim_config->max_agent_count;
-    if (!this->height_sampler)
+    U32 capacity = simulation.agents_active.capacity;
+    if (!simulation.height_sampler)
     {
-        if (this->agent_sim->agents_active.item_in_use_count == 0)
+        if (simulation.agents_active.item_in_use_count == 0)
             return;
-        this->height_sampler = allocator->make<TileHeightSampler>(capacity);
-        this->height_requests = Array<AgentHeightRequest>(allocator, capacity + 1);
+        simulation.height_sampler = allocator->make<TileHeightSampler>(capacity);
+        simulation.height_requests = Array<AgentHeightRequest>(allocator, capacity + 1);
     }
 
     // Results identify the original agent generation and streaming epoch. A single
     // outstanding request per agent prevents old batches from overwriting newer samples.
     Buffer<TileHeightResult> results = buffer_alloc<TileHeightResult>(scratch.arena, capacity);
-    U32 result_count = this->height_sampler->collect(results);
+    U32 result_count = simulation.height_sampler->collect(results);
     // The published BVH and completed batches may precede the current draw list.
     // Build a direct handle lookup once so hidden/reused entries cannot apply a
     // stale height while a replacement hierarchy is being uploaded.
@@ -372,12 +369,14 @@ AgentSystem::_agent_height_update_async(cesium::TilesetRenderer* renderer)
     if (result_count)
         for (cesium::TileRenderResources* tile = renderer->tile_to_show_first; tile; tile = tile->render_next)
             for (cesium::TileDrawBatch* batch = tile->batch_first; batch; batch = batch->next)
-                maximum_drawn_entry = Max(maximum_drawn_entry, batch->mesh_bvh_entry.handle.idx);
+                for (TileMeshBvhEntry& entry : batch->mesh_bvh_entries)
+                    maximum_drawn_entry = Max(maximum_drawn_entry, entry.handle.idx);
     Buffer<U32> drawn_generations = buffer_alloc<U32>(scratch.arena, (U64)maximum_drawn_entry + 1);
     if (result_count)
         for (cesium::TileRenderResources* tile = renderer->tile_to_show_first; tile; tile = tile->render_next)
             for (cesium::TileDrawBatch* batch = tile->batch_first; batch; batch = batch->next)
-                drawn_generations.data[batch->mesh_bvh_entry.handle.idx] = batch->mesh_bvh_entry.handle.gen_id;
+                for (TileMeshBvhEntry& entry : batch->mesh_bvh_entries)
+                    drawn_generations.data[entry.handle.idx] = entry.handle.gen_id;
     for (U32 index = 0; index < result_count; ++index)
     {
         TileHeightResult result = results.data[index];
@@ -385,15 +384,15 @@ AgentSystem::_agent_height_update_async(cesium::TilesetRenderer* renderer)
                           drawn_generations.data[result.entry_handle.idx] == result.entry_handle.gen_id;
         if (!entry_drawn)
             result.hit = false;
-        const AgentHeightRequest& request = this->height_requests.data[result.request_id % this->height_requests.size];
-        if (request.request_id != result.request_id || request.epoch != this->height_epoch)
+        const AgentHeightRequest& request = simulation.height_requests.data[result.request_id % simulation.height_requests.size];
+        if (request.request_id != result.request_id || request.epoch != simulation.height_epoch)
             continue;
         Agent* agent = {};
-        if (this->agent_sim->agents_active.item_from_handle(request.agent_handle, &agent))
-            agent_height_result_apply(agent, request, result, this->height_epoch);
+        if (simulation.agents_active.item_from_handle(request.agent_handle, &agent))
+            agent_height_result_apply(agent, request, result, simulation.height_epoch);
     }
 
-    if (this->agent_sim->agents_active.item_in_use_count == 0)
+    if (simulation.agents_active.item_in_use_count == 0)
         return;
     render::TileBvhResourceView view = {};
     if (!render::tile_bvh_resource_get(renderer->ready_tile_bvh, &view) || view.entry_count == 0)
@@ -401,7 +400,7 @@ AgentSystem::_agent_height_update_async(cesium::TilesetRenderer* renderer)
     Buffer<TileHeightQuery> queries = buffer_alloc<TileHeightQuery>(scratch.arena, capacity);
     Buffer<AgentHeightRequest> requests = buffer_alloc<AgentHeightRequest>(scratch.arena, capacity);
     queries.size = 0;
-    for (Agent& agent : this->agent_sim->agents_active)
+    for (Agent& agent : simulation.agents_active)
     {
         if (agent.done || agent.height_request_id)
             continue;
@@ -414,20 +413,20 @@ AgentSystem::_agent_height_update_async(cesium::TilesetRenderer* renderer)
         TileHeightRay ray = tile_height_ray_create(surface, up, view.city_bounds);
         // Encode the stable agent slot in the remainder. One pending sample per
         // agent keeps metadata bounded without overwriting a different agent's request.
-        Assert(this->height_request_sequence < max_U64 / this->height_requests.size - 1);
-        ray.query.request_id = ++this->height_request_sequence * this->height_requests.size + agent.handle.idx;
+        Assert(simulation.height_request_sequence < max_U64 / simulation.height_requests.size - 1);
+        ray.query.request_id = ++simulation.height_request_sequence * simulation.height_requests.size + agent.handle.idx;
         Assert(ray.query.request_id != 0);
-        requests.data[queries.size] = {ray.query.request_id, this->height_epoch, agent.handle,
+        requests.data[queries.size] = {ray.query.request_id, simulation.height_epoch, agent.handle,
                                       agent.ecef_coord_cur, ray.origin_height};
         queries.data[queries.size++] = ray.query;
     }
-    if (queries.size && this->height_sampler->submit(renderer->ready_tile_bvh, {queries.data, queries.size}))
+    if (queries.size && simulation.height_sampler->submit(renderer->ready_tile_bvh, {queries.data, queries.size}))
         for (U32 index = 0; index < queries.size; ++index)
         {
             const AgentHeightRequest& request = requests.data[index];
-            this->height_requests.data[request.request_id % this->height_requests.size] = request;
+            simulation.height_requests.data[request.request_id % simulation.height_requests.size] = request;
             Agent* agent = {};
-            B32 active = this->agent_sim->agents_active.item_from_handle(request.agent_handle, &agent);
+            B32 active = simulation.agents_active.item_from_handle(request.agent_handle, &agent);
             Assert(active);
             agent->height_request_id = request.request_id;
         }
@@ -462,7 +461,7 @@ _gltf_rotation_to_world(glm::dvec3 world_dir, glm::dvec3 model_dir)
     return model_to_world_rotation;
 }
 g_internal void
-_agent_models_release(AgentSimConfig* config)
+_agent_models_release(AgentRenderResources* config)
 {
     for (AgentModelRenderInfo& model : config->models)
     {

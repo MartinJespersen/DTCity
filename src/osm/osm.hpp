@@ -28,7 +28,7 @@ namespace osm
 {
 
 typedef S64 EdgeId;
-typedef U64 NodeId;
+typedef S64 NodeId;
 typedef S64 WayId;
 
 struct WgsNode
@@ -128,10 +128,10 @@ struct Edge
 {
     Edge* prev;
     Edge* next;
-    S64 id;
-    S64 node_id_from;
-    S64 node_id_to;
-    S64 way_id;
+    EdgeId id;
+    NodeId node_id_from;
+    NodeId node_id_to;
+    WayId way_id;
 };
 
 struct EdgeStructure
@@ -178,7 +178,7 @@ struct Network
     Map<NodeId, EcefLocation>* ecef_location_map;
     Map<NodeId, WgsLocation>* wgs_location_map;
 
-    Buffer<WayList> way_hashmap;                    // view into way buffers
+    Buffer<WayList> way_hashmap;                         // view into way buffers
     Buffer<Way> ways_arr[enum_idx(WayType::Count)] = {}; // buffer storage
     Buffer<NodeId> node_id_arr[enum_idx(WayType::Count)] = {};
     EdgeStructure edge_structure;
@@ -199,7 +199,6 @@ struct NetworkLoadTask
 async::AsyncTaskStatus<NetworkLoadTask>*
 network_load(async::ThreadPool* thread_pool, NetworkCache cache, String8 request_body,
              U64 node_hashmap_size = 1000, U64 way_hashmap_size = 100);
-
 
 // Public
 EcefLocation

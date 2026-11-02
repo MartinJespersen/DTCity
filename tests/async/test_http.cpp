@@ -2,6 +2,25 @@
 #include "async/thread_pool.cpp"
 #include "async/async_http.cpp"
 #include "test_http.hpp"
+#include "test_task_lifetime.hpp"
+
+TEST_CASE("HTTP setup failure destroys its payload before the task arena")
+{
+    U32 destroyed = 0;
+    U32 arena_destroyed = 0;
+    Allocator allocator = Allocator::create();
+    allocator.make<ArenaAwareTestObject>(U32{1}, &arena_destroyed);
+    auto payload = std::make_unique<TaskPayloadLifetimeProbe>();
+    payload->destruction_count = &destroyed;
+    payload->allocator_destruction_count = &arena_destroyed;
+    async::AsyncHttpTaskStateConfig<TaskPayloadLifetimeProbe> config(nullptr, std::move(payload), 0, 0);
+    auto result = async::async_http_task_run(std::move(allocator), nullptr, nullptr, &config, "invalid setup");
+    CHECK(result.async_result.has_error());
+    CHECK(result.task_state == nullptr);
+    CHECK_FALSE(config.user_data);
+    CHECK(destroyed == 1);
+    CHECK(arena_destroyed == 1);
+}
 
 TEST_CASE("HTTP failures stop at their retry budget and preserve the error")
 {
@@ -16,8 +35,8 @@ TEST_CASE("HTTP failures stop at their retry budget and preserve the error")
     http->timeout_us = 60'000'000;
     http->max_http_retries = 2;
     http->max_task_retries = 1;
-    U32 callback_calls = 0;
-    task->user_data = &callback_calls;
+    task->user_data = std::make_unique<U32>(0);
+    U32& callback_calls = *task->user_data;
     http->first_func = _test_http_callback_failure;
     http->next_func = http->first_func;
 
@@ -72,12 +91,11 @@ TEST_CASE("HTTP failures stop at their retry budget and preserve the error")
 TEST_CASE("HTTP setup failures and rejected scheduling release allocator objects")
 {
     U32 destroyed = 0;
-    U32 callback_calls = 0;
     async::ThreadPool stopped_pool = {};
     Allocator allocator = Allocator::create();
     allocator.make<ArenaAwareTestObject>(U32{1}, &destroyed);
     auto* info = async::http_info_create_get(allocator.arena, S("http://127.0.0.1/"));
-    async::AsyncHttpTaskStateConfig<U32> config(_test_http_callback_failure, &callback_calls, 0, 0);
+    async::AsyncHttpTaskStateConfig<U32> config(_test_http_callback_failure, std::make_unique<U32>(0), 0, 0);
     bool setup_failure = false;
     SUBCASE("invalid URL")
     {
@@ -86,6 +104,7 @@ TEST_CASE("HTTP setup failures and rejected scheduling release allocator objects
     }
     SUBCASE("queue rejected") {}
     auto result = async::async_http_task_run(std::move(allocator), &stopped_pool, info, &config, "not scheduled");
+    CHECK_FALSE(config.user_data);
     if (setup_failure)
     {
         CHECK(result.async_result.has_error());
@@ -99,10 +118,10 @@ TEST_CASE("HTTP setup failures and rejected scheduling release allocator objects
         auto completed = async::async_task_take_completed(result.task_state);
         REQUIRE(completed);
         CHECK(completed->error);
+        CHECK(*completed->user_data == 0);
         completed.reset();
         CHECK(destroyed == 1);
     }
-    CHECK(callback_calls == 0);
 }
 
 static async::UserFuncResult<U32>

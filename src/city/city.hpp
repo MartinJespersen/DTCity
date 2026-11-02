@@ -11,6 +11,11 @@
 struct gltfw_Sampler;
 struct gltfw_Vertex3D;
 
+namespace cesium
+{
+struct TileDrawBatch;
+}
+
 namespace city
 {
 
@@ -36,7 +41,7 @@ struct AsyncCityTask
         async::AsyncTaskStatus<neta::NetaLoadTask>* neta;
         async::AsyncTaskStatus<osm::NetworkLoadTask>* osm;
         async::AsyncTaskStatus<RoadBuildTask>* road;
-        async::AsyncTaskStatus<city::AgentSimThread>* agent_sim_task;
+        async::AsyncTaskStatus<city::AgentModelLoadTask>* agent_sim_task;
     };
 };
 
@@ -93,7 +98,6 @@ struct City
     bool road_building_started;
     bool road_building_done;
     bool agent_creation_started;
-    bool cars_creation_done;
 
     bool no_gui_focus;
 
@@ -120,8 +124,8 @@ _cache_and_parse_osm_json(Arena* arena, async::ThreadPool* thread_pool, osm::Net
 g_internal render::SamplerInfo
 sampler_from_cgltf_sampler(gltfw_Sampler sampler);
 
-g_internal async::AsyncTaskContinuation<AgentSimThread>
-agent_sim_build(async::ThreadInfo info, async::AsyncTaskStatus<AgentSimThread>* status);
+g_internal async::AsyncTaskContinuation<AgentModelLoadTask>
+agent_models_load_task(async::ThreadInfo info, async::AsyncTaskStatus<AgentModelLoadTask>* status);
 
 void
 city_build(City* city, Rng2F64 bbox, String8 tileset_url, String8 area);
@@ -137,7 +141,6 @@ city_init(City* city, String8 cache_path);
 void
 city_release(City* city);
 
-
 // coordinates from str list
 
 g_internal Rng3F32
@@ -146,4 +149,6 @@ _agent_world_bounds_from_transform(Rng3F32 model_bounds, glm::mat4 model_transfo
 // helpers
 g_internal void
 _city_tasks_collect(City* city, bool publish_results);
+g_internal void
+_city_tile_batch_draw(City* city, cesium::TileDrawBatch* batch, RoadOverlayOption overlay_option);
 } // namespace city

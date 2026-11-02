@@ -194,7 +194,7 @@ foreach(GLSL ${GLSL_SOURCE_FILES})
         OUTPUT ${SPIRV}
         COMMAND ${CMAKE_COMMAND} -E make_directory "${SHADER_BINARY_DIR}"
         COMMAND ${GLSL_VALIDATOR} -V ${GLSL} ${GLSL_SHADER_FLAGS} ${SHADER_TARGET_FLAGS} -o ${SPIRV}
-        DEPENDS ${GLSL} "${SHADER_SRC}/shader_shared.h" "${SHADER_SRC}/tile/includes.glsl" "${SHADER_SRC}/model_instance/lod_select.glsl"
+        DEPENDS ${GLSL} "${SHADER_SRC}/shader_shared.h" "${SHADER_SRC}/tile/tile_surface.glsl" "${SHADER_SRC}/model_instance/lod_select.glsl"
         COMMENT "Compiling ${FILE_NAME} to SPIR-V"
     )
   list(APPEND SPIRV_BINARY_FILES ${SPIRV})
@@ -249,26 +249,7 @@ find_package(cesium-native CONFIG REQUIRED)
 
 find_package(absl CONFIG REQUIRED)
 
-# Async++ exports an MSVC-style option for every Windows compiler. The GNU-style
-# Clang driver treats it as an input path, so remove it from the imported target.
-if(CMAKE_CXX_COMPILER_ID MATCHES "Clang" AND CMAKE_CXX_COMPILER_FRONTEND_VARIANT STREQUAL "GNU")
-  get_target_property(ASYNC_COMPILE_OPTIONS Async++ INTERFACE_COMPILE_OPTIONS)
-  if(ASYNC_COMPILE_OPTIONS)
-    list(REMOVE_ITEM ASYNC_COMPILE_OPTIONS "/Zc:__cplusplus")
-    set_target_properties(Async++ PROPERTIES INTERFACE_COMPILE_OPTIONS "${ASYNC_COMPILE_OPTIONS}")
-  endif()
-
-  get_property(IMPORTED_TARGETS DIRECTORY PROPERTY IMPORTED_TARGETS)
-  foreach(IMPORTED_TARGET IN LISTS IMPORTED_TARGETS)
-    if(IMPORTED_TARGET MATCHES "^absl::")
-      get_target_property(IMPORTED_LINK_LIBRARIES ${IMPORTED_TARGET} INTERFACE_LINK_LIBRARIES)
-      if(IMPORTED_LINK_LIBRARIES)
-        list(REMOVE_ITEM IMPORTED_LINK_LIBRARIES "-ignore:4221" "$<LINK_ONLY:-ignore:4221>")
-        set_target_properties(${IMPORTED_TARGET} PROPERTIES INTERFACE_LINK_LIBRARIES "${IMPORTED_LINK_LIBRARIES}")
-      endif()
-    endif()
-  endforeach()
-endif()
+include(cmake/ClangImportedTargets.cmake)
 
 # city executable specifics
 add_dependencies(city CompileShaders)
